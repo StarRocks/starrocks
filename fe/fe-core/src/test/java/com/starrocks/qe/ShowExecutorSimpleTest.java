@@ -66,9 +66,12 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.snapshot.ClusterSnapshotJob;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.server.CatalogMgr;
@@ -79,6 +82,7 @@ import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
@@ -454,6 +458,43 @@ public class ShowExecutorSimpleTest {
         Assertions.assertTrue(resultSet.next());
         Assertions.assertEquals("Database", resultSet.getMetaData().getColumn(0).getName());
         Assertions.assertEquals(resultSet.getResultRows().get(0).get(0), "testDb");
+    }
+
+    @Test
+    public void testAdminShowAutomatedClusterSnapshot() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        Deencapsulation.invoke(clusterSnapshotMgr, "setAutomatedSnapshotOn", "builtin_storage_volume", 86400L);
+
+        long createdTimeMs = 1700000000000L;
+        ClusterSnapshotJob job = new ClusterSnapshotJob(1L,
+                ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX + createdTimeMs, "builtin_storage_volume", createdTimeMs);
+        Deencapsulation.setField(job, "state", ClusterSnapshotJob.ClusterSnapshotJobState.FINISHED);
+        clusterSnapshotMgr.addSnapshotJob(job);
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
+                result = clusterSnapshotMgr;
+            }
+        };
+
+        AdminShowAutomatedSnapshotStmt stmt = new AdminShowAutomatedSnapshotStmt();
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertTrue(resultSet.next());
+        List<String> row = resultSet.getResultRows().get(0);
+        Assertions.assertEquals("true", row.get(0));
+        Assertions.assertEquals("1 DAY", row.get(1));
+        Assertions.assertEquals("builtin_storage_volume", row.get(2));
+        Assertions.assertEquals(TimeUtils.longToTimeString(createdTimeMs), row.get(3));
+        Assertions.assertEquals(TimeUtils.longToTimeString(createdTimeMs + 86400L * 1000L), row.get(4));
     }
 
     @Test

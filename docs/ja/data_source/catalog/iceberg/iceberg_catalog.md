@@ -240,6 +240,10 @@ AWS Glue 用の `MetastoreParams`:
   - 必須: いいえ
   - 説明: AWS IAM ユーザーのシークレットキー。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。
 
+- `aws.glue.catalog_id`
+  - 必須: いいえ
+  - 説明: 使用する AWS Glue Data Catalog の ID。指定しない場合、現在の AWS アカウントのカタログが使用されます。別の AWS アカウントの Glue Data Catalog にアクセスする（クロスアカウントアクセス）必要がある場合は、このパラメータを指定する必要があります。
+
 AWS Glue へのアクセス認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [AWS Glue へのアクセス認証パラメーター](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
 
 </TabItem>

@@ -86,7 +86,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfo.add(lakeTablet.getMinVersion());
-                tabletInfo.add(lakeTablet.getRange().toString());
+                tabletInfo.add(String.valueOf(lakeTablet.getRange()));
                 tabletInfos.add(tabletInfo);
             }
         } finally {
@@ -171,7 +171,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                     new ByteSizeValue(tablet.getDataSize(true)).toString(),
                     String.valueOf(tablet.getRowCount(0L)),
                     String.valueOf(tablet.getMinVersion()),
-                    tablet.getRange().toString()
+                    String.valueOf(tablet.getRange())
             );
             result.addRow(row);
 

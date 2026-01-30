@@ -639,16 +639,17 @@ struct TParquetOptions {
     4: optional string version
 }
 
-enum TInfinityType {
-    NONE_INFINITY = 0,
-    MINIMUM = 1,
-    MAXIMUM = 2,
+enum TVariantType {
+    NORMAL_VALUE = 0,
+    NULL_VALUE = 1,
+    MINIMUM = 2,
+    MAXIMUM = 3,
 }
 
 struct TVariant {
     1: optional TTypeDesc type
     2: optional string value
-    3: optional TInfinityType infinity_type
+    3: optional TVariantType variant_type
 }
 
 struct TTuple {

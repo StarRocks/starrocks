@@ -20,6 +20,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.LightWeightDeltaLakeTable;
+import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -189,10 +191,10 @@ public class OptExpressionDuplicator {
             Operator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
             LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
             opBuilder.withOperator(scanOperator);
-            // Use scan operator's table instead of columnRefFactory's table
-            // This fixes the issue where transparent MV rewrite rewrites MV scan to base table scan,
-            // but columnRefFactory still maps column refs to MV table
-            Table scanTable = scanOperator.getTable();
+            // Use scan operator's table instead of columnRefFactory's table.
+            // If a lightweight external table sneaks in (from mv plan cache), restore full table here
+            // to avoid leaking LightWeight* into physical planning (e.g. Iceberg native table access execpetion).
+            Table scanTable = refreshLightWeightExternalTable(scanOperator.getTable());
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = scanOperator.getColRefToColumnMetaMap();
             ImmutableMap.Builder<ColumnRefOperator, Column> columnRefColumnMapBuilder = new ImmutableMap.Builder<>();
             Map<Integer, Integer> relationIdMapping = Maps.newHashMap();
@@ -255,18 +257,14 @@ public class OptExpressionDuplicator {
             } else {
                 if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
                     // refresh iceberg table's metadata
-                    Table refBaseTable = scanOperator.getTable();
-                    IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
-                    String catalogName = cachedIcebergTable.getCatalogName();
-                    String dbName = cachedIcebergTable.getCatalogDBName();
-                    TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                    Table currentTable =
-                            GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
-                                    .orElse(null);
+                    Table refBaseTable = scanTable;
+                    //the table is already load in refreshLightWeightExternalTable
+                    IcebergTable currentTable = (IcebergTable) refBaseTable;
+
                     if (currentTable == null) {
                         return null;
                     }
-                    scanBuilder.setTable(currentTable);
+
                     TvrVersionRange versionRange = TvrTableSnapshot.of(
                             Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
                                     .map(Snapshot::snapshotId));
@@ -296,6 +294,7 @@ public class OptExpressionDuplicator {
             }
             ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
             scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
+            scanBuilder.setTable(scanTable);
 
             // process external table scan operator's predicates
             LogicalScanOperator newScanOperator = (LogicalScanOperator) opBuilder.build();
@@ -303,6 +302,25 @@ public class OptExpressionDuplicator {
                 processExternalTableScanOperator(newScanOperator);
             }
             return OptExpression.create(newScanOperator);
+        }
+
+        private Table refreshLightWeightExternalTable(Table table) {
+            if (!(table instanceof LightWeightIcebergTable || table instanceof LightWeightDeltaLakeTable)) {
+                return table;
+            }
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+            String catalogName = table.getCatalogName();
+            String dbName = table.getCatalogDBName();
+            TableName tableName = new TableName(catalogName, dbName, table.getName());
+            try {
+                // lookup the latest full table from global state manager
+                Table currentTable =
+                        GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(connectContext, tableName)
+                                .orElse(null);
+                return currentTable;
+            } catch (Exception e) {
+                return null;
+            }
         }
 
         private void processExternalTableScanOperator(LogicalScanOperator newScanOperator) {

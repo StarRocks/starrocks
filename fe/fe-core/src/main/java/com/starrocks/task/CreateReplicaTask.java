@@ -37,6 +37,7 @@ package com.starrocks.task;
 import com.google.common.base.Preconditions;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.FlatJsonConfig;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.thrift.TBinlogConfig;
@@ -91,6 +92,7 @@ public class CreateReplicaTask extends AgentTask {
     private long gtid = 0;
     private long timeoutMs = -1;
     private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
+    private TabletRange range;
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
@@ -115,6 +117,7 @@ public class CreateReplicaTask extends AgentTask {
         this.gtid = builder.getGtid();
         this.timeoutMs = builder.getTimeoutMs();
         this.compactionStrategy = builder.getCompactionStrategy();
+        this.range = builder.getRange();
     }
 
     public static Builder newBuilder() {
@@ -201,6 +204,9 @@ public class CreateReplicaTask extends AgentTask {
         if (compactionStrategy != null) {
             createTabletReq.setCompaction_strategy(compactionStrategy);
         }
+        if (range != null) {
+            createTabletReq.setRange(range.toThrift());
+        }
         return createTabletReq;
     }
 
@@ -233,6 +239,7 @@ public class CreateReplicaTask extends AgentTask {
         private long gtid = 0;
         private long timeoutMs = -1;
         private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
+        private TabletRange range;
 
         private Builder() {
         }
@@ -469,6 +476,15 @@ public class CreateReplicaTask extends AgentTask {
         public Builder setCompactionStrategy(TCompactionStrategy compactionStrategy) {
             this.compactionStrategy = compactionStrategy;
             return this;
+        }
+
+        public Builder setRange(TabletRange range) {
+            this.range = range;
+            return this;
+        }
+
+        public TabletRange getRange() {
+            return range;
         }
 
         public CreateReplicaTask build() {

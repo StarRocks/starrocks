@@ -38,6 +38,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -88,10 +90,13 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
+import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -109,12 +114,17 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.SortDirection;
+import org.apache.iceberg.SortField;
+import org.apache.iceberg.SortOrder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -920,14 +930,56 @@ public class InsertPlanner {
         Table targetTable = insertStmt.getTargetTable();
         if (targetTable instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) targetTable;
-            if (session.isEnableIcebergSinkGlobalShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
-                List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
-                        .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                        HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                return new PhysicalPropertySet(DistributionProperty
-                        .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+
+            // Create distribution property if global shuffle is enabled
+            DistributionProperty distributionProperty = EmptyDistributionProperty.INSTANCE;
+            ConnectorSinkShuffleMode shuffleMode = session.getConnectorSinkShuffleMode();
+
+            // For shuffle mode except NEVER, only apply shuffle to partitioned tables
+            if (shuffleMode != ConnectorSinkShuffleMode.NEVER && !icebergTable.getPartitionColumns().isEmpty()) {
+
+                // For FORCE mode - always enable global shuffle, we also handle the old session variable
+                // `enable_iceberg_sink_global_shuffle` for compatibility.
+                // For AUTO mode - use adaptive logic based on partition count and backend count
+                if (shuffleMode == ConnectorSinkShuffleMode.FORCE || (shuffleMode == ConnectorSinkShuffleMode.AUTO &&
+                        shouldEnableAdaptiveGlobalShuffle(insertStmt, icebergTable, session))) {
+                    List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    distributionProperty = createDistributionPropertyFromPartitions(partitionColumnIDs);
+                }
             }
+
+            // Check if we should use host-level sorting for connector sink
+            ConnectorSinkSortScope sortScope = ConnectorSinkSortScope.fromName(session.getConnectorSinkSortScope());
+            boolean useHostLevelSort = (sortScope == ConnectorSinkSortScope.HOST);
+
+            // Get sort order info from Iceberg table
+            List<Ordering> sortOrderings = new ArrayList<>();
+            if (useHostLevelSort) {
+                org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+                SortOrder sortOrder = nativeTable.sortOrder();
+                if (sortOrder != null && sortOrder.isSorted()) {
+                    List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
+                    for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
+                        int sortKeyIndex = sortKeyIndexes.get(idx);
+                        SortField sortField = sortOrder.fields().get(idx);
+                        // Skip non-identity transforms
+                        if (!sortField.transform().isIdentity()) {
+                            continue;
+                        }
+                        boolean isAsc = sortField.direction() == SortDirection.ASC;
+                        boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
+                        sortOrderings.add(new Ordering(outputColumns.get(sortKeyIndex), isAsc, isNullFirst));
+                    }
+                }
+            }
+
+            // Create sort property if host-level sorting is enabled and sort order exists
+            SortProperty sortProperty = SortProperty.createProperty(sortOrderings);
+
+            // Return property set with both distribution and sort properties
+            // These properties also can be empty.
+            return new PhysicalPropertySet(distributionProperty, sortProperty);
         }
 
         if (targetTable instanceof TableFunctionTable) {
@@ -945,10 +997,7 @@ public class InsertPlanner {
                 } else { // use hash shuffle for partitioned table
                     List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
                             .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                    return new PhysicalPropertySet(DistributionProperty
-                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                    return new PhysicalPropertySet(createDistributionPropertyFromPartitions(partitionColumnIDs));
                 }
             }
 
@@ -1000,6 +1049,12 @@ public class InsertPlanner {
         shuffleServiceEnable = true;
 
         return new PhysicalPropertySet(property);
+    }
+
+    private DistributionProperty createDistributionPropertyFromPartitions(List<Integer> partitionColumnIDs) {
+        HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
+        return DistributionProperty.createProperty(spec);
     }
 
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,
@@ -1107,5 +1162,86 @@ public class InsertPlanner {
         }
         checkPartitionInsertValid(targetTable);
         return true;
+    }
+
+    /**
+     * Judge whether adaptive global shuffle should be enabled based on partition count and backend count.
+     * <p>
+     * Decision criteria (configurable via session variables):
+     * 1. Enable when estimated partition count >= backend count * ratio
+     * 2. OR when estimated partition count >= absolute threshold
+     *
+     * @param insertStmt   INSERT statement
+     * @param icebergTable target Iceberg table
+     * @param session      Session variable
+     * @return whether to enable global shuffle
+     */
+    private boolean shouldEnableAdaptiveGlobalShuffle(InsertStmt insertStmt,
+                                                      IcebergTable icebergTable,
+                                                      SessionVariable session) {
+        // Get the number of alive BE nodes and CN nodes in the cluster
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        int aliveBackendNum = clusterInfo.getAliveBackendNumber();
+        int totalComputeNodeNum = clusterInfo.getTotalComputeNodeNumber();
+        int totalWorkerNum = aliveBackendNum + totalComputeNodeNum;
+
+        // Don't enable global shuffle if we have only 1 or 0 worker nodes
+        if (totalWorkerNum <= 1) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Disable adaptive global shuffle for connector table {}.{}: " +
+                                "total worker nodes ({}) <= 1",
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                        totalWorkerNum);
+            }
+            return false;
+        }
+
+        // Estimate the number of partitions that may be involved in this insert
+        long estimatedPartitionCount = estimatePartitionCountForInsert(insertStmt, icebergTable);
+
+        // Don't enable global shuffle if unable to estimate partition count or only writing to 1 partition
+        // estimatedPartitionCount <= 1 covers:
+        // - -1: unable to estimate (users typically write to only the latest partition)
+        // - 0 or 1: only writing to one partition
+        if (estimatedPartitionCount <= 1) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Disable adaptive global shuffle for connector table {}.{}: " +
+                                "estimated partition count ({}) <= 1",
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                        estimatedPartitionCount);
+            }
+            return false;
+        }
+
+        // Get configured thresholds from connector variables
+        long partitionCountThreshold = session.getConnectorSinkShufflePartitionThreshold();
+        double partitionCountNodeRatio = session.getConnectorSinkShufflePartitionNodeRatio();
+
+        // Decision logic:
+        // 1. estimated partitions >= total worker count * ratio coefficient
+        // 2. OR estimated partitions >= absolute threshold
+        boolean shouldEnable = estimatedPartitionCount >= (long) (totalWorkerNum * partitionCountNodeRatio)
+                || estimatedPartitionCount >= partitionCountThreshold;
+
+        if (shouldEnable && LOG.isDebugEnabled()) {
+            LOG.debug("Enable adaptive global shuffle for connector table {}.{}: " +
+                            "estimated partitions={}, total workers={}, threshold={}, ratio={}",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                    estimatedPartitionCount, totalWorkerNum,
+                    partitionCountThreshold, partitionCountNodeRatio);
+        }
+
+        return shouldEnable;
+    }
+
+    /**
+     * Estimate the number of partitions that may be involved in this INSERT operation.
+     *
+     * @param insertStmt   INSERT statement
+     * @param icebergTable target Iceberg table
+     * @return estimated partition count
+     */
+    private long estimatePartitionCountForInsert(InsertStmt insertStmt, IcebergTable icebergTable) {
+        return InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
     }
 }

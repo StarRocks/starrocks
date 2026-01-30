@@ -5,6 +5,8 @@ keywords: ['session','variable']
 
 # 系统变量
 
+import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
 StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用于兼容 MySQL 客户端协议，并不产生其在 MySQL 数据库中的实际意义**。
@@ -555,6 +557,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 * 默认值：true
+
+### max_unknown_string_meta_length (global)
+
+* 描述：当字符串列的最大长度未知时用于元数据的回退长度。如果客户端依赖该元数据且报告的长度小于真实值，部分 BI 工具可能返回空值或截断。小于等于 0 时回退为 `64`；有效范围为 `1` ~ `1048576`。
+* 默认值：64
+* 数据类型：Int
+* 引入版本：v3.5.12
 
 ### enable_lake_tablet_internal_parallel
 
@@ -1489,4 +1498,4 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 单位：秒
 * 类型：Int
 
-
+<VariableWarehouse />

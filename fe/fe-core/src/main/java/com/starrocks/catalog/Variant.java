@@ -16,13 +16,14 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.proto.InfinityTypePB;
 import com.starrocks.proto.VariantPB;
+import com.starrocks.proto.VariantTypePB;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.thrift.TInfinityType;
 import com.starrocks.thrift.TVariant;
+import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.List;
 
@@ -53,9 +54,39 @@ public abstract class Variant implements Comparable<Variant> {
 
     public abstract long getLongValue();
 
-    public abstract TVariant toThrift();
+    public TVariant toThrift() {
+        TVariant variant = new TVariant();
+        variant.setType(TypeSerializer.toThrift(type));
+        if (this instanceof NullVariant) {
+            variant.setVariant_type(TVariantType.NULL_VALUE);
+        } else if (this instanceof MinVariant) {
+            variant.setVariant_type(TVariantType.MINIMUM);
+        } else if (this instanceof MaxVariant) {
+            variant.setVariant_type(TVariantType.MAXIMUM);
+        } else {
+            variant.setVariant_type(TVariantType.NORMAL_VALUE);
+            variant.setValue(getStringValue());
+        }
+        return variant;
+    }
 
-    // public abstract VariantPB toProto();
+    public VariantPB toProto() {
+        VariantPB variant = new VariantPB();
+        variant.type = TypeSerializer.toProtobuf(type);
+        if (this instanceof NullVariant) {
+            variant.variantType = VariantTypePB.NULL_VALUE;
+        } else if (this instanceof MinVariant) {
+            variant.variantType = VariantTypePB.MINIMUM;
+        } else if (this instanceof MaxVariant) {
+            variant.variantType = VariantTypePB.MAXIMUM;
+        } else {
+            variant.variantType = VariantTypePB.NORMAL_VALUE;
+            variant.value = getStringValue();
+        }
+        return variant;
+    }
+
+    protected abstract int compareToImpl(Variant other);
 
     @Override
     public int compareTo(Variant other) {
@@ -71,10 +102,14 @@ public abstract class Variant implements Comparable<Variant> {
         if (other instanceof MaxVariant) {
             return -1;
         }
+        if (this instanceof NullVariant) {
+            return (other instanceof NullVariant) ? 0 : -1;
+        }
+        if (other instanceof NullVariant) {
+            return 1;
+        }
         return compareToImpl(other);
     }
-
-    protected abstract int compareToImpl(Variant other);
 
     public static Variant of(Type type, String value) {
         Preconditions.checkArgument(type.isValid());
@@ -103,12 +138,29 @@ public abstract class Variant implements Comparable<Variant> {
         }
     }
 
+    public static Variant nullVariant(Type type) {
+        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.nullVariant");
+        return new NullVariant(type);
+    }
+
+    public static Variant minVariant(Type type) {
+        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.minVariant");
+        return new MinVariant(type);
+    }
+
+    public static Variant maxVariant(Type type) {
+        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.maxVariant");
+        return new MaxVariant(type);
+    }
+
     public static Variant fromThrift(TVariant tVariant) {
         Type type = TypeDeserializer.fromThrift(tVariant.type);
-        if (tVariant.isSetInfinity_type()) {
-            if (tVariant.getInfinity_type() == TInfinityType.MINIMUM) {
+        if (tVariant.isSetVariant_type()) {
+            if (tVariant.getVariant_type() == TVariantType.NULL_VALUE) {
+                return new NullVariant(type);
+            } else if (tVariant.getVariant_type() == TVariantType.MINIMUM) {
                 return new MinVariant(type);
-            } else if (tVariant.getInfinity_type() == TInfinityType.MAXIMUM) {
+            } else if (tVariant.getVariant_type() == TVariantType.MAXIMUM) {
                 return new MaxVariant(type);
             }
         }
@@ -117,10 +169,12 @@ public abstract class Variant implements Comparable<Variant> {
 
     public static Variant fromProto(VariantPB variantPB) {
         Type type = TypeDeserializer.fromProtobuf(variantPB.type);
-        if (variantPB.infinityType != null) {
-            if (variantPB.infinityType == InfinityTypePB.MINIMUM) {
+        if (variantPB.variantType != null) {
+            if (variantPB.variantType == VariantTypePB.NULL_VALUE) {
+                return new NullVariant(type);
+            } else if (variantPB.variantType == VariantTypePB.MINIMUM) {
                 return new MinVariant(type);
-            } else if (variantPB.infinityType == InfinityTypePB.MAXIMUM) {
+            } else if (variantPB.variantType == VariantTypePB.MAXIMUM) {
                 return new MaxVariant(type);
             }
         }
@@ -132,12 +186,12 @@ public abstract class Variant implements Comparable<Variant> {
             return key1.compareTo(key2);
         }
 
-        // If any side is an infinity sentinel (MIN/MAX), rely directly on Variant.compareTo().
+        // If any side is an infinity sentinel (MIN/MAX) or NULL, rely directly on Variant.compareTo().
         // The compareTo implementation already encodes global ordering for MinVariant/MaxVariant
         // across all underlying types, so we must NOT route them through Variant.of(...) again,
         // otherwise their string representation ("MIN"/"MAX") would be parsed as normal values.
-        if (key1 instanceof MinVariant || key1 instanceof MaxVariant
-                || key2 instanceof MinVariant || key2 instanceof MaxVariant) {
+        if (key1 instanceof NullVariant || key1 instanceof MinVariant || key1 instanceof MaxVariant
+                || key2 instanceof NullVariant || key2 instanceof MinVariant || key2 instanceof MaxVariant) {
             return key1.compareTo(key2);
         }
 
@@ -165,15 +219,5 @@ public abstract class Variant implements Comparable<Variant> {
             }
         }
         return Integer.compare(key1Length, key2Length);
-    }
-
-    public static Variant minVariant(Type type) {
-        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.minVariant");
-        return new MinVariant(type);
-    }
-
-    public static Variant maxVariant(Type type) {
-        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.maxVariant");
-        return new MaxVariant(type);
     }
 }

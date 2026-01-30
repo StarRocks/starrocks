@@ -141,7 +141,11 @@ class ParquetScannerTest : public ::testing::Test {
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
 
-        return std::make_unique<ParquetScanner>(state, profile, *broker_scan_range, counter);
+        auto scanner = std::make_unique<ParquetScanner>(state, profile, *broker_scan_range, counter);
+        EXPECT_EQ("parquet", scanner->file_format());
+        // scan_type is not set in TBrokerScanRangeParams, default to LOAD
+        EXPECT_EQ("load", scanner->scan_type());
+        return scanner;
     }
 
     void validate(std::unique_ptr<ParquetScanner>& scanner, const size_t expect_num_rows,
@@ -271,6 +275,7 @@ class ParquetScannerTest : public ::testing::Test {
             }
         };
         validate(scanner, 36865, check);
+        ASSERT_EQ(file_names.size(), scanner->TEST_scanner_counter()->num_files_read);
     }
 
     template <bool is_nullable>
@@ -466,6 +471,7 @@ TEST_F(ParquetScannerTest, test_parquet_data) {
         }
     };
     validate(scanner, 36865, check);
+    ASSERT_EQ(_file_names.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_F(ParquetScannerTest, test_parquet_data_with_1_column_from_path) {
@@ -646,6 +652,8 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
     auto check = [](const ChunkPtr& chunk) {};
     validate(scanner, 3, check);
+    // single file split
+    ASSERT_EQ(file_names.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_F(ParquetScannerTest, int96_timestamp) {

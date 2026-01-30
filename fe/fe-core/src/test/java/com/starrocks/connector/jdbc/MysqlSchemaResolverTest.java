@@ -360,4 +360,65 @@ public class MysqlSchemaResolverTest {
             Assertions.fail();
         }
     }
+
+    @Test
+    public void testQueryTimeoutIsSet() throws SQLException {
+        MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+        int expectedTimeout = resolver.getQueryTimeoutSeconds();
+        new Expectations() {
+            {
+                preparedStatement.setQueryTimeout(expectedTimeout);
+                minTimes = 1;
+            }
+        };
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            // Assert that setQueryTimeout was called and the operation completed successfully
+            Assertions.assertNotNull(partitionNames);
+            Assertions.assertFalse(partitionNames.isEmpty());
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testQueryTimeoutMinimumValueProtection() throws SQLException {
+        long originalTimeout = com.starrocks.common.Config.jdbc_query_timeout_ms;
+        try {
+            MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+
+            // Test case 1: sub-second timeout (100ms) - should be rounded up to 1 second
+            com.starrocks.common.Config.jdbc_query_timeout_ms = 100;
+            int expectedTimeout1 = resolver.getQueryTimeoutSeconds();
+            new Expectations() {
+                {
+                    preparedStatement.setQueryTimeout(expectedTimeout1);
+                    minTimes = 1;
+                }
+            };
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            Assertions.assertNotNull(partitionNames);
+            Assertions.assertEquals(1, expectedTimeout1, "100ms should round up to 1 second");
+
+            // Test case 2: timeout = 0 means no limit (should remain 0, not become 1)
+            com.starrocks.common.Config.jdbc_query_timeout_ms = 0;
+            int expectedTimeout2 = resolver.getQueryTimeoutSeconds();
+            new Expectations() {
+                {
+                    preparedStatement.setQueryTimeout(expectedTimeout2);
+                    minTimes = 1;
+                }
+            };
+            partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            Assertions.assertNotNull(partitionNames);
+            Assertions.assertEquals(0, expectedTimeout2, "0ms should remain 0 (no limit)");
+        } finally {
+            com.starrocks.common.Config.jdbc_query_timeout_ms = originalTimeout;
+        }
+    }
 }

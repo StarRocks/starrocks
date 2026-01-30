@@ -21,6 +21,7 @@
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "storage/chunk_helper.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 std::string get_next_prefix(const Slice& prefix_s) {
@@ -36,15 +37,6 @@ std::string get_next_prefix(const Slice& prefix_s) {
     return "";
 }
 
-Status BuiltinInvertedIndexIterator::close() {
-    if (!_like_context) {
-        return Status::OK();
-    }
-    Status st = LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
-    _like_context.reset(nullptr);
-    return st;
-}
-
 Status BuiltinInvertedIndexIterator::_equal_query(const Slice* search_query, roaring::Roaring* bitmap) {
     bool exact_match = false;
     Status st = _bitmap_itr->seek_dictionary(search_query, &exact_match);
@@ -58,19 +50,35 @@ Status BuiltinInvertedIndexIterator::_equal_query(const Slice* search_query, roa
 }
 
 Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, roaring::Roaring* bitmap) {
-    auto first_wildcard_pos = search_query->to_string().find('%');
-    if (first_wildcard_pos == std::string::npos) {
+    if (_stats == nullptr) {
+        return Status::InternalError("stats is null for builtin inverted index");
+    }
+
+    int64_t wildcard_pos = search_query->find('%');
+    if (wildcard_pos == -1) {
         return Status::InternalError("invalid wildcard query for builtin inverted index");
     }
 
-    rowid_t lower_rowid = 0;
-    rowid_t upper_rowid = _bitmap_itr->has_null_bitmap() ? _bitmap_itr->bitmap_nums() - 1 : _bitmap_itr->bitmap_nums();
-    std::pair<rowid_t, std::string> lower = std::make_pair(lower_rowid, Slice::min_value().to_string());
-    std::pair<rowid_t, std::string> upper = std::make_pair(upper_rowid, Slice::max_value().to_string());
+    if (wildcard_pos == search_query->get_size() - 1 && search_query->get_size() == 1) {
+        // It means all the rows are matched.
+        bitmap->addRange(0, _segment_rows);
+        roaring::Roaring null_map;
+        RETURN_IF_ERROR(_bitmap_itr->read_null_bitmap(&null_map));
+        *bitmap -= null_map;
+        return Status::OK();
+    }
 
-    if (first_wildcard_pos != 0) {
-        Slice prefix_s(search_query->data, first_wildcard_pos);
+    if (wildcard_pos == search_query->get_size() - 1) {
+        SCOPED_RAW_TIMER(&_stats->gin_prefix_filter_ns);
+        // optimize for pure prefix query
+        Slice prefix_s(search_query->data, wildcard_pos);
         std::string next_prefix = get_next_prefix(prefix_s);
+
+        rowid_t lower_rowid = 0;
+        rowid_t upper_rowid =
+                _bitmap_itr->has_null_bitmap() ? _bitmap_itr->bitmap_nums() - 1 : _bitmap_itr->bitmap_nums();
+        std::pair<rowid_t, std::string> lower = std::make_pair(lower_rowid, Slice::min_value().to_string());
+        std::pair<rowid_t, std::string> upper = std::make_pair(upper_rowid, Slice::max_value().to_string());
 
         auto seek = [&](const Slice& bound) -> StatusOr<std::pair<rowid_t, std::string>> {
             bool exact_match;
@@ -101,56 +109,123 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             return Status::OK();
         }
 
-        if (first_wildcard_pos == search_query->size - 1) {
-            // pure prefix query
-            Buffer<rowid_t> hit_rowids(upper.first - lower.first);
-            std::iota(hit_rowids.begin(), hit_rowids.end(), lower.first);
-            RETURN_IF_ERROR(_bitmap_itr->read_union_bitmap(hit_rowids, bitmap));
-            return Status::OK();
-        }
-    }
-
-    RETURN_IF_ERROR(_init_like_context(*search_query));
-    auto predicate = [this](const Column& value_column) -> StatusOr<ColumnPtr> {
-        Columns cols;
-        cols.push_back(&value_column);
-        cols.push_back(this->_like_context->get_constant_column(1));
-        return LikePredicate::like(this->_like_context.get(), cols);
-    };
-    Slice from_value = Slice(lower.second);
-    size_t search_size = upper.first - lower.first;
-    auto res = _bitmap_itr->seek_dictionary_by_predicate(predicate, from_value, search_size);
-    Status st = res.status();
-    if (st.ok()) {
-        auto hit_rowids = std::move(res.value());
+        Buffer<rowid_t> hit_rowids(upper.first - lower.first);
+        std::iota(hit_rowids.begin(), hit_rowids.end(), lower.first);
         RETURN_IF_ERROR(_bitmap_itr->read_union_bitmap(hit_rowids, bitmap));
-    } else if (!st.ok() && !st.is_not_found()) {
-        return st;
-    }
-    return Status::OK();
-}
-
-Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
-    if (_like_context) {
-        RETURN_IF_ERROR(
-                LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL));
-        _like_context.reset(nullptr);
+        return Status::OK();
     }
 
-    _like_context = std::make_unique<FunctionContext>();
-    auto ptr = BinaryColumn::create();
-    ptr->append_datum(Datum(s));
-    (void)ptr->get_data();
-    Columns cols;
-    cols.push_back(nullptr);
-    cols.push_back(ConstColumn::create(std::move(ptr), 1));
-    _like_context->set_constant_columns(cols);
-    Status st = LikePredicate::like_prepare(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
-    if (!st.ok()) {
-        (void)LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
-        _like_context.reset(nullptr);
+    roaring::Roaring filtered_key_words;
+    filtered_key_words.addRange(0, _bitmap_itr->num_dictionaries());
+
+    std::vector<std::pair<Slice, std::vector<size_t>>> keywords;
+
+    _stats->gin_dict_count = _bitmap_itr->num_dictionaries();
+    _stats->gin_ngram_dict_count = _bitmap_itr->ngram_bitmap_nums();
+
+    {
+        SCOPED_RAW_TIMER(&_stats->gin_ngram_filter_dict_ns);
+        // Parse wildcard query like '%%key%word%%' into ['key', 'word'], then use ngram to filter each word.
+        // Start from the beginning to search: the left boundary may consist of several '%' characters. Therefore,
+        // if the left boundary is '%', move the left boundary to the right. After finding the first non-'%' character,
+        // locate the first '%' that appears after this position, and use it as the right boundary. The segment between
+        // these two positions is the keyword. Then, set the right boundary as the new left boundary and continue
+        // searching for the next right boundary following the same logic.
+        int64_t left = 0, right = 0;
+        while (0 <= left && left < search_query->get_size()) {
+            while (0 <= left && left < search_query->get_size() && (*search_query)[left] == '%') {
+                ++left;
+            }
+            if (left < 0 || left >= search_query->get_size()) {
+                break;
+            }
+            right = left;
+            left = search_query->find('%', right);
+
+            auto sub_query = left != -1 ? Slice(search_query->data + right, left - right)
+                                        : Slice(search_query->data + right, search_query->get_size() - right);
+            keywords.emplace_back(sub_query, sub_query.build_next());
+
+            if (_bitmap_itr->ngram_bitmap_nums() == 0) {
+                continue;
+            }
+
+            roaring::Roaring tmp;
+            if (auto st = _bitmap_itr->seek_dict_by_ngram(&sub_query, &tmp); !st.ok()) {
+                if (st.is_not_found()) {
+                    // no words match ngram index, just return empty bitmap
+                    VLOG(10) << "no words match ngram index for gram query " << sub_query.to_string();
+                    return Status::OK();
+                }
+                return st;
+            }
+
+            if (tmp.cardinality() <= 0) {
+                // no words match ngram index, just return empty bitmap
+                VLOG(10) << "no words match ngram index for gram query " << sub_query.to_string();
+                return Status::OK();
+            }
+
+            filtered_key_words &= tmp;
+            if (filtered_key_words.cardinality() <= 0) {
+                // no words match ngram index, just return empty bitmap
+                VLOG(10) << "no words match ngram index for query " << search_query->to_string();
+                return Status::OK();
+            }
+        }
+        _stats->gin_ngram_dict_filtered = _bitmap_itr->num_dictionaries() - filtered_key_words.cardinality();
     }
-    return st;
+
+    Buffer<rowid_t> hit_rowids;
+    {
+        SCOPED_RAW_TIMER(&_stats->gin_predicate_filter_dict_ns);
+        // Check if pattern starts/ends with '%' to enforce SQL LIKE semantics
+        bool pattern_starts_with_wildcard = (*search_query)[0] == '%';
+        bool pattern_ends_with_wildcard = (*search_query)[search_query->get_size() - 1] == '%';
+
+        auto predicate = [&keywords, pattern_starts_with_wildcard,
+                          pattern_ends_with_wildcard](const Slice* dict) -> bool {
+            if (keywords.empty()) {
+                return true;
+            }
+
+            // Find each keyword in order, checking start/end constraints
+            int64_t last_pos = 0;
+            for (size_t i = 0; i < keywords.size(); ++i) {
+                const auto& [keyword, next_array] = keywords[i];
+
+                if (i == keywords.size() - 1 && !pattern_ends_with_wildcard) {
+                    // The last keyword must align to the end. Use the last possible position instead of
+                    // the first occurrence to avoid rejecting cases like "a%c" on "acc".
+                    if (!dict->ends_with(keyword)) {
+                        return false;
+                    }
+                    int64_t required_pos = dict->get_size() - keyword.get_size();
+                    if (required_pos < last_pos) {
+                        return false;
+                    }
+                    last_pos = required_pos + keyword.get_size();
+                    continue;
+                }
+
+                last_pos = dict->find(keyword, next_array, last_pos);
+                if (last_pos == -1) {
+                    return false;
+                }
+
+                // First keyword must be at start if pattern doesn't start with '%'
+                if (i == 0 && !pattern_starts_with_wildcard && last_pos != 0) {
+                    return false;
+                }
+
+                last_pos += keyword.get_size();
+            }
+            return true;
+        };
+        ASSIGN_OR_RETURN(hit_rowids, _bitmap_itr->filter_dict_by_predicate(&filtered_key_words, predicate));
+        _stats->gin_predicate_dict_filtered = filtered_key_words.cardinality() - hit_rowids.size();
+    }
+    return _bitmap_itr->read_union_bitmap(hit_rowids, bitmap);
 }
 
 Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,

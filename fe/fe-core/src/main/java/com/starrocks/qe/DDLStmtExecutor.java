@@ -829,6 +829,9 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAdminRepairTableStatement(AdminRepairTableStmt stmt, ConnectContext context) {
+            List<List<String>> result = Lists.newArrayList();
+            boolean isDryRun = stmt.isDryRun();
+
             ErrorReport.wrapWithRuntimeException(() -> {
                 String dbName = stmt.getDbName() != null ? stmt.getDbName() : context.getDatabase();
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
@@ -847,16 +850,31 @@ public class DDLStmtExecutor {
                     PartitionRef partitionRef = stmt.getPartitionRef();
                     List<String> partitionNames = partitionRef != null ? partitionRef.getPartitionNames() : Lists.newArrayList();
                     ComputeResource computeResource = context.getCurrentComputeResource();
-                    TabletRepairHelper.repair(stmt, db, (OlapTable) table, partitionNames, computeResource);
+
+                    if (isDryRun) {
+                        List<List<String>> rows =
+                                TabletRepairHelper.dryRunRepair(stmt, db, (OlapTable) table, partitionNames, computeResource);
+                        result.addAll(rows);
+                    } else {
+                        TabletRepairHelper.repair(stmt, db, (OlapTable) table, partitionNames, computeResource);
+                    }
                 } else if (table.isCloudNativeMaterializedView()) {
                     // cloud native mv
                     throw new DdlException("Repair cloud native materialized view is not supported");
                 } else {
                     // olap table or mv
+                    if (isDryRun) {
+                        throw new DdlException("Dry run is only supported for cloud-native tables");
+                    }
                     GlobalStateMgr.getCurrentState().getTabletChecker().repairTable(context, stmt);
                 }
             });
-            return null;
+
+            if (isDryRun) {
+                return new ShowResultSet(TabletRepairHelper.getDryRunRepairResultMetaData(), result);
+            } else {
+                return null;
+            }
         }
 
         @Override
@@ -1016,9 +1034,10 @@ public class DDLStmtExecutor {
                     statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                             context.getSessionVariable().getStatisticCollectParallelism());
                     Thread thread = new Thread(() -> {
-                        statsConnectCtx.setThreadLocalInfo();
-                        StatisticExecutor statisticExecutor = new StatisticExecutor();
-                        analyzeJob.run(statsConnectCtx, statisticExecutor);
+                        try (var scope = statsConnectCtx.bindScope()) {
+                            StatisticExecutor statisticExecutor = new StatisticExecutor();
+                            analyzeJob.run(statsConnectCtx, statisticExecutor);
+                        }
                     });
                     thread.start();
                 }

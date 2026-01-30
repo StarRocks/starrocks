@@ -43,6 +43,15 @@ inline void encode_fixed32_le(uint8_t* buf, uint32_t val) {
 #endif
 }
 
+inline void encode_fixed32_be(uint8_t* buf, uint32_t val) {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+    uint32_t res = bswap_32(val);
+    memcpy(buf, &res, sizeof(res));
+#else
+    memcpy(buf, &val, sizeof(val));
+#endif
+}
+
 inline void encode_fixed64_le(uint8_t* buf, uint64_t val) {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
     memcpy(buf, &val, sizeof(val));

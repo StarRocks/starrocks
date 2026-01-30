@@ -589,15 +589,15 @@ public class AnalyzeMgr implements Writable {
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
+        try (var scope = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStatisticsConnection(true);
+            List<Long> pids =
+                    dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
 
-        List<Long> pids = dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
-
-        StatisticExecutor executor = new StatisticExecutor();
-        statsConnectCtx.setThreadLocalInfo();
-        if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
-            pids.forEach(dropPartitionIds::remove);
+            StatisticExecutor executor = new StatisticExecutor();
+            if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
+                pids.forEach(dropPartitionIds::remove);
+            }
         }
     }
 
@@ -657,15 +657,16 @@ public class AnalyzeMgr implements Writable {
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        statsConnectCtx.setStatisticsConnection(true);
-        statsConnectCtx.setThreadLocalInfo();
-        StatisticExecutor executor = new StatisticExecutor();
-        statsConnectCtx.getSessionVariable().setExprChildrenLimit(partitionIds.size() * 3);
-        boolean res = executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tableIds, partitionIds);
-        if (!res) {
-            LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
+        try (var scope = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStatisticsConnection(true);
+            StatisticExecutor executor = new StatisticExecutor();
+            statsConnectCtx.getSessionVariable().setExprChildrenLimit(partitionIds.size() * 3);
+            boolean res = executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tableIds, partitionIds);
+            if (!res) {
+                LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
+            }
+            lastCleanTime = LocalDateTime.now();
         }
-        lastCleanTime = LocalDateTime.now();
     }
 
     private void clearStaleStatsWhenStarted() {
@@ -731,13 +732,14 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        statsConnectCtx.setThreadLocalInfo();
-        StatisticExecutor executor = new StatisticExecutor();
-        List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
+        try (var scope = statsConnectCtx.bindScope()) {
+            StatisticExecutor executor = new StatisticExecutor();
+            List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
 
-        statsConnectCtx.getSessionVariable().setExprChildrenLimit(checkPartitionIds.size() * 3);
-        if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
-            checkDbTableIds.forEach(checkTableIds::remove);
+            statsConnectCtx.getSessionVariable().setExprChildrenLimit(checkPartitionIds.size() * 3);
+            if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
+                checkDbTableIds.forEach(checkTableIds::remove);
+            }
         }
     }
 

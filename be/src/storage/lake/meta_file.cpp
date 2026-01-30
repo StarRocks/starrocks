@@ -100,7 +100,7 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             // Put this `.cols` files into orphan files
             FileMetaPB file_meta;
             file_meta.set_name(dcg_ver.column_files(i));
-            if (dcg_ver.shared_files_size() > 0) {
+            if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));

@@ -5,6 +5,8 @@ keywords: ['session variable']
 
 # System variables
 
+import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+
 StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
 The variables in StarRocks refer to the variable sets in MySQL, but **some variables are only compatible with the MySQL client protocol and do not function on the MySQL database**.
@@ -686,6 +688,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data Type**: boolean
 * **Introduced in**: -
 
+### max_unknown_string_meta_length (global)
+
+* **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
+* **Default**: 64
+* **Data Type**: int
+* **Introduced in**: v3.5.12
+
 ### enable_load_profile
 
 * **Scope**: Session
@@ -880,7 +889,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
   In scenarios where the table to query has a large number of tablets, this feature significantly improves query performance because the meta information and data of the tablet can be cached in memory more quickly.
 
-  However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
+  However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high concurrency scenarios.
 
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
@@ -1777,4 +1786,4 @@ The StarRocks version. Cannot be changed.
 * **Unit**: Second
 * **Data type**: Int
 
-
+<VariableWarehouse />

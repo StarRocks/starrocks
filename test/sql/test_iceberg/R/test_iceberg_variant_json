@@ -167,11 +167,6 @@ order by id;
 2	PASS	-7	-7	beta	beta
 3	PASS	2048	2048		
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_json/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_json_roundtrip force;
 -- result:
 -- !result
@@ -183,4 +178,9 @@ set catalog default_catalog;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_json/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result

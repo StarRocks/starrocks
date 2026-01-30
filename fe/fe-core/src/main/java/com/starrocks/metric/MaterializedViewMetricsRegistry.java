@@ -36,6 +36,7 @@ public class MaterializedViewMetricsRegistry {
     private final Map<MvId, IMaterializedViewMetricsEntity> idToMVMetrics;
     private final ScheduledThreadPoolExecutor timer;
     private static final MaterializedViewMetricsRegistry INSTANCE = new MaterializedViewMetricsRegistry();
+    private static final IMaterializedViewMetricsEntity BLACK_HOLE_ENTITY = new MaterializedViewMetricsBlackHoleEntity();
 
     private MaterializedViewMetricsRegistry() {
         idToMVMetrics = Maps.newHashMap();
@@ -55,7 +56,7 @@ public class MaterializedViewMetricsRegistry {
     }
     private IMaterializedViewMetricsEntity initMaterializedViewMetricsEntity(MvId mvId) {
         if (!Config.enable_materialized_view_metrics_collect) {
-            return new MaterializedViewMetricsBlackHoleEntity();
+            return BLACK_HOLE_ENTITY;
         } else {
             return new MaterializedViewMetricsEntity(metricRegistry, mvId);
         }

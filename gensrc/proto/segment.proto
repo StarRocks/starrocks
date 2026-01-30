@@ -289,6 +289,10 @@ message BitmapIndexPB {
     optional IndexedColumnMetaPB dict_column = 3;
     // required: meta for bitmaps part
     optional IndexedColumnMetaPB bitmap_column = 4;
+    // options: meta for ngram dictionary part
+    optional IndexedColumnMetaPB ngram_dict_column = 5;
+    // options: meta for ngram bitmaps part
+    optional IndexedColumnMetaPB ngram_bitmap_column = 6;
 }
 
 enum HashStrategyPB {

@@ -113,7 +113,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 **必需**：否\
 **描述**：单个 Routine Load 作业的期望任务并行度。默认值：`3`。实际任务并行度由多个参数的最小值决定：`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul><li>`alive_be_number`：存活的 BE 节点数。</li><li>`partition_number`：要消费的分区数。</li><li>`desired_concurrent_number`：单个 Routine Load 作业的期望任务并行度。默认值：`3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 作业的默认最大任务并行度，为 `5`。请参见 [FE 动态参数](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。</li></ul>最大实际任务并行度由存活的 BE 节点数或要消费的分区数决定。<br/>
 
-####  `max_batch_interval`
+#### `max_batch_interval`
 
 **必需**：否\
 **描述**：任务的调度间隔，即任务执行的频率。单位：秒。取值范围：`5` ~ `60`。默认值：`10`。建议设置大于 `10` 的值。如果调度时间小于 10 秒，由于导入频率过高，会生成过多的 tablet 版本。
@@ -359,7 +359,7 @@ FROM <data_source>
   - StarRocks 表由三列组成，按顺序为 `col1`、`col2` 和 `col3`。数据文件由四列组成，其中前三列可以按顺序映射到 StarRocks 表列 `col1`、`col2` 和 `col3`，第四列不能映射到任何 StarRocks 表列。在这种情况下，您需要为数据文件的第四列临时指定一个名称，并且临时名称必须与任何 StarRocks 表列名称不同。例如，您可以指定 `"columns: col1, col2, col3, temp"`，其中数据文件的第四列临时命名为 `temp`。
   - StarRocks 表由三列组成，按顺序为 `year`、`month` 和 `day`。数据文件仅由一列组成，该列包含 `yyyy-mm-dd hh:mm:ss` 格式的日期和时间值。在这种情况下，您可以指定 `"columns: col, year = year(col), month=month(col), day=day(col)"`，其中 `col` 是数据文件列的临时名称，函数 `year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于从数据文件列 `col` 中提取数据并将数据加载到映射的 StarRocks 表列中。例如，`year = year(col)` 用于从数据文件列 `col` 中提取 `yyyy` 数据并将数据加载到 StarRocks 表列 `year` 中。
 
-有关更多示例，请参见 [配置列映射](#configure-column-mapping)。
+有关更多示例，请参见 [配置列映射](#配置列映射)。
 
 ### 配置 JSON 格式或 Avro 格式数据的列映射
 

@@ -285,7 +285,7 @@ public class InsertOverwriteJobRunner {
         String label = MetaUtils.genInsertLabel(context.getExecutionId());
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
 
-        long txnId = transactionMgr.beginTransaction(
+        return transactionMgr.beginTransaction(
                 db.getId(),
                 Lists.newArrayList(targetTable.getId()),
                 label,
@@ -294,29 +294,6 @@ public class InsertOverwriteJobRunner {
                 sourceType,
                 context.getExecTimeout(),
                 context.getCurrentComputeResource());
-
-        // add table indexes to transaction state
-        // If any operation fails after beginTransaction succeeds, we must abort the transaction
-        // to avoid orphaned transactions that would only timeout eventually.
-        try {
-            TransactionState txnState = transactionMgr.getTransactionState(db.getId(), txnId);
-            if (txnState == null) {
-                throw new DmlException("transaction state is null after beginTransaction, dbId:%s, txnId:%s",
-                        db.getId(), txnId);
-            }
-            txnState.addTableIndexes(targetTable);
-        } catch (Exception e) {
-            LOG.warn("failed to setup transaction state for dynamic overwrite, aborting txnId: {}", txnId, e);
-            try {
-                transactionMgr.abortTransaction(db.getId(), txnId,
-                        "failed to setup transaction state: " + e.getMessage());
-            } catch (Exception abortEx) {
-                LOG.warn("failed to abort orphaned transaction {}: {}", txnId, abortEx.getMessage());
-            }
-            throw e;
-        }
-
-        return txnId;
     }
 
     private void createPartitionByValue(InsertStmt insertStmt) {
@@ -585,7 +562,7 @@ public class InsertOverwriteJobRunner {
 
     private void collectTabletsFromPartition(Partition partition, Set<Tablet> tablets) {
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            for (MaterializedIndex index : subPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+            for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 tablets.addAll(index.getTablets());
             }
         }
@@ -641,7 +618,7 @@ public class InsertOverwriteJobRunner {
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : subPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                         sourceTablets.addAll(index.getTablets());
                     }
                 }

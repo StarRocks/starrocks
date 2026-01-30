@@ -148,6 +148,7 @@ public:
     //      }
     //      main_writer->merge_other_writers(cloned_writers)
     Status merge_other_writers(const std::vector<std::unique_ptr<TabletWriter>>& other_writers);
+    Status merge_other_writer(const TabletWriter* other_writer);
 
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }

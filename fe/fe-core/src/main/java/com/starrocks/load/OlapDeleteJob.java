@@ -43,6 +43,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -53,6 +54,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
@@ -79,6 +81,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -121,6 +124,11 @@ public class OlapDeleteJob extends DeleteJob {
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
         List<Predicate> conditions = getDeleteConditions();
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), getTransactionId());
+        if (txnState == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_TXN_NOT_EXIST, getTransactionId());
+        }
 
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
@@ -130,12 +138,15 @@ public class OlapDeleteJob extends DeleteJob {
             int totalReplicaNum = 0;
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition
-                                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    List<Long> indexIds = Lists.newArrayList();
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        indexIds.add(index.getId());
                         for (Tablet tablet : index.getTablets()) {
                             totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
                         }
                     }
+
+                    txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(), indexIds);
                 }
             }
 
@@ -143,8 +154,7 @@ public class OlapDeleteJob extends DeleteJob {
 
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition
-                                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         long indexMetaId = index.getMetaId();
                         int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexMetaId);
 

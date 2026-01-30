@@ -44,6 +44,7 @@
 #include "util/jvm_metrics.h"
 #endif
 #include "util/metrics.h"
+#include "util/metrics/file_scan_metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"
 
@@ -227,6 +228,15 @@ public:
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_pending_duration_us, MetricUnit::MICROSECONDS);
     // Metrics for metadata lru cache
     METRIC_DEFINE_INT_GAUGE(metadata_cache_bytes_total, MetricUnit::BYTES);
+    // Metrics for load spill blocks read & write
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_blocks_read_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_blocks_write_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_blocks_read_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_blocks_write_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_bytes_read_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_bytes_write_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_bytes_read_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_bytes_write_total, MetricUnit::BYTES);
 
     // Metrics for delta writer
     // The number of eos task that executed
@@ -424,6 +434,7 @@ public:
     TableMetricsManager* table_metrics_mgr() { return &_table_metrics_mgr; }
     TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
     pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
+    FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
 
 private:
     // Don't allow constructor
@@ -443,6 +454,8 @@ private:
     JVMMetrics _jvm_metrics;
 #endif
     TableMetricsManager _table_metrics_mgr;
+
+    std::unique_ptr<FileScanMetrics> _file_scan_metrics;
 };
 
 }; // namespace starrocks

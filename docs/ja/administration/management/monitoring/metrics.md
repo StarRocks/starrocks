@@ -704,6 +704,31 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: Bytes
 - 説明: スキャンされたバイトの総数。
 
+### starrocks_be_files_scan_num_files_read
+
+- 単位: Count
+- 説明: 外部ストレージ（CSV, Parquet, ORC, JSON, Avro）から読み取られたファイルの数。ラベル: `file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_bytes_read
+
+- 単位: Bytes
+- 説明: 外部ストレージから読み取られた総バイト数。ラベル: `file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_raw_rows_read
+
+- 単位: Count
+- 説明: フィルタリング前に外部ストレージから読み取られた生の総行数。ラベル: `file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_valid_rows_read
+
+- 単位: Count
+- 説明: 読み取られた有効な行数（フォーマットが無効な行を除く）。ラベル: `file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_rows_return
+
+- 単位: Count
+- 説明: 述語フィルタリング後に返された行数。ラベル: `file_format`, `scan_type`。
+
 ### disk_reads_completed
 
 - 単位: Count

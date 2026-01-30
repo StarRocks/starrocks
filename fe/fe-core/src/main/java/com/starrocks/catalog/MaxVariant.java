@@ -14,8 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.thrift.TInfinityType;
-import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
 
 import java.util.Objects;
@@ -33,14 +31,6 @@ public class MaxVariant extends Variant {
     @Override
     public long getLongValue() {
         return Long.MAX_VALUE;
-    }
-
-    @Override
-    public TVariant toThrift() {
-        TVariant variant = new TVariant();
-        variant.setType(com.starrocks.type.TypeSerializer.toThrift(type));
-        variant.setInfinity_type(TInfinityType.MAXIMUM);
-        return variant;
     }
 
     @Override
@@ -65,4 +55,3 @@ public class MaxVariant extends Variant {
         return Objects.hash(MaxVariant.class, type);
     }
 }
-

@@ -130,6 +130,20 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 assertNotContains(plan, "___count___");
             }
         }
+
+        // negative cases, because customer_union_view is a view.
+        {
+            String[] sqlString = {
+                    "select l_shipdate, count(*) from hive0.tpch.customer_union_view where l_shipdate = '1998-01-02' group by 1",
+                    "select count(*) from hive0.tpch.customer_union_view",
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
+                assertNotContains(plan, "ifnull");
+            }
+        }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
     }
 

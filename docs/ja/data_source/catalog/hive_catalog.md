@@ -194,6 +194,7 @@ Hive データをクエリする前に、Hive メタストアノードのホス�
 | aws.glue.region               | Yes      | AWS Glue Data Catalog が存在するリージョンです。例：`us-west-1`。 |
 | aws.glue.access_key           | No       | AWS IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.glue.secret_key           | No       | AWS IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
+| hive.metastore.glue.catalogid | No       | 使用する AWS Glue Data Catalog の ID。指定しない場合、現在の AWS アカウントのカタログが使用されます。別の AWS アカウントの Glue Data Catalog にアクセスする（クロスアカウントアクセス）必要がある場合は、このパラメータを指定する必要があります。 |
 
 AWS Glue にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS Glue にアクセスするための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
 
@@ -1070,7 +1071,7 @@ StarRocks の内部テーブルと同様に、Hive テーブル（管理テー�
 :::note
 
 - [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
-- テーブルプロパティ [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md# connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに適用する圧縮アルゴリズムを指定できます。StarRocks はテーブルプロパティで指定された圧縮コーデックを優先的に使用します。
+- テーブルプロパティ [`compression_codec`](#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md# connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに適用する圧縮アルゴリズムを指定できます。StarRocks はテーブルプロパティで指定された圧縮コーデックを優先的に使用します。
 
 :::
 

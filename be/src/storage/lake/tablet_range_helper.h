@@ -50,10 +50,9 @@ public:
     static StatusOr<SstSeekRange> create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                              const TabletSchemaCSPtr& tablet_schema);
 
-private:
-    static Status _parse_string_to_datum(const TypeDescriptor& type_desc, const std::string& value_str, Datum* datum,
-                                         MemPool* mem_pool);
+    static StatusOr<TabletRangePB> convert_t_range_to_pb_range(const TTabletRange& t_range);
 
+private:
     // check if the tablet range is closedOpen
     static Status _validate_tablet_range(const TabletRangePB& tablet_range_pb);
 };

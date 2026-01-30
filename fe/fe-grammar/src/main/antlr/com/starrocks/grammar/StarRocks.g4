@@ -119,6 +119,7 @@ statement
     | adminSetConfigStatement
     | adminSetReplicaStatusStatement
     | adminShowConfigStatement
+    | adminShowAutomatedSnapshotStatement
     | adminShowReplicaDistributionStatement
     | adminShowReplicaStatusStatement
     | adminRepairTableStatement
@@ -762,6 +763,10 @@ adminShowConfigStatement
     : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
     ;
 
+adminShowAutomatedSnapshotStatement
+    : ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
+    ;
+
 adminShowReplicaDistributionStatement
     : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
     ;
@@ -984,6 +989,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | mergeTabletClause
     | alterTableAutoIncrementClause
 
     //Alter partition clause
@@ -1243,6 +1249,16 @@ splitTabletClause
     : SPLIT
       (((TABLET | TABLETS) partitionNames?) | tabletList)
       properties?
+    ;
+
+mergeTabletClause
+    : MERGE
+      (((TABLET | TABLETS) partitionNames?) | tabletGroupList)
+      properties?
+    ;
+
+tabletGroupList
+    : (TABLET | TABLETS) integer_list+
     ;
 
 alterTableAutoIncrementClause
@@ -2304,8 +2320,8 @@ alterCNGroupStatement
 // ------------------------------------------- Transaction Statement ---------------------------------------------------
 
 beginStatement
-    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
-    | BEGIN WORK?
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)? (WITH LABEL label=identifier)?
+    | BEGIN WORK? (WITH LABEL label=identifier)?
     ;
 
 commitStatement

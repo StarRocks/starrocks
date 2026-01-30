@@ -292,6 +292,7 @@ public class TabletTaskExecutor {
                         .setEnableTabletCreationOptimization(option.isEnableTabletCreationOptimization())
                         .setGtid(option.getGtid())
                         .setCompactionStrategy(table.getCompactionStrategy())
+                        .setRange(table.isRangeDistribution() ? tablet.getRange() : null)
                         .build();
                 tasks.add(task);
                 createSchemaFile = false;
@@ -455,7 +456,7 @@ public class TabletTaskExecutor {
         for (Partition partition : olapTable.getAllPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 List<MaterializedIndex> allIndices = physicalPartition
-                        .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                        .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
                     int schemaHash = olapTable.getSchemaHashByIndexMetaId(materializedIndex.getMetaId());
                     for (Tablet tablet : materializedIndex.getTablets()) {

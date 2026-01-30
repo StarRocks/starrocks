@@ -1735,7 +1735,7 @@ public class OlapTable extends Table {
                     for (MaterializedIndex deleteIndex : shadowIndex) {
                         physicalPartition.deleteMaterializedIndexByMetaId(deleteIndex.getMetaId());
                     }
-                    for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(extState)) {
+                    for (MaterializedIndex idx : physicalPartition.getAllMaterializedIndices(extState)) {
                         idx.setState(IndexState.NORMAL);
                         if (copied.isCloudNativeTableOrMaterializedView()) {
                             continue;
@@ -2176,6 +2176,30 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                 Boolean.valueOf(enable).toString());
         tableProperty.buildEnableStatisticCollectOnFirstLoad();
+    }
+
+    public int getTableQueryTimeout() {
+        if (tableProperty != null) {
+            return tableProperty.getTableQueryTimeout();
+        }
+        return -1;
+    }
+
+    public void setTableQueryTimeout(int tableQueryTimeout) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        if (tableQueryTimeout == -1) {
+            // Unset table_query_timeout to fallback to default behavior.
+            tableProperty.getProperties().remove(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+            tableProperty.buildTableQueryTimeout();
+            return;
+        }
+        if (tableQueryTimeout <= 0) {
+            throw new IllegalArgumentException("table_query_timeout must be greater than 0, or -1 to reset to default");
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, String.valueOf(tableQueryTimeout));
+        tableProperty.buildTableQueryTimeout();
     }
 
     public boolean allowBucketSizeSetting() {
@@ -2934,7 +2958,21 @@ public class OlapTable extends Table {
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
         }
 
-        Map<String, String> tableProperties = tableProperty.getProperties();
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
+
+        // table query timeout (only show if explicitly set, not default)
+        String tableQueryTimeoutStr = tableProperties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+        if (tableQueryTimeoutStr != null) {
+            try {
+                int timeout = Integer.parseInt(tableQueryTimeoutStr);
+                if (timeout > 0) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, tableQueryTimeoutStr);
+                }
+            } catch (NumberFormatException e) {
+                LOG.warn("fail to parse table query_timeout.", e);
+            }
+        }
+
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
@@ -3293,5 +3331,9 @@ public class OlapTable extends Table {
     @Override
     public Set<TableOperation> getSupportedOperations() {
         return Sets.newHashSet(TableOperation.values());
+    }
+
+    public boolean isRangeDistribution() {
+        return defaultDistributionInfo instanceof RangeDistributionInfo;
     }
 }

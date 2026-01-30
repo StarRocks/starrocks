@@ -194,6 +194,7 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
+| hive.metastore.glue.catalogid | No       | The ID of the AWS Glue Data Catalog to use. When not specified, the catalog in the current AWS account is used. You must specify this parameter when you need to access a Glue Data Catalog in a different AWS account (cross-account access). |
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
@@ -1070,7 +1071,7 @@ Note that sinking data to external tables is disabled by default. To sink data t
 :::note
 
 - You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
-- You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables. StarRocks will prioritize using the compression codec specified in the table property.
+- You can use the table property [`compression_codec`](#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables. StarRocks will prioritize using the compression codec specified in the table property.
 
 :::
 

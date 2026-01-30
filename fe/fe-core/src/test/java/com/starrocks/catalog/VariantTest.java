@@ -14,11 +14,11 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.proto.InfinityTypePB;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.proto.PTypeNode;
 import com.starrocks.proto.VariantPB;
+import com.starrocks.proto.VariantTypePB;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TTuple;
 import com.starrocks.thrift.TTypeNodeType;
@@ -28,7 +28,9 @@ import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
@@ -968,27 +970,27 @@ public class VariantTest {
     public void testMinMaxVariantToThrift() {
         Variant minDate = Variant.minVariant(DateType.DATE);
         TVariant tMin = minDate.toThrift();
-        Assertions.assertTrue(tMin.isSetInfinity_type());
-        Assertions.assertEquals(com.starrocks.thrift.TInfinityType.MINIMUM, tMin.getInfinity_type());
+        Assertions.assertTrue(tMin.isSetVariant_type());
+        Assertions.assertEquals(com.starrocks.thrift.TVariantType.MINIMUM, tMin.getVariant_type());
 
         Variant maxDate = Variant.maxVariant(DateType.DATE);
         TVariant tMax = maxDate.toThrift();
-        Assertions.assertTrue(tMax.isSetInfinity_type());
-        Assertions.assertEquals(com.starrocks.thrift.TInfinityType.MAXIMUM, tMax.getInfinity_type());
+        Assertions.assertTrue(tMax.isSetVariant_type());
+        Assertions.assertEquals(com.starrocks.thrift.TVariantType.MAXIMUM, tMax.getVariant_type());
     }
 
     @Test
     public void testMinMaxVariantFromThrift() {
         TVariant tMin = new TVariant();
         tMin.setType(TypeSerializer.toThrift(DateType.DATE));
-        tMin.setInfinity_type(com.starrocks.thrift.TInfinityType.MINIMUM);
+        tMin.setVariant_type(com.starrocks.thrift.TVariantType.MINIMUM);
         Variant minVariant = Variant.fromThrift(tMin);
         Assertions.assertTrue(minVariant instanceof MinVariant);
         Assertions.assertEquals(DateType.DATE, minVariant.getType());
 
         TVariant tMax = new TVariant();
         tMax.setType(TypeSerializer.toThrift(DateType.DATE));
-        tMax.setInfinity_type(com.starrocks.thrift.TInfinityType.MAXIMUM);
+        tMax.setVariant_type(com.starrocks.thrift.TVariantType.MAXIMUM);
         Variant maxVariant = Variant.fromThrift(tMax);
         Assertions.assertTrue(maxVariant instanceof MaxVariant);
         Assertions.assertEquals(DateType.DATE, maxVariant.getType());
@@ -1008,17 +1010,120 @@ public class VariantTest {
 
         VariantPB pbMin = new VariantPB();
         pbMin.type = typeDesc;
-        pbMin.infinityType = InfinityTypePB.MINIMUM;
+        pbMin.variantType = VariantTypePB.MINIMUM;
         Variant minVariant = Variant.fromProto(pbMin);
         Assertions.assertTrue(minVariant instanceof MinVariant);
         Assertions.assertEquals(DateType.DATE, minVariant.getType());
 
         VariantPB pbMax = new VariantPB();
         pbMax.type = typeDesc;
-        pbMax.infinityType = InfinityTypePB.MAXIMUM;
+        pbMax.variantType = VariantTypePB.MAXIMUM;
         Variant maxVariant = Variant.fromProto(pbMax);
         Assertions.assertTrue(maxVariant instanceof MaxVariant);
         Assertions.assertEquals(DateType.DATE, maxVariant.getType());
+    }
+
+    @Test
+    public void testNullVariantFromThrift() {
+        TVariant tNull = new TVariant();
+        tNull.setType(TypeSerializer.toThrift(IntegerType.INT));
+        tNull.setVariant_type(com.starrocks.thrift.TVariantType.NULL_VALUE);
+        Variant nullVariant = Variant.fromThrift(tNull);
+        Assertions.assertTrue(nullVariant instanceof NullVariant);
+        Assertions.assertEquals(IntegerType.INT, nullVariant.getType());
+    }
+
+    @Test
+    public void testNullVariantFromProto() {
+        PTypeDesc typeDesc = new PTypeDesc();
+        typeDesc.types = new ArrayList<>();
+
+        PTypeNode node = new PTypeNode();
+        node.type = TTypeNodeType.SCALAR.getValue();
+        node.scalarType = new PScalarType();
+        node.scalarType.type = TPrimitiveType.INT.getValue();
+        typeDesc.types.add(node);
+
+        VariantPB pbNull = new VariantPB();
+        pbNull.type = typeDesc;
+        pbNull.variantType = VariantTypePB.NULL_VALUE;
+        Variant nullVariant = Variant.fromProto(pbNull);
+        Assertions.assertTrue(nullVariant instanceof NullVariant);
+        Assertions.assertEquals(IntegerType.INT, nullVariant.getType());
+    }
+
+    @Test
+    public void testToProtoNormalVariant() {
+        Variant variant = Variant.of(IntegerType.INT, "123");
+        VariantPB pb = variant.toProto();
+        Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, pb.variantType);
+        Assertions.assertEquals("123", pb.value);
+        Assertions.assertEquals(IntegerType.INT, TypeDeserializer.fromProtobuf(pb.type));
+    }
+
+    @Test
+    public void testToProtoSpecialVariants() {
+        Variant min = Variant.minVariant(DateType.DATE);
+        VariantPB pbMin = min.toProto();
+        Assertions.assertEquals(VariantTypePB.MINIMUM, pbMin.variantType);
+        Assertions.assertNull(pbMin.value);
+        Assertions.assertEquals(DateType.DATE, TypeDeserializer.fromProtobuf(pbMin.type));
+
+        Variant max = Variant.maxVariant(DateType.DATE);
+        VariantPB pbMax = max.toProto();
+        Assertions.assertEquals(VariantTypePB.MAXIMUM, pbMax.variantType);
+        Assertions.assertNull(pbMax.value);
+        Assertions.assertEquals(DateType.DATE, TypeDeserializer.fromProtobuf(pbMax.type));
+
+        Variant nullVar = Variant.nullVariant(IntegerType.INT);
+        VariantPB pbNull = nullVar.toProto();
+        Assertions.assertEquals(VariantTypePB.NULL_VALUE, pbNull.variantType);
+        Assertions.assertNull(pbNull.value);
+        Assertions.assertEquals(IntegerType.INT, TypeDeserializer.fromProtobuf(pbNull.type));
+    }
+
+    @Test
+    public void testToProtoStringLength() {
+        VarcharType varcharType = new VarcharType(10);
+        Variant variant = Variant.of(varcharType, "abc");
+        VariantPB pb = variant.toProto();
+        Type type = TypeDeserializer.fromProtobuf(pb.type);
+        Assertions.assertTrue(type instanceof ScalarType);
+        Assertions.assertEquals(10, ((ScalarType) type).getLength());
+    }
+
+    @Test
+    public void testNullVariantCompareOrder() {
+        Variant min = Variant.minVariant(IntegerType.INT);
+        Variant max = Variant.maxVariant(IntegerType.INT);
+        Variant nullVar = Variant.nullVariant(IntegerType.INT);
+        Variant intVar = new IntVariant(IntegerType.INT, 1);
+
+        Assertions.assertTrue(min.compareTo(nullVar) < 0);
+        Assertions.assertTrue(nullVar.compareTo(intVar) < 0);
+        Assertions.assertTrue(intVar.compareTo(max) < 0);
+    }
+
+    @Test
+    public void testNullVariantToThriftAndStringValue() {
+        Variant nullVar = Variant.nullVariant(IntegerType.INT);
+        TVariant tNull = nullVar.toThrift();
+        Assertions.assertTrue(tNull.isSetVariant_type());
+        Assertions.assertEquals(com.starrocks.thrift.TVariantType.NULL_VALUE, tNull.getVariant_type());
+        Assertions.assertFalse(tNull.isSetValue());
+        Assertions.assertEquals("NULL", nullVar.toString());
+    }
+
+    @Test
+    public void testNullVariantEqualsHashCodeAndLongValue() {
+        Variant nullInt1 = Variant.nullVariant(IntegerType.INT);
+        Variant nullInt2 = Variant.nullVariant(IntegerType.INT);
+        Variant nullBigint = Variant.nullVariant(IntegerType.BIGINT);
+
+        Assertions.assertEquals(nullInt1, nullInt2);
+        Assertions.assertEquals(nullInt1.hashCode(), nullInt2.hashCode());
+        Assertions.assertNotEquals(nullInt1, nullBigint);
+        Assertions.assertThrows(IllegalStateException.class, nullInt1::getLongValue);
     }
 
     // ==================== Cross-Variant equals() Tests ====================

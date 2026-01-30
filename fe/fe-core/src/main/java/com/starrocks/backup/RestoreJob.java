@@ -84,6 +84,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -1038,6 +1039,11 @@ public class RestoreJob extends AbstractJob {
             for (int i = 0; i < tabletNum; ++i) {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
+                if (remoteOlapTbl.isRangeDistribution()) {
+                    // In shared-nothing mode, ranges do not support splitting.
+                    // There will only be one default range.
+                    newTablet.setRange(new TabletRange());
+                }
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
                 // replicas
@@ -1077,6 +1083,11 @@ public class RestoreJob extends AbstractJob {
             for (int i = 0; i < tabletNum; i++) {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
+                if (remoteOlapTbl.isRangeDistribution()) {
+                    // In shared-nothing mode, ranges do not support splitting.
+                    // There will only be one default range.
+                    newTablet.setRange(new TabletRange());
+                }
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
                 // replicas
@@ -1541,7 +1552,7 @@ public class RestoreJob extends AbstractJob {
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
         // ensure modify for all physical partitions, not only for the first one (default physical partition)
         for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
-            for (MaterializedIndex restoreIdx : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex restoreIdx : physicalPartition.getAllMaterializedIndices(IndexExtState.VISIBLE)) {
                 TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), physicalPartition.getId(),
                         restoreIdx.getId(), TStorageMedium.HDD);
                 for (Tablet restoreTablet : restoreIdx.getTablets()) {
@@ -2057,7 +2068,7 @@ public class RestoreJob extends AbstractJob {
         for (Partition part : restoreTbl.getPartitions()) {
             // ensure clear all physical partitions, not only for the first one (default physical partition)
             for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
-                for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex idx : physicalPartition.getAllMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : idx.getTablets()) {
                         globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
                     }

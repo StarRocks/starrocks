@@ -29,7 +29,8 @@ set(UTIL_FILES
   brpc_stub_cache.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
-  compression/stream_compression.cpp
+  compression/stream_compressor.cpp
+  compression/stream_decompressor.cpp
   coding.cpp
   cpu_info.cpp
   cpu_usage_info.cpp
@@ -50,6 +51,7 @@ set(UTIL_FILES
   starrocks_metrics.cpp
   mem_info.cpp
   metrics.cpp
+  metrics/file_scan_metrics.cpp
   misc.cpp
   murmur_hash3.cpp
   ndv_estimator.cpp

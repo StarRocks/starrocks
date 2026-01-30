@@ -370,8 +370,7 @@ void OperatorFactory::_prepare_runtime_holders(const std::vector<RuntimeFilterHo
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            WARN_IF_ERROR(filter->prepare(runtime_state()), "prepare filter expression failed");
-            WARN_IF_ERROR(filter->open(runtime_state()), "open filter expression failed");
+            DCHECK(filter->opened());
             runtime_in_filters->push_back(filter);
         }
     }

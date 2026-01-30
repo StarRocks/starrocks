@@ -157,8 +157,15 @@ private:
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
 
     // GIN (Generalized Inverted Index) filter
-    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_prefix_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
 
     // Rows after skip key filter
     RuntimeProfile::Counter* _rows_after_sk_filtered_counter = nullptr;

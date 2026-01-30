@@ -1438,6 +1438,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
 - 引入版本：-
 
+##### enable_query_queue_v2
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：当设置为 `true` 时，将 FE 基于 Slot 的查询调度器切换为查询队列 V2。该标志由 Slot 管理器和追踪器读取（例如 `BaseSlotManager.isEnableQueryQueueV2` 和 `SlotTracker#createSlotSelectionStrategy`），用于选择 `SlotSelectionStrategyV2` 替代旧版策略。仅当此标志启用时，`query_queue_v2_xxx` 配置选项和 `QueryQueueOptions` 才会生效。自 v4.1 起，默认值从 `false` 改为 `true`。
+- 引入版本：v3.3.4、v3.4.0、v3.5.0
+
 ##### enable_sql_blacklist
 
 - 默认值：false
@@ -3170,6 +3179,33 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：启用时，StarRocks 允许 Lake 表对相关事务使用 combined transaction log 路径。仅在集群以 shared-data 模式运行（RunMode.isSharedDataMode()）时此标志才会被考虑。设置 `lake_use_combined_txn_log = true` 时，类型为 BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING 和 BATCH_LOAD_JOB 的加载事务将有资格使用 combined txn logs（参见 LakeTableHelper.supportCombinedTxnLog）。包含 compaction 的代码路径通过 isTransactionSupportCombinedTxnLog 检查 combined-log 支持。如果禁用或不在 shared-data 模式下，则不使用 combined transaction log 行为。
 - 引入版本：`v3.3.7, v3.4.0, v3.5.0`
 
+##### enable_iceberg_commit_queue
+
+- 默认值：`true`
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Iceberg 表启用 commit queue 以避免并发提交冲突。Iceberg 使用乐观并发控制（OCC）进行元数据提交。当多个线程同时向同一表提交时，可能会发生冲突并出现类似"Cannot commit: Base metadata location is not same as the current table metadata location"的错误。启用后，每个 Iceberg 表都有自己的单线程执行器用于 commit 操作，确保同一表的提交是串行化的，防止 OCC 冲突。不同的表可以并发提交，保持整体吞吐量。这是一个系统级优化以提高可靠性，默认应该启用。如果禁用，并发提交可能会因乐观锁冲突而失败。
+- 引入版本：`v4.1.0`
+
+##### iceberg_commit_queue_timeout_seconds
+
+- 默认值：`300`
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：等待 Iceberg commit 操作完成的超时时间（秒）。使用 commit queue（`enable_iceberg_commit_queue=true`）时，每个 commit 操作必须在此超时时间内完成。如果 commit 时间超过此超时时间，将被取消并抛出错误。影响 commit 时间的因素包括：提交的数据文件数量、表的元数据大小、底层存储的性能（如 S3、HDFS）。
+- 引入版本：`v4.1.0`
+
+##### iceberg_commit_queue_max_size
+
+- 默认值：`1000`
+- 类型：Int
+- 单位：个
+- 是否动态：否
+- 描述：每个 Iceberg 表的最大待处理 commit 操作数。使用 commit queue（`enable_iceberg_commit_queue=true`）时，这限制了可以排队到单个表的 commit 操作数量。当达到限制时，额外的 commit 操作将在调用者线程中执行（阻塞直到有可用容量）。此配置在 FE 启动时读取，适用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有大量并发 commit，请增加此值。如果此值太低，在高并发期间 commit 可能会在调用者线程中阻塞。
+- 引入版本：`v4.1.0`
+
 ### 其他
 
 ##### agent_task_resend_wait_time_ms
@@ -3387,6 +3423,33 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
+
+##### jdbc_connection_timeout_ms
+
+- 默认值：10000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：否
+- 描述：HikariCP 连接池获取连接的超时时间（单位：毫秒）。如果在该时间内无法从连接池获取到连接，操作将失败。
+- 引入版本：v3.5.13
+
+##### jdbc_query_timeout_ms
+
+- 默认值：30000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：JDBC Statement 查询执行的超时时间（单位：毫秒）。该超时应用于通过 JDBC Catalog 执行的所有 SQL 查询（例如分区元数据查询）。该值在传递给 JDBC 驱动时会转换为秒。
+- 引入版本：v3.5.13
+
+##### jdbc_network_timeout_ms
+
+- 默认值：30000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：JDBC 网络操作（socket 读取）的超时时间（单位：毫秒）。该超时应用于数据库元数据调用（如 getSchemas()、getTables()、getColumns()），以防止外部数据库无响应时无限期阻塞。
+- 引入版本：v3.5.13
 
 ##### jdbc_connection_pool_size
 

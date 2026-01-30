@@ -111,7 +111,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
-    auto res = rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats);
+    auto res = rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &stats);
     if (!res.ok()) {
         return res.status();
     }
@@ -329,8 +329,8 @@ Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, 
         }
         _partial_update_value_columns_schema =
                 ChunkHelper::convert_schema(tablet_schema, _partial_update_value_column_ids);
-        auto res = rowset->get_segment_iterators2(_partial_update_value_columns_schema, tablet_schema, nullptr, 0,
-                                                  &_partial_update_value_column_read_stats);
+        auto res = rowset->get_segment_iterators2(_partial_update_value_columns_schema, tablet_schema,
+                                                  MetaLoadMode::NONE, 0, &_partial_update_value_column_read_stats);
         if (!res.ok()) {
             return res.status();
         }

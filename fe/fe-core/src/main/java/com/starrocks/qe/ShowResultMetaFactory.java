@@ -33,6 +33,7 @@ import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -768,6 +769,18 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("Type", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("IsMutable", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("Comment", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                                          Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Enabled", TypeFactory.createVarcharType(5)))
+                .addColumn(new Column("Interval", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("StorageVolume", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("LastSnapshotTime", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("NextSnapshotTime", TypeFactory.createVarcharType(20)))
                 .build();
     }
 

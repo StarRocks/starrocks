@@ -670,9 +670,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.* ${STARROCKS_OUTPUT}/be/lib/ 2>/dev/null || true
     mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
-    ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
 
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then

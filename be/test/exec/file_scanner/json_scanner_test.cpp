@@ -80,7 +80,11 @@ protected:
         TBrokerScanRange* broker_scan_range = _pool.add(new TBrokerScanRange());
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
-        return std::make_unique<JsonScanner>(_state.get(), _profile, *broker_scan_range, _counter);
+        auto scanner = std::make_unique<JsonScanner>(_state.get(), _profile, *broker_scan_range, _counter);
+        EXPECT_EQ("json", scanner->file_format());
+        // scan_type is not set in TBrokerScanRangeParams, default to LOAD
+        EXPECT_EQ("load", scanner->scan_type());
+        return scanner;
     }
 
     ChunkPtr test_whole_row_json(int columns, const std::string& input_data, std::string jsonpath,
@@ -206,6 +210,7 @@ TEST_F(JsonScannerTest, test_array_json) {
 
     ASSERT_GT(scanner->TEST_scanner_counter()->file_read_count, 0);
     ASSERT_GT(scanner->TEST_scanner_counter()->file_read_ns, 0);
+    ASSERT_EQ(ranges.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_F(JsonScannerTest, test_json_without_path) {
@@ -238,6 +243,7 @@ TEST_F(JsonScannerTest, test_json_without_path) {
 
     EXPECT_EQ("['reference', 'NigelRees', 'SayingsoftheCentury', 8.95]", chunk->debug_row(0));
     EXPECT_EQ("['fiction', 'EvelynWaugh', 'SwordofHonour', 12.99]", chunk->debug_row(1));
+    ASSERT_EQ(ranges.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_F(JsonScannerTest, test_json_path_with_asterisk_basic) {

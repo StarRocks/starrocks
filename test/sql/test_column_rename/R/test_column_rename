@@ -1,4 +1,4 @@
--- name: test_column_rename
+-- name: test_column_rename_native @native
 CREATE TABLE t1 (
     k1 INT,
     v1 INT,
@@ -67,10 +67,10 @@ PROPERTIES (
 insert into t1(k2, v1, v2) values(4, 5, 6);
 -- result:
 -- !result
-select * from t1;
+select * from t1 order by k2;
 -- result:
-4	5	6
 1	2	3
+4	5	6
 -- !result
 drop table t1;
 -- result:
@@ -179,10 +179,10 @@ datekey	varchar(20)	NO	false	None
 select * from t_recharge_detail;
 -- result:
 1	1	1.00	bj	2020-01-01
-2	2	2.00	beijing	2022-04-02
 1	1	1.00	bj	2020-01-01
+2	2	2.00	beijing	2022-04-02
 -- !result
--- name: test_column_rename_insert
+-- name: test_column_rename_insert_native @native
 CREATE TABLE t2 (
     k1 INT,
     v1 INT,
@@ -300,7 +300,7 @@ select * from bill_detail where bill = "JT2921712368984";
 -- result:
 JT2921712368984
 -- !result
--- name: test_column_rename_failed_with_unused_output_column
+-- name: test_column_rename_failed_with_unused_output_column_native @native
 CREATE TABLE `t_rename_column_unused_output_column_name` (
   `a` bigint(20) NOT NULL COMMENT "",
   `b` varchar(20) NULL COMMENT "",
@@ -340,7 +340,7 @@ SELECT a, e FROM t_rename_column_unused_output_column_name WHERE t_rename_column
 drop table t_rename_column_unused_output_column_name force;
 -- result:
 -- !result
--- name: test_wrong_access_path_after_column_rename
+-- name: test_wrong_access_path_after_column_rename_native @native
 CREATE TABLE `t_wrong_access_path_after_column_rename` (
   `k` STRING NOT NULL COMMENT "",
   `v` int,

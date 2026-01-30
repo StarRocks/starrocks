@@ -704,6 +704,31 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Total number of scanned bytes.
 
+### starrocks_be_files_scan_num_files_read
+
+- Unit: Count
+- Description: Number of files read from external storage (CSV, Parquet, ORC, JSON, Avro). Labels: `file_format`, `scan_type`.
+
+### starrocks_be_files_scan_num_bytes_read
+
+- Unit: Bytes
+- Description: Total bytes read from external storage. Labels: `file_format`, `scan_type`.
+
+### starrocks_be_files_scan_num_raw_rows_read
+
+- Unit: Count
+- Description: Total raw rows read from external storage before format validation and predicate filtering. Labels: `file_format`, `scan_type`.
+
+### starrocks_be_files_scan_num_valid_rows_read
+
+- Unit: Count
+- Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
+
+### starrocks_be_files_scan_num_rows_return
+
+- Unit: Count
+- Description: Number of rows returned after predicate filtering. Labels: `file_format`, `scan_type`.
+
 ### disk_reads_completed
 
 - Unit: Count

@@ -53,6 +53,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
@@ -321,6 +323,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SKIP_PAGE_CACHE = "skip_page_cache";
 
+    public static final String SKIP_BLACK_LIST = "skip_black_list";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -516,6 +520,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
+    public static final String ENABLE_RANGE_DISTRIBUTION = "enable_range_distribution";
+
     public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
 
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
@@ -554,10 +560,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // when writing to fewer partitions. Therefore, we introduce a new invisible session variable with a default
     // false value temporarily. Once we can handle the shuffle behavior automatically to avoid some bad cases,
     // We will make it be controlled by the common connector session.
+    // Deprecated: Use connector_sink_shuffle_mode instead
     public static final String ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE = "enable_iceberg_sink_global_shuffle";
+
+    // Control global shuffle mode for connector table sink (Iceberg, Hive, File, etc.)
+    // Supports three modes:
+    // - force: Always enable global shuffle
+    // - auto: Automatically decide based on partition count and backend count (adaptive)
+    // - never: Never enable global shuffle
+    // Default is "auto" for adaptive optimization.
+    public static final String CONNECTOR_SINK_SHUFFLE_MODE = "connector_sink_shuffle_mode";
+
+    // The absolute threshold of partition count to enable adaptive global shuffle.
+    // When the estimated partition count is >= this value, adaptive shuffle will be enabled.
+    // Default is 500 partitions.
+    public static final String CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD = "connector_sink_shuffle_partition_threshold";
+
+    // The ratio of partition count to backend count to enable adaptive global shuffle.
+    // When estimated partition count >= backend count * this ratio, adaptive shuffle will be enabled.
+    // Default is 2.0 (i.e., enable shuffle when partitions >= backends * 2).
+    public static final String CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO = "connector_sink_shuffle_partition_node_ratio";
 
     public static final String ENABLE_CONNECTOR_SINK_SPILL = "enable_connector_sink_spill";
     public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
+    public static final String CONNECTOR_SINK_SORT_SCOPE = "connector_sink_sort_scope";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
@@ -1142,6 +1168,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SKIP_PAGE_CACHE)
     private boolean skipPageCache = false;
 
+    @VariableMgr.VarAttr(name = SKIP_BLACK_LIST)
+    private boolean skipBlackList = false;
+
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
 
@@ -1430,13 +1459,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
 
+    // Deprecated: Use connector_sink_shuffle_mode instead
     @VariableMgr.VarAttr(name = ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergSinkGlobalShuffle = false;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_MODE)
+    private String connectorSinkShuffleMode = ConnectorSinkShuffleMode.AUTO.modeName();
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private long connectorSinkShufflePartitionThreshold = 500;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO, flag = VariableMgr.INVISIBLE)
+    private double connectorSinkShufflePartitionNodeRatio = 2.0;
+
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
 
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double connectorSinkSpillMemLimitThreshold = 0.5;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SORT_SCOPE)
+    private String connectorSinkSortScope = ConnectorSinkSortScope.FILE.scopeName();
 
     // execute sql don't return result, for performance test
     @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
@@ -1815,6 +1858,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_RANGE_DISTRIBUTION, flag = VariableMgr.INVISIBLE)
+    private boolean enableRangeDistribution = false;
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
@@ -2488,6 +2534,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getConnectorSinkTargetMaxFileSize() {
         return connectorSinkTargetMaxFileSize;
+    }
+
+    public String getConnectorSinkSortScope() {
+        return connectorSinkSortScope;
+    }
+
+    public void setConnectorSinkSortScope(String connectorSinkSortScope) {
+        this.connectorSinkSortScope = connectorSinkSortScope;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
@@ -3418,6 +3472,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return skipPageCache;
     }
 
+    public boolean isSkipBlackList() {
+        return skipBlackList;
+    }
+
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
     }
@@ -4280,8 +4338,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableConnectorSinkGlobalShuffle;
     }
 
+    public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
+        ConnectorSinkShuffleMode mode = ConnectorSinkShuffleMode.fromName(this.connectorSinkShuffleMode);
+        // Backward compatibility: legacy iceberg-only boolean implies FORCE when new mode stays at default AUTO.
+        if (mode == ConnectorSinkShuffleMode.AUTO && enableIcebergSinkGlobalShuffle) {
+            return ConnectorSinkShuffleMode.FORCE;
+        }
+        return mode;
+    }
+
     public boolean isEnableIcebergSinkGlobalShuffle() {
         return enableIcebergSinkGlobalShuffle;
+    }
+
+    public long getConnectorSinkShufflePartitionThreshold() {
+        return connectorSinkShufflePartitionThreshold;
+    }
+
+    public double getConnectorSinkShufflePartitionNodeRatio() {
+        return connectorSinkShufflePartitionNodeRatio;
     }
 
     public boolean isEnableConnectorSinkSpill() {
@@ -4447,20 +4522,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableLowCardinalityOptimize = enableLowCardinalityOptimize;
     }
 
-    public boolean isEnableOptimizerSkewJoinByBroadCastSkewValues() {
-        return enableOptimizerSkewJoinByBroadCastSkewValues;
-    }
-
-    public void setEnableOptimizerSkewJoinByBroadCastSkewValues(boolean enableOptimizerSkewJoinByBroadCastSkewValues) {
+    public void setEnableOptimizerSkewJoinOptimizeV2(boolean enableOptimizerSkewJoinByBroadCastSkewValues) {
         this.enableOptimizerSkewJoinByBroadCastSkewValues = enableOptimizerSkewJoinByBroadCastSkewValues;
         this.enableOptimizerSkewJoinByQueryRewrite = !enableOptimizerSkewJoinByBroadCastSkewValues;
     }
 
-    public boolean isEnableOptimizerSkewJoinByQueryRewrite() {
-        return enableOptimizerSkewJoinByQueryRewrite;
+    public boolean isEnableOptimizerSkewJoinOptimizeV1() {
+        return enableOptimizerSkewJoinByQueryRewrite && !enableOptimizerSkewJoinByBroadCastSkewValues;
     }
 
-    public void setEnableOptimizerSkewJoinByQueryRewrite(boolean enableOptimizerSkewJoinByQueryRewrite) {
+    public boolean isEnableOptimizerSkewJoinOptimizeV2() {
+        return enableOptimizerSkewJoinByBroadCastSkewValues;
+    }
+
+    public void setEnableOptimizerSkewJoinOptimizeV1(boolean enableOptimizerSkewJoinByQueryRewrite) {
         this.enableOptimizerSkewJoinByQueryRewrite = enableOptimizerSkewJoinByQueryRewrite;
         this.enableOptimizerSkewJoinByBroadCastSkewValues = !enableOptimizerSkewJoinByQueryRewrite;
     }
@@ -4479,6 +4554,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isAllowDefaultPartition() {
         return allowDefaultPartition;
+    }
+
+    public boolean isEnableRangeDistribution() {
+        return enableRangeDistribution;
+    }
+
+    public void setEnableRangeDistribution(boolean enableRangeDistribution) {
+        this.enableRangeDistribution = enableRangeDistribution;
     }
 
     public void setAllowDefaultPartition(boolean allowDefaultPartition) {

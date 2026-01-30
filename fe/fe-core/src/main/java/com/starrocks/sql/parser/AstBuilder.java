@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -243,6 +244,7 @@ import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -409,6 +411,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TableSampleClause;
+import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.ast.TaskName;
@@ -1825,7 +1828,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
 
-        return new CreateViewStmt(
+        CreateViewStmt stmt = new CreateViewStmt(
                 context.IF() != null,
                 context.REPLACE() != null,
                 targetTableRef,
@@ -1836,6 +1839,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 createPos(context),
                 getCaseInsensitiveProperties(context.properties())
                 );
+        stmt.setQueryStartIndex(context.queryStatement().start.getStartIndex());
+        stmt.setQueryStopIndex(context.queryStatement().stop.getStopIndex() + 1);
+        return stmt;
     }
 
     @Override
@@ -1868,6 +1874,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     context.MODIFY() != null ? AlterViewStmt.AlterDialectType.MODIFY : AlterViewStmt.AlterDialectType.NONE;
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
             AlterViewClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+            alterClause.setQueryStartIndex(context.queryStatement().start.getStartIndex());
+            alterClause.setQueryStopIndex(context.queryStatement().stop.getStopIndex() + 1);
             return new AlterViewStmt(targetTableRef, isSecurity, alterDialectType, properties, alterClause, createPos(context));
         }
     }
@@ -2759,6 +2767,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, stringLiteral.getValue(), pos);
         }
         return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null, pos);
+    }
+
+    @Override
+    public ParseNode visitAdminShowAutomatedSnapshotStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminShowAutomatedSnapshotStatementContext context) {
+        return new AdminShowAutomatedSnapshotStmt(createPos(context));
     }
 
     @Override
@@ -5234,6 +5248,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 createPos(context));
     }
 
+    @Override
+    public ParseNode visitMergeTabletClause(com.starrocks.sql.parser.StarRocksParser.MergeTabletClauseContext context) {
+        return new MergeTabletClause(
+                context.partitionNames() == null ? null : (PartitionRef) visit(context.partitionNames()),
+                context.tabletGroupList() == null ? null : (TabletGroupList) visit(context.tabletGroupList()),
+                getCaseSensitiveProperties(context.properties()),
+                createPos(context));
+    }
+
     // ---------Alter partition clause---------
 
     @Override
@@ -5645,7 +5668,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitBeginStatement(com.starrocks.sql.parser.StarRocksParser.BeginStatementContext context) {
-        return new BeginStmt(createPos(context));
+        String label = null;
+        if (context.label != null) {
+            label = ((Identifier) visit(context.label)).getValue();
+        }
+        return new BeginStmt(createPos(context), label);
     }
 
     @Override
@@ -6445,6 +6472,20 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitTabletList(com.starrocks.sql.parser.StarRocksParser.TabletListContext context) {
         return new TabletList(context.INTEGER_VALUE().stream().map(ParseTree::getText)
                 .map(Long::parseLong).collect(toList()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitTabletGroupList(com.starrocks.sql.parser.StarRocksParser.TabletGroupListContext context) {
+        List<List<Long>> tabletIdGroups = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.Integer_listContext integerListContext :
+                context.integer_list()) {
+            List<Long> tabletIds = new ArrayList<>();
+            for (TerminalNode integerValueNode : integerListContext.INTEGER_VALUE()) {
+                tabletIds.add(Long.parseLong(integerValueNode.getText()));
+            }
+            tabletIdGroups.add(tabletIds);
+        }
+        return new TabletGroupList(tabletIdGroups, createPos(context));
     }
 
     @Override

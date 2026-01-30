@@ -127,7 +127,7 @@ Status PartialRuntimeFilterMerger::merge_singleton_local_bloom_filters() {
     const bool is_version_v3 = _func_version >= TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_3;
     const bool maybe_use_bitset_filter =
             _enable_join_runtime_bitset_filter && is_version_v3 && row_count <= _global_rf_limit &&
-            join_mode == TRuntimeFilterBuildJoinMode::BORADCAST && _partial_bloom_filter_build_params.size() == 1;
+            join_mode == TRuntimeFilterBuildJoinMode::BROADCAST && _partial_bloom_filter_build_params.size() == 1;
 
     const auto& num_bloom_filters = _bloom_filter_descriptors.size();
     // all params must have the same size as num_bloom_filters

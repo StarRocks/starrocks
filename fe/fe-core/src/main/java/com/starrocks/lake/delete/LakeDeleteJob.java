@@ -20,14 +20,19 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.Utils;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.MultiDeleteInfo;
@@ -42,6 +47,7 @@ import com.starrocks.qe.QueryStateException;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.InPredicate;
@@ -54,6 +60,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -96,17 +103,39 @@ public class LakeDeleteJob extends DeleteJob {
             throws DdlException, QueryStateException {
         Preconditions.checkState(table.isCloudNativeTable());
 
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), getTransactionId());
+        if (txnState == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_TXN_NOT_EXIST, getTransactionId());
+        }
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, computeResource);
+            for (Partition partition : partitions) {
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    List<Long> indexIds = Lists.newArrayList();
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        indexIds.add(index.getId());
+                        for (Tablet tablet : index.getTablets()) {
+                            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
+                                    tablet.getId());
+                            if (computeNode == null) {
+                                throw new NoAliveBackendException("no alive backend");
+                            }
+                            beToTablets.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
+                        }
+                    }
+
+                    txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(), indexIds);
+                }
+            }
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
-            // if transaction has been begun, need to abort it
-            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getTransactionState(db.getId(), getTransactionId()) != null) {
-                cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
-            }
+            // transaction has been begun, need to abort it
+            cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             throw new DdlException(t.getMessage(), t);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);

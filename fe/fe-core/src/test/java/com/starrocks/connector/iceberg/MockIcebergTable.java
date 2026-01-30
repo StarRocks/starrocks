@@ -21,18 +21,11 @@ import java.util.List;
 import java.util.Map;
 
 public class MockIcebergTable extends IcebergTable {
-    private final String tableIdentifier;
 
     public MockIcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
                         String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
-                        Map<String, String> icebergProperties, String tableIdentifier, String comment) {
+                        Map<String, String> icebergProperties, String comment) {
         super(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName, comment, schema,
                 nativeTable, icebergProperties);
-        this.tableIdentifier = tableIdentifier;
-    }
-
-    @Override
-    public String getTableIdentifier() {
-        return this.tableIdentifier;
     }
 }

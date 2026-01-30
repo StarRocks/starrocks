@@ -70,6 +70,8 @@ message POlapTableColumnParam {
 };
 
 message POlapTableIndexSchema {
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `id` is set to the `index meta id`.
     required int64 id = 1;
     repeated string columns = 2;
     required int32 schema_hash = 3;

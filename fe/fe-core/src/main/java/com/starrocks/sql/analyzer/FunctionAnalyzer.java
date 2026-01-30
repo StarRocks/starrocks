@@ -394,13 +394,17 @@ public class FunctionAnalyzer {
                     functionCallExpr.getPos());
         }
 
-        if ((fnName.equals(FunctionSet.MIN)
-                || fnName.equals(FunctionSet.MAX)
-                || fnName.equals(FunctionSet.NDV)
+        if ((fnName.equals(FunctionSet.MIN) || fnName.equals(FunctionSet.MAX))
+                && !arg.getType().canApplyToNumeric()) {
+            throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
+        }
+
+        // ndv and approx_count_distinct cannot be applied to non-numeric types
+        if ((fnName.equals(FunctionSet.NDV)
                 || fnName.equals(FunctionSet.APPROX_COUNT_DISTINCT)
                 || fnName.equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
                 || fnName.equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
-                && !arg.getType().canApplyToNumeric()) {
+                && !(arg.getType().canApplyToNumeric() || arg.getType().isBinaryType())) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
 
@@ -1018,7 +1022,12 @@ public class FunctionAnalyzer {
             }
         } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
                 FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
-            Preconditions.checkState(argumentTypes.length == 2);
+            if (argumentTypes.length != 2) {
+                String functionName = fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, "");
+                throw new SemanticException(String.format(
+                        "Function '%s' requires exactly 2 arguments: column and number, but got %d argument(s)",
+                        functionName, argumentTypes.length));
+            }
             Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
             fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
             if (args[0].isDecimalV3()) {

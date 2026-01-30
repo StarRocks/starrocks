@@ -1021,7 +1021,7 @@ public class DatabaseTransactionMgr {
                         return false;
                     }
 
-                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
+                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partition.getParentId(), table.writeQuorum());
                     int replicaNum = partitionInfo.getReplicationNum(partition.getParentId());
                     for (MaterializedIndex index : allIndices) {
@@ -1201,7 +1201,7 @@ public class DatabaseTransactionMgr {
                                 partitionInfo.getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
 
                         List<MaterializedIndex> allIndices =
-                                transactionState.getPartitionLoadedTblIndexes(tableId, physicalPartition);
+                                transactionState.getPartitionLoadedIndexesWithoutLock(tableId, physicalPartition);
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;

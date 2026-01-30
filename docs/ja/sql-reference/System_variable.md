@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # システム変数
 
+import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+
 StarRocks は、多くのシステム変数を提供しており、要件に応じて設定や変更が可能です。このセクションでは、StarRocks がサポートする変数について説明します。これらの変数の設定を確認するには、MySQL クライアントで [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) コマンドを実行します。また、[SET](sql-statements/cluster-management/config_vars/SET.md) コマンドを使用して、変数を動的に設定または変更することもできます。これらの変数は、システム全体でグローバルに、現在のセッションのみで、または単一のクエリ文でのみ有効にすることができます。
 
 StarRocks の変数は、MySQL の変数セットを参照していますが、**一部の変数は MySQL クライアントプロトコルとの互換性のみを持ち、MySQL データベースでは機能しません**。
@@ -558,6 +560,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 * **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/load_concept/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
 * **デフォルト**: true
+
+### max_unknown_string_meta_length (global)
+
+* **説明**: 文字列列の最大長が不明な場合にメタデータで使用するフォールバック長。メタデータの長さが実際より小さいと、一部の BI ツールで空値や切り詰めが発生する可能性があります。`0` 以下は `64` にフォールバックします。有効範囲は `1` ～ `1048576`。
+* **デフォルト**: 64
+* **データ型**: Int
+* **導入バージョン**: v3.5.12
 
 ### enable_lake_tablet_internal_parallel
 
@@ -1470,4 +1479,4 @@ StarRocks のバージョン。変更できません。
 * **単位**: 秒
 * **データ型**: Int
 
-
+<VariableWarehouse />

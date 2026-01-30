@@ -180,7 +180,8 @@ public class AlterJobMgrEditLogTest {
         List<Column> newColumns = new ArrayList<>();
         Column newCol1 = new Column("c1", com.starrocks.type.IntegerType.INT);
         newColumns.add(newCol1);
-        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment");
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment",
+                newViewDef);
 
         // 3. Execute alterView operation (master side)
         alterJobMgr.alterView(alterViewInfo);
@@ -262,7 +263,8 @@ public class AlterJobMgrEditLogTest {
         List<Column> newColumns = new ArrayList<>();
         Column newCol1 = new Column("c1", com.starrocks.type.IntegerType.INT);
         newColumns.add(newCol1);
-        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment");
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment",
+                newViewDef);
 
         // 3. Mock EditLog.logModifyViewDef to throw exception
         EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());

@@ -67,6 +67,32 @@ public class IntervalLiteral extends LiteralExpr {
         }
     }
 
+    public static String formatIntervalSeconds(long intervalSeconds) {
+        if (intervalSeconds <= 0) {
+            return null;
+        }
+
+        long value;
+        String unit;
+        if (intervalSeconds % 604800L == 0) {
+            value = intervalSeconds / 604800L;
+            unit = "WEEK";
+        } else if (intervalSeconds % 86400L == 0) {
+            value = intervalSeconds / 86400L;
+            unit = "DAY";
+        } else if (intervalSeconds % 3600L == 0) {
+            value = intervalSeconds / 3600L;
+            unit = "HOUR";
+        } else if (intervalSeconds % 60L == 0) {
+            value = intervalSeconds / 60L;
+            unit = "MINUTE";
+        } else {
+            value = intervalSeconds;
+            unit = "SECOND";
+        }
+        return value + " " + unit;
+    }
+
     @Override
     public Expr clone() {
         return new IntervalLiteral(this.value, this.unitIdentifier, this.pos);

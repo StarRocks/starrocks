@@ -21,7 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.Metric.MetricUnit;
@@ -35,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 public final class MaterializedViewMetricsEntity implements IMaterializedViewMetricsEntity {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsEntity.class);
@@ -231,11 +231,15 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 MaterializedView mv = (MaterializedView) table;
-                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
-                            LockType.READ)) {
-                    return mv.getRowCount();
-                } catch (Exception e) {
+                Locker locker = new Locker();
+                if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()),
+                        LockType.READ, 1, TimeUnit.SECONDS)) {
                     return 0L;
+                }
+                try {
+                    return mv.getRowCount();
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
                 }
             }
         };
@@ -255,11 +259,15 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 MaterializedView mv = (MaterializedView) table;
-                try (AutoCloseableLock ignore =
-                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
-                    return mv.getDataSize();
-                } catch (Exception e) {
+                Locker locker = new Locker();
+                if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()),
+                        LockType.READ, 1, TimeUnit.SECONDS)) {
                     return 0L;
+                }
+                try {
+                    return mv.getDataSize();
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
                 }
             }
         };
@@ -304,11 +312,15 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
 
-                try (AutoCloseableLock ignore =
-                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
-                    return mv.getPartitions().size();
-                } catch (Exception e) {
+                Locker locker = new Locker();
+                if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()),
+                        LockType.READ, 1, TimeUnit.SECONDS)) {
                     return 0;
+                }
+                try {
+                    return mv.getPartitions().size();
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
                 }
             }
         };

@@ -49,7 +49,9 @@ JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
           _next_range(0),
           _max_chunk_size(state->chunk_size()),
           _cur_file_reader(nullptr),
-          _cur_file_eof(true) {}
+          _cur_file_eof(true) {
+    _file_format_str = "json";
+}
 
 JsonScanner::~JsonScanner() = default;
 
@@ -250,6 +252,7 @@ Status JsonScanner::_open_next_reader() {
         return st;
     }
     _next_range++;
+    ++_counter->num_files_read;
     return Status::OK();
 }
 
@@ -302,7 +305,11 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
 Status JsonReader::open() {
     Status st = _read_and_parse_json();
     if (!st.ok()) {
-        _append_error_msg("", st.to_string());
+        // Timeout can happen when reading from a TimeBoundedStreamLoadPipe (e.g. merge-commit).
+        // It's a retryable condition and should not be written into user-facing error logs.
+        if (!st.is_time_out()) {
+            _append_error_msg("", st.to_string());
+        }
         return st;
     }
     _empty_parser = false;

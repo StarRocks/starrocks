@@ -10,7 +10,7 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 <Beta />
 
-As an OLAP database, StarRocks originally stores data in the columnar storage, which can enhance the performance of complex queries, such as aggregate queries. Since v3.2.3, StarRocks also supports storing data in the hybrid row-column storage where data is stored in both row-by-row and column-by-column fashions. This hybrid row-column storage is well suited for various scenario such as primary key-based high-concurrency, low-latency point queries and partial column updates, while delivering efficient analytical capabilities comparable to columnar storage. Additionally, hybrid row-column storage supports [prepared statements](../sql-reference/sql-statements/prepared_statement.md), which enhances query performance and security.
+As an OLAP database, StarRocks originally stores data in the columnar storage, which can enhance the performance of complex queries, such as aggregate queries. Since v3.2.3, StarRocks also supports storing data in the hybrid row-column storage where data is stored in both row-by-row and column-by-column fashions. This hybrid row-column storage is well suited for various scenario such as primary key-based high concurrency, low-latency point queries and partial column updates, while delivering efficient analytical capabilities comparable to columnar storage. Additionally, hybrid row-column storage supports [prepared statements](../sql-reference/sql-statements/prepared_statement.md), which enhances query performance and security.
 
 ## Comparisons between columnar storage and hybrid row-column storage
 
@@ -20,7 +20,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
    ![img](../_assets/table_design/hybrid_table.png)
 
-- Scenarios: supports the user scenarios of both row-by-row and column-by-column storage, but incurs additional storage costs.<ul><li>User scenarios of row-by-row storage:</li><ul><li>High-concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>User scenarios of column-by-column storage: Complex data analysis.</li></ul>
+- Scenarios: supports the user scenarios of both row-by-row and column-by-column storage, but incurs additional storage costs.<ul><li>User scenarios of row-by-row storage:</li><ul><li>High concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>User scenarios of column-by-column storage: Complex data analysis.</li></ul>
 
 **Column-oriented**
 

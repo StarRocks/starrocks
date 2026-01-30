@@ -56,7 +56,7 @@ StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> OlapRuntimeRangePrunerTe
     desc.__set_filter_id(1);
     desc.__set_has_remote_targets(false);
     desc.__set_build_plan_node_id(_node_id);
-    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BORADCAST);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
     desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
 
     TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(1, true);

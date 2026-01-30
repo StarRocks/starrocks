@@ -469,11 +469,6 @@ Canada	3	90.3	31.666666666666668
 UK	3	89.5	31.333333333333332
 USA	3	76.60000000000001	29.333333333333332
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_analytics_users force;
 -- result:
 -- !result
@@ -491,4 +486,9 @@ set catalog default_catalog;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result

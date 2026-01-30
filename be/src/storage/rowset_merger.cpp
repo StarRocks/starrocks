@@ -355,8 +355,8 @@ private:
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
             entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-            auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                      stats, nullptr, _chunk_size);
+            auto res = rowset->get_segment_iterators2(schema, tablet_schema, MetaLoadMode::ALL, version, stats,
+                                                      _chunk_size);
             if (!res.ok()) {
                 return res.status();
             }
@@ -535,8 +535,8 @@ private:
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-                auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                          &non_key_stats, nullptr, _chunk_size);
+                auto res = rowset->get_segment_iterators2(schema, tablet_schema, MetaLoadMode::ALL, version,
+                                                          &non_key_stats, _chunk_size);
                 if (!res.ok()) {
                     return res.status();
                 }

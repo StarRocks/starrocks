@@ -918,6 +918,11 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitJoin(JoinRelation join, Scope parentScope) {
+            if (join.getLeft() instanceof TableFunctionRelation) {
+                throw unsupportedException("Table function cannot appear on the left side of a join. " +
+                        "Place it on the right side (optionally with LATERAL) or wrap it with TABLE(...).");
+            }
+
             Scope leftScope = process(join.getLeft(), parentScope);
             Scope rightScope;
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
@@ -1260,10 +1265,6 @@ public class QueryAnalyzer {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
             } else if (HintNode.HINT_JOIN_SKEW.equals(join.getJoinHint())) {
-                if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
-                        (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
-                    throw new SemanticException("CROSS JOIN does not support SKEW JOIN optimize");
-                }
                 if (join.getJoinOp().isRightJoin()) {
                     throw new SemanticException("RIGHT JOIN does not support SKEW JOIN optimize");
                 }

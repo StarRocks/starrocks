@@ -192,6 +192,7 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 | aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
 | aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
+| hive.metastore.glue.catalogid | 否       | 要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。 |
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
@@ -1079,7 +1080,7 @@ PARTITION BY (par_col1[, par_col2...])
 :::note
 
 - 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
-- 您可以通过表属性 [`compression_codec`](../../data_source/catalog/hive_catalog.md/#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。StarRocks 会优先选择表属性中指定的 `compression_codec` 来使用。
+- 您可以通过表属性 [`compression_codec`](#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。StarRocks 会优先选择表属性中指定的 `compression_codec` 来使用。
 
 :::
 

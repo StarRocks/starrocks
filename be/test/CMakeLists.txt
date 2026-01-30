@@ -92,6 +92,7 @@ set(EXEC_FILES
         ./exec/schema_task_runs_scanner_test.cpp
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
         ./exec/schema_scanner/schema_scanner_test.cpp
+        ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
@@ -278,6 +279,7 @@ set(EXEC_FILES
         ./http/action/proc_profile_e2e_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
+        ./io/formatted_output_stream_file_test.cpp
         ./io/io_profiler_test.cpp
         ./io/fd_output_stream_test.cpp
         ./io/s3_output_stream_test.cpp
@@ -384,6 +386,7 @@ set(EXEC_FILES
         ./util/json_flattener_test.cpp
         ./util/md5_test.cpp
         ./util/memcmp_test.cpp
+        ./util/metrics/file_scan_metrics_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
         ./util/new_metrics_test.cpp
@@ -427,6 +430,7 @@ set(EXEC_FILES
         ./util/byte_stream_split_test.cpp
         ./util/url_coding_test.cpp
         ./util/url_parser_test.cpp
+        ./util/slice_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp
@@ -489,6 +493,7 @@ SET(DW_TEST_FILES
     ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
+    ./storage/datum_variant_test.cpp
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
@@ -529,6 +534,7 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/schema_change_test.cpp
@@ -554,6 +560,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
     ./storage/lake/tablet_write_log_manager_test.cpp
     ./storage/load_spill_block_manager_test.cpp
+    ./storage/load_spill_pipeline_merge_test.cpp
     ./storage/memtable_flush_executor_test.cpp
     ./storage/memtable_test.cpp
     ./storage/merge_iterator_test.cpp

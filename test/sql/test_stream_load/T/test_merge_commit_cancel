@@ -29,7 +29,8 @@ shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_ca
 -- 4) Verify no running transactions
 function: get_running_transaction_count("db_${uuid0}")
 
--- 5) TODO verify merge commit task state is CANCELLED after supporting information_schema.loads later
+-- 5) Verify merge commit task state is CANCELLED in information_schema.loads
+select STATE = 'CANCELLED' from information_schema.loads where LABEL = '${label1}';
 
 -- 6) Verify data not loaded
 select count(*) from t0;

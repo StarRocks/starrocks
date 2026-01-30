@@ -30,6 +30,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -78,6 +79,13 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
             throws StarRocksException {
         TabletReshardJob job = new SplitTabletJobFactory(db, table, splitTabletClause).createTabletReshardJob();
         addTabletReshardJob(job);
+    }
+
+    public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause mergeTabletClause)
+            throws StarRocksException {
+        // TODO: implement merge tablet reshard job creation.
+        LOG.warn("Merge tablet reshard job creation is not implemented yet. db={}, table={}",
+                db.getFullName(), table.getName());
     }
 
     public void addTabletReshardJob(TabletReshardJob tabletReshardJob) throws StarRocksException {

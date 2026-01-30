@@ -16,10 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.StringUtils;
-import com.starrocks.thrift.TInfinityType;
-import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
-import com.starrocks.type.TypeSerializer;
 
 /*
  * StringVariant is for type CHAR, VARCHAR, BINARY, VARBINARY and HLL
@@ -42,15 +39,6 @@ public class StringVariant extends Variant {
     @Override
     public String getStringValue() {
         return value;
-    }
-
-    @Override
-    public TVariant toThrift() {
-        TVariant variant = new TVariant();
-        variant.setType(TypeSerializer.toThrift(type));
-        variant.setValue(getStringValue());
-        variant.setInfinity_type(TInfinityType.NONE_INFINITY);
-        return variant;
     }
 
     @Override
