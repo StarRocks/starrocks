@@ -825,21 +825,24 @@ public class Load {
             entry.getValue().collect(SlotRef.class, slots);
             for (SlotRef slot : slots) {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
+                Expr mappingExpr = exprsByName.get(slot.getColumnName());
                 // In this case, generated column ref some mapping column
                 // and the expression should be replace by mapping column expression.
 
-                // Notes that, if slotDesc != null and exprsByName.get(slot.getColumnName()) != null
+                // Notes that, if slotDesc != null and mappingExpr != null
                 // it means that the ref columns are both in column list and expression list.
                 // In this case, we should rewrite the generated column expression using
                 // the expression in expression list instead of column list.
-                if (slotDesc == null || exprsByName.get(slot.getColumnName()) != null) {
-                    Expr replaceExpr = exprsByName.get(slot.getColumnName());
+                if (mappingExpr != null) {
+                    // Use expression from column mapping
+                    Expr replaceExpr = mappingExpr;
                     if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
                             !replaceExpr.getType().matchesType(slot.getType())) {
                         replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
                     }
                     smap.put(slot, replaceExpr);
-                } else {
+                } else if (slotDesc != null) {
+                    // Use SlotDescriptor from column list
                     SlotRef slotRef = new SlotRef(slotDesc);
                     slotRef.setColumnName(slot.getColumnName());
                     Expr replaceExpr = slotRef;
@@ -848,6 +851,12 @@ public class Load {
                         replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
                     }
                     smap.put(slot, replaceExpr);
+                } else {
+                    // Column not found in either column list or expression mapping
+                    throw new DdlException("Generated column '" + entry.getKey() +
+                            "' references column '" + slot.getColumnName() +
+                            "' which is not found in the import column list. " +
+                            "Please add column '" + slot.getColumnName() + "' to the columns specification.");
                 }
             }
             Expr expr = ExprSubstitutionVisitor.rewrite(entry.getValue(), smap);
