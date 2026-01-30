@@ -109,12 +109,21 @@ public class MemoryUsageTracker extends FrontendDaemon {
         REFERENCE.get(moduleName).put(object.getClass().getSimpleName(), object);
     }
 
+    // Periodic call - only collects counts, no estimateSize()
     public static void trackMemory() {
-        trackMemory(REFERENCE);
-        trackMemory(ImmutableMap.of("Connector",
+        trackCount(REFERENCE);
+        trackCount(ImmutableMap.of("Connector",
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
 
         LOG.info("jvm: {}", getJVMMemory());
+    }
+
+    // HTTP call - collects full memory stats (estimateSize + estimateCount)
+    public static Map<String, Map<String, MemoryStat>> collectMemoryUsage() {
+        collectFullMemory(REFERENCE);
+        collectFullMemory(ImmutableMap.of("Connector",
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
+        return MEMORY_USAGE;
     }
 
     private static String getJVMMemory() {
@@ -132,7 +141,43 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 new ByteSizeValue(directBufferUsed));
     }
 
-    private static void trackMemory(Map<String, Map<String, MemoryTrackable>> trackers) {
+    public static Map<String, Object> getJVMMemoryMap() {
+        JvmStats jvmStats = JvmStats.jvmStats();
+        long directBufferUsed = 0;
+        for (JvmStats.BufferPool pool : jvmStats.getBufferPools()) {
+            if (pool.getName().equalsIgnoreCase("direct")) {
+                directBufferUsed = pool.getUsed();
+            }
+        }
+        Map<String, Object> jvmMap = Maps.newLinkedHashMap();
+        jvmMap.put("heap_committed", new ByteSizeValue(Runtime.getRuntime().totalMemory()).toString());
+        jvmMap.put("heap_used", new ByteSizeValue(jvmStats.getMem().getHeapUsed()).toString());
+        jvmMap.put("non_heap_used", new ByteSizeValue(jvmStats.getMem().getNonHeapUsed()).toString());
+        jvmMap.put("direct_buffer_used", new ByteSizeValue(directBufferUsed).toString());
+        return jvmMap;
+    }
+
+    private static void trackCount(Map<String, Map<String, MemoryTrackable>> trackers) {
+        for (Map.Entry<String, Map<String, MemoryTrackable>> entry : trackers.entrySet()) {
+            String moduleName = entry.getKey();
+            Map<String, MemoryTrackable> statMap = entry.getValue();
+
+            for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
+                String className = statEntry.getKey();
+                MemoryTrackable tracker = statEntry.getValue();
+                Map<String, Long> counterMap = tracker.estimateCount();
+
+                StringBuilder sb = new StringBuilder();
+                for (Map.Entry<String, Long> subEntry : counterMap.entrySet()) {
+                    sb.append(subEntry.getKey()).append(" with ").append(subEntry.getValue())
+                            .append(" object(s). ");
+                }
+                LOG.info("Module {} - {}. Contains {}", moduleName, className, sb.toString());
+            }
+        }
+    }
+
+    private static void collectFullMemory(Map<String, Map<String, MemoryTrackable>> trackers) {
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : trackers.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();

@@ -271,8 +271,8 @@ class EstimatorTest {
         NestedObject nested = new NestedObject();
         nested.inner = new SimpleObject(1, "inner");
 
-        long shallowSize = Estimator.estimate(nested, 0);
-        long deepSize = Estimator.estimate(nested, 8);
+        long shallowSize = Estimator.estimate(nested, 5, 0);
+        long deepSize = Estimator.estimate(nested, 5, 8);
 
         // With depth 0, should only return shallow size
         assertEquals(Estimator.shallow(nested), shallowSize);
@@ -283,9 +283,9 @@ class EstimatorTest {
     void testEstimateWithCustomDepth() {
         DeeplyNestedObject deep = createDeeplyNestedObject(10);
 
-        long depth2 = Estimator.estimate(deep, 2);
-        long depth5 = Estimator.estimate(deep, 5);
-        long depth10 = Estimator.estimate(deep, 10);
+        long depth2 = Estimator.estimate(deep, 5, 2);
+        long depth5 = Estimator.estimate(deep, 5, 5);
+        long depth10 = Estimator.estimate(deep, 5, 10);
 
         // More depth should generally result in larger size estimation
         assertTrue(depth5 >= depth2);
@@ -301,9 +301,9 @@ class EstimatorTest {
             list.add("element" + i);
         }
 
-        long sample1 = Estimator.estimate(list, 8, 1);
-        long sample5 = Estimator.estimate(list, 8, 5);
-        long sample10 = Estimator.estimate(list, 8, 10);
+        long sample1 = Estimator.estimate(list, 1, 8);
+        long sample5 = Estimator.estimate(list, 5, 8);
+        long sample10 = Estimator.estimate(list, 10, 8);
 
         // All should be positive
         assertTrue(sample1 > 0);
@@ -1286,11 +1286,11 @@ class EstimatorTest {
         Set<Class<?>> ignoreClasses = Set.of(SharedData.class);
 
         // Test with different max depths
-        long depth2 = Estimator.estimate(nested, 2, ignoreClasses);
-        long depth8 = Estimator.estimate(nested, 8, ignoreClasses);
+        long depth2 = Estimator.estimate(nested, 5, 2, ignoreClasses);
+        long depth8 = Estimator.estimate(nested, 5, 8, ignoreClasses);
 
         // Both should be smaller than without ignore
-        long normalDepth8 = Estimator.estimate(nested, 8);
+        long normalDepth8 = Estimator.estimate(nested, 5, 8);
         assertTrue(depth8 < normalDepth8);
 
         // Deeper traversal should generally give larger size
@@ -1312,10 +1312,10 @@ class EstimatorTest {
         Set<Class<?>> ignoreClasses = Set.of(SharedData.class);
 
         // Test with all parameters
-        long size = Estimator.estimate(list, 8, 5, ignoreClasses);
+        long size = Estimator.estimate(list, 5, 8, ignoreClasses);
 
         // Should be smaller than without ignore
-        long normalSize = Estimator.estimate(list, 8, 5);
+        long normalSize = Estimator.estimate(list, 5, 8);
         assertTrue(size < normalSize);
     }
 

@@ -135,7 +135,7 @@ public class Estimator {
     );
 
     // Set to track visited objects and avoid counting the same object twice
-    private final Set<Object> sampled;
+    private final Set<Object> visited;
 
     // Set of classes to ignore during estimation
     private final Set<Class<?>> ignoreClasses;
@@ -145,7 +145,7 @@ public class Estimator {
     }
 
     public Estimator(Set<Class<?>> ignoreClasses) {
-        this.sampled = Collections.newSetFromMap(new IdentityHashMap<>());
+        this.visited = Collections.newSetFromMap(new IdentityHashMap<>());
         this.ignoreClasses = ignoreClasses != null ? ignoreClasses : Collections.emptySet();
     }
 
@@ -192,35 +192,35 @@ public class Estimator {
     }
 
     /**
-     * Estimate the memory size of an object with default max depth.
+     * Estimate the memory size of an object with default settings.
      *
      * @param obj the object to estimate
      * @return the estimated memory size in bytes
      */
     public static long estimate(Object obj) {
-        return estimate(obj, DEFAULT_MAX_DEPTH);
-    }
-
-    /**
-     * Estimate the memory size of an object.
-     *
-     * @param obj      the object to estimate
-     * @param maxDepth the maximum recursion depth
-     * @return the estimated memory size in bytes
-     */
-    public static long estimate(Object obj, int maxDepth) {
-        return new Estimator().estimateInternal(obj, maxDepth, DEFAULT_SAMPLE_SIZE);
+        return new Estimator().estimateInternal(obj, DEFAULT_MAX_DEPTH, DEFAULT_SAMPLE_SIZE);
     }
 
     /**
      * Estimate the memory size of an object with specified sample size.
      *
      * @param obj        the object to estimate
-     * @param maxDepth   the maximum recursion depth
      * @param sampleSize the number of elements to sample for collections/arrays
      * @return the estimated memory size in bytes
      */
-    public static long estimate(Object obj, int maxDepth, int sampleSize) {
+    public static long estimate(Object obj, int sampleSize) {
+        return new Estimator().estimateInternal(obj, DEFAULT_MAX_DEPTH, sampleSize);
+    }
+
+    /**
+     * Estimate the memory size of an object with specified sample size and max depth.
+     *
+     * @param obj        the object to estimate
+     * @param sampleSize the number of elements to sample for collections/arrays
+     * @param maxDepth   the maximum recursion depth
+     * @return the estimated memory size in bytes
+     */
+    public static long estimate(Object obj, int sampleSize, int maxDepth) {
         return new Estimator().estimateInternal(obj, maxDepth, sampleSize);
     }
 
@@ -239,27 +239,27 @@ public class Estimator {
     }
 
     /**
-     * Estimate the memory size of an object with specified max depth and ignore classes.
+     * Estimate the memory size of an object with specified sample size and ignore classes.
      *
      * @param obj           the object to estimate
-     * @param maxDepth      the maximum recursion depth
+     * @param sampleSize    the number of elements to sample for collections/arrays
      * @param ignoreClasses set of classes to ignore during estimation
      * @return the estimated memory size in bytes
      */
-    public static long estimate(Object obj, int maxDepth, Set<Class<?>> ignoreClasses) {
-        return new Estimator(ignoreClasses).estimateInternal(obj, maxDepth, DEFAULT_SAMPLE_SIZE);
+    public static long estimate(Object obj, int sampleSize, Set<Class<?>> ignoreClasses) {
+        return new Estimator(ignoreClasses).estimateInternal(obj, DEFAULT_MAX_DEPTH, sampleSize);
     }
 
     /**
      * Estimate the memory size of an object with all options specified.
      *
      * @param obj           the object to estimate
-     * @param maxDepth      the maximum recursion depth
      * @param sampleSize    the number of elements to sample for collections/arrays
+     * @param maxDepth      the maximum recursion depth
      * @param ignoreClasses set of classes to ignore during estimation
      * @return the estimated memory size in bytes
      */
-    public static long estimate(Object obj, int maxDepth, int sampleSize, Set<Class<?>> ignoreClasses) {
+    public static long estimate(Object obj, int sampleSize, int maxDepth, Set<Class<?>> ignoreClasses) {
         return new Estimator(ignoreClasses).estimateInternal(obj, maxDepth, sampleSize);
     }
 
@@ -272,7 +272,7 @@ public class Estimator {
         }
 
         // Skip if already visited (avoid counting the same object twice)
-        if (!sampled.add(obj)) {
+        if (!visited.add(obj)) {
             return 0;
         }
 
