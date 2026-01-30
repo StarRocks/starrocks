@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "formats/csv/output_stream_file.h"
+#include "io/formatted_output_stream_file.h"
 
 #include <gtest/gtest.h>
 
@@ -26,9 +26,9 @@
 #include "io/async_flush_output_stream.h"
 #include "testutil/assert.h"
 
-namespace starrocks::csv {
+namespace starrocks::io {
 
-class OutputStreamFileTest : public testing::Test {
+class FormattedOutputStreamFileTest : public testing::Test {
 public:
     void SetUp() override {
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
@@ -45,15 +45,15 @@ protected:
 };
 
 // Test basic compression functionality
-TEST_F(OutputStreamFileTest, TestBasicCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestBasicCompression) {
     std::string file_path = "/test_basic_compression.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -76,15 +76,15 @@ TEST_F(OutputStreamFileTest, TestBasicCompression) {
 }
 
 // Test compression with empty data
-TEST_F(OutputStreamFileTest, TestEmptyDataCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestEmptyDataCompression) {
     std::string file_path = "/test_empty_compression.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -102,15 +102,15 @@ TEST_F(OutputStreamFileTest, TestEmptyDataCompression) {
 }
 
 // Test compression with large data
-TEST_F(OutputStreamFileTest, TestLargeDataCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestLargeDataCompression) {
     std::string file_path = "/test_large_compression.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -137,15 +137,15 @@ TEST_F(OutputStreamFileTest, TestLargeDataCompression) {
 }
 
 // Test multiple writes before finalize
-TEST_F(OutputStreamFileTest, TestMultipleWrites) {
+TEST_F(FormattedOutputStreamFileTest, TestMultipleWrites) {
     std::string file_path = "/test_multiple_writes.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -170,16 +170,16 @@ TEST_F(OutputStreamFileTest, TestMultipleWrites) {
 }
 
 // Test compression with data larger than buffer
-TEST_F(OutputStreamFileTest, TestDataLargerThanBuffer) {
+TEST_F(FormattedOutputStreamFileTest, TestDataLargerThanBuffer) {
     std::string file_path = "/test_larger_than_buffer.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
     // Use a small buffer size to test buffer overflow handling
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 64);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 64);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -202,15 +202,15 @@ TEST_F(OutputStreamFileTest, TestDataLargerThanBuffer) {
 }
 
 // Test size() method - tests both pending estimate and final size
-TEST_F(OutputStreamFileTest, TestSizeMethod) {
+TEST_F(FormattedOutputStreamFileTest, TestSizeMethod) {
     std::string file_path = "/test_size.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -232,15 +232,15 @@ TEST_F(OutputStreamFileTest, TestSizeMethod) {
 }
 
 // Test compression with special characters
-TEST_F(OutputStreamFileTest, TestSpecialCharacters) {
+TEST_F(FormattedOutputStreamFileTest, TestSpecialCharacters) {
     std::string file_path = "/test_special_chars.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -260,15 +260,15 @@ TEST_F(OutputStreamFileTest, TestSpecialCharacters) {
 }
 
 // Test compression with binary data
-TEST_F(OutputStreamFileTest, TestBinaryData) {
+TEST_F(FormattedOutputStreamFileTest, TestBinaryData) {
     std::string file_path = "/test_binary.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -291,14 +291,14 @@ TEST_F(OutputStreamFileTest, TestBinaryData) {
 }
 
 // Test that uncompressed stream still works (regression test)
-TEST_F(OutputStreamFileTest, TestUncompressedStream) {
+TEST_F(FormattedOutputStreamFileTest, TestUncompressedStream) {
     std::string file_path = "/test_uncompressed.csv";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto output_stream = std::make_unique<AsyncOutputStreamFile>(async_stream.get(), 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto output_stream = std::make_unique<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
 
     std::string test_data = "Uncompressed data\n";
     ASSERT_OK(output_stream->write(Slice(test_data)));
@@ -316,15 +316,15 @@ TEST_F(OutputStreamFileTest, TestUncompressedStream) {
 // but any subsequent flush would fail since the underlying stream is closed.
 
 // Test very small writes
-TEST_F(OutputStreamFileTest, TestVerySmallWrites) {
+TEST_F(FormattedOutputStreamFileTest, TestVerySmallWrites) {
     std::string file_path = "/test_small_writes.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::GZIP, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -346,15 +346,16 @@ TEST_F(OutputStreamFileTest, TestVerySmallWrites) {
 }
 
 // Test SNAPPY compression
-TEST_F(OutputStreamFileTest, TestSnappyCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestSnappyCompression) {
     std::string file_path = "/test_snappy.csv.snappy";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::SNAPPY, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result =
+            CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::SNAPPY, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -374,15 +375,15 @@ TEST_F(OutputStreamFileTest, TestSnappyCompression) {
 }
 
 // Test ZSTD compression
-TEST_F(OutputStreamFileTest, TestZstdCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestZstdCompression) {
     std::string file_path = "/test_zstd.csv.zst";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::ZSTD, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::ZSTD, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -409,15 +410,15 @@ TEST_F(OutputStreamFileTest, TestZstdCompression) {
 }
 
 // Test LZ4 (raw block) compression
-TEST_F(OutputStreamFileTest, TestLz4RawCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestLz4RawCompression) {
     std::string file_path = "/test_lz4raw.csv.lz4";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -437,15 +438,16 @@ TEST_F(OutputStreamFileTest, TestLz4RawCompression) {
 }
 
 // Test LZ4_FRAME compression
-TEST_F(OutputStreamFileTest, TestLz4FrameCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestLz4FrameCompression) {
     std::string file_path = "/test_lz4_frame.csv.lz4";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4_FRAME, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result =
+            CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::LZ4_FRAME, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -473,15 +475,16 @@ TEST_F(OutputStreamFileTest, TestLz4FrameCompression) {
 }
 
 // Test LZ4 auto-detection for frame format
-TEST_F(OutputStreamFileTest, TestLz4FrameAutoDetect) {
+TEST_F(FormattedOutputStreamFileTest, TestLz4FrameAutoDetect) {
     std::string file_path = "/test_lz4_frame_auto.csv.lz4";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4_FRAME, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result =
+            CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::LZ4_FRAME, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -501,15 +504,15 @@ TEST_F(OutputStreamFileTest, TestLz4FrameAutoDetect) {
 }
 
 // Test LZ4 auto-detection for block format
-TEST_F(OutputStreamFileTest, TestLz4BlockAutoDetect) {
+TEST_F(FormattedOutputStreamFileTest, TestLz4BlockAutoDetect) {
     std::string file_path = "/test_lz4_block_auto.csv.lz4";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -529,15 +532,15 @@ TEST_F(OutputStreamFileTest, TestLz4BlockAutoDetect) {
 }
 
 // Test LZ4 block stream empty terminator auto-detect
-TEST_F(OutputStreamFileTest, TestLz4BlockAutoDetectEmpty) {
+TEST_F(FormattedOutputStreamFileTest, TestLz4BlockAutoDetectEmpty) {
     std::string file_path = "/test_lz4_block_empty.csv.lz4";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -551,15 +554,16 @@ TEST_F(OutputStreamFileTest, TestLz4BlockAutoDetectEmpty) {
 }
 
 // Test DEFLATE compression
-TEST_F(OutputStreamFileTest, TestDeflateCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestDeflateCompression) {
     std::string file_path = "/test_deflate.csv.deflate";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::DEFLATE, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result =
+            CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::DEFLATE, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -579,15 +583,15 @@ TEST_F(OutputStreamFileTest, TestDeflateCompression) {
 }
 
 // Test ZLIB compression
-TEST_F(OutputStreamFileTest, TestZlibCompression) {
+TEST_F(FormattedOutputStreamFileTest, TestZlibCompression) {
     std::string file_path = "/test_zlib.csv.zlib";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::ZLIB, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::ZLIB, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -607,15 +611,16 @@ TEST_F(OutputStreamFileTest, TestZlibCompression) {
 }
 
 // Test BZIP2 compression
-TEST_F(OutputStreamFileTest, TestBzip2Compression) {
+TEST_F(FormattedOutputStreamFileTest, TestBzip2Compression) {
     std::string file_path = "/test_bzip2.csv.bz2";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
-    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::BZIP2, 1024);
+    auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result =
+            CompressedFormattedOutputStream::create(base_stream, CompressionTypePB::BZIP2, 1024);
     ASSERT_OK(compressed_stream_result.status());
     auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -635,7 +640,7 @@ TEST_F(OutputStreamFileTest, TestBzip2Compression) {
 }
 
 // Test all supported compression types with large data
-TEST_F(OutputStreamFileTest, TestAllCompressionTypesLargeData) {
+TEST_F(FormattedOutputStreamFileTest, TestAllCompressionTypesLargeData) {
     std::vector<std::pair<CompressionTypePB, std::string>> compression_types = {
             {CompressionTypePB::GZIP, ".gz"},       {CompressionTypePB::ZSTD, ".zst"},
             {CompressionTypePB::LZ4_FRAME, ".lz4"}, {CompressionTypePB::SNAPPY, ".snappy"},
@@ -656,9 +661,9 @@ TEST_F(OutputStreamFileTest, TestAllCompressionTypesLargeData) {
         ASSERT_OK(maybe_file.status());
         auto file = std::move(maybe_file.value());
 
-        auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-        auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-        auto compressed_stream_result = CompressedOutputStream::create(base_stream, compression_type, 1024);
+        auto async_stream = std::make_unique<AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+        auto base_stream = std::make_shared<AsyncFormattedOutputStreamFile>(async_stream.get(), 1024);
+        auto compressed_stream_result = CompressedFormattedOutputStream::create(base_stream, compression_type, 1024);
         ASSERT_OK(compressed_stream_result.status());
         auto compressed_stream = std::move(compressed_stream_result.value());
 
@@ -680,4 +685,4 @@ TEST_F(OutputStreamFileTest, TestAllCompressionTypesLargeData) {
     }
 }
 
-} // namespace starrocks::csv
+} // namespace starrocks::io

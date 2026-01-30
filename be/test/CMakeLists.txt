@@ -214,7 +214,6 @@ set(EXEC_FILES
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
-        ./formats/csv/output_stream_file_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
@@ -280,6 +279,7 @@ set(EXEC_FILES
         ./http/action/proc_profile_e2e_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
+        ./io/formatted_output_stream_file_test.cpp
         ./io/io_profiler_test.cpp
         ./io/fd_output_stream_test.cpp
         ./io/s3_output_stream_test.cpp
