@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -168,11 +169,22 @@ public class HiveMetaClientTest {
             }
         };
 
+        // Use CyclicBarrier to ensure all 3 threads create their clients before any of them
+        // can complete getTable and call finish(). Without this, due to the mock's instant
+        // getTable return, threads may run sequentially and only 1 client is ever created,
+        // so the pool never fills and close() is never called.
+        CyclicBarrier barrier = new CyclicBarrier(3);
+
         new MockUp<RetryingMetaStoreClient>() {
             @Mock
             public IMetaStoreClient getProxy(Configuration hiveConf, HiveMetaHookLoader hookLoader,
                                              ConcurrentHashMap<String, Long> metaCallTimeMap, String mscClassName,
                                              boolean allowEmbedded) throws MetaException {
+                try {
+                    barrier.await(10, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
                 return metaStoreClient;
             }
         };
