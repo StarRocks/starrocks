@@ -12,6 +12,8 @@ displayed_sidebar: docs
 
 对于存算分离集群中的云原生表，当元数据或数据文件丢失时，它会尝试回滚到历史可用版本。请注意，**这可能会导致某些分区丢失最新数据**。
 
+详细操作指南请参阅[管理副本](../../../../administration/management/resource_management/Replica.md)。
+
 :::tip
 
 该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../../account-management/GRANT.md) 为用户赋权。
