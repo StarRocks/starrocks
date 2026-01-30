@@ -18,7 +18,7 @@ import com.starrocks.common.StarRocksException;
 
 /*
  * TabletReshardJobFactory is for creating TabletReshardJob.
- * This is the base class of SplitTabletJobFactory and MergeTabletJobFactory.
+ * This is the base class of tablet reshard job factories.
  */
 public interface TabletReshardJobFactory {
 
