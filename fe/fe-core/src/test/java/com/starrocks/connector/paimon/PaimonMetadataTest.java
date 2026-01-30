@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -148,8 +149,8 @@ import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PaimonMetadataTest {
     @Mocked
@@ -1113,7 +1114,7 @@ public class PaimonMetadataTest {
         assertEquals(PAIMON_VIEW, view.getType());
         assertEquals("test_view", view.getName());
         assertEquals("select * from table", view.getInlineViewDef());
-        assertDoesNotThrow(view::getQueryStatement);
+        assertThrows(StarRocksPlannerException.class, view::getQueryStatement);
 
         //test drop normal
         DropTableStmt dropStmt = new DropTableStmt(true, new TableRef(QualifiedName.of(
