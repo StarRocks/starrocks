@@ -117,7 +117,7 @@ jobs:
                 if [ "$SRC" == "$LANG" ]; then continue; fi
                 
                 FULL_LANG=$(echo $LANG | sed 's/ja/Japanese/;s/zh/Chinese/;s/en/English/')
-                GLOBAL_STR=" [x] **$FULL_LANG ($LANG)** for **ALL** missing files"
+                GLOBAL_STR=" [x] **$FULL_LANG ($LANG)** for **ALL** missing/outdated files"
                 INDIVIDUAL_STR=" [x] **$LANG** for \`$FILE\`"
                 
                 if [[ "$BODY" == *"$GLOBAL_STR"* ]] || [[ "$BODY" == *"$INDIVIDUAL_STR"* ]]; then
