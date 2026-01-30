@@ -1,7 +1,6 @@
 FEs: FE
 BEs: BE
-distributed architecture: &da 分散アーキテクチャ
-distributed-architecture: *da
+distributed architecture: 分散アーキテクチャ
 Data loading: データロード
 Data unloading: データアンロード
 load: ロード
@@ -21,9 +20,7 @@ zero-migration: ゼロマイグレーション
 native vectorized engine: ネイティブベクトル化エンジン
 vectorized query engine: ベクトル化クエリエンジン
 query federation/federated query: フェデレーションクエリ
-query plan: &qp クエリプラン
-query planning: *qp
-query analysis: *qp
+query plan: クエリプラン
 columnar storage: 列指向（カラムナ）ストレージ
 row storage: 行指向（ロウ）ストレージ
 intelligent materialized view: インテリジェントなマテリアライズドビュー
@@ -33,8 +30,7 @@ synchronous materialized view: 同期マテリアライズドビュー
 asynchronous materialized view: 非同期マテリアライズドビュー
 unified batch and streaming, batch-stream integrated: バッチストリーム統合
 high availability: 高可用性
-high concurrency: &hc 高い同時実行性
-high-concurrency: *hc
+high concurrency: 高い同時実行性
 high scalability: 高拡張性
 data ingestion: データ取り込み
 denormalized table/flat table: 非正規化テーブル

@@ -12,17 +12,33 @@ permissions:
   issues: write
 
 jobs:
-  grab_feedback_from_posthog:
-    name: Pull feedback using API
-    runs-on: ubuntu-latest
+  Weekly_info_for_docs_team:
     env:
       POSTHOG_TOKEN: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
       ALGOLIA_TOKEN: ${{ secrets.ALGOLIA_ANALYTICS_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Run PostHog script
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: List PRs with docs-maintainer Label
         run: |
           set -eo pipefail # Ensure the script fails on any command error
-          echo "## Feedback from readers" > feedback.md
+          echo "## PRs that need attention" > feedback.md
+          echo "Listing PRs with label: docs-maintainer" >> feedback.md
+
+          curl -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?state=open" | jq -r '.[] | select(.labels[]?.name == "docs-maintainer") | "- PR number: \(.number) PR title: [\(.title)](\(.html_url))"' >> feedback.md
+
+          echo "---" >> feedback.md
+
+
+      - name: Collect feedback
+        run: |
+          set -eo pipefail # Ensure the script fails on any command error
+          echo "## Feedback from readers" >> feedback.md
           echo "Three sections: feedback, top working searches, and top failed searches." >> feedback.md
           echo "Please check off the feedback and failed searches as you fix them and" >> feedback.md
           echo "please add the `doc-feedback` label to your PRs related to this issue." >> feedback.md
@@ -63,6 +79,7 @@ jobs:
            >> feedback.md
 
       - name: Create issue from file
+        if: always()
         id: weekly-feedback-report
         uses: peter-evans/create-issue-from-file@ceef9be92406ace67ab5421f66570acf213ec395
         with:
