@@ -406,28 +406,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         idToVisibleIndex.put(mIndex.getId(), mIndex);
     }
 
-<<<<<<< HEAD
-=======
-    public MaterializedIndex deleteMaterializedIndexByIndexId(long indexId) {
-        MaterializedIndex index = idToVisibleIndex.remove(indexId);
-        if (index == null) {
-            index = idToShadowIndex.remove(indexId);
-        }
-
-        if (index != null) {
-            List<Long> indexIds = indexMetaIdToIndexIds.get(index.getMetaId());
-            Preconditions.checkState(indexIds != null && indexIds.remove(indexId),
-                    String.format("index id %d not found in indexMetaIdToIndexIds", indexId));
-
-            if (indexIds.isEmpty()) {
-                indexMetaIdToIndexIds.remove(index.getMetaId());
-            }
-        }
-
-        return index;
-    }
-
->>>>>>> bd3d9a9a29 ([BugFix] Fix PhysicalPartition cleanup and multi-version materialized index handling (#68593))
     public List<MaterializedIndex> deleteMaterializedIndexByMetaId(long indexMetaId) {
         List<MaterializedIndex> indices = Lists.newArrayList();
         List<Long> indexIds = indexMetaIdToIndexIds.remove(indexMetaId);
