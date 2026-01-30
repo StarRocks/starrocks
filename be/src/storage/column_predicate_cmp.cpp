@@ -1152,6 +1152,9 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
     case PredicateType::kPlaceHolder:
         os << "placeholder";
         break;
+    case PredicateType::kGinFallback:
+        os << "gin_fallback";
+        break;
     default:
         CHECK(false) << "unknown predicate " << p;
     }

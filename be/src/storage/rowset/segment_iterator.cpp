@@ -36,6 +36,7 @@
 #include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate.h"
+#include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
@@ -296,8 +297,8 @@ private:
         std::vector<InvertedIndexIterator*> inverted_index_iterators;
         std::unordered_set<ColumnId> prune_cols_candidate_by_inverted_index;
 
-        // Fallback predicates for MATCH expressions in OR queries
-        std::vector<const ColumnExprPredicate*> fallback_predicates;
+        // Fallback predicates for MATCH expressions in OR queries (wrapped with segment-specific bitmaps)
+        std::vector<InvertedIndexFallbackPredicate*> fallback_predicates;
 
         // Cleanup method to properly delete iterators
         void cleanup() {
@@ -526,6 +527,9 @@ private:
 
     // Inverted index context - only created when needed
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
+
+    // Reusable buffer for rowids to avoid repeated allocations
+    std::vector<rowid_t> _rowid_buffer;
 
     bool _enable_predicate_col_late_materialize;
 };
@@ -1942,11 +1946,13 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
-    std::vector<uint32_t> rowids;
     const bool need_rowids =
             (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) ||
             (_inverted_index_ctx && !_inverted_index_ctx->fallback_predicates.empty());
-    std::vector<uint32_t>* p_rowids = need_rowids ? &rowids : nullptr;
+    if (need_rowids) {
+        _rowid_buffer.clear();  // Reuse existing capacity
+    }
+    std::vector<uint32_t>* p_rowids = need_rowids ? &_rowid_buffer : nullptr;
     do {
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
@@ -1981,15 +1987,15 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
-    vector<uint32_t> rowids;
+    _rowid_buffer.clear();  // Reuse existing capacity
     do {
-        st = _do_get_next(chunk, &rowids);
+        st = _do_get_next(chunk, &_rowid_buffer);
     } while (st.ok() && chunk->num_rows() == 0);
     if (st.ok()) {
         // encode rssid with rowid
         // | rssid (32bit) | rowid (32bit) |
         uint64_t rssid_shift = (uint64_t)(_opts.rowset_id + segment_id()) << 32;
-        for (uint32_t rowid : rowids) {
+        for (uint32_t rowid : _rowid_buffer) {
             rssid_rowids->push_back(rssid_shift | rowid);
         }
     }
@@ -2504,18 +2510,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
     size_t chunk_size = chunk->num_rows();
     if (chunk_size > 0 && !_expr_pred_tree.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
-        if (_inverted_index_ctx) {
-            for (auto* pred : _inverted_index_ctx->fallback_predicates) {
-                pred->set_evaluate_rowids(rowid);
-            }
-        }
-        SCOPED_CLEANUP({
-            if (_inverted_index_ctx) {
-                for (auto* pred : _inverted_index_ctx->fallback_predicates) {
-                    pred->set_evaluate_rowids(nullptr);
-                }
-            }
-        });
         RETURN_IF_ERROR(_expr_pred_tree.evaluate(chunk, _selection.data(), 0, chunk_size));
 
         size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
@@ -3303,6 +3297,65 @@ Status SegmentIterator::_init_inverted_index_iterators() {
     return Status::OK();
 }
 
+// Visitor for wrapping MATCH predicates in OR queries with InvertedIndexFallbackPredicate
+// Only wraps predicates that are inside OR nodes (non-immediate children of root)
+struct InvertedIndexFallbackVisitor {
+    Status operator()(PredicateColumnNode& node) const {
+        const auto* pred = node.col_pred();
+        
+        // Only wrap ColumnExprPredicate with MATCH expressions
+        if (pred->type() != PredicateType::kExpr) {
+            return Status::OK();
+        }
+        
+        const auto* expr_pred = static_cast<const ColumnExprPredicate*>(pred);
+        if (!expr_pred->is_match_expr()) {
+            return Status::OK();
+        }
+        
+        // Get the inverted index iterator for this column
+        const ColumnId cid = pred->column_id();
+        InvertedIndexIterator* inverted_iter = inverted_index_iterators[cid];
+        if (inverted_iter == nullptr) {
+            return Status::OK();
+        }
+        
+        // Read the bitmap from inverted index using the column name from SlotDescriptor
+        const std::string& column_name = expr_pred->slot_desc()->col_name();
+        ASSIGN_OR_RETURN(auto roaring_opt, expr_pred->read_inverted_index(column_name, inverted_iter));
+        if (!roaring_opt.has_value()) {
+            return Status::OK();
+        }
+        
+        // Create the fallback wrapper with segment-specific bitmap and rowid buffer pointer
+        auto* wrapper = new InvertedIndexFallbackPredicate(expr_pred, std::move(roaring_opt.value()), 
+                                                           rowid_buffer);
+        pool->add(wrapper);
+        
+        // Replace the predicate in the tree
+        node.set_col_pred(wrapper);
+        
+        // Track the wrapper for later rowid injection
+        fallback_predicates->push_back(wrapper);
+        
+        return Status::OK();
+    }
+    
+    template <CompoundNodeType Type>
+    Status operator()(PredicateCompoundNode<Type>& node) const {
+        // Recursively visit all children
+        for (auto child : node.children()) {
+            RETURN_IF_ERROR(child.visit(*this));
+        }
+        return Status::OK();
+    }
+    
+    std::vector<InvertedIndexIterator*>& inverted_index_iterators;
+    ObjectPool* pool;
+    std::vector<InvertedIndexFallbackPredicate*>* fallback_predicates;
+    const std::vector<rowid_t>* rowid_buffer;
+};
+
 Status SegmentIterator::_apply_inverted_index() {
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF(!_opts.enable_gin_filter, Status::OK());
@@ -3313,30 +3366,28 @@ Status SegmentIterator::_apply_inverted_index() {
     }
     SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
 
-    // For OR queries: initialize fallback predicates for MATCH expressions
+    // For OR queries: wrap MATCH predicates with InvertedIndexFallbackPredicate
     _inverted_index_ctx->fallback_predicates.clear();
     const bool gin_fallback_enabled = _opts.pred_tree.has_or_predicate();
     if (gin_fallback_enabled) {
         _inverted_index_ctx->fallback_predicates.reserve(_opts.pred_tree.size());
-        for (const auto& [cid, pred_list] : _opts.pred_tree.get_non_immediate_column_predicate_map()) {
-            InvertedIndexIterator* inverted_iter = _inverted_index_ctx->inverted_index_iterators[cid];
-            if (inverted_iter == nullptr) {
-                continue;
-            }
-            for (const ColumnPredicate* pred : pred_list) {
-                if (pred->type() != PredicateType::kExpr) {
-                    continue;
-                }
-                const auto* expr_pred = static_cast<const ColumnExprPredicate*>(pred);
-                if (!expr_pred->is_match_expr()) {
-                    continue;
-                }
-                Status st = expr_pred->init_inverted_index_fallback(inverted_iter);
-                if (st.ok()) {
-                    _inverted_index_ctx->fallback_predicates.push_back(expr_pred);
-                }
-            }
+        
+        // Walk the OR nodes (non-immediate children) and wrap MATCH predicates
+        auto root = _opts.pred_tree.release_root();
+        InvertedIndexFallbackVisitor visitor{
+            _inverted_index_ctx->inverted_index_iterators,
+            &_obj_pool,
+            &_inverted_index_ctx->fallback_predicates,
+            &_rowid_buffer
+        };
+        
+        // Only visit OR nodes (compound children of root)
+        // Immediate children of root use the normal inverted index filtering path
+        for (auto& or_child : root.compound_children()) {
+            RETURN_IF_ERROR(or_child.visit(visitor));
         }
+        
+        _opts.pred_tree = PredicateTree::create(std::move(root));
     }
 
     roaring::Roaring row_bitmap = range2roaring(_scan_range);

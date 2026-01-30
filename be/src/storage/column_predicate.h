@@ -80,6 +80,7 @@ enum class PredicateType {
     kTrue = 14,
     kMap = 15,
     kPlaceHolder = 16,
+    kGinFallback = 17,
 };
 
 std::ostream& operator<<(std::ostream& os, PredicateType p);

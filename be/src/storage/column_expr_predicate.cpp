@@ -76,16 +76,6 @@ void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
 Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     // Does not support range evaluatation.
     DCHECK(from == 0);
-    if (_inverted_index_bitmap.has_value() && _evaluate_rowids != nullptr) {
-        const bool is_negated = is_negated_expr();
-        const uint8_t hit_value = is_negated ? 0 : 1;
-        const uint8_t miss_value = is_negated ? 1 : 0;
-        roaring::BulkContext ctx;
-        for (size_t i = 0; i < _evaluate_rowids->size(); i++) { // fallback evaluate
-            selection[i] = _inverted_index_bitmap->containsBulk(ctx, (*_evaluate_rowids)[i]) ? hit_value : miss_value;
-        }
-        return Status::OK();
-    }
 
     Chunk chunk;
     // `column` is owned by storage layer
@@ -429,18 +419,6 @@ Status ColumnTruePredicate::convert_to(const ColumnPredicate** output, const Typ
 
 std::string ColumnTruePredicate::debug_string() const {
     return "(ColumnTruePredicate)";
-}
-
-Status ColumnExprPredicate::init_inverted_index_fallback(InvertedIndexIterator* iterator) const {
-    const std::string& column_name = _slot_desc->col_name();
-    ASSIGN_OR_RETURN(auto roaring_opt, read_inverted_index(column_name, iterator));
-    if (roaring_opt.has_value()) {
-        _inverted_index_bitmap.emplace(std::move(roaring_opt.value()));
-    } else {
-        // nullopt means empty match string - store empty roaring
-        _inverted_index_bitmap.emplace(roaring::Roaring());
-    }
-    return Status::OK();
 }
 
 } // namespace starrocks

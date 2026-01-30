@@ -36,6 +36,7 @@
 #include "simd/simd.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
+#include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -321,6 +322,15 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
         return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
     }
+    
+    if (PredicateType::kGinFallback == pred->type()) {
+        const auto* fallback_pred = down_cast<const InvertedIndexFallbackPredicate*>(pred);        
+        if (fallback_pred->get_bitmap().isEmpty()) {
+            return fallback_pred->is_negated_expr() ? RewriteStatus::ALWAYS_TRUE : RewriteStatus::ALWAYS_FALSE;
+        }
+        return RewriteStatus::UNCHANGED;
+    }
+    
     if (PredicateType::kPlaceHolder == pred->type()) {
         return RewriteStatus::ALWAYS_TRUE;
     }
@@ -421,18 +431,9 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
         ObjectPool* pool, const ColumnPtr& raw_dict_column, const ColumnPtr& raw_code_column, bool field_nullable,
         const ColumnPredicate* src_pred, ColumnPredicate** dest_pred) {
     *dest_pred = nullptr;
-    const auto* pred = down_cast<const ColumnExprPredicate*>(src_pred);
-
-    const auto& inverted_index_fallback = pred->get_inverted_index_fallback();
-    if (inverted_index_fallback.has_value()) {
-        if (inverted_index_fallback->isEmpty()) {
-            return pred->is_negated_expr() ? RewriteStatus::ALWAYS_TRUE : RewriteStatus::ALWAYS_FALSE;
-        }
-        return RewriteStatus::UNCHANGED;
-    }
-
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
+    const auto* pred = down_cast<const ColumnExprPredicate*>(src_pred);
     size_t chunk_size = std::min<size_t>(pred->runtime_state()->chunk_size(), std::numeric_limits<uint16_t>::max());
 
     if (value_size <= chunk_size) {
