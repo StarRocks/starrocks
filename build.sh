@@ -596,6 +596,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/bin/show_fe_version.sh ${STARROCKS_OUTPUT}/fe/bin/
         cp -r -p ${STARROCKS_HOME}/bin/common.sh ${STARROCKS_OUTPUT}/fe/bin/
         cp -r -p ${STARROCKS_HOME}/conf/fe.conf ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/log4j2.xml ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/udf_security.policy ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
