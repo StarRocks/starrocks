@@ -689,15 +689,8 @@ struct TLakeScanNode {
   42: optional i64 back_pressure_num_rows
 
   43: optional Descriptors.TTableSchemaKey schema_key
-<<<<<<< HEAD
-=======
-
-  // inverted index
-  44: optional bool enable_prune_column_after_index_filter
-  45: optional bool enable_gin_filter
 
   46: optional i32 next_uniq_id
->>>>>>> 3c49c35754 ([BugFix] Fix duplicate column unique_id conflict for flat JSON extended columns (#68279))
 }
 
 struct TEqJoinCondition {
