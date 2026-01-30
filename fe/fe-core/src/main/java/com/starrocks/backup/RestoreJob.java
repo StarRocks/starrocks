@@ -1552,7 +1552,7 @@ public class RestoreJob extends AbstractJob {
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
         // ensure modify for all physical partitions, not only for the first one (default physical partition)
         for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
-            for (MaterializedIndex restoreIdx : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex restoreIdx : physicalPartition.getAllMaterializedIndices(IndexExtState.VISIBLE)) {
                 TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), physicalPartition.getId(),
                         restoreIdx.getId(), TStorageMedium.HDD);
                 for (Tablet restoreTablet : restoreIdx.getTablets()) {
@@ -2068,7 +2068,7 @@ public class RestoreJob extends AbstractJob {
         for (Partition part : restoreTbl.getPartitions()) {
             // ensure clear all physical partitions, not only for the first one (default physical partition)
             for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
-                for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex idx : physicalPartition.getAllMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : idx.getTablets()) {
                         globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
                     }

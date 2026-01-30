@@ -233,7 +233,7 @@ public class LakeTable extends OlapTable {
             .flatMap(partition -> partition.getSubPartitions().stream())
             .allMatch(physicalPartition -> {
                 long physicalPartitionId = physicalPartition.getId();
-                List<Long> shardIds = physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).stream()
+                List<Long> shardIds = physicalPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL).stream()
                         .flatMap(index -> index.getTablets().stream())
                         .map(tablet -> ((LakeTablet) tablet).getShardId())
                         .collect(Collectors.toList());

@@ -1735,7 +1735,7 @@ public class OlapTable extends Table {
                     for (MaterializedIndex deleteIndex : shadowIndex) {
                         physicalPartition.deleteMaterializedIndexByMetaId(deleteIndex.getMetaId());
                     }
-                    for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(extState)) {
+                    for (MaterializedIndex idx : physicalPartition.getAllMaterializedIndices(extState)) {
                         idx.setState(IndexState.NORMAL);
                         if (copied.isCloudNativeTableOrMaterializedView()) {
                             continue;
