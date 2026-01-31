@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -55,6 +56,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -551,6 +553,11 @@ public class ListPartitionPruner implements PartitionPruner {
 
         for (Map.Entry<LiteralExpr, Set<Long>> entry : partitionValueMap.entrySet()) {
             LiteralExpr key = entry.getKey();
+            if (castOperator.getType().isNumericType() && key instanceof StringLiteral &&
+                    !NumberUtils.isNumber(key.getStringValue())) {
+                // Partition values (p='1','2','a'), select * from tb where p=1, cast(p as decimal). An error occurs when the value is 'a'.
+                continue;
+            }
             LiteralExpr literalExpr = castLiteralExpr(key, castOperator.getType());
             Set<Long> partitions = newPartitionValueMap.computeIfAbsent(literalExpr, k -> Sets.newHashSet());
             partitions.addAll(entry.getValue());
