@@ -15,6 +15,7 @@
 
 package com.starrocks.staros;
 
+import com.staros.manager.HttpService;
 import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
 import com.staros.metrics.MetricsSystem;
@@ -119,6 +120,10 @@ public class StarMgrServer {
 
     public StarOSBDBJEJournalSystem getJournalSystem() {
         return journalSystem;
+    }
+
+    public HttpService getHttpService() {
+        return starMgrServer.getHttpService();
     }
 
     public StateChangeExecution getStateChangeExecution() {
