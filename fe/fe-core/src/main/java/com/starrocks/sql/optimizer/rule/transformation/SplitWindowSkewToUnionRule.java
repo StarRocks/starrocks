@@ -147,8 +147,12 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
         Statistics statistics = child.getStatistics();
 
         // 1. Identify Skew
-        // We look for a partition column that has a specific value causing data skew.
-        List<SkewedInfo> skewedInfos = findSkewedPartition(window.getPartitionExpressions(), statistics);
+        // First check for explicit skew hint from user (takes precedence over statistics)
+        // Then fallback to statistics-based detection
+        List<SkewedInfo> skewedInfos = findSkewedPartitionFromHint(window);
+        if (skewedInfos.isEmpty()) {
+            skewedInfos = findSkewedPartition(window.getPartitionExpressions(), statistics);
+        }
 
         //todo (m.bogusz) in theory we could have multiple skewed values, but for now we only handle one
         if (skewedInfos.size() != 1) {
@@ -241,6 +245,8 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         LogicalWindowOperator.Builder windowBuilder = new LogicalWindowOperator.Builder()
                 .withOperator(originalWindow)
+                .setSkewColumn(null)
+                .setSkewValue(null)
                 .setUseHashBasedPartition(partitionExprs.isEmpty() && originalWindow.isUseHashBasedPartition())
                 .setIsSkewed(partitionExprs.isEmpty() && originalWindow.isSkewed());
 
@@ -306,6 +312,34 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             this.columnMapping = columnMapping;
         }
 
+    }
+
+    /**
+     * Check for explicit skew hint from user: [skew|t.column(value)]
+     * This takes precedence over statistics-based detection.
+     */
+    private List<SkewedInfo> findSkewedPartitionFromHint(LogicalWindowOperator window) {
+        ScalarOperator skewColumn = window.getSkewColumn();
+        ScalarOperator skewValue = window.getSkewValue();
+
+        if (skewColumn == null || skewValue == null) {
+            return Collections.emptyList();
+        }
+
+        if (!(skewColumn instanceof ColumnRefOperator col)) {
+            return Collections.emptyList();
+        }
+
+        if (!(skewValue instanceof ConstantOperator val)) {
+            return Collections.emptyList();
+        }
+
+        // Verify that the skewed column is part of the partition expressions
+        if (!window.getPartitionExpressions().contains(col)) {
+            return Collections.emptyList();
+        }
+
+        return List.of(new SkewedInfo(col, val));
     }
 
     private List<SkewedInfo> findSkewedPartition(List<ScalarOperator> partitionExprs, Statistics statistics) {
