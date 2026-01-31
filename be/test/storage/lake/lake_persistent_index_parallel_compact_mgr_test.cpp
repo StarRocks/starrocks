@@ -117,6 +117,38 @@ protected:
         return Status::OK();
     }
 
+    Status create_test_sstable_with_rssid(const std::string& filename, int start_key, int count, uint32_t rssid_base,
+                                          PersistentIndexSstablePB* sst_pb) {
+        sstable::Options options;
+        std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), filename);
+        ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(filepath));
+        sstable::TableBuilder builder(options, wf.get());
+
+        for (int i = 0; i < count; i++) {
+            std::string key = fmt::format("key_{:016X}", start_key + i);
+            IndexValuesWithVerPB val_pb;
+            auto* v = val_pb.add_values();
+            v->set_version(1);
+            v->set_rssid(rssid_base + i);
+            v->set_rowid(i);
+            builder.Add(Slice(key), val_pb.SerializeAsString());
+        }
+        RETURN_IF_ERROR(builder.Finish());
+        uint64_t filesize = builder.FileSize();
+        RETURN_IF_ERROR(wf->close());
+
+        sst_pb->set_filename(filename);
+        sst_pb->set_filesize(filesize);
+        if (count > 0) {
+            sst_pb->mutable_range()->set_start_key(builder.KeyRange().first.to_string());
+            sst_pb->mutable_range()->set_end_key(builder.KeyRange().second.to_string());
+        }
+        auto fileset_id = UniqueId::gen_uid();
+        sst_pb->mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
+
+        return Status::OK();
+    }
+
     // Helper function to create a test sstable file using PrimaryKeyEncoder
     Status create_test_sstable_with_pk(const std::string& filename, int start_key, int count,
                                        PersistentIndexSstablePB* sst_pb, bool shared = false) {
@@ -168,6 +200,15 @@ protected:
         sst_pb->set_shared(shared);
 
         return Status::OK();
+    }
+
+    StatusOr<std::unique_ptr<PersistentIndexSstable>> open_sstable(const PersistentIndexSstablePB& sst_pb) {
+        RandomAccessFileOptions opts;
+        std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_pb.filename());
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, filepath));
+        auto sst = std::make_unique<PersistentIndexSstable>();
+        RETURN_IF_ERROR(sst->init(std::move(rf), sst_pb, nullptr, false));
+        return sst;
     }
 
     constexpr static const char* const kTestDir = "test_lake_persistent_index_parallel_compact_mgr";
@@ -419,6 +460,47 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_overlapping_sstab
     // check range
     ASSERT_EQ(output_sstables[0].range().start_key(), sst1.range().start_key());
     ASSERT_EQ(output_sstables[0].range().end_key(), sst2.range().end_key());
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_apply_rssid_offset) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    PersistentIndexSstablePB sst1;
+    PersistentIndexSstablePB sst2;
+    ASSERT_OK(create_test_sstable_with_rssid("test_sst_offset_1.sst", 0, 3, 10, &sst1));
+    ASSERT_OK(create_test_sstable_with_rssid("test_sst_offset_2.sst", 0, 3, 20, &sst2));
+    sst1.set_max_rss_rowid(static_cast<uint64_t>(1) << 32);
+    sst2.set_max_rss_rowid(static_cast<uint64_t>(2) << 32);
+    sst2.set_rssid_offset(5);
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+    candidates.push_back({sst2});
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
+    ASSERT_EQ(1, output_sstables.size());
+
+    ASSIGN_OR_ABORT(auto output_sst, open_sstable(output_sstables[0]));
+    std::vector<std::string> key_strs;
+    std::vector<Slice> keys;
+    KeyIndexSet key_indexes;
+    for (int i = 0; i < 3; ++i) {
+        key_strs.emplace_back(fmt::format("key_{:016X}", i));
+        keys.emplace_back(key_strs.back());
+        key_indexes.insert(i);
+    }
+
+    std::vector<IndexValue> values(keys.size(), IndexValue(NullIndexValue));
+    KeyIndexSet found_key_indexes;
+    ASSERT_OK(output_sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found_key_indexes));
+    ASSERT_EQ(key_indexes.size(), found_key_indexes.size());
+
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(values[i].get_rssid(), 20U + static_cast<uint32_t>(i) + 5U);
+        EXPECT_EQ(values[i].get_rowid(), static_cast<uint32_t>(i));
+    }
 }
 
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_multiple_filesets) {
