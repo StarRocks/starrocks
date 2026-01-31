@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -95,11 +96,84 @@ public class ScalarApply2JoinRule extends TransformationRule {
             throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
         }
 
+        OptExpression rightChild = input.inputAt(1);
+        if (apply.isNeedCheckMaxRows() && isLimitOne(rightChild)) {
+            return transformCorrelateWithLimitOne(input, apply, context);
+        }
+
         if (apply.isNeedCheckMaxRows()) {
             return transformCorrelateWithCheckOneRows(input, apply, context);
         } else {
             return transformCorrelateWithoutCheckOneRows(input, apply, context);
         }
+    }
+
+    private boolean isLimitOne(OptExpression input) {
+        if (!OperatorType.LOGICAL_LIMIT.equals(input.getOp().getOpType())) {
+            return false;
+        }
+        LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
+        return limit.getLimit() == 1 && !limit.hasOffset();
+    }
+
+    private List<OptExpression> transformCorrelateWithLimitOne(OptExpression input, LogicalApplyOperator apply,
+                                                               OptimizerContext context) {
+        // t0.v1 = t1.v1
+        ScalarOperator correlationPredicate = apply.getCorrelationConjuncts();
+
+        CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
+                apply.getCorrelationColumnRefs(), context);
+
+        ScalarOperator newPredicate = rewriter.rewrite(correlationPredicate);
+
+        Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
+
+        OptExpression rightChild = input.inputAt(1);
+        OptExpression rightInput = rightChild.getInputs().get(0);
+
+        if (SubqueryUtils.existNonColumnRef(innerRefMap.values())) {
+            rightInput = OptExpression.create(new LogicalProjectOperator(
+                    SubqueryUtils.generateChildOutColumns(rightInput, innerRefMap, context)), rightInput);
+        }
+
+        // Non-correlated predicates
+        if (apply.getPredicate() != null) {
+            rightInput = OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), rightInput);
+        }
+
+        ColumnRefFactory factory = context.getColumnRefFactory();
+
+        Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
+        ScalarOperator subqueryOperator = apply.getSubqueryOperator();
+        CallOperator anyValueCallOp = SubqueryUtils.createAnyValueOperator(subqueryOperator);
+        if (anyValueCallOp.getFunction() == null) {
+            throw new SemanticException(String.format(
+                    "NOT support scalar correlated sub-query of type %s",
+                    subqueryOperator.getType().toSql()));
+        }
+        ColumnRefOperator anyValue = factory.create("anyValue", anyValueCallOp.getType(), anyValueCallOp.isNullable());
+        aggregates.put(anyValue, anyValueCallOp);
+
+        OptExpression newAggOpt = OptExpression.create(
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(innerRefMap.keySet()), aggregates),
+                rightInput);
+
+        LogicalJoinOperator joinOp = new LogicalJoinOperator.Builder()
+                .setJoinType(JoinOperator.LEFT_OUTER_JOIN)
+                .setOnPredicate(newPredicate)
+                .build();
+        OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
+
+        Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+        projectMap.put(anyValue, anyValue);
+        Arrays.stream(input.inputAt(0).getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef)
+                .forEach(i -> projectMap.put(i, i));
+        projectMap.put(apply.getOutput(), anyValue);
+
+        OptExpression newProjectOpt =
+                OptExpression.create(new LogicalProjectOperator(projectMap), newLeftOuterJoinOpt);
+
+        return Collections.singletonList(newProjectOpt);
     }
 
     /*

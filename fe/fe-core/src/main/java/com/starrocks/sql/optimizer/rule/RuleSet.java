@@ -125,6 +125,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRul
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLimitFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownFlatJsonMetaToMetaScanRule;
@@ -304,6 +305,7 @@ public class RuleSet {
     public static final Rule SUBQUERY_EXTRACT_CORRELATION_PREDICATE_RULES =
             new CombinationRule(RuleType.GP_SUBQUERY_EXTRACT_CORRELATION_PREDICATE, ImmutableList.of(
                     new PushDownApplyProjectRule(),
+                    new PushDownApplyLimitFilterRule(),
                     new PushDownApplyFilterRule(),
                     new PushDownApplyAggFilterRule(),
                     new PushDownApplyAggProjectFilterRule()
