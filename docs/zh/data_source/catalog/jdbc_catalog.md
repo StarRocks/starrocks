@@ -58,6 +58,7 @@ JDBC Catalog 的属性，包含如下必填配置项：
 | jdbc_uri     | JDBC 驱动程序连接目标数据库的 URI。如果使用 MySQL，格式为：`"jdbc:mysql://ip:port"`。如果使用 PostgreSQL，格式为 `"jdbc:postgresql://ip:port/db_name"`。 |
 | driver_url   | 用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。<br />**说明**<br />您也可以把 JDBC 驱动程序部署在 FE 或 BE（或 CN）所在节点上任意相同路径下，然后把 `driver_url` 设置为该路径，格式为 `file:///<path>/to/the/driver`。 |
 | driver_class | JDBC 驱动程序的类名称。以下是常见数据库引擎支持的 JDBC 驱动程序类名称：<ul><li>MySQL：`com.mysql.jdbc.Driver`（MySQL 5.x 及之前版本）、`com.mysql.cj.jdbc.Driver`（MySQL 6.x 及之后版本）</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
+| schema_resolver | （可选）显式指定要使用的 Schema Resolver。有效值：`postgresql`、`mysql`、`oracle`、`sqlserver`、`clickhouse`。当使用非标准 JDBC 驱动程序且无法通过驱动类名自动检测时，请使用此参数。如果未指定，StarRocks 将根据 `driver_class` 参数自动检测相应的 Resolver。 |
 
 > **说明**
 >
@@ -121,6 +122,18 @@ PROPERTIES
     "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
     "driver_url"="https://repo1.maven.org/maven2/com/clickhouse/clickhouse-jdbc/0.4.6/clickhouse-jdbc-0.4.6.jar",
     "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
+);
+-- 使用 schema_resolver 处理非标准驱动
+CREATE EXTERNAL CATALOG jdbc5
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="postgres",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/mydb",
+    "driver_url"="file:///path/to/custom-postgresql-driver.jar",
+    "driver_class"="com.custom.PostgresDriver",
+    "schema_resolver"="postgresql"
 );
 ```
 
