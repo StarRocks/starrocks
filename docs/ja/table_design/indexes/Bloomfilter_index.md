@@ -9,7 +9,7 @@ sidebar_position: 30
 
 ブルームフィルターインデックスは、テーブルのデータファイル内のフィルタリングされたデータの存在の可能性を検出するために使用される、空間効率の高いデータ構造です。ブルームフィルターインデックスがフィルタリング対象のデータが特定のデータファイルに存在しないことを検出した場合、StarRocks はそのデータファイルのスキャンをスキップします。ブルームフィルターインデックスは、列（例えば ID）のカーディナリティが比較的高い場合に応答時間を短縮することができます。
 
-クエリがソートキー列にヒットした場合、StarRocks は [プレフィックスインデックス](./Prefix_index_sort_key.md) を使用して効率的にクエリ結果を返します。ただし、データブロックのプレフィックスインデックスエントリは36バイトを超えることはできません。ソートキーとして使用されておらず、カーディナリティが比較的高い列のクエリパフォーマンスを向上させたい場合、その列にブルームフィルターインデックスを作成することができます。
+クエリがソートキー列にヒットした場合、StarRocks は [プレフィックスインデックス](./Prefix_index_sort_key.md) を使用して効率的にクエリ結果を返します。ただし、データブロックのプレフィックスインデックスエントリは36バイトを超えることはできません。**ソートキーとして使用されておらず**、**カーディナリティが比較的高い**列のクエリパフォーマンスを向上させたい場合、その列にブルームフィルターインデックスを作成することができます。
 
 ## 動作の仕組み
 
@@ -30,20 +30,20 @@ sidebar_position: 30
 
 ## ブルームフィルターインデックスの作成
 
-テーブルを作成する際に `PROPERTIES` の `bloom_filter_columns` パラメータを指定することで、列に対してブルームフィルターインデックスを作成できます。例えば、`table1` の `k1` および `k2` 列にブルームフィルターインデックスを作成します。
+テーブルを作成する際に `PROPERTIES` の `bloom_filter_columns` パラメータを指定することで、列に対してブルームフィルターインデックスを作成できます。例えば、`table1` の `v1` 列にブルームフィルターインデックスを作成します。
 
 ```SQL
 CREATE TABLE table1
 (
     k1 BIGINT,
     k2 LARGEINT,
-    v1 VARCHAR(2048) REPLACE,
+    v1 VARCHAR(2048),
     v2 SMALLINT DEFAULT "10"
 )
 ENGINE = olap
-PRIMARY KEY(k1, k2)
+DUPLICATE KEY(k1, k2)
 DISTRIBUTED BY HASH (k1, k2)
-PROPERTIES("bloom_filter_columns" = "k1,k2");
+PROPERTIES("bloom_filter_columns" = "v1");
 ```
 
 複数の列に対して一度にブルームフィルターインデックスを作成することができます。これらの列名を指定する際には、カンマ（`,`）で区切る必要があります。CREATE TABLE 文の他のパラメータの説明については、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を参照してください。
@@ -60,16 +60,16 @@ SHOW CREATE TABLE table1;
 
 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 文を使用して、ブルームフィルターインデックスを追加、削減、削除することができます。
 
-- 次の文は、`v1` 列にブルームフィルターインデックスを追加します。
+- 次の文は、`v2` 列にブルームフィルターインデックスを追加します。
 
     ```SQL
-    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1,k2,v1");
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "v1,v2");
     ```
 
-- 次の文は、`k2` 列のブルームフィルターインデックスを削減します。
+- 次の文は、ブルームフィルターインデックスを `v1` 列のみに削減します。
 
     ```SQL
-    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1");
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "v1");
     ```
 
 - 次の文は、`table1` のすべてのブルームフィルターインデックスを削除します。
