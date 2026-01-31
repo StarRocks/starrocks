@@ -117,6 +117,14 @@ public:
             observer->source_trigger();
         }
     }
+    // notify the operator with the given driver sequence
+    // NOTE: The index of _observers directly corresponds to the driver sequence,
+    // because each observer is registered in order during the prepare phase for each operator.
+    // This ensures that observer access by sequence number is safe and consistent.
+    void notify_source_observer(int seq) {
+        DCHECK(seq >= 0 && seq < _observers.size());
+        _observers[seq]->source_trigger();
+    }
     void notify_sink_observers() {
         for (auto* observer : _observers) {
             observer->sink_trigger();
