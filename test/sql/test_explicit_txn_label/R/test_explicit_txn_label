@@ -1,0 +1,95 @@
+-- name: test_begin_with_label_already_used_by_insert @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1(id int) primary key(id);
+-- result:
+-- !result
+insert /*+ SET_VAR(query_timeout=300) */ into t1 with label test_label_${uuid0} values(1);
+-- result:
+-- !result
+begin with label test_label_${uuid0};
+-- result:
+[REGEX]E: \(1064, 'Getting analyzing error. Detail message: Label \[test_label_.*\] has already been used..'\)
+-- !result
+-- name: test_begin_with_label_already_used_by_another_begin @sequential
+create database db_${uuid1};
+-- result:
+-- !result
+use db_${uuid1};
+-- result:
+-- !result
+create table t1(id int) primary key(id);
+-- result:
+-- !result
+begin with label test_label_${uuid1};
+-- result:
+-- !result
+insert into t1 values(1);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+begin with label test_label_${uuid1};
+-- result:
+[REGEX]E: \(1064, 'Getting analyzing error. Detail message: Label \[test_label_.*\] has already been used..'\)
+-- !result
+-- name: test_begin_with_valid_label @sequential
+create database db_${uuid2};
+-- result:
+-- !result
+use db_${uuid2};
+-- result:
+-- !result
+create table t1(id int) primary key(id);
+-- result:
+-- !result
+begin with label test_unique_label_${uuid2};
+-- result:
+-- !result
+insert into t1 values(100);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select * from t1 order by id;
+-- result:
+100
+-- !result
+-- name: test_begin_with_label_reuse_after_rollback @sequential
+create database db_${uuid3};
+-- result:
+-- !result
+use db_${uuid3};
+-- result:
+-- !result
+create table t1(id int) primary key(id);
+-- result:
+-- !result
+begin with label test_label_${uuid3};
+-- result:
+-- !result
+insert into t1 values(1);
+-- result:
+-- !result
+rollback;
+-- result:
+-- !result
+begin with label test_label_${uuid3};
+-- result:
+-- !result
+insert into t1 values(200);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select * from t1 order by id;
+-- result:
+200
+-- !result
