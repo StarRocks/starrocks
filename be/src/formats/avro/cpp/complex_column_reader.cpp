@@ -36,7 +36,7 @@ Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
 
     for (size_t i = 0; i < _type_desc.children.size(); ++i) {
         const auto& field_name = _type_desc.field_names[i];
-        auto* field_column = struct_column->field_column_raw_ptr(field_name);
+        ASSIGN_OR_RETURN(auto* field_column, struct_column->field_column_raw_ptr(field_name));
 
         if (record.hasField(field_name)) {
             const auto& field = record.field(field_name);
