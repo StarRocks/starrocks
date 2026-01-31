@@ -116,6 +116,8 @@ struct AcquireBlockOptions {
     BlockAffinityGroup affinity_group = kDefaultBlockAffinityGroup;
     // force to use remote block
     bool force_remote = false;
+    // skip parent path deletion
+    bool skip_parent_path_deletion = false;
 };
 
 // BlockManager is used to manage the life cycle of the Block.
