@@ -1,0 +1,159 @@
+-- name: test_percentile_cont_decimal
+
+DROP TABLE IF EXISTS t_percentile_cont_decimal;
+
+CREATE TABLE t_percentile_cont_decimal (
+    id INT,
+    v DECIMAL64(9,2)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO t_percentile_cont_decimal VALUES
+    (1, 2.00),
+    (2, 3.00),
+    (3, 4.00),
+    (4, 5.00),
+    (5, 6.00);
+
+-- rate is DECIMAL(9,3), precision/scale mismatch is allowed
+SELECT percentile_cont(v, CAST(0.300 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal;
+
+-- rate == 0 => min
+SELECT percentile_cont(v, CAST(0.000 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal;
+
+-- rate == 1 => max
+SELECT percentile_cont(v, CAST(1.000 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal;
+
+-- truncate semantics: [1.00, 1.01], rate=0.50 => 1.005 -> 1.00
+DROP TABLE IF EXISTS t_percentile_cont_decimal_trunc;
+
+CREATE TABLE t_percentile_cont_decimal_trunc (
+    id INT,
+    v DECIMAL64(9,2)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO t_percentile_cont_decimal_trunc VALUES
+    (1, 1.00),
+    (2, 1.01);
+
+SELECT percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal_trunc;
+
+-- rate must be constant
+SELECT percentile_cont(v, v) FROM t_percentile_cont_decimal;
+
+-- streaming_preaggregation_mode covers convert_to_serialize_format vs serialize_to_column
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_streaming') */
+       percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3)))
+FROM t_percentile_cont_decimal;
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_preaggregation') */
+       percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3)))
+FROM t_percentile_cont_decimal;
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_streaming') */
+       id % 2 AS g, percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3)))
+FROM t_percentile_cont_decimal
+GROUP BY g
+ORDER BY g;
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_preaggregation') */
+       id % 2 AS g, percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3)))
+FROM t_percentile_cont_decimal
+GROUP BY g
+ORDER BY g;
+
+-- fallback path (overflow in decimal interpolation, then double fallback)
+DROP TABLE IF EXISTS t_percentile_cont_decimal_fallback;
+CREATE TABLE t_percentile_cont_decimal_fallback (
+    v DECIMAL64(9,2)
+) ENGINE=OLAP
+DUPLICATE KEY(`v`)
+DISTRIBUTED BY HASH(`v`) BUCKETS 1
+PROPERTIES (
+  "replication_num" = "1"
+);
+INSERT INTO t_percentile_cont_decimal_fallback VALUES
+    (0.00),
+    (9000000.00);
+SELECT percentile_cont(v, CAST(0.500 AS DECIMAL64(9,4))) FROM t_percentile_cont_decimal_fallback;
+
+-- big data with generate_series(0, 99999) and group by
+DROP TABLE IF EXISTS t_percentile_cont_decimal_big;
+CREATE TABLE t_percentile_cont_decimal_big (
+    v DECIMAL64(9,2),
+    g INT
+) ENGINE=OLAP
+DUPLICATE KEY(`g`)
+DISTRIBUTED BY HASH(`g`) BUCKETS 4
+PROPERTIES (
+  "replication_num" = "1"
+);
+INSERT INTO t_percentile_cont_decimal_big
+SELECT CAST(generate_series AS DECIMAL64(9,2)) AS v,
+       generate_series % 2 AS g
+FROM TABLE(generate_series(0, 99999));
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2') */ g,
+       percentile_cont(v, CAST(0.500 AS DECIMAL64(9,2)))
+FROM t_percentile_cont_decimal_big
+GROUP BY g
+ORDER BY g;
+
+-- streaming_preaggregation_mode covers convert_to_serialize_format vs serialize_to_column
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_streaming') */
+       percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3)))
+FROM t_percentile_cont_decimal;
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_preaggregation') */
+       percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3)))
+FROM t_percentile_cont_decimal;
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_streaming') */
+       id % 2 AS g, percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3)))
+FROM t_percentile_cont_decimal
+GROUP BY g
+ORDER BY g;
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_preaggregation') */
+       id % 2 AS g, percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3)))
+FROM t_percentile_cont_decimal
+GROUP BY g
+ORDER BY g;
+
+-- fallback path (overflow in decimal interpolation, then double fallback)
+DROP TABLE IF EXISTS t_percentile_cont_decimal_fallback;
+CREATE TABLE t_percentile_cont_decimal_fallback (
+    v DECIMAL64(9,2)
+) ENGINE=OLAP
+DUPLICATE KEY(`v`)
+DISTRIBUTED BY HASH(`v`) BUCKETS 1
+PROPERTIES (
+  "replication_num" = "1"
+);
+INSERT INTO t_percentile_cont_decimal_fallback VALUES
+    (0.00),
+    (9000000.00);
+SELECT percentile_cont(v, CAST(0.500 AS DECIMAL64(9,4))) FROM t_percentile_cont_decimal_fallback;
+
+-- big data with generate_series(0, 99999) and group by
+DROP TABLE IF EXISTS t_percentile_cont_decimal_big;
+CREATE TABLE t_percentile_cont_decimal_big (
+    v DECIMAL64(9,2),
+    g INT
+) ENGINE=OLAP
+DUPLICATE KEY(`g`)
+DISTRIBUTED BY HASH(`g`) BUCKETS 4
+PROPERTIES (
+  "replication_num" = "1"
+);
+INSERT INTO t_percentile_cont_decimal_big
+SELECT CAST(generate_series AS DECIMAL64(9,2)) AS v,
+       generate_series % 2 AS g
+FROM TABLE(generate_series(0, 99999));
+SELECT /*+ SET_VAR (new_planner_agg_stage = '2') */ g,
+       percentile_cont(v, CAST(0.500 AS DECIMAL64(9,2)))
+FROM t_percentile_cont_decimal_big
+GROUP BY g
+ORDER BY g;

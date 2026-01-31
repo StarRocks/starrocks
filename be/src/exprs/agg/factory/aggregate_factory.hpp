@@ -218,6 +218,9 @@ public:
     template <LogicalType LT>
     static AggregateFunctionPtr MakePercentileContAggregateFunction();
 
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakePercentileContDecimalRateAggregateFunction();
+
     template <LogicalType PT>
     static AggregateFunctionPtr MakePercentileDiscAggregateFunction();
 
@@ -448,6 +451,11 @@ AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
     return new PercentileContAggregateFunction<LT>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakePercentileContDecimalRateAggregateFunction() {
+    return new PercentileContDecimalRateAggregateFunction<LT>();
 }
 
 template <LogicalType PT>
