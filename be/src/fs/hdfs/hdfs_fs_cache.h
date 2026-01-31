@@ -32,13 +32,22 @@ namespace starrocks {
 class HdfsFsClient {
 public:
     ~HdfsFsClient() {
-        if (hdfs_fs != nullptr) {
-            // hdfs_fs maybe a nullptr, if it create failed.
+        if (hdfs_fs != nullptr && _owns_hdfs_fs) {
+            // Only disconnect if we own the hdfs_fs instance.
+            // When hdfs_client_force_new_instance is false, the hdfs_fs is managed by
+            // Hadoop's internal FileSystem cache, and we should not close it here
+            // to avoid "FileSystem closed" errors for other users of the same cache entry.
             hdfsDisconnect(hdfs_fs);
         }
     }
+
     std::string namenode;
-    hdfsFS hdfs_fs;
+    hdfsFS hdfs_fs{nullptr};
+    // Whether this client owns the hdfs_fs instance and should disconnect it on destruction.
+    // When hdfs_client_force_new_instance=true, each HdfsFsClient has its own hdfs_fs instance.
+    // When hdfs_client_force_new_instance=false, multiple HdfsFsClient may share the same
+    // Hadoop-cached hdfs_fs, so we should not disconnect it.
+    bool _owns_hdfs_fs{true};
 };
 
 // Cache for HDFS file system
@@ -64,5 +73,10 @@ private:
     HdfsFsCache(const HdfsFsCache&) = delete;
     const HdfsFsCache& operator=(const HdfsFsCache&) = delete;
 };
+
+// Helper function to determine whether to force new FileSystem instance.
+// Extracted for testability.
+// Priority: THdfsProperties.disable_cache > config::hdfs_client_force_new_instance
+bool should_force_new_hdfs_instance(const THdfsProperties* properties);
 
 } // namespace starrocks
