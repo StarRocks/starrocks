@@ -1109,6 +1109,10 @@ public class PropertyAnalyzer {
     public static boolean analyzeBooleanProp(Map<String, String> properties, String propKey, boolean defaultVal) {
         if (properties != null && properties.containsKey(propKey)) {
             String val = properties.get(propKey);
+            if (!val.equalsIgnoreCase("true") && !val.equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + propKey + " must be bool type(false/true)");
+            }
             properties.remove(propKey);
             return Boolean.parseBoolean(val);
         }

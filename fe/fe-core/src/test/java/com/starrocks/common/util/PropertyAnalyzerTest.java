@@ -15,6 +15,7 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -118,5 +119,40 @@ public class PropertyAnalyzerTest {
         properties6.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "600");
         int result2 = PropertyAnalyzer.analyzeTableQueryTimeout(properties6);
         Assertions.assertEquals(600, result2);
+    }
+
+    @Test
+    public void testAnalyzeBooleanProp() {
+        String testPropKey = "test_boolean_prop";
+
+        // Test 1: properties is null - should return default value
+        Assertions.assertFalse(PropertyAnalyzer.analyzeBooleanProp(null, testPropKey, false));
+        Assertions.assertTrue(PropertyAnalyzer.analyzeBooleanProp(null, testPropKey, true));
+
+        // Test 2: properties does not contain the key - should return default value
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put("other_property", "value");
+        Assertions.assertFalse(PropertyAnalyzer.analyzeBooleanProp(properties1, testPropKey, false));
+        Assertions.assertTrue(properties1.containsKey("other_property")); // other property should remain
+
+        // Test 3: valid value "true" - should return true and remove property
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put(testPropKey, "true");
+        Assertions.assertTrue(PropertyAnalyzer.analyzeBooleanProp(properties2, testPropKey, false));
+        Assertions.assertFalse(properties2.containsKey(testPropKey)); // Property should be removed
+
+        // Test 4: valid value "false" - should return false and remove property
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put(testPropKey, "false");
+        Assertions.assertFalse(PropertyAnalyzer.analyzeBooleanProp(properties3, testPropKey, true));
+        Assertions.assertFalse(properties3.containsKey(testPropKey)); // Property should be removed
+
+        // Test 5: invalid value - should throw SemanticException
+        Map<String, String> properties4 = new HashMap<>();
+        properties4.put(testPropKey, "invalid");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
+                PropertyAnalyzer.analyzeBooleanProp(properties4, testPropKey, false));
+        Assertions.assertTrue(ex.getMessage().contains("must be bool type(false/true)"));
+        Assertions.assertTrue(ex.getMessage().contains(testPropKey));
     }
 }
