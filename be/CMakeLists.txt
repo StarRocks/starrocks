@@ -420,6 +420,7 @@ set(STARROCKS_LINK_LIBS
     Geo
     Simd
     Cache
+    orc
     ${WL_END_GROUP}
     Base
     Gutil
@@ -489,7 +490,6 @@ set(STARROCKS_DEPENDENCIES
     gRPC::grpc
     gRPC::grpc++
     parquet
-    orc
     cctz
     fmt
     ryu
@@ -623,6 +623,7 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
     ENDIF()
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
+
 
 set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp)
 

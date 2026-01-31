@@ -32,13 +32,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "common/status.h"
+#include "base/status.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
-
-#include "gen_cpp/Types_types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
