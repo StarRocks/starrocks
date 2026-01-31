@@ -3948,6 +3948,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Specifies whether to enable the feature that is used to periodically collect metrics. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
 - Introduced in: -
 
+##### enable_table_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to export table-level metrics in FE. When disabled, FE will skip exporting table metrics (such as table scan/load counters and table size metrics), but still records the counters in memory.
+- Introduced in: -
+
 ##### enable_mv_post_image_reload_cache
 
 - Default: true
