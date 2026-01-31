@@ -230,6 +230,7 @@ import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.summary.PartitionsScanMgr;
 import com.starrocks.summary.QueryHistoryMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -539,6 +540,7 @@ public class GlobalStateMgr {
     private final SQLPlanStorage sqlPlanStorage;
     private final QueryHistoryMgr queryHistoryMgr;
     private final SPMAutoCapturer spmAutoCapturer;
+    private final PartitionsScanMgr partitionsScanMgr;
 
     private JwkMgr jwkMgr;
 
@@ -695,6 +697,7 @@ public class GlobalStateMgr {
         this.sqlPlanStorage = SQLPlanStorage.create(true);
         this.queryHistoryMgr = new QueryHistoryMgr();
         this.spmAutoCapturer = new SPMAutoCapturer();
+        this.partitionsScanMgr = new PartitionsScanMgr();
 
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
@@ -934,6 +937,10 @@ public class GlobalStateMgr {
 
     public QueryHistoryMgr getQueryHistoryMgr() {
         return queryHistoryMgr;
+    }
+
+    public PartitionsScanMgr getPartitionsScanMgr() {
+        return partitionsScanMgr;
     }
 
     public AuthenticationMgr getAuthenticationMgr() {
