@@ -1,0 +1,13 @@
+diff --git a/config_brpc.sh b/config_brpc.sh
+index 75826452..69a7c4b9 100755
+--- a/config_brpc.sh
++++ b/config_brpc.sh
+@@ -344,7 +344,7 @@ if [ "$PROTOBUF_VERSION" -ge 4022000 ]; then
+     done
+     CXXFLAGS="-std=c++17"
+ else
+-    CXXFLAGS="-std=c++0x"
++    CXXFLAGS="-std=c++17"
+ fi
+ 
+ CPPFLAGS=
