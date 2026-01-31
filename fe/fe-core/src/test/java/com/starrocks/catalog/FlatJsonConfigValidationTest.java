@@ -226,14 +226,14 @@ public class FlatJsonConfigValidationTest {
         Assertions.assertEquals("0.8", properties1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
         Assertions.assertEquals("50", properties1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
 
-        // Test 2: When flat_json.enable is false, only the enable property should be present
+        // Test 2: When flat_json.enable is false, all properties should still be present for SHOW CREATE TABLE
         FlatJsonConfig config2 = new FlatJsonConfig(false, 0.1, 0.8, 50);
         Map<String, String> properties2 = config2.toProperties();
 
         Assertions.assertEquals("false", properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
-        Assertions.assertNull(properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
-        Assertions.assertNull(properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
-        Assertions.assertNull(properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+        Assertions.assertEquals("0.1", properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertEquals("0.8", properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertEquals("50", properties2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
     }
 
     @Test
@@ -262,20 +262,18 @@ public class FlatJsonConfigValidationTest {
         Assertions.assertEquals(50, originalConfig.getFlatJsonColumnMax());
         
         // Step 2: Simulate setting flat_json.enable = false
-        // This is what happens when setFlatJsonConfig() is called with enable=false
-        // The toProperties() only returns flat_json.enable = false, but properties may still contain
-        // residual flat JSON properties from previous configuration
+        // After the fix, toProperties() includes all properties regardless of enable flag
         FlatJsonConfig disabledConfig = new FlatJsonConfig(false, 0.1, 0.8, 50);
         Map<String, String> disabledProperties = disabledConfig.toProperties();
-        // Only flat_json.enable = false is returned
+        // After the fix, all properties are returned
         Assertions.assertEquals("false", disabledProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
-        Assertions.assertNull(disabledProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertEquals("0.1", disabledProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertEquals("0.8", disabledProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertEquals("50", disabledProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
         
-        // But the original properties may still contain residual flat JSON properties
-        // This simulates the bug scenario where modifyTableProperties() doesn't remove old properties
+        // The properties now properly contain all flat JSON properties
         Map<String, String> propertiesWithResidual = new HashMap<>(originalProperty.getProperties());
         propertiesWithResidual.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
-        // Note: propertiesWithResidual still contains the old flat JSON properties
         
         // Step 3: Create a new TableProperty with residual properties and verify it doesn't throw
         TableProperty propertyWithResidual = new TableProperty(propertiesWithResidual);
@@ -285,10 +283,10 @@ public class FlatJsonConfigValidationTest {
         FlatJsonConfig configWithResidual = propertyWithResidual.getFlatJsonConfig();
         Assertions.assertNotNull(configWithResidual);
         Assertions.assertFalse(configWithResidual.getFlatJsonEnable());
-        // Should use default values, ignoring residual properties
-        Assertions.assertEquals(Config.flat_json_null_factor, configWithResidual.getFlatJsonNullFactor(), 0.001);
-        Assertions.assertEquals(Config.flat_json_sparsity_factory, configWithResidual.getFlatJsonSparsityFactor(), 0.001);
-        Assertions.assertEquals(Config.flat_json_column_max, configWithResidual.getFlatJsonColumnMax());
+        // Should preserve the configured values from properties
+        Assertions.assertEquals(0.1, configWithResidual.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.8, configWithResidual.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, configWithResidual.getFlatJsonColumnMax());
         
         // Step 4: Test TableProperty.copy() which calls gsonPostProcess()
         // This simulates what happens during SELECT query when table is copied
@@ -299,8 +297,8 @@ public class FlatJsonConfigValidationTest {
         FlatJsonConfig copiedConfig = copiedProperty.getFlatJsonConfig();
         Assertions.assertNotNull(copiedConfig);
         Assertions.assertFalse(copiedConfig.getFlatJsonEnable());
-        Assertions.assertEquals(Config.flat_json_null_factor, copiedConfig.getFlatJsonNullFactor(), 0.001);
-        Assertions.assertEquals(Config.flat_json_sparsity_factory, copiedConfig.getFlatJsonSparsityFactor(), 0.001);
-        Assertions.assertEquals(Config.flat_json_column_max, copiedConfig.getFlatJsonColumnMax());
+        Assertions.assertEquals(0.1, copiedConfig.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.8, copiedConfig.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, copiedConfig.getFlatJsonColumnMax());
     }
 }

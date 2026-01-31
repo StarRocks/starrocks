@@ -109,14 +109,13 @@ public class FlatJsonConfig implements Writable {
     public Map<String, String> toProperties() {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, String.valueOf(flatJsonEnable));
-
-        // Only include other flat JSON properties if flat JSON is enabled
-        if (flatJsonEnable) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, String.valueOf(flatJsonNullFactor));
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR,
-                    String.valueOf(flatJsonSparsityFactor));
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, String.valueOf(flatJsonColumnMax));
-        }
+        
+        // Always include all flat JSON properties so they appear in SHOW CREATE TABLE
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, String.valueOf(flatJsonNullFactor));
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR,
+                String.valueOf(flatJsonSparsityFactor));
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, String.valueOf(flatJsonColumnMax));
+        
         return properties;
     }
 
