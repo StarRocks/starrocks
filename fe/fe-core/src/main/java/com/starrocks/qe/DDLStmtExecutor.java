@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -1152,6 +1153,33 @@ public class DDLStmtExecutor {
                         "the related task will be deleted automatically.");
             }
             taskManager.dropTasks(Collections.singletonList(task.getId()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterTaskStatement(AlterTaskStmt alterTaskStmt, ConnectContext context) {
+            TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
+            String taskName = alterTaskStmt.getTaskName().getName();
+            if (!taskManager.containTask(taskName)) {
+                if (alterTaskStmt.isIfExists()) {
+                    return null;
+                }
+                throw new SemanticException("Task " + taskName + " is not exist");
+            }
+            Task task = taskManager.getTask(taskName);
+            switch (alterTaskStmt.getAction()) {
+                case RESUME:
+                    taskManager.resumeTask(task);
+                    break;
+                case SUSPEND:
+                    taskManager.suspendTask(task);
+                    break;
+                case SET:
+                    taskManager.updateTaskProperties(task, alterTaskStmt.getProperties());
+                    break;
+                default:
+                    throw new SemanticException("Unsupported alter task action: " + alterTaskStmt.getAction());
+            }
             return null;
         }
 

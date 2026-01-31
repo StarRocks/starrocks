@@ -80,6 +80,7 @@ statement
 
     // Task Statement
     | submitTaskStatement
+    | alterTaskStatement
     | dropTaskStatement
 
     // Materialized View Statement
@@ -688,6 +689,10 @@ submitTaskStatement
     : SUBMIT TASK qualifiedName?
         taskClause*
         AS (createTableAsSelectStatement | insertStatement | dataCacheSelectStatement)
+    ;
+
+alterTaskStatement
+    : ALTER TASK (IF EXISTS)? qualifiedName (RESUME | SUSPEND | SET propertyList)
     ;
 
 taskClause
