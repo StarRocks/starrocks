@@ -55,6 +55,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/concurrent_limiter.h"
 #include "util/cpu_info.h"
+#include "util/defer_op.h"
 
 class mg_connection;
 
@@ -628,6 +629,44 @@ TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
     request._params.emplace(HTTP_TABLE_KEY, "%RR");
     request.set_handler(&action);
     ASSERT_EQ(-1, action.on_header(&request));
+}
+
+TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
+    struct TestCase {
+        const char* timeout_header;
+        int32_t expected_timeout_ms;
+    };
+    TestCase test_cases[] = {
+            {nullptr, config::txn_commit_rpc_timeout_ms}, // default timeout
+            {"30", 15000},                                // custom timeout: 30s -> 15000ms
+    };
+
+    for (const auto& tc : test_cases) {
+        StreamLoadAction action(&_env, _limiter.get());
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        int32_t captured_timeout = -1;
+        SyncPoint::GetInstance()->SetCallBack("StreamLoadAction::_process_put::rpc_timeout", [&](void* arg) {
+            auto* request = static_cast<TStreamLoadPutRequest*>(arg);
+            captured_timeout = request->thrift_rpc_timeout_ms;
+        });
+
+        HttpRequest request(_evhttp_req);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        if (tc.timeout_header != nullptr) {
+            request._headers.emplace(HTTP_TIMEOUT, tc.timeout_header);
+        }
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        EXPECT_EQ(tc.expected_timeout_ms, captured_timeout);
+    }
 }
 
 } // namespace starrocks
