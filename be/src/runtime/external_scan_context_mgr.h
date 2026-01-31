@@ -75,6 +75,9 @@ public:
     Status clear_scan_context(const std::string& context_id);
 
 private:
+    Status _cancel_fragment(const ScanContext& context, const Status& s);
+
+private:
     ExecEnv* _exec_env;
     std::map<std::string, std::shared_ptr<ScanContext>> _active_contexts;
     void gc_expired_context();
