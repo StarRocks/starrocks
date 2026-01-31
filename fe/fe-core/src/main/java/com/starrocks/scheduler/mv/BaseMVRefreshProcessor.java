@@ -419,7 +419,7 @@ public abstract class BaseMVRefreshProcessor {
                         String partitionName = toRefreshPartitions.getPartitions().iterator().next().name();
                         Partition partition = mv.getPartition(partitionName);
                         dataProperty = partitionInfo.getDataProperty(partition.getId());
-                        mv.dropPartition(db.getId(), partitionName, false);
+                        mv.dropPartition(db.getId(), partitionName, true /* forceDrop */);
                     } else {
                         for (PCellWithName partName : toRefreshPartitions.getPartitions()) {
                             mvRefreshPartitioner.dropPartition(db, mv, partName.name());
