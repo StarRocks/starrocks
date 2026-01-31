@@ -32,8 +32,45 @@ void RowidRangeOption::add(const BaseRowset* rowset, const Segment* segment, Spa
     segment_map.emplace(segment->id(), SegmentSplit{std::move(rowid_range), is_first_split_of_segment});
 }
 
+void RowidRangeOption::add(RowsetId rowset_id, uint64_t segment_id, SparseRangePtr rowid_range,
+                           bool is_first_split_of_segment) {
+    auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset_id);
+    if (rowset_it == rowid_range_per_segment_per_rowset.end()) {
+        rowset_it = rowid_range_per_segment_per_rowset.emplace(rowset_id, SetgmentRowidRangeMap()).first;
+    }
+
+    auto& segment_map = rowset_it->second;
+    segment_map.emplace(segment_id, SegmentSplit{std::move(rowid_range), is_first_split_of_segment});
+}
+
 bool RowidRangeOption::contains_rowset(const BaseRowset* rowset) const {
     return rowid_range_per_segment_per_rowset.find(rowset->rowset_id()) != rowid_range_per_segment_per_rowset.end();
+}
+
+bool RowidRangeOption::empty() const {
+    if (rowid_range_per_segment_per_rowset.empty()) {
+        return true;
+    } else if (rowid_range_per_segment_per_rowset.size() == 1) {
+        return rowid_range_per_segment_per_rowset.begin()->second.empty();
+    } else {
+        return false;
+    }
+}
+
+std::optional<std::tuple<RowsetId, SegmentId, RowidRangeOption::SegmentSplit>> RowidRangeOption::get_single_segment()
+        const {
+    if (rowid_range_per_segment_per_rowset.size() != 1) {
+        return std::nullopt;
+    }
+    for (const auto& [rowset_id, segment_map] : rowid_range_per_segment_per_rowset) {
+        if (segment_map.size() != 1) {
+            return std::nullopt;
+        }
+        for (const auto& [segment_id, segment_split] : segment_map) {
+            return std::make_tuple(rowset_id, segment_id, segment_split);
+        }
+    }
+    return std::nullopt;
 }
 
 RowidRangeOption::SegmentSplit RowidRangeOption::get_segment_rowid_range(const BaseRowset* rowset,
@@ -49,6 +86,22 @@ RowidRangeOption::SegmentSplit RowidRangeOption::get_segment_rowid_range(const B
         return {nullptr, false};
     }
     return segment_it->second;
+}
+
+RowidRangeOptionPtr RowidRangeOption::clone() {
+    return std::make_shared<RowidRangeOption>(*this);
+}
+
+std::string RowidRangeOption::to_string() const {
+    std::stringstream ss;
+    ss << "RowidRangeOption: ";
+    for (const auto& [rowset_id, segment_map] : rowid_range_per_segment_per_rowset) {
+        ss << "rowset_id: " << rowset_id.to_string() << " ";
+        for (const auto& [segment_id, segment_split] : segment_map) {
+            ss << "segment_id: " << segment_id << " " << segment_split.row_id_range->to_string() << " ";
+        }
+    }
+    return ss.str();
 }
 
 } // namespace starrocks

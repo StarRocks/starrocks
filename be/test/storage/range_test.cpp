@@ -204,4 +204,48 @@ TEST(SparseRangeIteratorTest, intersect_test) {
     }
 }
 
+TEST(SparseRangeTest, range_subtraction) {
+    // Basic subtraction: [0, 10) - [3, 7) = [0, 3) + [7, 10)
+    SparseRange<> range1(0, 10);
+    SparseRange<> range2(3, 7);
+    SparseRange<> result = range1 - range2;
+    EXPECT_EQ(result.span_size(), 6);
+    EXPECT_EQ(result.to_string(), "([0,3), [7,10))");
+
+    // No intersection: [0, 5) - [10, 15) = [0, 5)
+    SparseRange<> range3(0, 5);
+    SparseRange<> range4(10, 15);
+    SparseRange<> result2 = range3 - range4;
+    EXPECT_EQ(result2.to_string(), "([0,5))");
+
+    // Complete overlap: [0, 10) - [0, 10) = empty
+    SparseRange<> range5(0, 10);
+    SparseRange<> range6(0, 10);
+    SparseRange<> result3 = range5 - range6;
+    EXPECT_TRUE(result3.empty());
+
+    // Operator -=
+    SparseRange<> range7(0, 10);
+    range7 -= SparseRange<>(3, 7);
+    EXPECT_EQ(range7.to_string(), "([0,3), [7,10))");
+}
+
+TEST(SparseRangeTest, range_complement) {
+    // Complement within bounds
+    SparseRange<> range(5, 15);
+    SparseRange<> complement = range.complement(0, 20);
+    EXPECT_EQ(complement.to_string(), "([0,5), [15,20))");
+
+    SparseRange<> range2(5, 15);
+    range2 -= SparseRange<>(3, 7);
+    EXPECT_EQ(range2.to_string(), "([7,15))");
+    SparseRange<> complement2 = range2.complement(0, 20);
+    EXPECT_EQ(complement2.to_string(), "([0,7), [15,20))");
+
+    // Empty range complement
+    SparseRange<> empty;
+    SparseRange<> empty_complement = empty.complement(0, 10);
+    EXPECT_EQ(empty_complement.to_string(), "([0,10))");
+}
+
 } // namespace starrocks

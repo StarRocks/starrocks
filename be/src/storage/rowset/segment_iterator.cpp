@@ -862,7 +862,13 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_init_ann_reader());
     // filter by index stage
     // Use indexes and predicates to filter some data page
-    RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
+    bool need_refine = _opts.filtered_scan_range && _opts.is_first_split_of_segment;
+    if (need_refine) {
+        _scan_range.add(Range<>(0, num_rows()));
+    } else {
+        RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
+    }
+
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_tablet_range());
     bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
@@ -889,6 +895,15 @@ Status SegmentIterator::_init() {
     // reverse scan_range
     if (!_opts.asc_hint) {
         _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
+    }
+
+    // Update the rowid_range_option with the current scan_range to avoid redundant computations
+    // in subsequent scan tasks. This ensures that the filtered scan range is reused efficiently.
+    if (need_refine) {
+        *_opts.filtered_scan_range = _scan_range;
+        if (_opts.rowid_range_option != nullptr) {
+            _scan_range &= (*_opts.rowid_range_option);
+        }
     }
 
     _range_iter = _scan_range.new_iterator();
