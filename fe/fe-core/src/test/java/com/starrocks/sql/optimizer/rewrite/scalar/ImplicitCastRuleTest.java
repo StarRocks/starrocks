@@ -232,4 +232,28 @@ public class ImplicitCastRuleTest {
 
         assertTrue(result.getChild(1).getChild(0).getType().isInt());
     }
+
+    @Test
+    public void testDateColumnWithCastExpression() {
+        // Test case: dt = CAST(20250101 AS BIGINT) should be optimized to dt = '2025-01-01'
+        ColumnRefOperator dateColumn = new ColumnRefOperator(1, DateType.DATE, "dt", true);
+        CastOperator castExpression = new CastOperator(IntegerType.BIGINT, ConstantOperator.createBigint(20250101));
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, dateColumn, castExpression);
+
+        ImplicitCastRule rule = new ImplicitCastRule();
+        ScalarOperator result = rule.apply(predicate, null);
+
+        assertEquals(OperatorType.BINARY, result.getOpType());
+        assertTrue(result instanceof BinaryPredicateOperator);
+        BinaryPredicateOperator resultPredicate = (BinaryPredicateOperator) result;
+        assertEquals(BinaryType.EQ, resultPredicate.getBinaryType());
+
+        assertEquals(dateColumn, resultPredicate.getChild(0));
+        assertEquals(DateType.DATE, resultPredicate.getChild(0).getType());
+        assertTrue(resultPredicate.getChild(1) instanceof ConstantOperator);
+        assertEquals(DateType.DATE, resultPredicate.getChild(1).getType());
+        ConstantOperator dateConstant = (ConstantOperator) resultPredicate.getChild(1);
+        assertEquals("2025-01-01", dateConstant.toString());
+    }
 }
