@@ -14,12 +14,12 @@
 
 #include "runtime/type_pack.h"
 
+#include "base/string/faststring.h"
+#include "base/utility/meta_macro.h"
 #include "column/datum.h"
 #include "column/type_traits.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/faststring.h"
-#include "util/meta_macro.h"
 
 namespace starrocks {
 template <LogicalType LT, typename = guard::Guard>

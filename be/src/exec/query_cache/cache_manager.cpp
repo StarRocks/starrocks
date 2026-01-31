@@ -14,7 +14,7 @@
 
 #include "exec/query_cache/cache_manager.h"
 
-#include "util/defer_op.h"
+#include "base/utility/defer_op.h"
 namespace starrocks::query_cache {
 
 CacheManager::CacheManager(size_t capacity) : _cache(capacity) {}

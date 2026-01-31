@@ -16,15 +16,15 @@
 
 #include <cstdint>
 
+#include "base/simd/byte_stream_split.h"
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
 #include "util/bit_util.h"
-#include "util/byte_stream_split.h"
-#include "util/faststring.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 

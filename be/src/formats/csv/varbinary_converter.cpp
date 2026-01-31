@@ -16,13 +16,13 @@
 
 #include <iostream>
 
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "common/config.h"
 #include "exprs/base64.h"
 #include "gutil/strings/escaping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
-#include "util/defer_op.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks::csv {

@@ -16,13 +16,13 @@
 
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "fmt/core.h"
 #include "udf/java/java_udf.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

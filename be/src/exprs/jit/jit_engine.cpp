@@ -58,13 +58,13 @@
 #include <mutex>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "util/defer_op.h"
 #include "util/mem_info.h"
 
 namespace starrocks {

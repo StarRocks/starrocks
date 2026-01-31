@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <set>
 
+#include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/lake_types.pb.h"
@@ -31,7 +32,6 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/defer_op.h"
 #include "util/threadpool.h"
 
 namespace starrocks::lake {

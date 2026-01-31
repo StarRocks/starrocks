@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/string/slice.h"
 #include "common/statusor.h"
 #include "exec/spill/block_manager.h"
 #include "fmt/format.h"
 #include "io/input_stream.h"
-#include "util/slice.h"
 
 namespace starrocks::spill {
 

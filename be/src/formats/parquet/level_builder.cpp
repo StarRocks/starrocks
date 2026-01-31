@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -31,7 +32,6 @@
 #include "common/compiler_util.h"
 #include "gutil/casts.h"
 #include "types/date_value.h"
-#include "util/defer_op.h"
 #include "utils.h"
 
 namespace starrocks::parquet {

@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -59,7 +60,6 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 #include "util/uid_util.h"
 

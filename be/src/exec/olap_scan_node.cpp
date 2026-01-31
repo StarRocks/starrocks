@@ -19,6 +19,7 @@
 #include <functional>
 #include <thread>
 
+#include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
@@ -44,7 +45,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 

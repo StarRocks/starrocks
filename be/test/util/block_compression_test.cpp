@@ -39,10 +39,10 @@
 #include <iostream>
 #include <thread>
 
+#include "base/random/random.h"
+#include "base/string/faststring.h"
 #include "gen_cpp/segment.pb.h"
 #include "util/compression/compression_context_pool_singletons.h"
-#include "util/faststring.h"
-#include "util/random.h"
 #include "util/raw_container.h"
 
 namespace starrocks {

@@ -4,8 +4,8 @@
 
 #include "storage/sstable/filter_policy.h"
 
-#include "util/murmur_hash3.h"
-#include "util/slice.h"
+#include "base/hash/murmur_hash3.h"
+#include "base/string/slice.h"
 
 namespace starrocks::sstable {
 

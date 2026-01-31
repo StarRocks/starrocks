@@ -40,6 +40,8 @@
 
 #include <memory>
 
+#include "base/string/slice.h"
+#include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
@@ -61,10 +63,8 @@
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
-#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
-#include "util/slice.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
 bvar::Adder<int> g_open_segments_io; // NOLINT

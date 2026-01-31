@@ -38,6 +38,7 @@
 #include <sstream>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/tracer.h"
@@ -58,7 +59,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"

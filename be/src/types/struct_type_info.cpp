@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/utility/mem_util.hpp"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "types/map_type_info.h"
-#include "util/mem_util.hpp"
 
 namespace starrocks {
 

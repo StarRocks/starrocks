@@ -34,10 +34,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/string/slice.h"
 #include "runtime/mem_pool.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

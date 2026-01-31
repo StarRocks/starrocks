@@ -19,13 +19,13 @@
 #include <boost/locale/encoding_utf.hpp>
 #include <memory>
 
+#include "base/string/faststring.h"
+#include "base/utility/defer_op.h"
 #include "clucene_inverted_util.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/clucene/match_operator.h"
 #include "storage/rowset/options.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 

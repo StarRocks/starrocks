@@ -11,9 +11,9 @@
 
 #include <string>
 
+#include "base/string/slice.h"
 #include "gutil/endian.h"
 #include "storage/olap_common.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

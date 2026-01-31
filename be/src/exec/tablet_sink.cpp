@@ -41,6 +41,7 @@
 
 #include "agent/master_info.h"
 #include "agent/utils.h"
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -65,7 +66,6 @@
 #include "storage/tablet_manager.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
-#include "util/defer_op.h"
 #include "util/stack_util.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"

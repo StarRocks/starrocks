@@ -19,6 +19,7 @@
 
 #include <limits>
 
+#include "base/string/slice.h"
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -36,7 +37,6 @@
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
 #include "util/json.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

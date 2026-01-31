@@ -4,6 +4,7 @@
 
 #include "storage/sstable/table_builder.h"
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/sstable/block_builder.h"
@@ -15,7 +16,6 @@
 #include "testutil/sync_point.h"
 #include "util/compression/compression_headers.h"
 #include "util/crc32c.h"
-#include "util/slice.h"
 
 namespace starrocks::sstable {
 

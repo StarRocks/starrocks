@@ -43,6 +43,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "runtime/current_thread.h"
@@ -63,7 +64,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
-#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/ratelimit.h"
 #include "util/starrocks_metrics.h"

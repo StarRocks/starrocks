@@ -18,6 +18,7 @@
 
 #include <cstdlib>
 
+#include "base/string/faststring.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -34,7 +35,6 @@
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
 #include "util/failpoint/fail_point.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 

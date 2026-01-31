@@ -17,13 +17,13 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "jni.h"
 #include "types/logical_type.h"
 #include "udf/java/type_traits.h"
-#include "util/slice.h"
 
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c

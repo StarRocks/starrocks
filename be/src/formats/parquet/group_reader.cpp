@@ -21,6 +21,8 @@
 #include <utility>
 
 #include "agent/master_info.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -41,9 +43,7 @@
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
-#include "util/stopwatch.hpp"
 #include "utils.h"
 
 namespace starrocks::parquet {

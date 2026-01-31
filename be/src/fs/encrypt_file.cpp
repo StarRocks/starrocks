@@ -25,11 +25,11 @@
 #include <cpuid.h>
 #endif
 
+#include "base/utility/defer_op.h"
 #include "fmt/format.h"
 #include "fs/encrypt_file.h"
 #include "gutil/endian.h"
 #include "io/input_stream.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

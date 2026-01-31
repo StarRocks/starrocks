@@ -45,6 +45,7 @@
 #include <string>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
@@ -62,7 +63,6 @@
 #include "storage/tablet_updates.h"
 #include "util/coding.h"
 #include "util/debug_util.h"
-#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/url_coding.h"
 

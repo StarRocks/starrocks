@@ -21,6 +21,7 @@
 #include <string>
 #include <thread>
 
+#include "base/utility/defer_op.h"
 #include "column/datum_tuple.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -40,7 +41,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "util/slice.h"
 
 namespace starrocks {
 class FunctionContext;

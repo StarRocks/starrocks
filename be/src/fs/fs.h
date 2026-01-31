@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 
+#include "base/string/slice.h"
 #include "common/statusor.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "fs/encryption.h"
@@ -22,7 +23,6 @@
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
 #include "runtime/descriptors.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

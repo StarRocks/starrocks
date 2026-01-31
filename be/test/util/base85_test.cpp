@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "util/uuid_generator.h"
+#include "base/uuid/uuid_generator.h"
 
 namespace starrocks {
 

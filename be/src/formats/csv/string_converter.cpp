@@ -14,11 +14,11 @@
 
 #include "formats/csv/string_converter.h"
 
+#include "base/string/utf8.h"
 #include "column/binary_column.h"
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
-#include "util/utf8.h"
 
 namespace starrocks::csv {
 

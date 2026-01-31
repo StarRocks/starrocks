@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include <bbase/system/errno.h>
 #include <bthread/bthread.h>
-#include <butil/errno.h>
 #include <fmt/format.h>
 
 #include <functional>

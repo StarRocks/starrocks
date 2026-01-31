@@ -15,13 +15,13 @@
 #include <algorithm>
 #include <stack>
 
+#include "base/string/utf8.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/map_column.h"
 #include "exprs/function_context.h"
 #include "exprs/string_functions.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 

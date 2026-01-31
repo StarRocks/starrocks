@@ -34,9 +34,9 @@
 
 #include "types/bitmap_value.h"
 
+#include "base/utility/defer_op.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value_detail.h"
-#include "util/defer_op.h"
 #include "util/phmap/phmap.h"
 #include "util/raw_container.h"
 

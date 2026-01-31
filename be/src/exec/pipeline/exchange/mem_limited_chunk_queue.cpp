@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
@@ -33,7 +34,6 @@
 #include "serde/column_array_serde.h"
 #include "serde/protobuf_serde.h"
 #include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 

@@ -14,6 +14,7 @@
 
 #include "storage/push_handler.h"
 
+#include "base/utility/defer_op.h"
 #include "storage/compaction_manager.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -22,7 +23,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

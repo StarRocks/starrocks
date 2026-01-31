@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -28,7 +29,6 @@
 #include "runtime/mem_pool.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
-#include "util/slice.h"
 
 namespace starrocks::pipeline {
 

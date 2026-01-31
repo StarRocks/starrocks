@@ -15,6 +15,7 @@
 #include <any>
 #include <optional>
 
+#include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/decimalv3_column.h"
@@ -22,7 +23,6 @@
 #include "common/status.h"
 #include "exprs/literal.h"
 #include "types/logical_type_infra.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

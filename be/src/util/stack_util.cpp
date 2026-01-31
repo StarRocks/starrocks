@@ -37,14 +37,14 @@
 #include <thread>
 #include <tuple>
 
+#include "base/hash/hash.h"
+#include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "testutil/sync_point.h"
-#include "util/defer_op.h"
-#include "util/hash.h"
 #include "util/phmap/phmap.h"
 #include "util/time.h"
 

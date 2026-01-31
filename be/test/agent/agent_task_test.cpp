@@ -20,6 +20,7 @@
 #include "agent/publish_version.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
+#include "base/uuid/uuid_generator.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -29,7 +30,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/task/engine_clone_task.h"
 #include "testutil/assert.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 

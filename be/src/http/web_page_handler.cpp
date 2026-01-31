@@ -36,6 +36,7 @@
 
 #include <functional>
 
+#include "base/template/mustache/mustache.h"
 #include "fs/fs.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
@@ -50,7 +51,6 @@
 #include "util/debug_util.h"
 #include "util/disk_info.h"
 #include "util/mem_info.h"
-#include "util/mustache/mustache.h"
 
 using strings::Substitute;
 

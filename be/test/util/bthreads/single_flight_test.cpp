@@ -17,10 +17,10 @@
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
+#include "base/utility/defer_op.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/bthreads/util.h"
-#include "util/defer_op.h"
 
 namespace starrocks::bthreads {
 

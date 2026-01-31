@@ -20,10 +20,10 @@
 
 #include <boost/locale/encoding_utf.hpp>
 
+#include "base/string/faststring.h"
 #include "common/status.h"
 #include "storage/index/index_descriptor.h"
 #include "types/logical_type.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 

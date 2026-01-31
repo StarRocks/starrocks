@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_pool.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

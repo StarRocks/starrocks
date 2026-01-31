@@ -16,6 +16,8 @@
 
 #include <cstdint>
 
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -30,8 +32,6 @@
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
 #include "util/failpoint/fail_point.h"
-#include "util/slice.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 

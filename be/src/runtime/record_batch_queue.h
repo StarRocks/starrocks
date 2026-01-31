@@ -19,8 +19,8 @@
 
 #include <util/spinlock.h>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "common/status.h"
-#include "util/blocking_queue.hpp"
 
 namespace arrow {
 

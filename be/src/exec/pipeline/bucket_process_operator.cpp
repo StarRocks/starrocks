@@ -16,13 +16,13 @@
 
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

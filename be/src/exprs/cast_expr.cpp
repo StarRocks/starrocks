@@ -29,6 +29,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/utility/mysql_global.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -53,7 +54,6 @@
 #include "util/date_func.h"
 #include "util/json.h"
 #include "util/json_converter.h"
-#include "util/mysql_global.h"
 #include "util/numeric_types.h"
 #include "util/variant_converter.h"
 #include "util/variant_encoder.h"

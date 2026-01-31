@@ -18,8 +18,8 @@
 #include <cstdint>
 #include <limits>
 
+#include "base/utility/updater.h"
 #include "common/logging.h"
-#include "util/updater.h"
 
 namespace starrocks::pipeline {
 // Manage the memory usage for local exchange

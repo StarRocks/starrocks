@@ -38,11 +38,11 @@
 #include <iostream>
 #include <limits>
 
+#include "base/string/faststring.h"
 #include "storage/olap_common.h"
 #include "storage/uint24.h"
 #include "util/bit_stream_utils.h"
 #include "util/bit_stream_utils.inline.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 

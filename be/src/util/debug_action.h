@@ -16,7 +16,7 @@
 
 #include <optional>
 
-#include "util/hash.h"
+#include "base/hash/hash.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {

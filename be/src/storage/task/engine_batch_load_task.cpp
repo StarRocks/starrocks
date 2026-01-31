@@ -40,6 +40,7 @@
 #include <iostream>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/spark_load.h"
 #include "storage/lake/tablet_manager.h"
@@ -47,7 +48,6 @@
 #include "storage/olap_common.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
-#include "util/defer_op.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 

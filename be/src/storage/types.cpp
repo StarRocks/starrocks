@@ -34,6 +34,10 @@
 
 #include "storage/types.h"
 
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h"
+#include "base/utility/mem_util.hpp"
+#include "base/utility/mysql_global.h"
 #include "gutil/strings/numbers.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
@@ -54,11 +58,7 @@
 #include "types/map_type_info.h"
 #include "types/struct_type_info.h"
 #include "util/hash_util.hpp"
-#include "util/mem_util.hpp"
-#include "util/mysql_global.h"
-#include "util/slice.h"
 #include "util/string_parser.hpp"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

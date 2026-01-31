@@ -20,11 +20,11 @@
 #include <string>
 #include <string_view>
 
+#include "base/string/slice.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "util/raw_container.h"
-#include "util/slice.h"
 #include "util/variant.h"
 
 namespace starrocks {
