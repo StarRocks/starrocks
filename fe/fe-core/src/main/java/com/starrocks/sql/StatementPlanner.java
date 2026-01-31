@@ -138,7 +138,15 @@ public class StatementPlanner {
                 Authorizer.check(stmt, session);
             }
             if (stmt instanceof QueryStatement) {
+                // After analysis and authorization, validate table property disable_query.
+                AnalyzerUtils.validateDisableQueryOnTables(stmt);
                 OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
+            } else if (stmt instanceof InsertStmt) {
+                InsertStmt insertStmt = (InsertStmt) stmt;
+                QueryStatement queryStatement = insertStmt.getQueryStatement();
+                if (queryStatement != null) {
+                    AnalyzerUtils.validateDisableQueryOnTables(queryStatement);
+                }
             }
 
             // Note: we only could get the olap table after Analyzing phase

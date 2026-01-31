@@ -794,6 +794,22 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    // Validate table level property: disable_query.
+    // When disable_query is true on an OlapTable, any query that tries to read this table should be rejected.
+    public static void validateDisableQueryOnTables(StatementBase statementBase) {
+        Map<TableName, Table> tables = collectAllTable(statementBase);
+        for (Map.Entry<TableName, Table> entry : tables.entrySet()) {
+            Table table = entry.getValue();
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                if (olapTable.isDisableQuery()) {
+                    String fullName = entry.getKey() != null ? entry.getKey().toString() : table.getName();
+                    throw new SemanticException("The table " + fullName + " property disable_query is true");
+                }
+            }
+        }
+    }
+
     public static Multimap<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);

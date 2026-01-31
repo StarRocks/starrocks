@@ -342,6 +342,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "tableQueryTimeout")
     private int tableQueryTimeout = -1;
 
+    // control whether query is disabled on this table.
+    // false (default): query is allowed
+    // true: query is disabled
+    private boolean disableQuery = false;
+
     /**
      * Whether to enable the v2 implementation of fast schema evolution for cloud-native tables.
      * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
@@ -439,6 +444,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
                 buildTableQueryTimeout();
+                buildDisableQuery();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -1293,6 +1299,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildDisableQuery() {
+        disableQuery = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_DISABLE_QUERY, "false"));
+        return this;
+    }
+
     public TableProperty buildCloudNativeFastSchemaEvolutionV2() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             cloudNativeFastSchemaEvolutionV2 = Boolean.parseBoolean(
@@ -1340,6 +1352,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return tableQueryTimeout;
     }
 
+    public boolean isDisableQuery() {
+        return disableQuery;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1378,5 +1394,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildLakeCompactionMaxParallel();
         buildEnableStatisticCollectOnFirstLoad();
         buildTableQueryTimeout();
+        buildDisableQuery();
     }
 }
