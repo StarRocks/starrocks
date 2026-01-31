@@ -129,6 +129,7 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.listener.LoadJobMVListener;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mv.MVMetaVersionRepairer;
 import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.mv.analyzer.MVPartitionExprResolver;
@@ -5444,33 +5445,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        long totalCount = idToDb.values()
-                .stream()
-                .mapToInt(database -> {
-                    Locker locker = new Locker();
-                    locker.lockDatabase(database.getId(), LockType.READ);
-                    try {
-                        return database.getOlapPartitionsCount();
-                    } finally {
-                        locker.unLockDatabase(database.getId(), LockType.READ);
-                    }
-                }).sum();
-        List<Object> samples = new ArrayList<>();
-        // get every olap table's first partition
-        for (Database database : idToDb.values()) {
-            Locker locker = new Locker();
-            locker.lockDatabase(database.getId(), LockType.READ);
-            try {
-                samples.addAll(database.getPartitionSamples());
-            } finally {
-                locker.unLockDatabase(database.getId(), LockType.READ);
-            }
-        }
-        return Lists.newArrayList(Pair.create(samples, totalCount));
-    }
-
-    @Override
     public Map<String, Long> estimateCount() {
         long totalCount = idToDb.values()
                 .stream()
@@ -5484,6 +5458,21 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 }).sum();
         return ImmutableMap.of("Partition", totalCount);
+    }
+
+    @Override
+    public long estimateSize() {
+        long size = 0;
+        for (Database database : idToDb.values()) {
+            Locker locker = new Locker();
+            locker.lockDatabase(database.getId(), LockType.READ);
+            try {
+                size += Estimator.estimate(database.getTables());
+            } finally {
+                locker.unLockDatabase(database.getId(), LockType.READ);
+            }
+        }
+        return size;
     }
 
     public void alterTableAutoIncrement(String dbName, String tableName, long newAutoIncrementValue) throws DdlException {

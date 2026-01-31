@@ -19,20 +19,23 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.memory.estimate.Estimator;
+import com.starrocks.memory.estimate.StringEstimator;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.QeProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.CacheRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
+import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -46,7 +49,6 @@ public class MemoryUsageTracker extends FrontendDaemon {
             new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
 
     public static final Map<String, Map<String, MemoryStat>> MEMORY_USAGE = Maps.newConcurrentMap();
-    private static MemoryMXBean memoryMXBean;
 
     private boolean initialize;
     public MemoryUsageTracker() {
@@ -54,6 +56,9 @@ public class MemoryUsageTracker extends FrontendDaemon {
     }
 
     private void initMemoryTracker() {
+        registerCustomEstimators();
+        registerShallowMemoryClasses();
+
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
 
         registerMemoryTracker("Load", currentState.getLoadMgr());
@@ -70,6 +75,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("Task", currentState.getTaskManager().getTaskRunManager());
         registerMemoryTracker("TabletInvertedIndex", currentState.getTabletInvertedIndex());
         registerMemoryTracker("LocalMetastore", currentState.getLocalMetastore());
+        registerMemoryTracker("RecycleBin", currentState.getRecycleBin());
         registerMemoryTracker("Report", currentState.getReportHandler());
 
         // MV
@@ -81,18 +87,18 @@ public class MemoryUsageTracker extends FrontendDaemon {
         if (currentState.getStatisticStorage() instanceof CachedStatisticStorage) {
             registerMemoryTracker("Statistics", (CachedStatisticStorage) currentState.getStatisticStorage());
         }
+        registerMemoryTracker("Statistics", (CacheRelaxDictManager) IRelaxDictManager.getInstance());
+        registerMemoryTracker("Statistics", (ColumnMinMaxMgr) IMinMaxStatsMgr.internalInstance());
 
-        QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
-        if (qeProcessor instanceof QeProcessorImpl) {
-            registerMemoryTracker("Coordinator", (QeProcessorImpl) qeProcessor);
+        QeProcessorImpl qeProcessor = QeProcessorImpl.INSTANCE;
+        if (qeProcessor != null) {
+            registerMemoryTracker("Coordinator", qeProcessor);
         }
 
         IDictManager dictManager = IDictManager.getInstance();
         if (dictManager instanceof CacheDictManager) {
             registerMemoryTracker("Dict", (CacheDictManager) dictManager);
         }
-
-        memoryMXBean = ManagementFactory.getMemoryMXBean();
 
         LOG.info("Memory usage tracker init success");
 
@@ -104,12 +110,21 @@ public class MemoryUsageTracker extends FrontendDaemon {
         REFERENCE.get(moduleName).put(object.getClass().getSimpleName(), object);
     }
 
+    // Periodic call - only collects counts, no estimateSize()
     public static void trackMemory() {
-        long totalTracked = trackMemory(REFERENCE);
-        totalTracked += trackMemory(ImmutableMap.of("Connector",
+        trackCount(REFERENCE);
+        trackCount(ImmutableMap.of("Connector",
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
 
-        LOG.info("total tracked memory: {}, jvm: {}", new ByteSizeValue(totalTracked), getJVMMemory());
+        LOG.info("jvm: {}", getJVMMemory());
+    }
+
+    // HTTP call - collects full memory stats (estimateSize + estimateCount)
+    public static Map<String, Map<String, MemoryStat>> collectMemoryUsage() {
+        collectFullMemory(REFERENCE);
+        collectFullMemory(ImmutableMap.of("Connector",
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
+        return MEMORY_USAGE;
     }
 
     private static String getJVMMemory() {
@@ -120,15 +135,50 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 directBufferUsed = pool.getUsed();
             }
         }
-        return String.format("Process used: %s, heap used: %s, non heap used: %s, direct buffer used: %s",
+        return String.format("heap committed: %s, heap used: %s, non heap used: %s, direct buffer used: %s",
                 new ByteSizeValue(Runtime.getRuntime().totalMemory()),
                 new ByteSizeValue(jvmStats.getMem().getHeapUsed()),
                 new ByteSizeValue(jvmStats.getMem().getNonHeapUsed()),
                 new ByteSizeValue(directBufferUsed));
     }
 
-    private static long trackMemory(Map<String, Map<String, MemoryTrackable>> trackers) {
-        long totalTracked = 0;
+    public static Map<String, Object> getJVMMemoryMap() {
+        JvmStats jvmStats = JvmStats.jvmStats();
+        long directBufferUsed = 0;
+        for (JvmStats.BufferPool pool : jvmStats.getBufferPools()) {
+            if (pool.getName().equalsIgnoreCase("direct")) {
+                directBufferUsed = pool.getUsed();
+            }
+        }
+        Map<String, Object> jvmMap = Maps.newLinkedHashMap();
+        jvmMap.put("heap_committed", new ByteSizeValue(Runtime.getRuntime().totalMemory()).toString());
+        jvmMap.put("heap_used", new ByteSizeValue(jvmStats.getMem().getHeapUsed()).toString());
+        jvmMap.put("non_heap_used", new ByteSizeValue(jvmStats.getMem().getNonHeapUsed()).toString());
+        jvmMap.put("direct_buffer_used", new ByteSizeValue(directBufferUsed).toString());
+        return jvmMap;
+    }
+
+    private static void trackCount(Map<String, Map<String, MemoryTrackable>> trackers) {
+        for (Map.Entry<String, Map<String, MemoryTrackable>> entry : trackers.entrySet()) {
+            String moduleName = entry.getKey();
+            Map<String, MemoryTrackable> statMap = entry.getValue();
+
+            for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
+                String className = statEntry.getKey();
+                MemoryTrackable tracker = statEntry.getValue();
+                Map<String, Long> counterMap = tracker.estimateCount();
+
+                StringBuilder sb = new StringBuilder();
+                for (Map.Entry<String, Long> subEntry : counterMap.entrySet()) {
+                    sb.append(subEntry.getKey()).append(" with ").append(subEntry.getValue())
+                            .append(" object(s). ");
+                }
+                LOG.info("Module {} - {}. Contains {}", moduleName, className, sb.toString());
+            }
+        }
+    }
+
+    private static void collectFullMemory(Map<String, Map<String, MemoryTrackable>> trackers) {
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : trackers.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
@@ -160,15 +210,16 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 memoryStat.setCounterMap(counterMap);
                 usageMap.put(className, memoryStat);
 
-                totalTracked += currentEstimateSize;
-
-                LOG.info("({}ms) Module {} - {} estimated {} of memory. Contains {}",
-                        endTime - startTime, moduleName, className,
-                        new ByteSizeValue(currentEstimateSize), sb.toString());
+                if (currentEstimateSize > 0) {
+                    LOG.info("({}ms) Module {} - {} estimated {} of memory. Contains {}",
+                            endTime - startTime, moduleName, className,
+                            new ByteSizeValue(currentEstimateSize), sb.toString());
+                } else {
+                    LOG.info("({}ms) Module {} - {}. Contains {}",
+                            endTime - startTime, moduleName, className, sb.toString());
+                }
             }
         }
-
-        return totalTracked;
     }
 
     @Override
@@ -180,5 +231,20 @@ public class MemoryUsageTracker extends FrontendDaemon {
         if (Config.memory_tracker_enable) {
             trackMemory();
         }
+    }
+
+    private void registerCustomEstimators() {
+        Estimator.registerCustomEstimator(String.class, new StringEstimator());
+    }
+
+    private void registerShallowMemoryClasses() {
+        Estimator.registerShallowMemoryClass(Boolean.class);
+        Estimator.registerShallowMemoryClass(Byte.class);
+        Estimator.registerShallowMemoryClass(Character.class);
+        Estimator.registerShallowMemoryClass(Short.class);
+        Estimator.registerShallowMemoryClass(Integer.class);
+        Estimator.registerShallowMemoryClass(Long.class);
+        Estimator.registerShallowMemoryClass(Float.class);
+        Estimator.registerShallowMemoryClass(Double.class);
     }
 }

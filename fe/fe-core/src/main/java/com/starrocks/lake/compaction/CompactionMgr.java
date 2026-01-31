@@ -16,11 +16,10 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -289,11 +288,7 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = partitionStatisticsHashMap.values()
-                .stream()
-                .limit(1)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(samples, (long) partitionStatisticsHashMap.size()));
+    public long estimateSize() {
+        return Estimator.estimate(partitionStatisticsHashMap);
     }
 }

@@ -41,6 +41,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
@@ -65,6 +66,7 @@ public class PublishVersionTask extends AgentTask {
     private final List<Long> errorTablets;
     private Set<Long> errorReplicas;
     private final long commitTimestamp;
+    @IgnoreMemoryTrack
     private final TransactionState txnState;
     private Span span;
     private boolean enableSyncPublish;

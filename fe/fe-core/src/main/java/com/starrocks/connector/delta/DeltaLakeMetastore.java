@@ -27,6 +27,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
@@ -56,7 +57,6 @@ import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetastore.class);
-    private static final int MEMORY_META_SAMPLES = 10;
     protected final String catalogName;
     protected final IMetastore delegate;
     protected final Configuration hdfsConfiguration;
@@ -228,18 +228,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> jsonSamples = jsonCache.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList());
-
-        List<Object> checkpointSamples = checkpointCache.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList());
-
-        return Lists.newArrayList(Pair.create(jsonSamples, jsonCache.size()),
-                Pair.create(checkpointSamples, checkpointCache.size()));
+    public long estimateSize() {
+        return Estimator.estimate(checkpointCache, 20) + Estimator.estimate(jsonCache, 20);
     }
 }
