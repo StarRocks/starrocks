@@ -8,6 +8,8 @@ SHOW PROFILELIST lists the query profile records cached in your StarRocks cluste
 
 This feature is supported from v3.1 onwards.
 
+**Starting from v3.5**, SHOW PROFILELIST supports global views across all Frontend (FE) nodes in a multi-FE environment. The command aggregates profile records from all FE nodes, allowing you to view profiles regardless of which FE node the query was executed on.
+
 No privilege is required to perform this operation.
 
 ## Syntax

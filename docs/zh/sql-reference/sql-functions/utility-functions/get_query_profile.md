@@ -12,6 +12,8 @@ displayed_sidebar: docs
 
 该函数从 3.0 版本开始支持。
 
+**从 v3.5 开始**，`get_query_profile` 支持在多 Frontend（FE）环境下跨所有 FE 节点进行全局 profile 检索。如果在当前 FE 节点上找不到 profile，该函数会自动搜索集群中的其他 FE 节点。
+
 ## 语法
 
 ```Haskell

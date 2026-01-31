@@ -10,6 +10,8 @@ displayed_sidebar: docs
 
 此功能自 v3.1 起支持。
 
+**从 v3.5 开始**，SHOW PROFILELIST 支持多 Frontend（FE）环境下的全局视图。该命令会聚合所有 FE 节点的 profile 记录，使您可以查看到在任何 FE 节点上执行的查询的 profile。
+
 该操作无需任何权限。
 
 ## 语法
