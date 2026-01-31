@@ -125,6 +125,8 @@ public class SplitTabletJob extends TabletReshardJob {
         gtid = globalStateMgr.getGtidGenerator().nextGtid();
 
         // 3. Commit transaction (update next version)
+        // NOTE: After updateNextVersions(), the table's next version is advanced.
+        // From this point the job must not abort or throw, because the run() wrapper would attempt to abort.
         updateNextVersions();
 
         // 4. Add new tablets to inverted index
