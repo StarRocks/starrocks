@@ -38,6 +38,7 @@ under the License.
         <module>plugin/spark-dpp</module>
         <module>plugin/hive-udf</module>
         <module>fe-core</module>
+        <module>fe-extension</module>
         <module>fe-server</module>
     </modules>
 
