@@ -21,6 +21,11 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.qe.QueryDetail.QueryMemState;
+import com.starrocks.qe.QueryStatisticsItem;
+import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -37,6 +42,8 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.UUID;
 
 public class StmtExecutorTest {
 
@@ -189,6 +196,284 @@ public class StmtExecutorTest {
                     SqlModeHelper.MODE_DEFAULT);
             StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
             Assertions.assertEquals(ctx.getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+        }
+    }
+
+    @Test
+    public void testFailedQueryDetailUsesCoordinatorStatistics() {
+        boolean oldCollect = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            StatementBase stmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            executor.addRunningQueryDetail(stmt);
+
+            // Force placeholder stats by calling the getter before coordinator stats are available.
+            executor.getQueryStatisticsForAuditLog();
+
+            PQueryStatistics coordinatorStats = new PQueryStatistics();
+            coordinatorStats.scanBytes = 123L;
+            coordinatorStats.scanRows = 456L;
+            coordinatorStats.cpuCostNs = 789L;
+            coordinatorStats.memCostBytes = 321L;
+
+            Coordinator coordinator = new Coordinator() {
+                @Override
+                public void startScheduling(ScheduleOption option) {
+                }
+
+                @Override
+                public String getSchedulerExplain() {
+                    return "";
+                }
+
+                @Override
+                public void updateFragmentExecStatus(com.starrocks.thrift.TReportExecStatusParams params) {
+                }
+
+                @Override
+                public void updateAuditStatistics(com.starrocks.thrift.TReportAuditStatisticsParams params) {
+                }
+
+                @Override
+                public void cancel(com.starrocks.proto.PPlanFragmentCancelReason reason, String message) {
+                }
+
+                @Override
+                public void onFinished() {
+                }
+
+                @Override
+                public com.starrocks.qe.scheduler.slot.LogicalSlot getSlot() {
+                    return null;
+                }
+
+                @Override
+                public RowBatch getNext() {
+                    return null;
+                }
+
+                @Override
+                public boolean join(int timeoutSecond) {
+                    return false;
+                }
+
+                @Override
+                public boolean checkBackendState() {
+                    return false;
+                }
+
+                @Override
+                public boolean isThriftServerHighLoad() {
+                    return false;
+                }
+
+                @Override
+                public void setLoadJobType(com.starrocks.thrift.TLoadJobType type) {
+                }
+
+                @Override
+                public com.starrocks.thrift.TLoadJobType getLoadJobType() {
+                    return null;
+                }
+
+                @Override
+                public long getLoadJobId() {
+                    return 0;
+                }
+
+                @Override
+                public void setLoadJobId(Long jobId) {
+                }
+
+                @Override
+                public java.util.Map<Integer, com.starrocks.thrift.TNetworkAddress> getChannelIdToBEHTTPMap() {
+                    return null;
+                }
+
+                @Override
+                public java.util.Map<Integer, com.starrocks.thrift.TNetworkAddress> getChannelIdToBEPortMap() {
+                    return null;
+                }
+
+                @Override
+                public boolean isEnableLoadProfile() {
+                    return false;
+                }
+
+                @Override
+                public void clearExportStatus() {
+                }
+
+                @Override
+                public void collectProfileSync() {
+                }
+
+                @Override
+                public boolean tryProcessProfileAsync(java.util.function.Consumer<Boolean> task) {
+                    return false;
+                }
+
+                @Override
+                public void setTopProfileSupplier(java.util.function.Supplier<com.starrocks.common.util.RuntimeProfile> topProfileSupplier) {
+                }
+
+                @Override
+                public void setExecPlan(com.starrocks.sql.plan.ExecPlan execPlan) {
+                }
+
+                @Override
+                public com.starrocks.common.util.RuntimeProfile buildQueryProfile(boolean needMerge) {
+                    return null;
+                }
+
+                @Override
+                public com.starrocks.common.util.RuntimeProfile getQueryProfile() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<String> getDeltaUrls() {
+                    return null;
+                }
+
+                @Override
+                public java.util.Map<String, String> getLoadCounters() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<com.starrocks.thrift.TTabletFailInfo> getFailInfos() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<com.starrocks.thrift.TTabletCommitInfo> getCommitInfos() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<com.starrocks.thrift.TSinkCommitInfo> getSinkCommitInfos() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<String> getExportFiles() {
+                    return null;
+                }
+
+                @Override
+                public String getTrackingUrl() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<String> getRejectedRecordPaths() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
+                    return null;
+                }
+
+                @Override
+                public com.starrocks.datacache.DataCacheSelectMetrics getDataCacheSelectMetrics() {
+                    return null;
+                }
+
+                @Override
+                public PQueryStatistics getAuditStatistics() {
+                    return coordinatorStats;
+                }
+
+                @Override
+                public com.starrocks.common.Status getExecStatus() {
+                    return null;
+                }
+
+                @Override
+                public boolean isUsingBackend(Long backendID) {
+                    return false;
+                }
+
+                @Override
+                public boolean isDone() {
+                    return false;
+                }
+
+                @Override
+                public com.starrocks.thrift.TUniqueId getQueryId() {
+                    return null;
+                }
+
+                @Override
+                public void setQueryId(com.starrocks.thrift.TUniqueId queryId) {
+                }
+
+                @Override
+                public java.util.List<com.starrocks.planner.ScanNode> getScanNodes() {
+                    return null;
+                }
+
+                @Override
+                public long getStartTimeMs() {
+                    return 0;
+                }
+
+                @Override
+                public void setTimeoutSecond(int timeoutSecond) {
+                }
+
+                @Override
+                public boolean isProfileAlreadyReported() {
+                    return false;
+                }
+
+                @Override
+                public String getWarehouseName() {
+                    return "";
+                }
+
+                @Override
+                public long getCurrentWarehouseId() {
+                    return 0;
+                }
+
+                @Override
+                public String getResourceGroupName() {
+                    return "";
+                }
+
+                @Override
+                public boolean isShortCircuit() {
+                    return false;
+                }
+            };
+
+            Deencapsulation.setField(executor, "coord", coordinator);
+
+            UUID queryId = UUID.randomUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(com.starrocks.common.util.UUIDUtil.toTUniqueId(queryId));
+            ctx.setCurrentThreadId(Thread.currentThread().getId());
+            ctx.setCurrentThreadAllocatedMemory(0L);
+            ctx.getState().setError("failed");
+            ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            executor.addFinishedQueryDetail();
+
+            QueryDetail detail = ctx.getQueryDetail();
+            Assertions.assertNotNull(detail);
+            Assertions.assertEquals(QueryMemState.FAILED, detail.getState());
+            Assertions.assertEquals(123L, detail.getScanBytes());
+            Assertions.assertEquals(456L, detail.getScanRows());
+            Assertions.assertEquals(789L, detail.getCpuCostNs());
+            Assertions.assertEquals(321L, detail.getMemCostBytes());
+        } finally {
+            Config.enable_collect_query_detail_info = oldCollect;
         }
     }
 
