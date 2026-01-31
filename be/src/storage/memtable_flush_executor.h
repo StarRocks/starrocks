@@ -88,6 +88,14 @@ public:
     // wait all tasks in token to be completed.
     Status wait();
 
+    // Wait for all tasks in token to be completed with timeout support.
+    // This method is useful for memory-pressure-aware waiting where the caller
+    // needs to periodically check memory status while waiting for flush completion.
+    // @param timeout_ms: Maximum time to wait in milliseconds
+    // @return StatusOr<bool>: Returns true if all tasks completed, false if timeout.
+    //         Returns error Status if any flush task failed.
+    StatusOr<bool> wait_for(int64_t timeout_ms);
+
     // get flush operations' statistics
     const FlushStatistic& get_stats() const { return _stats; }
 
