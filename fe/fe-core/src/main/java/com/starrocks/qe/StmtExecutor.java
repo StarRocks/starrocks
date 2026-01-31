@@ -56,6 +56,7 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -3537,6 +3538,7 @@ public class StmtExecutor {
                     getPreparedStmtId());
             // Set query source from context
             queryDetail.setQuerySource(context.getQuerySource());
+            queryDetail.setImpersonatedUser(resolveImpersonatedUser());
             context.setQueryDetail(queryDetail);
             // copy queryDetail, cause some properties can be changed in future
             QueryDetailQueue.addQueryDetail(queryDetail.copy());
@@ -3616,6 +3618,16 @@ public class StmtExecutor {
                 && !isInformationQuery
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+
+    private String resolveImpersonatedUser() {
+        String qualifiedUser = ClusterNamespace.getNameFromFullName(context.getQualifiedUser());
+        String currentUser = context.getCurrentUserIdentity() == null ? null :
+                ClusterNamespace.getNameFromFullName(context.getCurrentUserIdentity().getUser());
+        if (currentUser == null || qualifiedUser == null || currentUser.equals(qualifiedUser)) {
+            return null;
+        }
+        return currentUser;
     }
 
     public double getMaxFilterRatio(DmlStmt dmlStmt) {
