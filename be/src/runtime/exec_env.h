@@ -295,6 +295,7 @@ public:
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
+    PriorityThreadPool* fragment_prepare_pool() { return _fragment_prepare_pool; }
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
     PriorityThreadPool* datacache_rpc_pool() { return _datacache_rpc_pool; }
@@ -394,6 +395,7 @@ private:
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
+    PriorityThreadPool* _fragment_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
     PriorityThreadPool* _datacache_rpc_pool = nullptr;

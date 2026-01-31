@@ -361,6 +361,7 @@ void QueryContextManager::_clean_slot_unlocked(size_t i, std::vector<QueryContex
         }
     }
 }
+
 void QueryContextManager::_clean_query_contexts() {
     for (auto i = 0; i < _num_slots; ++i) {
         auto& mutex = _mutexes[i];
