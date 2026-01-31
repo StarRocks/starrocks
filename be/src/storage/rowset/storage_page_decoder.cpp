@@ -14,12 +14,15 @@
 
 #include "storage/rowset/storage_page_decoder.h"
 
+#include "cache/mem_cache/pagecache_arena.h" // IWYU for PageBufferPtr
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/raw_container_checked.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
+#include "storage/rowset/common.h"
+#include "storage/rowset/page_handle_fwd.h"
+#include "util/alignment.h"
 #include "util/coding.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -32,8 +35,8 @@ public:
         DCHECK(_reserve_head_size == 0);
         _reserve_head_size = head_size;
     }
-    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) override {
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding, PageBufferPtr* page,
+                            Slice* page_slice) override {
         size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 0);
         size_t compressed_size = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 4);
         size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 8);
@@ -45,7 +48,7 @@ public:
 
         // data_size is size of decoded_data
         // compressed_size contains encoded_data size and BITSHUFFLE_PAGE_HEADER_SIZE
-        std::unique_ptr<std::vector<uint8_t>> decompressed_page(new std::vector<uint8_t>());
+        PageBufferPtr decompressed_page(new PageBuffer());
         size_t new_size = page_slice->size + data_size - (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
         RETURN_IF_ERROR(raw::stl_vector_resize_uninitialized_checked(decompressed_page.get(), new_size));
         memcpy(decompressed_page.get()->data(), page_slice->data, header_size);
@@ -84,8 +87,8 @@ public:
     DictDictDecoder() { _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>(); }
     ~DictDictDecoder() override = default;
 
-    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) override {
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding, PageBufferPtr* page,
+                            Slice* page_slice) override {
         return _bit_shuffle_decoder->decode_page_data(footer, footer_size, encoding, page, page_slice);
     }
 
@@ -101,8 +104,8 @@ public:
     }
     ~BinaryDictDataDecoder() override = default;
 
-    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                            std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) override {
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding, PageBufferPtr* page,
+                            Slice* page_slice) override {
         // When the dictionary page is not full, the header of the binary dictionary's data
         // page is DICT_ENCODING, and bitshuffle decode is needed at this point. When the
         // dictionary page is full, the header of the binary dictionary's data page is PLAIN_ENCODING.
@@ -157,7 +160,7 @@ DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
 // encoding type. Still, BITSHUFFLE encoding pages for dictionary pages do not have a
 // reserved header.
 Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                                       std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) {
+                                       PageBufferPtr* page, Slice* page_slice) {
     DCHECK(footer->has_type()) << "type must be set";
     switch (footer->type()) {
     case INDEX_PAGE:

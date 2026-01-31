@@ -18,6 +18,7 @@
 #include "cache/disk_space_monitor.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
+#include "cache/mem_cache/pagecache_arena.h"
 #include "cache/mem_space_monitor.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
@@ -126,6 +127,17 @@ Status DataCache::_init_lrucache_engine(const MemCacheOptions& cache_options) {
 }
 
 Status DataCache::_init_page_cache() {
+    // Initialize pagecache arena before initializing page cache if enabled
+    if (config::enable_pagecache_arena) {
+        if (!PageCacheArena::instance()->init()) {
+            LOG(WARNING) << "Failed to initialize PageCacheArena, pagecache will use default allocator";
+        } else {
+            LOG(INFO) << "PageCacheArena enabled for pagecache memory allocation";
+        }
+    } else {
+        LOG(INFO) << "PageCacheArena disabled, pagecache will use default allocator";
+    }
+
     _page_cache->init(_local_mem_cache.get());
     _page_cache->init_metrics();
     LOG(INFO) << "storage page cache init successfully";
