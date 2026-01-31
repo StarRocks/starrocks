@@ -39,6 +39,8 @@
 #include <string>
 #include <string_view>
 
+#include "base/string/faststring.h"
+#include "base/utility/scoped_cleanup.h"
 #include "cache/mem_cache/page_cache.h"
 #include "column/column.h"
 #include "common/logging.h"
@@ -52,9 +54,7 @@
 #include "util/coding.h"
 #include "util/compression/block_compression.h"
 #include "util/crc32c.h"
-#include "util/faststring.h"
 #include "util/runtime_profile.h"
-#include "util/scoped_cleanup.h"
 
 namespace starrocks {
 

@@ -16,12 +16,12 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/chunk_helper.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

@@ -20,6 +20,7 @@
 #include <random>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
@@ -42,7 +43,6 @@
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
 #include "util/disk_info.h"
 #include "util/mem_info.h"
 #include "util/thrift_util.h"

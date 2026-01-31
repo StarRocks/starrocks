@@ -39,6 +39,7 @@
 #include <memory>
 #include <string>
 
+#include "base/string/slice.h"
 #include "cache/mem_cache/page_cache.h"
 #include "column/binary_column.h"
 #include "common/config.h"
@@ -46,7 +47,6 @@
 #include "storage/rowset/column_writer.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

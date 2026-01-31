@@ -20,11 +20,11 @@
 #include <array>
 #include <string>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/stream_decompressor.h"
-#include "util/slice.h"
 
 namespace starrocks::test {
 

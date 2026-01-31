@@ -30,7 +30,7 @@
 #include <thread>
 #include <vector>
 
-#include "util/slice.h"
+#include "base/string/slice.h"
 
 #if !defined(BE_TEST)
 // empty in release build

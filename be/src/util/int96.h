@@ -18,7 +18,7 @@
 #include <iterator>
 #include <ostream>
 
-#include "util/memcmp.h"
+#include "base/string/memcmp.h"
 
 namespace starrocks {
 

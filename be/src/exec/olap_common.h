@@ -45,6 +45,7 @@
 #include <utility>
 #include <variant>
 
+#include "base/string/slice.h"
 #include "exec/olap_utils.h"
 #include "exec/scan_node.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -55,7 +56,6 @@
 #include "storage/olap_tuple.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

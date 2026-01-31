@@ -24,10 +24,10 @@
 #include <memory>
 #include <utility>
 
+#include "base/random/random.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
-#include "util/random.h"
 
 namespace starrocks::spill {
 

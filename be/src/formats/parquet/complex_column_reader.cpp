@@ -14,6 +14,7 @@
 
 #include "formats/parquet/complex_column_reader.h"
 
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -28,7 +29,6 @@
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
 #include "types/variant_value.h"
-#include "util/slice.h"
 #include "util/variant_encoder.h"
 
 namespace starrocks::parquet {

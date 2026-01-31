@@ -20,6 +20,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "base/concurrency/await.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "fs/fs_util.h"
@@ -42,10 +44,8 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
-#include "util/await.h"
 #include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

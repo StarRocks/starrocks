@@ -26,6 +26,7 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
@@ -50,7 +51,6 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
-#include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/metrics.h"
 #include "util/misc.h"

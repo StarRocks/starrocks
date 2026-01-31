@@ -30,12 +30,12 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/string/slice.h"
+#include "base/utility/defer_op.h"
 #include "butil/fd_guard.h"
 #include "butil/fd_utility.h"
 #include "common/config.h"
-#include "util/defer_op.h"
 #include "util/misc.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

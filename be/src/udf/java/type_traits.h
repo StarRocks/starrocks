@@ -16,7 +16,7 @@
 
 #include <cstdint>
 
-#include "util/slice.h"
+#include "base/string/slice.h"
 
 namespace starrocks {
 template <class Type>

@@ -16,10 +16,10 @@
 #include <random>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "pipeline_test_base.h"
-#include "util/defer_op.h"
 #include "util/thrift_util.h"
 
 #define ASSERT_COUNTER_LIFETIME(counter, dop)       \

@@ -62,8 +62,8 @@
 #include <queue>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "exprs/function_context.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

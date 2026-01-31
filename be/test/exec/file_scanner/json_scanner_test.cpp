@@ -18,6 +18,7 @@
 
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
@@ -28,7 +29,6 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

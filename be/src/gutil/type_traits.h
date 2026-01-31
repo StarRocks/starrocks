@@ -62,7 +62,7 @@
 #include <utility>
 using std::pair; // For pair
 
-#include "gutil/template_util.h" // For true_type and false_type
+#include "gbase/utility/template_util.h" // For true_type and false_type
 
 namespace base {
 

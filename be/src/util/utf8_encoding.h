@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
 #include "column/column_hash.h"
-#include "util/slice.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 

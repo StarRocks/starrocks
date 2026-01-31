@@ -21,6 +21,8 @@
 #include <filesystem>
 #include <memory>
 
+#include "base/utility/defer_op.h"
+#include "base/utility/scoped_cleanup.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -66,10 +68,8 @@
 #include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
-#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
-#include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/trace.h"
 

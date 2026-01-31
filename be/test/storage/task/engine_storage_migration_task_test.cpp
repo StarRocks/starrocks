@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "butil/file_util.h"
+#include "bbase/path/file_util.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"

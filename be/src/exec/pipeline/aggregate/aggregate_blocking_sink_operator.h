@@ -18,10 +18,10 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/concurrency/race_detect.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
 #include "runtime/runtime_state.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 class AggregateBlockingSinkOperatorFactory;

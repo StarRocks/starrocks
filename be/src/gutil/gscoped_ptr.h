@@ -102,9 +102,9 @@
 #include <cstddef>
 #include <cstdlib>
 
+#include "gbase/utility/template_util.h"
 #include "gutil/basictypes.h"
 #include "gutil/move.h"
-#include "gutil/template_util.h"
 #include "gutil/type_traits.h"
 
 namespace starrocks {

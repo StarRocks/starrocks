@@ -38,6 +38,8 @@
 #include <memory>
 #include <utility>
 
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
 #include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
@@ -48,8 +50,6 @@
 #include "storage/types.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h" // for BloomFilterOptions, BloomFilter
-#include "util/slice.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 

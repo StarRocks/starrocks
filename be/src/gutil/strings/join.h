@@ -31,13 +31,13 @@ using std::pair;
 #include <vector>
 using std::vector;
 
+#include "gbase/utility/template_util.h"
 #include "gutil/hash/hash.h"
 #include "gutil/integral_types.h"
 #include "gutil/macros.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/strcat.h" // For backward compatibility.
 #include "gutil/strings/stringpiece.h"
-#include "gutil/template_util.h"
 
 // ----------------------------------------------------------------------
 // JoinUsing()

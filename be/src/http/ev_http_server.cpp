@@ -49,6 +49,7 @@
 #include <sstream>
 #include <utility>
 
+#include "base/system/errno.h"
 #include "common/logging.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
@@ -57,7 +58,6 @@
 #include "service/backend_options.h"
 #include "service/brpc.h"
 #include "util/debug_util.h"
-#include "util/errno.h"
 #include "util/thread.h"
 
 namespace starrocks {

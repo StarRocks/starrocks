@@ -21,6 +21,8 @@
 #include <string>
 #include <thread>
 
+#include "base/path/path_util.h"
+#include "base/utility/defer_op.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
@@ -46,8 +48,6 @@
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/path_util.h"
 
 namespace starrocks {
 

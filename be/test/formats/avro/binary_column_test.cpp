@@ -21,12 +21,12 @@
 #include <sstream>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "common/config.h"
 #include "exec/avro_test.h"
 #include "runtime/types.h"
-#include "util/defer_op.h"
 
 #ifdef __cplusplus
 extern "C" {

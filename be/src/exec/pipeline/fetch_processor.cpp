@@ -20,6 +20,8 @@
 #include <vector>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
+#include "base/uuid/uuid_generator.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -36,10 +38,8 @@
 #include "runtime/lookup_stream_mgr.h"
 #include "serde/column_array_serde.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
 #include "util/disposable_closure.h"
 #include "util/runtime_profile.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks::pipeline {
 

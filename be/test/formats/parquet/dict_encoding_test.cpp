@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "base/string/slice.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "formats/parquet/encoding.h"
@@ -13,7 +14,6 @@
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 template <LogicalType LT>

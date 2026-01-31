@@ -14,9 +14,9 @@
 
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

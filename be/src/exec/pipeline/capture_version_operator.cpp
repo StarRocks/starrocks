@@ -14,11 +14,11 @@
 
 #include "exec/pipeline/capture_version_operator.h"
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "exec/olap_scan_node.h"
 #include "runtime/runtime_state.h"
 #include "storage/rowset/rowset.h"
-#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 Status CaptureVersionOperator::prepare(RuntimeState* state) {

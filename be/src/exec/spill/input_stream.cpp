@@ -24,13 +24,13 @@
 #include <vector>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/sorted_chunks_merger.h"
-#include "util/defer_op.h"
 
 namespace starrocks::spill {
 

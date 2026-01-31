@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -52,7 +53,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/raw_container.h"
 #include "util/trace.h"

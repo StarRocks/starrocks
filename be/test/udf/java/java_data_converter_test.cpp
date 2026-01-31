@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -29,7 +30,6 @@
 #include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "udf/java/java_udf.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 class DataConverterTest : public testing::Test {

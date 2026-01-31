@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/http/content_type.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "formats/column_evaluator.h"
@@ -25,7 +26,6 @@
 #include "io/formatted_output_stream_file.h"
 #include "runtime/current_thread.h"
 #include "util/compression/compression_utils.h"
-#include "util/defer_op.h"
 
 namespace starrocks::formats {
 

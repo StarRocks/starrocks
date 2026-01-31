@@ -47,6 +47,7 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/utils.h"
@@ -74,7 +75,6 @@
 #include "simdjson.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
-#include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"

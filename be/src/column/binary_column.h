@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/string/slice.h"
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/container_resource.h"
@@ -24,7 +25,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
