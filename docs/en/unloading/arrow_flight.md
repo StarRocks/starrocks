@@ -176,6 +176,8 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 
 - The proxy feature is enabled by default, which may result in 8-10% lower throughput compared to direct BE connections. If your clients have direct network access to BE nodes, you can disable the proxy to achieve optimal performance: `SET GLOBAL arrow_flight_proxy_enabled = false;`
 - When `arrow_flight_proxy` is empty, tickets will automatically route through the FE node that the client initially connected to.
+- **Important**: The `arrow_flight_proxy` and `arrow_flight_proxy_enabled` settings should be configured globally using `SET GLOBAL`. Session-level settings are not supported.
+- **Session restart required**: Changing the proxy settings only affects new sessions. Existing Arrow Flight SQL sessions will continue using their original settings until they reconnect.
 
 :::
 
