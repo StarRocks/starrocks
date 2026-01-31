@@ -55,6 +55,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.Utils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpMethod;
@@ -194,9 +195,12 @@ public class LoadAction extends RestBaseAction {
         if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
         } else {
-            Optional<String> userWarehouseName = getUserDefaultWarehouse(request);
-            if (userWarehouseName.isPresent() && warehouseManager.warehouseExists(userWarehouseName.get())) {
-                warehouseName = userWarehouseName.get();
+            ConnectContext ctx = request.getConnectContext();
+            if (ctx != null && ctx.getCurrentUserIdentity() != null) {
+                Optional<String> userWarehouseName = Utils.getUserDefaultWarehouse(ctx.getCurrentUserIdentity().getUser());
+                if (userWarehouseName.isPresent() && warehouseManager.warehouseExists(userWarehouseName.get())) {
+                    warehouseName = userWarehouseName.get();
+                }
             }
         }
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);

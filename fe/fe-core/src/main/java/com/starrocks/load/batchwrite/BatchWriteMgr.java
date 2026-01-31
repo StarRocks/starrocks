@@ -20,8 +20,11 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Utils;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -166,10 +169,23 @@ public class BatchWriteMgr extends FrontendDaemon {
             return new Pair<>(new TStatus(TStatusCode.OK), load);
         }
 
-        String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
+        String warehouseName = params.getWarehouse().orElse(null);
+        if (warehouseName == null) {
+            // Try to use `session.warehouse` in user property if warehouse is not specified
+            Optional<String> userWarehouseName = Utils.getUserDefaultWarehouse(user);
+            if (userWarehouseName.isPresent() &&
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(userWarehouseName.get())) {
+                warehouseName = userWarehouseName.get();
+            }
+        }
+        if (warehouseName == null) {
+            warehouseName = DEFAULT_WAREHOUSE_NAME;
+        }
+
         StreamLoadInfo streamLoadInfo;
         try {
-            streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
+            CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
+            streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params, acquireContext);
         } catch (Exception e) {
             TStatus status = new TStatus();
             status.setStatus_code(TStatusCode.INVALID_ARGUMENT);
@@ -197,10 +213,11 @@ public class BatchWriteMgr extends FrontendDaemon {
         }
 
         try {
+            String finalWarehouseName = warehouseName;
             load = mergeCommitJobs.computeIfAbsent(uniqueId, uid -> {
                 long id = idGenerator.getAndIncrement();
                 MergeCommitJob newLoad = new MergeCommitJob(
-                        id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
+                        id, tableId, finalWarehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
                         params, coordinatorBackendAssigner, threadPoolExecutor, txnStateDispatcher);
                 coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getComputeResource(), tableId,
                         newLoad.getBatchWriteParallel());

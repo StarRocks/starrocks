@@ -14,8 +14,19 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Utils;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
@@ -24,6 +35,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
@@ -193,5 +207,120 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         RequestCoordinatorBackendResult result = batchWriteMgr.requestCoordinatorBackends(tableId1, params1, "root");
         assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
         assertEquals(0, batchWriteMgr.numJobs());
+    }
+
+    @Test
+    public void testRequestMergeCommitWithUserWarehouse() {
+        String user = "user1";
+        String warehouse = "test_warehouse";
+
+        new MockUp<Utils>() {
+            @Mock
+            public Optional<String> getUserDefaultWarehouse(String user) {
+                return Optional.of(warehouse);
+            }
+        };
+
+        // Mock WarehouseMgr
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean warehouseExists(String name) {
+                return warehouse.equals(name);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new Warehouse(1L, warehouseName, "wyb") {
+                    @Override
+                    public long getResumeTime() {
+                        return 0L;
+                    }
+
+                    @Override
+                    public Long getAnyWorkerGroupId() {
+                        return 0L;
+                    }
+
+                    @Override
+                    public void addNodeToCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+
+                    }
+
+                    @Override
+                    public void validateRemoveNodeFromCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+
+                    }
+
+                    @Override
+                    public List<Long> getWorkerGroupIds() {
+                        return List.of();
+                    }
+
+                    @Override
+                    public List<String> getWarehouseInfo() {
+                        return List.of();
+                    }
+
+                    @Override
+                    public List<List<String>> getWarehouseNodesInfo() {
+                        return List.of();
+                    }
+
+                    @Override
+                    public ProcResult fetchResult() {
+                        return null;
+                    }
+
+                    @Override
+                    public void createCNGroup(CreateCnGroupStmt stmt) throws DdlException {
+
+                    }
+
+                    @Override
+                    public void dropCNGroup(DropCnGroupStmt stmt) throws DdlException {
+
+                    }
+
+                    @Override
+                    public void enableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+
+                    }
+
+                    @Override
+                    public void disableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+
+                    }
+
+                    @Override
+                    public void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException {
+
+                    }
+
+                    @Override
+                    public void replayInternalOpLog(String payload) {
+
+                    }
+
+                    @Override
+                    public boolean isAvailable() {
+                        return false;
+                    }
+                };
+            }
+        };
+
+        StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>() {
+            {
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "1");
+            }
+        });
+
+        RequestCoordinatorBackendResult result = batchWriteMgr.requestCoordinatorBackends(tableId1, params, user);
+        assertTrue(result.isOk());
+        ConcurrentHashMap<BatchWriteId, MergeCommitJob> jobs = Deencapsulation.getField(batchWriteMgr, "mergeCommitJobs");
+        assertEquals(1, jobs.size());
+        MergeCommitJob job = jobs.values().iterator().next();
+        assertEquals(warehouse, Deencapsulation.getField(job, "warehouseName"));
     }
 }
