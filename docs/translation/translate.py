@@ -37,30 +37,22 @@ class StarRocksTranslator:
         self.target_lang_full = LANG_MAP.get(target_lang, target_lang)
         self.dry_run = dry_run
         
-        # Tracking for the final report
         self.has_errors = False
         self.successes = [] 
         self.failures = []  
         
-        # 1. Load Templates
         self.system_template = self._read_file(f"{CONFIG_BASE_PATH}/system_prompt.txt")
         self.human_template = self._read_file(f"{CONFIG_BASE_PATH}/human_prompt.txt")
         
-        # 2. Load Dictionary
         dict_path = f"{CONFIG_BASE_PATH}/language_dicts/{target_lang}.yaml"
         self.dictionary_str = self._load_dict_as_string(dict_path)
 
-        # 3. Load Synonyms (for normalization)
         synonyms_path = f"{CONFIG_BASE_PATH}/synonyms.yaml"
         self.synonyms = self._load_yaml_as_dict(synonyms_path)
         
-        # 4. Load "Never Translate" List
         raw_terms = self._load_yaml_as_list(f"{CONFIG_BASE_PATH}/never_translate.yaml")
-        
-        # A. Create the string for the System Prompt (Double Safety)
         self.never_translate_str = self._expand_terms(raw_terms)
         
-        # B. Inject into Dictionary as "Identity Rules" (Leader: Leader)
         identity_rules = []
         for term in raw_terms:
             identity_rules.append(f"{term}: {term}")          
@@ -94,15 +86,11 @@ class StarRocksTranslator:
 
     def _load_yaml_as_dict(self, path: str) -> dict:
         if not os.path.exists(path):
-            print(f"::warning::Synonyms file not found at: {path}. Skipping normalization.")
             return {}
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 data = yaml.safe_load(f)
-                if isinstance(data, dict):
-                    print(f"✅ Loaded {len(data)} synonym rules from {path}")
-                    return data
-                return {}
+                return data if isinstance(data, dict) else {}
         except Exception as e:
             print(f"::error::Failed to parse synonyms YAML: {e}")
             return {}
@@ -110,76 +98,77 @@ class StarRocksTranslator:
     def normalize_content(self, text: str) -> str:
         if not self.synonyms:
             return text
-            
-        # Regex to capture code blocks:
-        # 1. Fenced code blocks (```...```) - matches across newlines
-        # 2. Inline code (`...`) - typically single line, no internal newlines usually
         code_pattern = r'(```[\s\S]*?```|`[^`\n]+`)'
-        
-        # Split text by code blocks. 
-        # Because we use capturing groups (), re.split includes the separators (the code blocks) in the result list.
         parts = re.split(code_pattern, text)
-        
         processed_parts = []
         for part in parts:
-            # Check if this part is a code block (starts with backtick)
-            # Note: We rely on the regex structure ensuring code blocks start with `
             if part and part.startswith("`"):
-                processed_parts.append(part) # Preserve code exactly as is
+                processed_parts.append(part)
             else:
-                # This is plain text, apply synonyms
                 temp_text = part
                 for bad, good in self.synonyms.items():
-                    # Strict word boundary (\b) ensures we don't match inside other words
                     pattern = re.compile(r'\b' + re.escape(bad) + r'\b', re.IGNORECASE)
                     temp_text = pattern.sub(good, temp_text)
                 processed_parts.append(temp_text)
-                
         return "".join(processed_parts)
-
+    
     def _load_dict_as_string(self, path: str) -> str:
         if not os.path.exists(path):
-            print(f"::warning::Dictionary NOT found at: {path}")
             return ""
-        print(f"✅ Loaded dictionary from: {path}")
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
             return "\n".join([f"{k}: {v}" for k, v in data.items()]) if data else ""
 
+    def _strip_code_blocks(self, text: str) -> str:
+        code_pattern = r'(```[\s\S]*?```|`[^`\n]+`)'
+        return re.sub(code_pattern, '', text)
+
+    def _chunk_content(self, text: str) -> list[str]:
+        # Split by Level 2 through Level 5 headers for high granularity
+        chunks = re.split(r'(?m)^(?=#{2,5}\s)', text)
+        return [c for c in chunks if c.strip()]
+
     def validate_mdx(self, original: str, translated: str) -> tuple[bool, str]:
-        tag_pattern = r'<\s*/?\s*[A-Za-z_][A-Za-z0-9_.-]*\b[^<>]*?/?>'
+        clean_orig = self._strip_code_blocks(original)
+        clean_trans = self._strip_code_blocks(translated)
+        tag_pattern = r'<(?!\!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
         
-        orig_tags = re.findall(tag_pattern, original)
-        trans_tags = re.findall(tag_pattern, translated)
+        def get_tag_fingerprints(text):
+            fingerprints = []
+            for match in re.finditer(tag_pattern, text):
+                full_tag = match.group(0)
+                tag_name = match.group(1)
+                if full_tag.startswith("</"):
+                    type_prefix = "CLOSE"
+                elif full_tag.endswith("/>"):
+                    type_prefix = "SELF"
+                else:
+                    type_prefix = "OPEN"
+                fingerprints.append(f"{type_prefix}:{tag_name}")
+            return fingerprints
+
+        orig_fingerprints = get_tag_fingerprints(clean_orig)
+        trans_fingerprints = get_tag_fingerprints(clean_trans)
         
-        if len(orig_tags) == len(trans_tags):
+        if collections.Counter(orig_fingerprints) == collections.Counter(trans_fingerprints):
             return True, ""
             
-        # Build the detailed error report
         error_msg = [f"❌ TAG MISMATCH DETAILS:"]
-        error_msg.append(f"   - Original Tag Count: {len(orig_tags)}")
-        error_msg.append(f"   - Translated Tag Count: {len(trans_tags)}")
-        
-        orig_counts = collections.Counter(orig_tags)
-        trans_counts = collections.Counter(trans_tags)
-        
+        orig_counts = collections.Counter(orig_fingerprints)
+        trans_counts = collections.Counter(trans_fingerprints)
         all_tags = set(orig_counts.keys()) | set(trans_counts.keys())
         
         for tag in all_tags:
             diff = trans_counts[tag] - orig_counts[tag]
             if diff != 0:
                 status = "EXTRA" if diff > 0 else "MISSING"
-                error_msg.append(f"   - {status} {abs(diff)}x: {tag}")
-                
+                readable_tag = tag.replace("OPEN:", "<").replace("CLOSE:", "</").replace("SELF:", "<.../>")
+                if "OPEN" in tag or "CLOSE" in tag: readable_tag += ">"
+                error_msg.append(f"   - {status} {abs(diff)}x: {readable_tag}")
         return False, "\n".join(error_msg)
 
     def translate_file(self, input_file: str):
         if not os.path.exists(input_file):
-            msg = f"File not found: {input_file}"
-            print(f"::error::{msg}")
-            # Even if input missing, we log it. Since output path is hypothetical, use input.
-            self.failures.append({"file": input_file, "error": msg})
-            self.has_errors = True
             return
         
         source_lang = "en"
@@ -188,14 +177,9 @@ class StarRocksTranslator:
         source_lang_full = LANG_MAP.get(source_lang, source_lang)
 
         abs_input = os.path.abspath(input_file)
-        # Determine the Output Path
-        output_file = abs_input.replace(f"/docs/{source_lang}/", f"/docs/{self.target_lang}/")
-        # Relative path for cleaner reporting (e.g. pr_code/docs/ja/...)
-        rel_output_file = output_file
-        if os.getcwd() in output_file:
-             rel_output_file = os.path.relpath(output_file, os.getcwd())
-
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        base_output_path = abs_input.replace(f"/docs/{source_lang}/", f"/docs/{self.target_lang}/")
+        
+        os.makedirs(os.path.dirname(base_output_path), exist_ok=True)
 
         system_instruction = (self.system_template
                               .replace("${source_lang}", source_lang_full)
@@ -203,126 +187,92 @@ class StarRocksTranslator:
                               .replace("${dictionary}", self.dictionary_str)
                               .replace("${never_translate}", self.never_translate_str))
         
-        if self.dry_run:
-            print(f"🔍 [DRY RUN] {source_lang_full} -> {self.target_lang_full} | Input: {input_file}")
-            return
-        
         original_content = self._read_file(input_file)
         content_to_process = self.normalize_content(original_content)
+        chunks = self._chunk_content(content_to_process)
+        translated_chunks = []
         
-        current_human_prompt = (self.human_template
-                                .replace("${target_language}", self.target_lang_full) 
-                                + f"\n\n### CONTENT TO TRANSLATE ###\n\n{content_to_process}")
-
-        print(f"🚀 Translating {input_file} to {output_file}...")
+        print(f"🚀 Translating {input_file} ({len(chunks)} chunks)...")
         
-        max_retries = 5
-        base_delay = 5 
-        translated_text = ""
-        
-        try:
-            for attempt in range(max_retries):
+        for i, chunk in enumerate(chunks):
+            current_human_prompt = (self.human_template.replace("${target_language}", self.target_lang_full) 
+                                    + f"\n\n### CONTENT TO TRANSLATE ###\n\n{chunk}")
+            
+            chunk_translated = ""
+            for attempt in range(5):
                 try:
                     response = client.models.generate_content(
                         model=MODEL_NAME,
                         config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.0),
                         contents=current_human_prompt
                     )
-                    
-                    if not response.text:
-                        print(f"⚠️ Warning: Gemini returned empty response for {input_file} (Blocked?).")
-                        continue
-                        
-                    translated_text = response.text.strip()
-                    break # Success
-                    
+                    chunk_translated = response.text.strip() if response.text else ""
+                    break
                 except Exception as e:
                     if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                        if attempt < max_retries - 1:
-                            wait_time = base_delay * (2 ** attempt)
-                            print(f"⏳ Hit rate limit (429). Retrying in {wait_time}s...")
-                            time.sleep(wait_time)
-                            continue
-                    raise e 
-            
-            else:
-                 raise RuntimeError("Max retries exceeded.")
+                        time.sleep(5 * (2 ** attempt))
+                        continue
+                    raise e
 
-        except Exception as e:
-            msg = f"Gemini API failed: {str(e)}"
-            print(f"❌ {msg}")
-            # CHANGED: Report output_file (target) instead of input_file
-            self.failures.append({"file": rel_output_file, "error": msg})
-            self.has_errors = True
-            return
+            if chunk_translated.startswith("```"):
+                lines = chunk_translated.splitlines()
+                if lines[0].startswith("```"): lines = lines[1:]
+                if lines and lines[-1].startswith("```"): lines = lines[:-1]
+                chunk_translated = "\n".join(lines).strip()
+            translated_chunks.append(chunk_translated)
 
-        # Clean Markdown fences
-        if translated_text.startswith("```"):
-            lines = translated_text.splitlines()
-            if lines[0].startswith("```"): lines = lines[1:]
-            if lines and lines[-1].startswith("```"): lines = lines[:-1]
-            translated_text = "\n".join(lines).strip()
-
-        # Validation
-        is_valid, validation_msg = self.validate_mdx(original_content, translated_text)
+        full_text = "\n".join(chunk.strip() for chunk in translated_chunks)
+        is_valid, val_msg = self.validate_mdx(original_content, full_text)
         
+        final_output_path = base_output_path if is_valid else f"{base_output_path}.invalid"
+        rel_path = os.path.relpath(final_output_path, os.getcwd())
+
         if not is_valid:
             print(f"❌ Validation FAILED for {input_file}")
-            print(validation_msg)
-            # CHANGED: Report output_file (target) instead of input_file
-            self.failures.append({"file": rel_output_file, "error": validation_msg})
+            self.failures.append({"file": rel_path, "error": val_msg})
             self.has_errors = True
-
-            # Save invalid output with a distinct suffix so it is not mistaken for a valid file
-            invalid_output_file = output_file + ".invalid"
-            with open(invalid_output_file, 'w', encoding='utf-8') as f:
-                f.write(translated_text)
-            print(f"⚠️ Saved invalid translation for inspection: {invalid_output_file}")
         else:
-            # CHANGED: Report output_file (target) on success too
-            self.successes.append(rel_output_file)
+            self.successes.append(rel_path)
 
-            # Only save to the final output path when validation passes
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(translated_text)
-            print(f"✅ Saved: {output_file}")
+        with open(final_output_path, 'w', encoding='utf-8') as f:
+            f.write(full_text)
+        print(f"✅ Saved: {rel_path}")
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--files", nargs='*', help="Files to process")
     parser.add_argument("-l", "--lang", choices=['ja', 'zh', 'en'], required=True)
-    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     
-    translator = StarRocksTranslator(target_lang=args.lang, dry_run=args.dry_run)
+    translator = StarRocksTranslator(target_lang=args.lang)
     if args.files:
         for f in args.files:
-            if f.endswith(('.md', '.mdx')):
-                translator.translate_file(f)
+            translator.translate_file(f)
 
-    # --- GENERATE SUMMARY REPORT ---
+    # UPDATED: Report uses 'a' (append) mode to handle multiple language runs in one PR
     report_path = "translation_summary.md"
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write("### 📝 Translation Report\n\n")
-        
-        if translator.successes:
-            f.write("#### ✅ Successfully Translated\n")
-            for success in translator.successes:
-                f.write(f"- `{success}`\n")
+    report_exists = os.path.exists(report_path)
+    
+    with open(report_path, "a", encoding="utf-8") as f:
+        if not report_exists:
+            f.write("### 📝 Translation Report\n\n")
+        else:
+            # Ensure new language section starts on a new line when appending
             f.write("\n")
-            
+        
+        f.write(f"#### 🌐 Language: {args.lang.upper()}\n")
+        if translator.successes:
+            f.write("✅ **Successfully Translated:**\n")
+            for s in translator.successes: f.write(f"- `{s}`\n")
+        
         if translator.failures:
-            f.write("#### ❌ Failures (Action Required)\n")
-            f.write("The following files failed validation or API checks. **These files were NOT committed.**\n\n")
-            for failure in translator.failures:
-                f.write(f"**File:** `{failure['file']}`\n")
-                f.write("```text\n")
-                f.write(failure['error'])
-                f.write("\n```\n\n")
+            f.write("\n❌ **Failures (Action Required):**\n")
+            for fail in translator.failures:
+                f.write(f"**File:** `{fail['file']}`\n```text\n{fail['error']}\n```\n\n")
+        
+        f.write("\n---\n")
 
-    if translator.has_errors:
-        print("\n🚨 Translation finished with errors. Marking workflow as FAILED.")
-        sys.exit(1)
+    if translator.has_errors: sys.exit(1)
 
 if __name__ == "__main__":
     main()
