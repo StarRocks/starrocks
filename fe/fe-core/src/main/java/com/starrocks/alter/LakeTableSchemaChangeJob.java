@@ -423,8 +423,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkState(physicalPartition != null);
-                TStorageMedium storageMedium = table.getPartitionInfo()
-                        .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
 
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
@@ -469,7 +467,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setIndexId(shadowIdxMetaId)
                                 .setTabletId(shadowTabletId)
                                 .setVersion(Partition.PARTITION_INIT_VERSION)
-                                .setStorageMedium(storageMedium)
                                 .setLatch(countDownLatch)
                                 .setEnablePersistentIndex(table.enablePersistentIndex())
                                 .setPersistentIndexType(table.getPersistentIndexType())
