@@ -15,6 +15,7 @@
 #include "storage/lake/vacuum.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <ctime>
 #include <set>
@@ -3011,6 +3012,460 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
 
     SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_file_modified_time");
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup) {
+    const std::string compaction_file = "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    const std::string orphan_file = "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat";
+    create_data_file(compaction_file);
+    create_data_file(orphan_file);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 700,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 700,
+        "version": 2,
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ]
+            }
+        ],
+        "orphan_files": [
+            {
+                "name": "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat",
+                "size": 4096,
+                "shared": true
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(700);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(compaction_file));
+    EXPECT_FALSE(file_exist(orphan_file));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_keep_referenced) {
+    const std::string shared_file = "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    create_data_file(shared_file);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 710,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 710,
+        "version": 2,
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 711,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 711,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ]
+            }
+        ]
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info_710;
+    tablet_info_710.set_tablet_id(710);
+    tablet_info_710.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info_710);
+    TabletInfoPB tablet_info_711;
+    tablet_info_711.set_tablet_id(711);
+    tablet_info_711.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info_711);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_TRUE(file_exist(shared_file));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_reference_scan) {
+    const std::string shared_segment = "00000000000000a1_44444444-4444-4444-4444-444444444444.dat";
+    const std::string shared_del = "00000000000000a2_55555555-5555-5555-5555-555555555555.del";
+    create_data_file(shared_segment);
+    create_data_file(shared_del);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 720,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 720,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000000a3_66666666-6666-6666-6666-666666666666.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ],
+                "del_files": [
+                    {
+                        "name": "00000000000000a4_77777777-7777-7777-7777-777777777777.del",
+                        "shared": true
+                    }
+                ]
+            }
+        ],
+        "delvec_meta": {
+            "version_to_file": [
+                {
+                    "key": 1,
+                    "value": {
+                        "name": "00000000000000a5_88888888-8888-8888-8888-888888888888.delvec",
+                        "shared": true
+                    }
+                }
+            ]
+        },
+        "dcg_meta": {
+            "dcgs": [
+                {
+                    "key": 1,
+                    "value": {
+                        "column_files": [ "00000000000000a6_99999999-9999-9999-9999-999999999999.cols" ],
+                        "shared_files": [ true ]
+                    }
+                }
+            ]
+        },
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.sst",
+                    "shared": true
+                }
+            ]
+        },
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000000a1_44444444-4444-4444-4444-444444444444.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ],
+                "del_files": [
+                    {
+                        "name": "00000000000000a2_55555555-5555-5555-5555-555555555555.del",
+                        "shared": true
+                    }
+                ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(720);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+    EXPECT_FALSE(file_exist(shared_del));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_skip_bundle_range) {
+    const std::string shared_segment = "00000000000000b1_66666666-6666-6666-6666-666666666666.dat";
+    create_data_file(shared_segment);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 730,
+        "version": 3,
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000000b1_66666666-6666-6666-6666-666666666666.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 731,
+        "version": 1
+        }
+        )DEL")));
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(0);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+
+    auto t730_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 730,
+        "version": 2,
+        "rowsets": []
+        }
+        )DEL");
+    t730_v2->mutable_schema()->CopyFrom(schema_pb);
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[730] = *t730_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info_730;
+    tablet_info_730.set_tablet_id(730);
+    tablet_info_730.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info_730);
+    TabletInfoPB tablet_info_731;
+    tablet_info_731.set_tablet_id(731);
+    tablet_info_731.set_min_version(2);
+    request.add_tablet_infos()->CopyFrom(tablet_info_731);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_enable_file_bundling(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_bundle_meta_read_and_missing_meta) {
+    const std::string shared_segment = "00000000000000c1_77777777-7777-7777-7777-777777777777.dat";
+    create_data_file(shared_segment);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 740,
+        "version": 2,
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000000c1_77777777-7777-7777-7777-777777777777.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(0);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+    auto t740_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 740,
+        "version": 2,
+        "rowsets": []
+        }
+        )DEL");
+    t740_v2->mutable_schema()->CopyFrom(schema_pb);
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[740] = *t740_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    std::string meta_dir = join_path(kTestDir, kMetadataDirectoryName);
+    std::string broken_meta = join_path(meta_dir, tablet_metadata_filename(0, 0xabc402));
+    std::string broken_single_meta = join_path(meta_dir, tablet_metadata_filename(742, 0xabc403));
+    auto delete_status = FileSystem::Default()->delete_file(broken_meta);
+    if (!delete_status.ok() && !delete_status.is_not_found()) {
+        ASSERT_OK(delete_status);
+    }
+    ASSERT_EQ(0, symlink("missing_target", broken_meta.c_str()));
+    delete_status = FileSystem::Default()->delete_file(broken_single_meta);
+    if (!delete_status.ok() && !delete_status.is_not_found()) {
+        ASSERT_OK(delete_status);
+    }
+    ASSERT_EQ(0, symlink("missing_target", broken_single_meta.c_str()));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info_740;
+    tablet_info_740.set_tablet_id(740);
+    tablet_info_740.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info_740);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_enable_file_bundling(false);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+    EXPECT_OK(FileSystem::Default()->delete_file(broken_meta));
+    EXPECT_OK(FileSystem::Default()->delete_file(broken_single_meta));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_scan_error) {
+    const std::string shared_segment = "00000000000000d1_88888888-8888-8888-8888-888888888888.dat";
+    create_data_file(shared_segment);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 750,
+        "version": 2,
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000000d1_88888888-8888-8888-8888-888888888888.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    std::string meta_dir = join_path(kTestDir, kMetadataDirectoryName);
+    std::string corrupt_bundle_meta = join_path(meta_dir, tablet_metadata_filename(0, 2));
+    ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(corrupt_bundle_meta));
+    ASSERT_OK(f->append("corrupted"));
+    ASSERT_OK(f->close());
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(750);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1000000);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_enable_file_bundling(false);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_TRUE(file_exist(shared_segment));
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_shared_file_cleanup_skip_new_txn) {
+    const std::string shared_segment = "00000000000000f1_99999999-9999-9999-9999-999999999999.dat";
+    create_data_file(shared_segment);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 760,
+        "version": 2,
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000000f1_99999999-9999-9999-9999-999999999999.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [ true ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    TabletInfoPB tablet_info;
+    tablet_info.set_tablet_id(760);
+    tablet_info.set_min_version(1);
+    request.add_tablet_infos()->CopyFrom(tablet_info);
+    request.set_min_retain_version(2);
+    request.set_grace_timestamp(::time(nullptr) + 10);
+    request.set_min_active_txn_id(1);
+    request.set_enable_shared_file_cleanup(true);
+    request.set_delete_txn_log(false);
+
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_TRUE(file_exist(shared_segment));
 }
 
 TEST_P(LakeVacuumTest, test_garbage_file_check) {
