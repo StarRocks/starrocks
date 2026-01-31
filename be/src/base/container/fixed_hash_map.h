@@ -21,8 +21,8 @@
 #include <type_traits>
 #include <utility>
 
-#include "glog/logging.h"
 #include "base/hash/hash_fwd.h"
+#include "glog/logging.h"
 
 namespace starrocks {
 

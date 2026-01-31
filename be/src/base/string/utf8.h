@@ -17,8 +17,8 @@
 #include <cstring>
 #include <vector>
 
-#include "simdutf.h"
 #include "base/string/slice.h"
+#include "simdutf.h"
 
 namespace starrocks {
 

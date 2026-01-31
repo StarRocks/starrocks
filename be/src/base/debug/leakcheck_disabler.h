@@ -16,8 +16,8 @@
 // under the License.
 #pragma once
 
-#include "gutil/macros.h"
 #include "base/debug/leak_annotations.h"
+#include "gutil/macros.h"
 
 namespace starrocks::debug {
 

@@ -19,7 +19,6 @@
 
 #include <gtest/gtest.h>
 
-
 namespace starrocks {
 
 class PathTrieTest : public testing::Test {};
