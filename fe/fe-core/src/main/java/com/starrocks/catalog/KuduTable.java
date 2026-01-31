@@ -72,6 +72,10 @@ public class KuduTable extends Table {
         return masterAddresses;
     }
 
+    public void setMasterAddresses(String masterAddresses) {
+        this.masterAddresses = masterAddresses;
+    }
+
     @Override
     public String getCatalogName() {
         return catalogName;
