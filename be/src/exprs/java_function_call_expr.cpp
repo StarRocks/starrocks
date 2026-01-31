@@ -221,7 +221,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
 
     UserFunctionCache::FunctionCacheDesc func_cache_desc(_fn.fid, _fn.hdfs_location, _fn.checksum,
-                                                         TFunctionBinaryType::SRJAR);
+                                                         TFunctionBinaryType::SRJAR, _fn.cloud_configuration);
     // cacheable
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto get_func_desc = [this, scope, state](const std::string& lib) -> StatusOr<std::any> {
