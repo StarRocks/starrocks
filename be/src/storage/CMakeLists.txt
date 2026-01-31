@@ -171,6 +171,7 @@ set(STORAGE_FILES
     rowset_merger.cpp
     column_predicate_rewriter.cpp
     column_predicate_dict_conjuct.cpp
+    column_predicate_inverted_index_fallback.cpp
     compaction_task.cpp
     compaction_utils.cpp
     compaction_manager.cpp

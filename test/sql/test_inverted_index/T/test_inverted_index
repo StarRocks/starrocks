@@ -133,6 +133,45 @@ select count(*) from t_test_gin_index_query where query_chinese match_any "中�
 select count(*) from t_test_gin_index_query where query_english match_all "hello world";
 select count(*) from t_test_gin_index_query where query_chinese match_all "物化 视图";
 
+-- Comprehensive MATCH OR tests
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'chinese' order by id1;
+select query_english from t_test_gin_index_query where query_english match 'starrocks' or query_english match 'lakehouse' order by id1;
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'test' or query_english match 'view' order by id1;
+
+-- Partial OR (MATCH with non-MATCH)
+select query_english from t_test_gin_index_query where query_english match 'hello' or id1=4 order by id1;
+
+-- Complex nested predicates
+select query_english from t_test_gin_index_query where query_english match 'hello' and (query_english match 'nonexistent' or id1=1) order by id1;
+select query_english from t_test_gin_index_query where query_english match 'hello' or (query_english match 'chinese' and id1=5) order by id1;
+select query_english from t_test_gin_index_query where query_english match 'hello' or (id1=5 and query_english match 'chinese') order by id1;
+select query_english from t_test_gin_index_query where (query_english match 'hello' and id1=1) or (query_english match 'test' and id1=5) order by id1;
+select query_english from t_test_gin_index_query where (query_english match 'hello' or id1=4) and (query_english match 'world' or id1=1) order by id1;
+
+-- NOT MATCH tests
+select query_english from t_test_gin_index_query where not (query_english match 'hello') order by id1;
+select query_english from t_test_gin_index_query where query_english match 'starrocks' and not (query_english match 'world') order by id1;
+select query_english from t_test_gin_index_query where not (query_english match 'hello') or id1=1 order by id1;
+select query_english from t_test_gin_index_query where not (query_english match 'hello') and not (query_english match 'test') order by id1;
+select query_english from t_test_gin_index_query where (not (query_english match 'hello') or id1=1) and query_english match 'starrocks' order by id1;
+
+-- Multiple operations
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'test' or query_english match 'nonexistent' order by id1;
+select query_english from t_test_gin_index_query where query_english match 'hello' and query_english match 'starrocks' and id1 <= 3 order by id1;
+select query_english from t_test_gin_index_query where (query_english match 'hello' and id1 >= 1) or (query_english match 'test' and id1 < 6) order by id1;
+select query_english from t_test_gin_index_query where not (query_english match 'nonexistent1') or not (query_english match 'nonexistent2') order by id1;
+select query_english from t_test_gin_index_query where (query_english match 'hello' or not (query_english match 'world')) and id1 in (1, 2, 3) order by id1;
+select query_english from t_test_gin_index_query where query_english match 'hello' or not (query_english match 'world') or id1=10 order by id1;
+select query_english from t_test_gin_index_query where not (not (query_english match 'hello') or id1=10) order by id1;
+select query_english from t_test_gin_index_query where query_english match 'hello' and id1 * 2 <= 6 order by id1;
+select query_english from t_test_gin_index_query where query_english match 'hello' or not (query_english match 'hello') or id1=10 order by id1;
+
+-- Multiple MATCH in AND
+select query_english from t_test_gin_index_query where query_english match 'hello' and query_english match 'starrocks' order by id1;
+
+-- Empty result
+select query_english from t_test_gin_index_query where query_english match 'nonexistent' order by id1;
+
 drop table t_test_gin_index_query;
 
 -- name: test_gin_index_single_predicate_none @native
