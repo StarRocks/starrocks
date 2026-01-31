@@ -1,0 +1,271 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package staros.starlog.proto;
+
+import "star_status.proto";
+import "starlog/common.proto";
+import "starlog/extent.proto";
+import "starlog/extent_server.proto";
+import "starlog/lease.proto";
+import "starlog/stream.proto";
+
+option java_package = "com.staros.starlog.proto";
+option java_multiple_files = true;
+option cc_generic_services = true;
+
+message AddExtentServerRequest {
+    string address = 1;
+}
+
+message AddExtentServerResponse {
+    StarStatus status = 1;
+    int64 server_id = 2;
+}
+
+message RemoveExtentServerRequest {
+    string address = 1;
+}
+
+message RemoveExtentServerResponse {
+    StarStatus status = 1;
+}
+
+
+message ListExtentServersRequest {
+
+}
+
+message ListExtentServersResponse {
+    StarStatus status = 1;
+    repeated ExtentServer servers = 2;
+}
+
+message CreateStreamRequest {
+    string path = 1;
+    DataType type = 2;
+    CreateOptions options = 3;
+}
+
+message CreateStreamResponse {
+    StarStatus status = 1;
+}
+
+message RemoveStreamRequest {
+    string path = 1;
+    DataType type = 2;
+}
+
+message RemoveStreamResponse {
+    StarStatus status = 1;
+}
+
+// TODO: support prefix list
+message ListStreamsRequest {
+    DataType type = 1;
+}
+
+message ListStreamsResponse {
+    StarStatus status = 1;
+    repeated StreamMetadata stream_metadata = 2;
+}
+
+message OpenStreamRequest {
+    string client_id = 1;
+    string path = 2;
+    DataType type = 3;
+    bool create_if_not_exist = 4;
+    CreateOptions create_options = 5;
+}
+
+message OpenStreamResponse {
+    StarStatus status = 1;
+    StreamMetadata stream_metadata = 2;
+}
+
+message CloseStreamRequest {
+    string client_id = 1;
+    int64 stream_id = 2;
+    int64 active_extent_id = 3;
+    int64 active_extent_end_position = 4;
+}
+
+message CloseStreamResponse {
+    StarStatus status = 1;
+}
+
+message ForceCloseStreamRequest {
+    string path = 1;
+    DataType type = 2;
+}
+
+message ForceCloseStreamResponse {
+    StarStatus status = 1;
+}
+
+message ExtendStreamRequest {
+    string client_id = 1;
+    int64 stream_id = 2;
+    int64 active_extent_id = 3;
+    int64 active_extent_end_position = 4;
+    repeated int64 excluded_extent_servers = 5;
+}
+
+message ExtendStreamResponse {
+    StarStatus status = 1;
+    ExtentMetadata new_active_extent = 2;
+}
+
+message CheckinStreamRequest {
+    int64 stream_id = 1;
+    DataType type = 2;
+    int64 active_extent_id = 3;
+    int64 active_extent_end_position = 4;
+}
+
+message CheckinStreamResponse {
+    StarStatus status = 1;
+}
+
+message PurgeStreamRequest {
+    string path = 1;
+    DataType type = 2;
+    int64 position = 3;
+}
+
+message PurgeStreamResponse {
+    StarStatus status = 1;
+    int64 position = 2;
+}
+
+message QueryStreamMetaRequest {
+    string path = 1;
+    DataType type = 2;
+}
+
+message QueryStreamMetaResponse {
+    StarStatus status = 1;
+    StreamMetadata stream_metadata = 2;
+}
+
+message RenewLeaseRequest {
+    string client_id = 1;
+    int64 heartbeat_seq = 2;
+    repeated CheckinStreamRequest checkins = 3;
+}
+
+message RenewLeaseResponse {
+    StarStatus status = 1;
+}
+
+message ListLeasesRequest {
+
+}
+
+message ListLeasesResponse {
+    StarStatus status = 1;
+    repeated LeaseMetadata leases = 2;
+}
+
+message CreateInlineFileRequest {
+    string path = 1;
+}
+
+message CreateInlineFileResponse {
+    StarStatus status = 1;
+}
+
+message RemoveInlineFileRequest {
+    string path = 1;
+}
+
+message RemoveInlineFileResponse {
+    StarStatus status = 1;
+}
+
+message ListInlineFilesRequest {
+
+}
+
+message InlineFile {
+    string path = 1;
+    bytes value = 2;
+}
+
+message ListInlineFilesResponse {
+    StarStatus status = 1;
+    repeated InlineFile inline_files = 2;
+}
+
+message CompareAndWriteInlineFileRequest {
+    string path = 1;
+    bytes old_value = 2;
+    bytes new_value = 3;
+}
+
+message CompareAndWriteInlineFileResponse {
+    StarStatus status = 1;
+}
+
+message ReadInlineFileRequest {
+    string path = 1;
+}
+
+message ReadInlineFileResponse {
+    StarStatus status = 1;
+    bytes value = 2;
+}
+
+message ExtentServerReportRequest {
+
+}
+
+message ExtentServerReportResponse {
+
+}
+
+service StreamMgrService {
+    // server
+    rpc add_extent_server(AddExtentServerRequest) returns (AddExtentServerResponse);
+    rpc remove_extent_server(RemoveExtentServerRequest) returns (RemoveExtentServerResponse);
+    rpc list_extent_servers(ListExtentServersRequest) returns (ListExtentServersResponse);
+
+    // stream
+    rpc create_stream(CreateStreamRequest) returns (CreateStreamResponse);
+    rpc remove_stream(RemoveStreamRequest) returns (RemoveStreamResponse);
+    rpc list_streams(ListStreamsRequest) returns (ListStreamsResponse);
+    rpc open_stream(OpenStreamRequest) returns (OpenStreamResponse);
+    rpc close_stream(CloseStreamRequest) returns (CloseStreamResponse);
+    rpc force_close_stream(ForceCloseStreamRequest) returns (ForceCloseStreamResponse);
+    rpc extend_stream(ExtendStreamRequest) returns (ExtendStreamResponse);
+    rpc checkin_stream(CheckinStreamRequest) returns (CheckinStreamResponse);
+    rpc purge_stream(PurgeStreamRequest) returns (PurgeStreamResponse);
+    rpc query_stream_meta(QueryStreamMetaRequest) returns (QueryStreamMetaResponse);
+
+    // lease
+    rpc renew_lease(RenewLeaseRequest) returns (RenewLeaseResponse);
+    rpc list_leases(ListLeasesRequest) returns (ListLeasesResponse);
+
+    // inline file
+    rpc create_inline_file(CreateInlineFileRequest) returns (CreateInlineFileResponse);
+    rpc remove_inline_file(RemoveInlineFileRequest) returns (RemoveInlineFileResponse);
+    rpc list_inline_files(ListInlineFilesRequest) returns (ListInlineFilesResponse);
+    rpc compare_and_write_inline_file(CompareAndWriteInlineFileRequest) returns (CompareAndWriteInlineFileResponse);
+    rpc read_inline_file(ReadInlineFileRequest) returns (ReadInlineFileResponse);
+
+    // report extent and server info
+    rpc extent_server_report(ExtentServerReportRequest) returns (ExtentServerReportResponse);
+}
