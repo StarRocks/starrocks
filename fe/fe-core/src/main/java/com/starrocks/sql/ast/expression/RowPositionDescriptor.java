@@ -34,6 +34,11 @@ import java.util.List;
  */
 public class RowPositionDescriptor {
     public enum Type {
+        // ICEBERG_V3 format: (row_source_id, scan_range_id, row_id)
+        // Despite the name, this format works for both Iceberg v2 and v3 tables.
+        // For v3: row_id is globally unique (first_row_id from file metadata + offset)
+        // For v2: row_id is file-local (first_row_id = 0, so row_id = offset in file)
+        // The scan_range_id uniquely identifies the file, so file-local positions are sufficient.
         ICEBERG_V3
     }
 

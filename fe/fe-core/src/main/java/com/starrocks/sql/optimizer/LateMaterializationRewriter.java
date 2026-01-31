@@ -403,7 +403,14 @@ public class LateMaterializationRewriter {
             IdentifyOperator identifyOperator = new IdentifyOperator(scanOperator);
 
             IcebergTable scanTable = (IcebergTable) scanOperator.getTable();
-            if (scanTable.getFormatVersion() >= 3 && scanTable.isParquetFormat()) {
+            // Support Global Late Materialization for Iceberg v2 and v3.
+            // For v2: row position is file-local (first_row_id = 0).
+            // For v3: row position is globally unique (first_row_id from metadata).
+            // Note: If equality delete files exist, IcebergEqualityDeleteRewriteRule
+            // rewrites the plan to UNION ALL, which forces all columns to be materialized
+            // before the union (see visitPhysicalUnion), so GLM won't provide benefits
+            // in that case, but it won't break either.
+            if (scanTable.getFormatVersion() >= 2 && scanTable.isParquetFormat()) {
                 Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = scanOperator.getColRefToColumnMetaMap();
                 for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
                     context.columnSources.put(columnRefOperator, identifyOperator);
