@@ -18,6 +18,7 @@
 #include "column/object_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 #include "types/hll_sketch.h"
@@ -119,7 +120,11 @@ public:
         Int64Column* column = down_cast<Int64Column*>(dst);
         int64_t result = 0L;
         if (LIKELY(this->data(state).hll_sketch != nullptr)) {
-            result = this->data(state).hll_sketch->estimate_cardinality();
+            if (config::enable_data_sketches_hll_estimate_composite) {
+                result = this->data(state).hll_sketch->estimate_cardinality_composite();
+            } else {
+                result = this->data(state).hll_sketch->estimate_cardinality();
+            }
         }
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = result;
@@ -191,7 +196,11 @@ public:
         if (UNLIKELY(this->data(state).hll_sketch == nullptr)) {
             column->append(0L);
         } else {
-            column->append(this->data(state).hll_sketch->estimate_cardinality());
+            if (config::enable_data_sketches_hll_estimate_composite) {
+                column->append(this->data(state).hll_sketch->estimate_cardinality_composite());
+            } else {
+                column->append(this->data(state).hll_sketch->estimate_cardinality());
+            }
         }
     }
 
