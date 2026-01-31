@@ -19,6 +19,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import org.apache.iceberg.ExpireSnapshots;
 
 import java.time.Duration;
@@ -29,7 +30,8 @@ import java.util.Map;
 public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
     private static final String PROCEDURE_NAME = "expire_snapshots";
 
-    private static final String OLDER_THAN = "older_than";
+    public static final String OLDER_THAN = "older_than";
+    public static final String RETAIN_LAST = "retain_last";
 
     private static final ExpireSnapshotsProcedure INSTANCE = new ExpireSnapshotsProcedure();
 
@@ -41,7 +43,8 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(OLDER_THAN, DateType.DATETIME, false)
+                        new NamedArgument(OLDER_THAN, DateType.DATETIME, false),
+                        new NamedArgument(RETAIN_LAST, IntegerType.INT, false)
                 ),
                 IcebergTableOperation.EXPIRE_SNAPSHOTS
         );
@@ -49,8 +52,9 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
 
     @Override
     public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
-        if (args.size() > 1) {
-            throw new StarRocksConnectorException("invalid args. only support `older_than` in the expire snapshot operation");
+        if (args.size() > 2) {
+            throw new StarRocksConnectorException(
+                    "invalid args. only support `older_than` and `retain_last` in the expire snapshot operation");
         }
 
         long olderThanMillis;
@@ -64,9 +68,24 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
             olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
         }
 
+        int retainLast = -1;
+        ConstantOperator retainLastArg = args.get(RETAIN_LAST);
+        if (retainLastArg != null) {
+            retainLast = retainLastArg.castTo(IntegerType.INT).map(ConstantOperator::getInt)
+                    .orElseThrow(() ->
+                            new StarRocksConnectorException("invalid argument type for %s, expected INT", RETAIN_LAST));
+            if (retainLast < 1) {
+                throw new StarRocksConnectorException("invalid argument value for %s, must be >= 1, got %d", RETAIN_LAST,
+                        retainLast);
+            }
+        }
+
         ExpireSnapshots expireSnapshots = context.transaction().expireSnapshots();
         if (olderThanMillis != -1) {
             expireSnapshots = expireSnapshots.expireOlderThan(olderThanMillis);
+        }
+        if (retainLast != -1) {
+            expireSnapshots = expireSnapshots.retainLast(retainLast);
         }
         expireSnapshots.commit();
     }

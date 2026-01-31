@@ -24,6 +24,7 @@ import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
 import com.starrocks.connector.iceberg.procedure.FastForwardProcedure;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -128,6 +129,15 @@ public class AlterTableOperationStmtTest {
     @Test
     public void testExpireSnapshotsProcedureNoArgs() {
         String sql = "ALTER TABLE iceberg_catalog.iceberg_db.test_table EXECUTE expire_snapshots()";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assertions.assertInstanceOf(AlterTableStmt.class, stmt);
+        AlterTableStmt alterStmt = (AlterTableStmt) stmt;
+        Assertions.assertEquals("test_table", alterStmt.getTableName());
+    }
+
+    @Test
+    public void testRewriteManifestsProcedure() {
+        String sql = "ALTER TABLE iceberg_catalog.iceberg_db.test_table EXECUTE rewrite_manifests()";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assertions.assertInstanceOf(AlterTableStmt.class, stmt);
         AlterTableStmt alterStmt = (AlterTableStmt) stmt;
@@ -343,9 +353,11 @@ public class AlterTableOperationStmtTest {
 
         ExpireSnapshotsProcedure expireProc = ExpireSnapshotsProcedure.getInstance();
         Assertions.assertEquals("expire_snapshots", expireProc.getProcedureName());
-        Assertions.assertEquals(1, expireProc.getArguments().size());
+        Assertions.assertEquals(2, expireProc.getArguments().size());
         Assertions.assertEquals("older_than", expireProc.getArguments().get(0).getName());
         Assertions.assertFalse(expireProc.getArguments().get(0).isRequired());
+        Assertions.assertEquals("retain_last", expireProc.getArguments().get(1).getName());
+        Assertions.assertFalse(expireProc.getArguments().get(1).isRequired());
 
         FastForwardProcedure fastForwardProc = FastForwardProcedure.getInstance();
         Assertions.assertEquals("fast_forward", fastForwardProc.getProcedureName());
@@ -353,7 +365,11 @@ public class AlterTableOperationStmtTest {
 
         RemoveOrphanFilesProcedure removeOrphanProc = RemoveOrphanFilesProcedure.getInstance();
         Assertions.assertEquals("remove_orphan_files", removeOrphanProc.getProcedureName());
-        Assertions.assertEquals(1, removeOrphanProc.getArguments().size());
+        Assertions.assertEquals(2, removeOrphanProc.getArguments().size());
+        Assertions.assertEquals("older_than", removeOrphanProc.getArguments().get(0).getName());
+        Assertions.assertFalse(removeOrphanProc.getArguments().get(0).isRequired());
+        Assertions.assertEquals("location", removeOrphanProc.getArguments().get(1).getName());
+        Assertions.assertFalse(removeOrphanProc.getArguments().get(1).isRequired());
 
         RewriteDataFilesProcedure rewriteProc = RewriteDataFilesProcedure.getInstance();
         Assertions.assertEquals("rewrite_data_files", rewriteProc.getProcedureName());
@@ -364,6 +380,10 @@ public class AlterTableOperationStmtTest {
         Assertions.assertEquals(1, rollbackProc.getArguments().size());
         Assertions.assertEquals("snapshot_id", rollbackProc.getArguments().get(0).getName());
         Assertions.assertTrue(rollbackProc.getArguments().get(0).isRequired());
+
+        RewriteManifestsProcedure rewriteManifestsProc = RewriteManifestsProcedure.getInstance();
+        Assertions.assertEquals("rewrite_manifests", rewriteManifestsProc.getProcedureName());
+        Assertions.assertEquals(0, rewriteManifestsProc.getArguments().size());
     }
 
     @Test
