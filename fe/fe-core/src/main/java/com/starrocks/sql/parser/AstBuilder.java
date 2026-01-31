@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.AddFollowerClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddPartitionColumnClause;
+import com.starrocks.sql.ast.AddPhysicalPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
@@ -193,6 +194,7 @@ import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropPersistentIndexClause;
+import com.starrocks.sql.ast.DropPhysicalPartitionClause;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -5287,6 +5289,28 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         return new AddPartitionClause(partitionDesc, distributionDesc, properties, temporary, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAddPhysicalPartitionClause(
+            com.starrocks.sql.parser.StarRocksParser.AddPhysicalPartitionClauseContext context) {
+        String partitionName = null;
+        if (context.identifier() != null) {
+            partitionName = ((Identifier) visit(context.identifier())).getValue();
+        }
+        int bucketNum = 0;
+        if (context.INTEGER_VALUE() != null) {
+            bucketNum = Integer.parseInt(context.INTEGER_VALUE().getText());
+        }
+        return new AddPhysicalPartitionClause(partitionName, bucketNum, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropPhysicalPartitionClause(
+            com.starrocks.sql.parser.StarRocksParser.DropPhysicalPartitionClauseContext context) {
+        long physicalPartitionId = Long.parseLong(context.INTEGER_VALUE().getText());
+        boolean forceDrop = context.FORCE() != null;
+        return new DropPhysicalPartitionClause(physicalPartitionId, forceDrop, createPos(context));
     }
 
     @Override

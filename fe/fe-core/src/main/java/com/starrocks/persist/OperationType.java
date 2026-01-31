@@ -293,6 +293,8 @@ public class OperationType {
     public static final short OP_RECOVER_PARTITION_VERSION = 10245;
     @IgnorableOnReplayFailed
     public static final short OP_DROP_PARTITIONS = 10246;
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_PHYSICAL_PARTITION = 10247;
 
     // new privilege, all ends with V2
 
