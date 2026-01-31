@@ -24,14 +24,6 @@ public class RevokePrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
             List<String> privilegeTypeUnResolved,
             String objectTypeUnResolved,
             GrantRevokeClause grantRevokeClause,
-            GrantRevokePrivilegeObjects objects) {
-        this(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects, NodePosition.ZERO);
-    }
-
-    public RevokePrivilegeStmt(
-            List<String> privilegeTypeUnResolved,
-            String objectTypeUnResolved,
-            GrantRevokeClause grantRevokeClause,
             GrantRevokePrivilegeObjects objects,
             NodePosition pos) {
         super(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects, pos);

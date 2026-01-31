@@ -313,7 +313,7 @@ public class GrantRoleToGroupTest {
 
         String sql = "grant select on table db1.tbl1 to role r1";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, ctx);
 
         ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
         Assertions.assertThrows(AccessDeniedException.class,

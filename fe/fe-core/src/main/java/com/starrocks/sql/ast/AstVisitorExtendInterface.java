@@ -367,9 +367,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Authz Statement ----------------------------------------------------
 
-    default R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
+
 
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------
 

@@ -1165,6 +1165,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ------------------------------------------- Expression ----------------------------------------
 
     default R visitExpression(Expr node, C context) {
