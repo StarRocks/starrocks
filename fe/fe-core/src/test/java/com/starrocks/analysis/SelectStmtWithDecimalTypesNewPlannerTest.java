@@ -151,8 +151,11 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                         " has_nullable_child:false, is_nullable:true, is_monotonic:true, is_index_only_filter:false)," +
                         " TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:3, scale:2))])," +
                         " num_children:0, decimal_literal:TDecimalLiteral(value:3.14, integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), " +
-                        "output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true, is_index_only_filter:false)])})";
+                        "output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true, is_index_only_filter:false)])}, " +
+                        "sql_project_exprs:6->5: col_decimal128p20s3 * 3.14)";
+
         String plan = UtFrameUtils.getPlanThriftString(ctx, sql);
+        System.out.println(plan);
         Assertions.assertTrue(plan.contains(expectString));
     }
 

@@ -412,7 +412,8 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
 
         auto project_op = std::make_shared<ProjectOperatorFactory>(
                 context->next_operator_id(), id(), std::move(dst_column_ids), std::move(_child_expr_lists[i]),
-                std::move(dst_column_is_nullables), std::vector<int32_t>(), std::vector<ExprContext*>());
+                std::move(dst_column_is_nullables), std::vector<int32_t>(), std::vector<ExprContext*>(), std::string(),
+                std::string());
         operators_list[i].emplace_back(std::move(project_op));
         // Initialize OperatorFactory's fields involving runtime filters.
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
