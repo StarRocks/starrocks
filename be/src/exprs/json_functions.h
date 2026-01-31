@@ -183,7 +183,7 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_set);
   
-     /**
+    /**
      * Determine if a JSON value is a scalar value
      * @param JSON
      * @return true if the JSON value is a scalar (not an object or array), false otherwise
