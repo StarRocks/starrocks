@@ -21,8 +21,10 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -44,9 +46,11 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -138,6 +142,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.VarcharType.VARCHAR;
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
@@ -145,6 +150,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PaimonMetadataTest {
     @Mocked
@@ -261,6 +267,8 @@ public class PaimonMetadataTest {
             {
                 paimonNativeCatalog.getTable(identifier);
                 result = new Catalog.TableNotExistException(identifier);
+                paimonNativeCatalog.getView(identifier);
+                result = new Catalog.ViewNotExistException(identifier);
             }
         };
         org.junit.jupiter.api.Assertions.assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
@@ -645,21 +653,6 @@ public class PaimonMetadataTest {
         rule0.transform(scan, OptimizerFactory.mockContext(new ColumnRefFactory()));
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
-    }
-
-    @Test
-    public void testCreatePaimonView() {
-        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.createView(connectContext,
-                        new CreateViewStmt(false, false,
-                                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")),
-                                        null, NodePosition.ZERO),
-                    Lists.newArrayList(new ColWithComment("k1", "",
-                            NodePosition.ZERO)),
-                                "",
-                                false,
-                                null,
-                                NodePosition.ZERO)));
     }
 
     @Test
@@ -1089,5 +1082,53 @@ public class PaimonMetadataTest {
         // Before fix, if the key does not contain "db" and "table", it will return 2. After fix, it will return 3.
         assertEquals(3, result1.size() + result2.size());
 
+    }
+
+    @Test
+    public void testView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
+        //test createview
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView((org.apache.paimon.catalog.Identifier) any);
+                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+            }
+        };
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableRef(QualifiedName.of(
+                        Lists.newArrayList("paimon_catalog", "db", "test_view")), null, NodePosition.ZERO),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO);
+        stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
+        metadata.createView(connectContext, stmt);
+
+        //test getview
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView((Identifier) any);
+                result = paimonView;
+                paimonView.query();
+                result = "select * from table";
+            }
+        };
+        PaimonView view = (PaimonView) metadata.getView("db", "test_view");
+        assertEquals(PAIMON_VIEW, view.getType());
+        assertEquals("test_view", view.getName());
+        assertEquals("select * from table", view.getInlineViewDef());
+        assertThrows(StarRocksPlannerException.class, view::getQueryStatement);
+
+        //test drop normal
+        DropTableStmt dropStmt = new DropTableStmt(true, new TableRef(QualifiedName.of(
+                Lists.newArrayList("paimon_catalog", "db", "test_view")), null, NodePosition.ZERO),
+                true, true);
+        metadata.dropTable(connectContext, dropStmt);
+
+        //test drop not exist
+        new Expectations() {
+            {
+                paimonNativeCatalog.dropView((Identifier) any, true);
+                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+            }
+        };
+        org.junit.jupiter.api.Assertions.assertThrows(DdlException.class, () -> metadata.dropTable(connectContext, dropStmt));
     }
 }
