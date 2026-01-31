@@ -26,6 +26,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
+#include "storage/primary_key_encoder.h"
 
 namespace starrocks {
 class TabletSchema;
@@ -185,6 +186,8 @@ public:
 
     bool belonged_to_cloud_native() const override { return true; }
 
+    StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type() const;
+
 private:
     TabletManager* _mgr;
     int64_t _id;
@@ -192,6 +195,7 @@ private:
     std::shared_ptr<LocationProvider> _location_provider;
     TabletMetadataPtr _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
+    mutable std::optional<PrimaryKeyEncodingType> _primary_key_encoding_type = std::nullopt;
 };
 
 } // namespace starrocks::lake

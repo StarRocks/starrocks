@@ -122,6 +122,7 @@ private:
     // make sure at most 1 thread is read or write primary index
     std::shared_timed_mutex _mutex;
     bool _enable_persistent_index = false;
+    std::unique_ptr<Tablet> _tablet;
 };
 
 } // namespace lake

@@ -228,6 +228,7 @@ private:
 
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
+    std::unique_ptr<Tablet> _tablet;
     std::unique_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
 
@@ -431,7 +432,15 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
     }
-    RETURN_IF_ERROR(_mem_table->prepare());
+    std::optional<PrimaryKeyEncodingType> pk_encoding_type;
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        if (_tablet == nullptr) {
+            ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
+            _tablet = std::make_unique<Tablet>(std::move(tablet));
+        }
+        ASSIGN_OR_RETURN(pk_encoding_type, _tablet->primary_key_encoding_type());
+    }
+    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
     _mem_table->set_write_buffer_row(_max_buffer_rows);
     return Status::OK();
 }
@@ -832,7 +841,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
 }
 
 Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
-    ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
+    if (_tablet == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
 
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
@@ -841,12 +853,13 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_write_schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
-    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get(), pk_encoding_type);
     MutableColumns upserts;
     upserts.resize(1);
     upserts[0] = std::move(col);
@@ -860,7 +873,8 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
     Status st;
     if (metadata != nullptr) {
-        st = tablet.update_mgr()->get_rowids_from_pkindex(tablet.id(), metadata->version(), upserts, &rss_rowids, true);
+        st = _tablet->update_mgr()->get_rowids_from_pkindex(_tablet->id(), metadata->version(), upserts, &rss_rowids,
+                                                            true);
     }
 
     Filter filter;

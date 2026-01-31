@@ -511,10 +511,6 @@ Status LakePersistentIndex::prepare_merging_iterator(
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
-        if (sstable_pb.has_predicate()) {
-            ASSIGN_OR_RETURN(read_options.predicate,
-                             sstable::SstablePredicate::create(metadata->schema(), sstable_pb.predicate()));
-        }
         read_options.shared_rssid = sstable_pb.shared_rssid();
         read_options.shared_version = sstable_pb.shared_version();
         read_options.delvec = merging_sstable->delvec();
@@ -807,8 +803,13 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
+    if (_tablet == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
         TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
@@ -925,9 +926,14 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
+    if (_tablet == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, tablet_mgr->get_tablet(_tablet_id));
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
 
     // Init PersistentIndex
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
 
     const auto& sstables = metadata->sstable_meta().sstables();
     // Rebuild persistent index from `rebuild_rss_rowid_point`
@@ -935,9 +941,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        // more than one key column
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::V2) {
+        // more than one key column or big endian encoding
+        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
             CHECK(false) << "create column for primary key encoder failed";
         }
     }
@@ -986,7 +992,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                  pk_encoding_type);
                         pkc = pk_column.get();
                     } else {
                         pkc = const_cast<Column*>(chunk->columns()[0].get());

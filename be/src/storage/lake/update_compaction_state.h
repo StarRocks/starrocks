@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 
@@ -55,6 +56,7 @@ private:
     OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;
     int64_t _tablet_id = 0;
+    std::unique_ptr<Tablet> _tablet;
     std::mutex _state_lock;
 };
 

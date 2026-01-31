@@ -520,7 +520,8 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
     auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink, max_buffer_size,
                                                 CurrentThread::mem_tracker());
-    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(PrimaryKeyEncodingType::V1),
+                              alter_msg_header() + "failed to prepare mem table");
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -548,7 +549,8 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(PrimaryKeyEncodingType::V1),
+                                      alter_msg_header() + "failed to prepare mem table");
             VLOG(2) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
@@ -593,7 +595,8 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(PrimaryKeyEncodingType::V1),
+                                      alter_msg_header() + "failed to prepare mem table");
         }
 
         mem_pool->clear();
