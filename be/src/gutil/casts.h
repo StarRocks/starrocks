@@ -13,9 +13,9 @@
 #include <climits> // for enumeration casts and tests
 #include <cstring> // for memcpy
 
-#include "gbase/utility/template_util.h"
 #include "gutil/logging.h"
 #include "gutil/macros.h"
+#include "gutil/template_util.h"
 #include "gutil/type_traits.h"
 
 // Use implicit_cast as a safe version of static_cast or const_cast
