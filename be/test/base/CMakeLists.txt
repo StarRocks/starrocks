@@ -13,18 +13,17 @@
 # limitations under the License.
 
 set(BASE_TEST_FILES
+    cxa_throw_wrap.cpp
     status_test.cpp
 )
 
 set(BASE_TEST_LINK_LIBS
-    ${WL_START_GROUP}
     Base
     Gutil
     StarRocksGen
-    ${WL_END_GROUP}
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread
+    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest
