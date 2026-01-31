@@ -105,7 +105,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     finish();
     auto status = final_status();
-    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true);
 
     if (_report_when_finish) {
         /// TODO: report fragment finish to BE coordinator
@@ -195,7 +195,7 @@ void FragmentContext::report_exec_state_if_necessary() {
                 driver->runtime_report_action();
             }
         });
-        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false);
     }
 }
 
