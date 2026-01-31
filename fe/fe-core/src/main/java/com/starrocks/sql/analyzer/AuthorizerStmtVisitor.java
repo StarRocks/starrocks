@@ -3068,7 +3068,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkWarehouseAction(context, statement.getWarehouseName(), PrivilegeType.USAGE);
+            Authorizer.checkAnyActionOnWarehouse(context, statement.getWarehouseName());
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
