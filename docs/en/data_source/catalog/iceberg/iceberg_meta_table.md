@@ -21,6 +21,7 @@ Currently, StarRocks supports the following Iceberg metadata tables:
 | `partitions`           | Shows details about the partitions in the table.             |
 | `files`                | Shows details about the data files and delete files in the current snapshot of the table. |
 | `refs`                 | Shows details about the Iceberg references, including branches and tags. |
+| `properties`           | Shows the table properties as key-value pairs.               |
 
 ## `history` table
 
@@ -170,3 +171,26 @@ Output:
 | max_reference_age_in_ms | The maximum age of the reference before it could be expired. |
 | min_snapshots_to_keep   | For branch only, the minimum number of snapshots to keep in a branch. |
 | max_snapshot_age_in_ms  | For branch only, the max snapshot age allowed in a branch. Older snapshots in the branch will be expired. |
+
+## `properties` table
+
+Usage:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$properties;
+```
+
+Output:
+
+| Field | Description                      |
+| :---- | :------------------------------- |
+| key   | The name of the table property.  |
+| value | The value of the table property. |
+
+Example output:
+
+| key                            | value                              |
+| :----------------------------- | :--------------------------------- |
+| location                       | s3://bucket/warehouse/db/my_table  |
+| write.format.default           | parquet                            |
+| write.parquet.compression-codec| zstd                               |
