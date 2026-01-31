@@ -344,7 +344,68 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                                 ExecutorService executorService) {
         IcebergTableName key =
                 new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
+
+        // Check cache first
+        Map<String, Partition> cached = partitionCache.getIfPresent(key);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Estimate partition count before loading
+        int threshold = icebergProperties.getIcebergPartitionStreamingThreshold();
+        long estimatedCount = -1;
+        try {
+            estimatedCount = delegate.estimatePartitionCount(icebergTable, snapshotId);
+        } catch (Exception e) {
+            LOG.debug("Failed to estimate partition count, falling back to cache", e);
+        }
+
+        if (estimatedCount > 0 && estimatedCount > threshold) {
+            LOG.info("Table {}.{} has ~{} partitions (exceeds threshold {}), bypassing partition cache",
+                    key.dbName, key.tableName, estimatedCount, threshold);
+            // For very large tables, load directly without caching to avoid OOM
+            return delegate.getPartitions(icebergTable, snapshotId, executorService);
+        }
+
+        // For smaller tables, use cache
         return partitionCache.get(key);
+    }
+
+    /**
+     * Override getPartitionsByNames to always use streaming approach.
+     * This loads only the requested partitions without loading all partitions first,
+     * preventing OOM for large Iceberg tables with millions of partitions.
+     */
+    @Override
+    public List<Partition> getPartitionsByNames(IcebergTable icebergTable,
+                                                 ExecutorService executorService,
+                                                 List<String> partitionNames) {
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        long snapshotId = -1;
+        if (nativeTable.currentSnapshot() != null) {
+            snapshotId = nativeTable.currentSnapshot().snapshotId();
+        }
+
+        // Unpartitioned tables use existing logic
+        if (nativeTable.spec().isUnpartitioned()) {
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
+            return List.of(partitionMap.get(IcebergCatalog.EMPTY_PARTITION_NAME));
+        }
+
+        // Always use streaming - load only requested partitions without loading all partitions first
+        return getPartitionsByNamesStreaming(icebergTable, snapshotId, executorService, partitionNames);
+    }
+
+    /**
+     * Streaming implementation that stops as soon as all requested partitions are found.
+     */
+    private List<Partition> getPartitionsByNamesStreaming(IcebergTable icebergTable, long snapshotId,
+                                                          ExecutorService executorService,
+                                                          List<String> partitionNames) {
+        return IcebergPartitionUtils.collectPartitionsFromIterator(
+                () -> delegate.getPartitionIterator(icebergTable, snapshotId, executorService),
+                partitionNames,
+                icebergTable.getNativeTable().name());
     }
 
     @Override

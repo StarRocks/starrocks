@@ -44,6 +44,7 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
     public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
+    public static final String ICEBERG_PARTITION_STREAMING_THRESHOLD = "iceberg_partition_streaming_threshold";
 
     // internal config
     public static final String ICEBERG_TABLE_CACHE_TTL = "iceberg_table_cache_ttl_sec";
@@ -71,6 +72,7 @@ public class IcebergCatalogProperties {
     private double icebergDeleteFileCacheMemoryUsageRatio;
     private double icebergTableCacheMemoryUsageRatio;
     private long icebergTableCacheRefreshIntervalSec;
+    private int icebergPartitionStreamingThreshold;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
         this.properties = catalogProperties;
@@ -117,6 +119,8 @@ public class IcebergCatalogProperties {
                 2 * 1024 * 1024);
         this.enableCacheDataFileIdentifierColumnStatistics = PropertyUtil.propertyAsBoolean(properties,
                 ENABLE_CACHE_DATA_FILE_IDENTIFIER_COLUMN_STATISTICS, true);
+        this.icebergPartitionStreamingThreshold = PropertyUtil.propertyAsInt(properties,
+                ICEBERG_PARTITION_STREAMING_THRESHOLD, 100000);
     }
 
     private void initThreadPoolNum() {
@@ -206,5 +210,9 @@ public class IcebergCatalogProperties {
 
     public boolean enableCacheDataFileIdentifierColumnStatistics() {
         return enableCacheDataFileIdentifierColumnStatistics;
+    }
+
+    public int getIcebergPartitionStreamingThreshold() {
+        return icebergPartitionStreamingThreshold;
     }
 }
