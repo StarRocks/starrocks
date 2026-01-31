@@ -47,4 +47,19 @@ public class ResourceGroupClassifierTest {
             assertThat(classifier.weight()).isCloseTo(1 + i / 64., within(1e-5));
         }
     }
+
+    @Test
+    public void testUserPattern() {
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("user1").matches()).isTrue();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("user_1").matches()).isTrue();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("user-1").matches()).isTrue();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("a-user1").matches()).isTrue();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("user1/host").matches()).isTrue();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("user1/host-1").matches()).isTrue();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("").matches()).isFalse();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("-user1").matches()).isFalse();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("user@").matches()).isFalse();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("user/host/extra").matches()).isFalse();
+        assertThat(ResourceGroupClassifier.USER_PATTERN.matcher("user with space").matches()).isFalse();
+    }
 }
