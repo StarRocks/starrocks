@@ -125,6 +125,7 @@ import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -760,43 +761,43 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         boolean enableCollectColumnStatistics = enableCollectColumnStatistics(connectContext);
 
-        Iterator<FileScanTask> iterator =
-                buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, snapshotId,
-                        connectContext, enableCollectColumnStatistics);
-
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
+        try (CloseableIterator<FileScanTask> iterator =
+                     buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, snapshotId,
+                             connectContext, enableCollectColumnStatistics)) {
+            while (iterator.hasNext()) {
+                FileScanTask scanTask = iterator.next();
 
-        while (iterator.hasNext()) {
-            FileScanTask scanTask = iterator.next();
+                FileScanTask icebergSplitScanTask = scanTask;
+                if (enableCollectColumnStatistics) {
+                    try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
+                        icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                    }
 
-            FileScanTask icebergSplitScanTask = scanTask;
-            if (enableCollectColumnStatistics(connectContext)) {
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
-                    icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                    List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
+                    Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
+                            .filter(column -> column.type().isPrimitiveType())
+                            .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
+
+                    Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
+                            .filter(x -> x.transform().isIdentity())
+                            .map(PartitionField::sourceId)
+                            .collect(Collectors.toSet());
+
+                    List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
+                            .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
+                                    column.type().isPrimitiveType())
+                            .collect(toImmutableList());
+
+                    try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
+                        statisticProvider.updateIcebergFileStats(
+                                icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
+                    }
                 }
-
-                List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
-                Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
-                        .filter(column -> column.type().isPrimitiveType())
-                        .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
-
-                Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
-                        .filter(x -> x.transform().isIdentity())
-                        .map(PartitionField::sourceId)
-                        .collect(Collectors.toSet());
-
-                List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
-                        .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
-                                column.type().isPrimitiveType())
-                        .collect(toImmutableList());
-
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
-                    statisticProvider.updateIcebergFileStats(
-                            icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
-                }
+                icebergScanTasks.add(icebergSplitScanTask);
             }
-
-            icebergScanTasks.add(icebergSplitScanTask);
+        } catch (IOException e) {
+            throw new StarRocksConnectorException("Failed to iter iceberg file scan iterator", e);
         }
 
         splitTasks.put(key, icebergScanTasks);
@@ -858,7 +859,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                        Expression icebergPredicate,
                                                        Long snapshotId,
                                                        GetRemoteFilesParams params) {
-        Iterator<FileScanTask> iterator =
+        CloseableIterator<FileScanTask> iterator =
                 buildFileScanTaskIterator(table, icebergPredicate, snapshotId, ConnectContext.get(),
                         params.isEnableColumnStats());
         return new RemoteFileInfoSource() {
@@ -870,6 +871,14 @@ public class IcebergMetadata implements ConnectorMetadata {
             @Override
             public boolean hasMoreOutput() {
                 return iterator.hasNext();
+            }
+
+            @Override
+            public void close() {
+                try {
+                    iterator.close();
+                } catch (Exception ignore) {
+                }
             }
         };
     }
@@ -889,7 +898,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         };
     }
 
-    private Iterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
+    private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
                                                              Expression icebergPredicate,
                                                              Long snapshotId,
                                                              ConnectContext connectContext,
@@ -924,7 +933,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         TableScan tableScan = scan;
-        return new Iterator<>() {
+        return new CloseableIterator<>() {
             CloseableIterable<FileScanTask> fileScanTaskIterable;
             CloseableIterator<FileScanTask> fileScanTaskIterator;
             boolean hasMore = true;
@@ -968,6 +977,26 @@ public class IcebergMetadata implements ConnectorMetadata {
                         }
                     }
                     hasMore = false;
+                }
+            }
+
+            @Override
+            public void close() {
+                try {
+                    if (fileScanTaskIterator != null) {
+                        fileScanTaskIterator.close();
+                    }
+                } catch (Exception ignore) {
+                }
+
+                try {
+                    if (fileScanTaskIterable != null) {
+                        fileScanTaskIterable.close();
+                    }
+                } catch (Exception ignore) {
+                } finally {
+                    fileScanTaskIterator = null;
+                    fileScanTaskIterable = null;
                 }
             }
         };
