@@ -335,6 +335,7 @@ set(EXEC_FILES
         ./runtime/exec_env_test.cpp
         ./runtime/exec_sub_process_test.cpp
         ./runtime/load_fail_point_test.cpp
+        ./runtime/mysql_result_writer_test.cpp
         ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
