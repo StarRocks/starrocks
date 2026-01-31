@@ -283,9 +283,16 @@ public:
     std::shared_ptr<QueryStatistics> intermediate_query_statistic(int64_t delta_transmitted_bytes);
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
+    // Snapshot statistic without requiring final sink (best-effort, used for failure/cancel reporting).
+    std::shared_ptr<QueryStatistics> snapshot_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
     bool is_final_sink() const { return _is_final_sink; }
     void set_final_sink() { _is_final_sink = true; }
+
+    bool mark_audit_statistics_reported() {
+        bool expected = false;
+        return _audit_statistics_reported.compare_exchange_strong(expected, true);
+    }
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
@@ -353,6 +360,7 @@ private:
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
+    std::atomic_bool _audit_statistics_reported = false;
 
     struct ScanStats {
         std::atomic<int64_t> total_scan_rows_num = 0;

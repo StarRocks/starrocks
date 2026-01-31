@@ -1008,7 +1008,20 @@ public class DefaultCoordinator extends Coordinator {
         } finally {
             unlock();
         }
-        dealStatusToTryRetry(copyStatus);
+
+        try {
+            dealStatusToTryRetry(copyStatus);
+        } catch (StarRocksException e) {
+            PQueryStatistics queryStatistics = resultBatch.getQueryStatistics();
+            if (null == queryStatistics || null == queryStatistics.statsItems ||
+                    queryStatistics.statsItems.isEmpty()) {
+                throw e;
+            } else {
+                resultBatch.setStatus(copyStatus);
+                resultBatch.setInternalErrorCode(e.getInternalErrorCode());
+                return resultBatch;
+            }
+        }
 
         if (resultBatch.isEos()) {
             this.returnedAllResults = true;
@@ -1133,7 +1146,7 @@ public class DefaultCoordinator extends Coordinator {
         if (cancelReason == PPlanFragmentCancelReason.INTERNAL_ERROR && !queryStatus.ok()) {
             errorMessage = queryStatus.getErrorMsg();
         }
-        
+
         for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
             // If the execState fails to be cancelled, and it has been finished or not been deployed,
             // count down the profileDoneSignal of this execState immediately,
