@@ -741,6 +741,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String OPTIMIZE_DISTINCT_AGG_OVER_FRAMED_WINDOW =
             "optimize_distinct_agg_over_framed_window";
 
+    public static final String CUSTOM_SESSION_NAME = "custom_session_name";
+    public static final int CUSTOM_SESSION_NAME_MAX_LENGTH = 64;
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -3297,6 +3300,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
     private String customQueryId = "";
 
+    @VarAttr(name = CUSTOM_SESSION_NAME, flag = VariableMgr.SESSION_ONLY)
+    private String customSessionName = "";
+
     @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
     private boolean enableRewriteUnnestBitmapToArray = true;
 
@@ -5602,6 +5608,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCustomQueryId(String customQueryId) {
         this.customQueryId = customQueryId;
+    }
+
+    public String getCustomSessionName() {
+        return customSessionName;
+    }
+
+    public void setCustomSessionName(String customSessionName) {
+        this.customSessionName = customSessionName;
     }
 
     public int getConnectorRemoteFileAsyncQueueSize() {
