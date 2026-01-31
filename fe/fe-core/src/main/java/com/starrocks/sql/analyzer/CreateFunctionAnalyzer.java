@@ -235,11 +235,17 @@ public class CreateFunctionAnalyzer {
         // RETURN_TYPE evaluate(...)
         Method method = mainClass.getMethod(CreateFunctionStmt.EVAL_METHOD_NAME, true);
         mainClass.checkMethodNonStaticAndPublic(method);
-        mainClass.checkArgumentCount(method, argsDef.getArgTypes().length);
+        mainClass.checkArgumentCount(method, argsDef.getArgTypes().length, argsDef.isVariadic());
         mainClass.checkScalarReturnUdfType(method, returnType.getType());
-        for (int i = 0; i < method.getParameters().length; i++) {
-            Parameter p = method.getParameters()[i];
-            mainClass.checkScalarUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+        
+        // Validate parameter types
+        if (argsDef.isVariadic()) {
+            mainClass.checkVarargsScalarParameters(method, argsDef.getArgTypes());
+        } else {
+            for (int i = 0; i < method.getParameters().length; i++) {
+                Parameter p = method.getParameters()[i];
+                mainClass.checkScalarUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+            }
         }
     }
 
@@ -311,10 +317,16 @@ public class CreateFunctionAnalyzer {
             Method method = mainClass.getMethod(CreateFunctionStmt.UPDATE_METHOD_NAME, true);
             mainClass.checkMethodNonStaticAndPublic(method);
             mainClass.checkReturnJavaType(method, void.class);
-            mainClass.checkArgumentCount(method, argsDef.getArgTypes().length + 1);
+            mainClass.checkArgumentCount(method, argsDef.getArgTypes().length + 1, argsDef.isVariadic());
             mainClass.checkParamJavaType(method, udafStateClass.clazz, method.getParameters()[0]);
-            for (int i = 0; i < argsDef.getArgTypes().length; i++) {
-                mainClass.checkParamUdfType(method, argsDef.getArgTypes()[i], method.getParameters()[i + 1]);
+            
+            // Validate parameter types
+            if (argsDef.isVariadic()) {
+                mainClass.checkVarargsParameters(method, argsDef.getArgTypes(), 1);
+            } else {
+                for (int i = 0; i < argsDef.getArgTypes().length; i++) {
+                    mainClass.checkParamUdfType(method, argsDef.getArgTypes()[i], method.getParameters()[i + 1]);
+                }
             }
         }
         {
@@ -395,16 +407,22 @@ public class CreateFunctionAnalyzer {
             // TYPE[] process(INPUT)
             Method method = mainClass.getMethod(CreateFunctionStmt.PROCESS_METHOD_NAME, true);
             mainClass.checkMethodNonStaticAndPublic(method);
-            mainClass.checkArgumentCount(method, argsDef.getArgTypes().length);
-            for (int i = 0; i < method.getParameters().length; i++) {
-                Parameter p = method.getParameters()[i];
-                mainClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+            mainClass.checkArgumentCount(method, argsDef.getArgTypes().length, argsDef.isVariadic());
+            
+            // Validate parameter types
+            if (argsDef.isVariadic()) {
+                mainClass.checkVarargsParameters(method, argsDef.getArgTypes(), 0);
+            } else {
+                for (int i = 0; i < method.getParameters().length; i++) {
+                    Parameter p = method.getParameters()[i];
+                    mainClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+                }
             }
         }
         final List<Type> argList = Arrays.stream(argsDef.getArgTypes()).collect(Collectors.toList());
         TableFunction tableFunction = new TableFunction(functionName,
                 Lists.newArrayList(functionName.getFunction()),
-                argList, Lists.newArrayList(returnType.getType()));
+                argList, Lists.newArrayList(returnType.getType()), argsDef.isVariadic());
         tableFunction.setBinaryType(TFunctionBinaryType.SRJAR);
         tableFunction.setChecksum(checksum);
         tableFunction.setLocation(new HdfsURI(objectFile));
@@ -529,10 +547,33 @@ public class CreateFunctionAnalyzer {
         }
 
         private void checkArgumentCount(Method method, int argumentCount) {
-            if (method.getParameters().length != argumentCount) {
-                String errMsg = String.format("UDF class '%s' method '%s' expect argument count %d",
-                        clazz.getCanonicalName(), method.getName(), argumentCount);
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, errMsg);
+            checkArgumentCount(method, argumentCount, false);
+        }
+
+        private void checkArgumentCount(Method method, int argumentCount, boolean isVariadic) {
+            if (isVariadic) {
+                // For varargs, the Java method must use varargs syntax
+                if (!method.isVarArgs()) {
+                    String errMsg = String.format(
+                            "UDF class '%s' method '%s' must use varargs syntax (...) when function is declared with varargs",
+                            clazz.getCanonicalName(), method.getName());
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, errMsg);
+                }
+                // For varargs, method parameter count should match the declared argument count
+                // (the last parameter is the varargs array)
+                if (method.getParameterCount() != argumentCount) {
+                    String errMsg = String.format(
+                            "UDF class '%s' method '%s' varargs parameter count %d does not match declared argument count %d",
+                            clazz.getCanonicalName(), method.getName(), method.getParameterCount(), argumentCount);
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, errMsg);
+                }
+            } else {
+                // For non-varargs, exact parameter count match
+                if (method.getParameters().length != argumentCount) {
+                    String errMsg = String.format("UDF class '%s' method '%s' expect argument count %d",
+                            clazz.getCanonicalName(), method.getName(), argumentCount);
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, errMsg);
+                }
             }
         }
 
@@ -620,6 +661,64 @@ public class CreateFunctionAnalyzer {
                                 clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
                                 cls.getCanonicalName()));
             }
+        }
+
+        /**
+         * Functional interface for type checking strategies.
+         */
+        @FunctionalInterface
+        private interface TypeChecker {
+            void check(Method method, Type expectedType, Class<?> actualType, String paramName);
+        }
+
+        /**
+         * Generic helper to check varargs parameters with a custom type checking strategy.
+         * For varargs, the last declared type is the element type of the varargs array.
+         * All fixed parameters are checked normally, and the varargs parameter is validated
+         * to be an array of the expected element type.
+         */
+        private void checkVarargsParametersGeneric(Method method, Type[] declaredArgTypes, 
+                                                   int paramOffset, TypeChecker typeChecker) {
+            Parameter[] params = method.getParameters();
+            
+            // All parameters except the last should match the declared types
+            for (int i = 0; i < declaredArgTypes.length - 1; i++) {
+                Parameter param = params[i + paramOffset];
+                typeChecker.check(method, declaredArgTypes[i], param.getType(), param.getName());
+            }
+            
+            // The last parameter should be a varargs array
+            if (declaredArgTypes.length > 0) {
+                Type varargsElementType = declaredArgTypes[declaredArgTypes.length - 1];
+                Parameter varargsParam = params[paramOffset + declaredArgTypes.length - 1];
+                
+                // Java varargs are represented as arrays
+                if (!varargsParam.getType().isArray()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            String.format("UDF class '%s' method '%s' varargs parameter '%s' must be an array",
+                                    clazz.getCanonicalName(), method.getName(), varargsParam.getName()));
+                }
+                
+                // Check that the array component type matches the declared varargs element type
+                Class<?> arrayComponentType = varargsParam.getType().getComponentType();
+                typeChecker.check(method, varargsElementType, arrayComponentType, varargsParam.getName());
+            }
+        }
+
+        /**
+         * Check varargs parameters for scalar UDFs.
+         * Uses checkScalarUdfType for type validation.
+         */
+        private void checkVarargsScalarParameters(Method method, Type[] declaredArgTypes) {
+            checkVarargsParametersGeneric(method, declaredArgTypes, 0, this::checkScalarUdfType);
+        }
+
+        /**
+         * Check varargs parameters for UDAFs and UDTFs.
+         * Uses checkUdfType for type validation with an offset for the first parameter.
+         */
+        private void checkVarargsParameters(Method method, Type[] declaredArgTypes, int paramOffset) {
+            checkVarargsParametersGeneric(method, declaredArgTypes, paramOffset, this::checkUdfType);
         }
     }
 

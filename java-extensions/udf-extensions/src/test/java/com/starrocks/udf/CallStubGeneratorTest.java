@@ -126,6 +126,41 @@ public class CallStubGeneratorTest {
             return v1 + v2;
         }
     }
+    
+    public static class VarargsConcat {
+        public String evaluate(String... args) {
+            if (args == null || args.length == 0) {
+                return "";
+            }
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < args.length; i++) {
+                if (args[i] != null) {
+                    if (i > 0) {
+                        result.append(" ");
+                    }
+                    result.append(args[i]);
+                }
+            }
+            return result.toString();
+        }
+    }
+    
+    public static class VarargsSum {
+        public static class State {
+            public int sum = 0;
+        }
+        
+        public void update(State state, Integer... values) {
+            if (values != null) {
+                for (Integer val : values) {
+                    if (val != null) {
+                        state.sum += val;
+                    }
+                }
+            }
+        }
+    }
+    
     @Test
     public void testScalarCallStub()
             throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
@@ -155,5 +190,75 @@ public class CallStubGeneratorTest {
         for (int i = 0; i < testSize; i++) {
             Assertions.assertEquals(expects[i], res[i]);
         }
+    }
+    
+    @Test
+    public void testVarargsScalarUDF()
+            throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = VarargsConcat.class;
+        final String genClassName = CallStubGenerator.CLAZZ_NAME.replace("/", ".");
+        Method m = clazz.getMethod("evaluate", String[].class);
+        final byte[] updates =
+                CallStubGenerator.generateScalarCallStub(clazz, m);
+
+        ClassLoader classLoader = new TestClassLoader(genClassName, updates);
+        final Class<?> stubClazz = classLoader.loadClass(genClassName);
+        Method batchCall = getFirstMethod(stubClazz, "batchCallV");
+
+        VarargsConcat concat = new VarargsConcat();
+        int testSize = 100;
+        
+        // Test with 3 string columns
+        String[] inputs1 = new String[testSize];
+        String[] inputs2 = new String[testSize];
+        String[] inputs3 = new String[testSize];
+        String[] expects = new String[testSize];
+
+        for (int i = 0; i < testSize; i++) {
+            inputs1[i] = "a" + i;
+            inputs2[i] = "b" + i;
+            inputs3[i] = "c" + i;
+            expects[i] = inputs1[i] + " " + inputs2[i] + " " + inputs3[i];
+        }
+
+        final String[] res = (String[])batchCall.invoke(null, testSize, concat, inputs1, inputs2, inputs3);
+        for (int i = 0; i < testSize; i++) {
+            Assertions.assertEquals(expects[i], res[i]);
+        }
+    }
+    
+    @Test
+    public void testVarargsAggUDF()
+            throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = VarargsSum.class;
+        final String genClassName = CallStubGenerator.CLAZZ_NAME.replace("/", ".");
+        Method m = clazz.getMethod("update", VarargsSum.State.class, Integer[].class);
+        final byte[] updates =
+                CallStubGenerator.generateCallStubV(clazz, m);
+
+        ClassLoader classLoader = new TestClassLoader(genClassName, updates);
+        final Class<?> stubClazz = classLoader.loadClass(genClassName);
+        Method batchCall = getFirstMethod(stubClazz, "batchCallV");
+
+        VarargsSum sum = new VarargsSum();
+        VarargsSum.State state = new VarargsSum.State();
+
+        int testSize = 100;
+        Integer[] inputs1 = new Integer[testSize];
+        Integer[] inputs2 = new Integer[testSize];
+        Integer[] inputs3 = new Integer[testSize];
+        int expect = 0;
+
+        for (int i = 0; i < testSize; i++) {
+            inputs1[i] = i;
+            inputs2[i] = i * 2;
+            inputs3[i] = i * 3;
+            expect += inputs1[i] + inputs2[i] + inputs3[i];
+        }
+
+        assert batchCall != null;
+        batchCall.invoke(null, testSize, sum, state, inputs1, inputs2, inputs3);
+
+        Assertions.assertEquals(expect, state.sum);
     }
 }
