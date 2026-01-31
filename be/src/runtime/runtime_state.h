@@ -579,6 +579,10 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+    bool ngram_search_support_utf8() const {
+        return _query_options.__isset.ngram_search_support_utf8 && _query_options.ngram_search_support_utf8;
+    }
+
     bool enable_global_late_materialization() const {
         return _query_options.__isset.enable_global_late_materialization &&
                _query_options.enable_global_late_materialization;

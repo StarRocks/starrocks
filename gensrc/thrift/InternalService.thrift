@@ -350,6 +350,7 @@ struct TQueryOptions {
   171: optional bool enable_parquet_reader_page_index;
   
   180: optional bool lower_upper_support_utf8;
+  181: optional bool ngram_search_support_utf8;
 
   190: optional i64 column_view_concat_rows_limit;
   191: optional i64 column_view_concat_bytes_limit;
