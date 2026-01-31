@@ -2583,4 +2583,143 @@ TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
     EXPECT_EQ("-7", json1.value());
 }
 
+// Test casting float-format string to integer (e.g., "46047.0" -> 46047)
+// This aligns with JSON scanner's behavior in add_column_with_string_value
+TEST_F(VectorizedCastExprTest, stringCastToBigIntWithFloatFormat) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::BIGINT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string p("46047.0");
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_numeric());
+
+        auto v = ColumnHelper::cast_to_raw<TYPE_BIGINT>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(46047, v->get_data()[j]);
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastToIntWithFloatFormat) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string p("12345.0");
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_numeric());
+
+        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(12345, v->get_data()[j]);
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastToSmallIntWithFloatFormat) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::SMALLINT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string p("1234.5");
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_numeric());
+
+        auto v = ColumnHelper::cast_to_raw<TYPE_SMALLINT>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            // Float 1234.5 truncates to 1234
+            ASSERT_EQ(1234, v->get_data()[j]);
+        }
+    }
+}
+
+// Test overflow case: float value too large for target integer type
+TEST_F(VectorizedCastExprTest, stringCastToTinyIntWithFloatFormatOverflow) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    // 200.0 overflows tinyint (max 127)
+    std::string p("200.0");
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_nullable());
+
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_TRUE(ptr->is_null(j));
+        }
+    }
+}
+
+// Test negative float string to integer
+TEST_F(VectorizedCastExprTest, stringCastToIntWithNegativeFloatFormat) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string p("-12345.6");
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_numeric());
+
+        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            // Float -12345.6 truncates to -12345
+            ASSERT_EQ(-12345, v->get_data()[j]);
+        }
+    }
+}
+
 } // namespace starrocks
