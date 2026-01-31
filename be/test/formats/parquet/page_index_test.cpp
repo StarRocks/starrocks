@@ -622,4 +622,77 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     EXPECT_EQ(total_row_nums, 19000);
 }
 
+// Test for parquet files with empty null_counts in ColumnIndex.
+// This can happen with some parquet writers that don't populate null_counts.
+// The bug was accessing column_index.null_counts[i] without bounds checking.
+TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
+    const std::string file_path = "./be/test/formats/parquet/test_data/empty_null_counts_test.parquet";
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true),
+                         chunk->num_columns());
+    chunk->append_column(
+            ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
+            chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true),
+                         chunk->num_columns());
+
+    Utils::SlotDesc slot_descs[] = {
+            {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+            {"name", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+            {"value", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+            {""},
+    };
+
+    Utils::SlotDesc min_max_slots[] = {
+            {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), 0},
+            {""},
+    };
+
+    auto ctx = _create_scan_context();
+    auto file = _create_file(file_path);
+    ctx->conjunct_ctxs_by_slot[0].clear();
+    ctx->min_max_conjunct_ctxs.clear();
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
+    ctx->scan_range = _create_scan_range(file_path);
+    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+
+    std::vector<TExpr> t_conjuncts;
+    // id > 2, this triggers page index filtering
+    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 2, &t_conjuncts);
+
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
+
+    std::vector<ExprContext*> all_conjuncts;
+    for (auto* expr : ctx->min_max_conjunct_ctxs) {
+        all_conjuncts.push_back(expr);
+    }
+    for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
+        all_conjuncts.push_back(expr);
+    }
+    ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
+
+    auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), file_path,
+                                                                         std::filesystem::file_size(file_path));
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(file_path),
+                                         DataCacheOptions(), shared_buffer.get());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+    }
+    EXPECT_GT(total_row_nums, 0);
+}
+
 } // namespace starrocks::parquet
