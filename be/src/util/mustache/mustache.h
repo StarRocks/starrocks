@@ -1,3 +1,5 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -10,19 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <sstream>
+#pragma once
 
-#include "rapidjson/document.h"
-
-// Routines for rendering Mustache (http://mustache.github.io) templates with RapidJson
-// (https://code.google.com/p/rapidjson/) documents.
-namespace mustache {
-
-// Render a template contained in 'document' with respect to the json context
-// 'context'. Alternately finds a tag and then evaluates it. Returns when an error is
-// signalled (TODO: probably doesn't work in all paths), and evaluates that tag. Output is
-// accumulated in 'out'.
-bool RenderTemplate(const std::string& document, const std::string& document_root, const rapidjson::Value& context,
-                    std::stringstream* out);
-
-} // namespace mustache
+#include "base/template/mustache/mustache.h"

@@ -14,18 +14,4 @@
 
 #pragma once
 
-#include <atomic>
-
-namespace starrocks {
-template <typename AtomicT, typename T>
-inline void atomic_max(AtomicT& atomic_var, const std::atomic<T>& value_source) {
-    T old_val = atomic_var.load(std::memory_order_relaxed);
-    while (true) {
-        T current = value_source.load(std::memory_order_relaxed);
-        if (current <= old_val) break;
-        if (atomic_var.compare_exchange_weak(old_val, current, std::memory_order_release, std::memory_order_relaxed)) {
-            break;
-        }
-    }
-}
-} // namespace starrocks
+#include "base/utility/updater.h"
