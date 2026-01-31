@@ -37,7 +37,7 @@
 #include <cstdint>
 #include <limits>
 
-#include "util/alignment.h"
+#include "base/utility/alignment.h"
 
 enum { BINARY_DICT_PAGE_HEADER_SIZE = 4 };
 enum { BITSHUFFLE_PAGE_HEADER_SIZE = 16 };

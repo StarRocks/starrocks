@@ -16,9 +16,9 @@
 
 #include <queue>
 
+#include "base/utility/factory_method.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/factory_method.h"
 #include "util/moodycamel/concurrentqueue.h"
 
 namespace starrocks::pipeline {

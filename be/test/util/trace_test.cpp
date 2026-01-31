@@ -32,6 +32,7 @@
 #include <thread>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "gutil/macros.h"
 #include "gutil/port.h"
 #include "gutil/ref_counted.h"
@@ -39,7 +40,6 @@
 #include "util/countdown_latch.h"
 #include "util/monotime.h"
 #include "util/scoped_cleanup.h"
-#include "util/stopwatch.hpp"
 #include "util/thread.h"
 #include "util/trace_metrics.h"
 

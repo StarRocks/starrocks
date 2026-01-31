@@ -14,8 +14,8 @@
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "fmt/format.h"
-#include "util/blocking_queue.hpp"
 
 namespace starrocks::pipeline {
 

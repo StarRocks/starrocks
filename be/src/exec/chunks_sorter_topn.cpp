@@ -14,6 +14,7 @@
 
 #include "chunks_sorter_topn.h"
 
+#include "base/concurrency/stopwatch.hpp"
 #include "column/column_helper.h"
 #include "column/datum.h"
 #include "column/type_traits.h"
@@ -29,7 +30,6 @@
 #include "util/defer_op.h"
 #include "util/orlp/pdqsort.h"
 #include "util/runtime_profile.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 

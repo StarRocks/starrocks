@@ -38,6 +38,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "base/crypto/sm3.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -59,7 +60,6 @@
 #include "storage/olap_define.h"
 #include "types/large_int_value.h"
 #include "util/raw_container.h"
-#include "util/sm3.h"
 #include "util/utf8.h"
 #include "util/utf8_encoding.h"
 

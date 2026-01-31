@@ -19,6 +19,7 @@
 #include <starlet.h>
 #include <worker.h>
 
+#include "base/crypto/sha.h"
 #include "common/config.h"
 #include "common/gflags_utils.h"
 #include "common/logging.h"
@@ -32,7 +33,6 @@
 #include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/lru_cache.h"
-#include "util/sha.h"
 #include "util/starrocks_metrics.h"
 
 // cachemgr thread pool size

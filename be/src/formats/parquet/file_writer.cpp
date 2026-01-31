@@ -27,6 +27,7 @@
 
 #include <ostream>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
@@ -38,7 +39,6 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks::parquet {
 

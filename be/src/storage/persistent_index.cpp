@@ -18,6 +18,7 @@
 #include <numeric>
 #include <utility>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "fs/fs.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
@@ -45,7 +46,6 @@
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
-#include "util/stopwatch.hpp"
 #include "util/xxh3.h"
 
 namespace starrocks {

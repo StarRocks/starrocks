@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
@@ -26,7 +27,6 @@
 #include "runtime/exec_env.h"
 #include "service/brpc.h"
 #include "storage/table_reader.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 

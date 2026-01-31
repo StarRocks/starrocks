@@ -16,12 +16,12 @@
 
 #include <unordered_map>
 
+#include "base/string/utf8_check.h"
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_decompressor.h"
-#include "util/utf8_check.h"
 
 namespace starrocks {
 

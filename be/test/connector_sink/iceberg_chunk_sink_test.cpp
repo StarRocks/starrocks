@@ -21,6 +21,7 @@
 #include <future>
 #include <thread>
 
+#include "base/utility/integer_util.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
@@ -29,7 +30,6 @@
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
 #include "util/defer_op.h"
-#include "util/integer_util.h"
 
 namespace starrocks::connector {
 namespace {

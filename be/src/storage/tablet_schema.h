@@ -39,6 +39,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/string/c_string.h"
 #include "column/column_access_path.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
@@ -48,7 +49,6 @@
 #include "storage/olap_define.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
-#include "util/c_string.h"
 #include "util/once.h"
 
 namespace starrocks {

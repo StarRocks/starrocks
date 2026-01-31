@@ -20,6 +20,7 @@
 #include <shared_mutex>
 #include <unordered_map>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/delta_column_group.h"
@@ -27,7 +28,6 @@
 #include "storage/olap_common.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset_writer.h"
-#include "util/blocking_queue.hpp"
 #include "util/time.h"
 
 namespace starrocks {

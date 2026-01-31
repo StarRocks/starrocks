@@ -53,10 +53,10 @@
 #include "util/bthreads/semaphore.h"
 // resolve `barrier` macro conflicts with boost/thread.hpp header file
 #undef barrier
+#include "base/container/priority_queue.h"
 #include "cpu_util.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
-#include "util/priority_queue.h"
 
 namespace starrocks {
 

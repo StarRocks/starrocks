@@ -21,10 +21,10 @@
 #include <aws/s3/model/UploadPartRequest.h>
 #include <fmt/format.h>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "io/io_profiler.h"
 #include "io/s3_zero_copy_iostream.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks::io {
 
