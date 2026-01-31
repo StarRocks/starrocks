@@ -208,6 +208,65 @@ public class FoldConstantsRuleTest {
         BinaryPredicateOperator bpo10 = new BinaryPredicateOperator(BinaryType.LT,
                 ConstantOperator.createInt(1), ConstantOperator.createInt(1));
         assertEquals(OB_FALSE, rule.apply(bpo10, null));
+    }
 
+    @Test
+    public void applyCastEdgeCases() {
+        // 1. Overflow Tests
+        // Cast '128' as TINYINT (Max 127) -> No fold (returns original)
+        CastOperator castOverflow1 = new CastOperator(IntegerType.TINYINT, ConstantOperator.createVarchar("128"));
+        assertEquals(castOverflow1, rule.apply(castOverflow1, null));
+
+        // Cast '32768' as SMALLINT (Max 32767) -> No fold
+        CastOperator castOverflow2 = new CastOperator(IntegerType.SMALLINT, ConstantOperator.createVarchar("32768"));
+        assertEquals(castOverflow2, rule.apply(castOverflow2, null));
+
+        // Cast '2147483648' as INT (Max 2147483647) -> No fold
+        CastOperator castOverflow3 = new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("2147483648"));
+        assertEquals(castOverflow3, rule.apply(castOverflow3, null));
+
+        // Cast '9223372036854775808' as BIGINT -> No fold
+        CastOperator castOverflow4 = new CastOperator(IntegerType.BIGINT, ConstantOperator.createVarchar("9223372036854775808"));
+        assertEquals(castOverflow4, rule.apply(castOverflow4, null));
+
+        // 2. Underflow Tests
+        // Cast '-129' as TINYINT (Min -128) -> No fold
+        CastOperator castUnderflow1 = new CastOperator(IntegerType.TINYINT, ConstantOperator.createVarchar("-129"));
+        assertEquals(castUnderflow1, rule.apply(castUnderflow1, null));
+
+        // Cast '-2147483649' as INT -> No fold
+        CastOperator castUnderflow2 = new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("-2147483649"));
+        assertEquals(castUnderflow2, rule.apply(castUnderflow2, null));
+
+        // 3. Invalid Number Formats
+        // 'abc' -> No fold
+        CastOperator castInvalid1 = new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("abc"));
+        assertEquals(castInvalid1, rule.apply(castInvalid1, null));
+
+        // '123a' -> No fold
+        CastOperator castInvalid2 = new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("123a"));
+        assertEquals(castInvalid2, rule.apply(castInvalid2, null));
+
+        // '12.3.4' -> No fold
+        CastOperator castInvalid3 = new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("12.3.4"));
+        assertEquals(ConstantOperator.createInt(12), rule.apply(castInvalid3, null));
+
+        // 4. Truncation & Formatting
+        // '123.999' -> 123 (Truncated at dot)
+        CastOperator castTrunc1 = new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("123.999"));
+        assertEquals(ConstantOperator.createInt(123), rule.apply(castTrunc1, null));
+
+        // '   123   ' -> 123 (Trimmed)
+        CastOperator castTrim1 = new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("   123   "));
+        assertEquals(ConstantOperator.createInt(123), rule.apply(castTrim1, null));
+
+        // 5. Boundary Success Cases
+        // '127' as TINYINT -> 127
+        CastOperator castBound1 = new CastOperator(IntegerType.TINYINT, ConstantOperator.createVarchar("127"));
+        assertEquals(ConstantOperator.createTinyInt((byte) 127), rule.apply(castBound1, null));
+
+        // '-128' as TINYINT -> -128
+        CastOperator castBound2 = new CastOperator(IntegerType.TINYINT, ConstantOperator.createVarchar("-128"));
+        assertEquals(ConstantOperator.createTinyInt((byte) -128), rule.apply(castBound2, null));
     }
 }
