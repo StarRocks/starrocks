@@ -248,9 +248,9 @@ public class StreamLoadTaskTest {
         task.beginTxn(0, 2, null,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe"), resp);
         Assertions.assertTrue(resp.stateOK());
+        // PREPARED, COMMITED, FINISHED states should return OK (idempotent behavior)
         for (StreamLoadTask.State st : java.util.List.of(StreamLoadTask.State.PREPARED,
                 StreamLoadTask.State.COMMITED,
-                StreamLoadTask.State.CANCELLED,
                 StreamLoadTask.State.FINISHED)) {
             Deencapsulation.invoke(task, "setState", st);
             TransactionResult r = new TransactionResult();
@@ -258,6 +258,13 @@ public class StreamLoadTaskTest {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe"), r);
             Assertions.assertTrue(r.stateOK());
         }
+        // CANCELLED state should return error (task already failed)
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult cancelledResp = new TransactionResult();
+        task.beginTxn(0, 2, null,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe"), cancelledResp);
+        Assertions.assertFalse(cancelledResp.stateOK());
     }
 
     @Test
@@ -383,7 +390,8 @@ public class StreamLoadTaskTest {
         Deencapsulation.setField(task, "isCommitting", true);
         TransactionResult resp = new TransactionResult();
         task.manualCancelTask(resp);
-        Assertions.assertTrue(resp.stateOK());
+        // Cancel while committing should return error (cannot cancel during commit)
+        Assertions.assertFalse(resp.stateOK());
     }
 
     @Test
@@ -557,5 +565,117 @@ public class StreamLoadTaskTest {
         TLoadInfo loadInfo = task.toThrift().get(0);
         Assertions.assertTrue(loadInfo.isSetWarehouse());
         Assertions.assertEquals("", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testTryLoadInCancelledState() throws StarRocksException {
+        StreamLoadTask task = new StreamLoadTask(1020, new Database(), new OlapTable(), "t_label21", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.setField(task, "tableName", "tbl");
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        TNetworkAddress addr = task.tryLoad(0, task.getTableName(), resp);
+        Assertions.assertNull(addr);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testExecuteTaskInCancelledState() {
+        StreamLoadTask task = new StreamLoadTask(1021, new Database(), new OlapTable(), "t_label22", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.setField(task, "tableName", "tbl");
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        TNetworkAddress addr = task.executeTask(0, task.getTableName(), null, resp);
+        Assertions.assertNull(addr);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testPrepareChannelInCancelledState() {
+        StreamLoadTask task = new StreamLoadTask(1022, new Database(), new OlapTable(), "t_label23", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.setField(task, "tableName", "tbl");
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        task.prepareChannel(0, task.getTableName(), null, resp);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testWaitCoordFinishInCancelledState() {
+        StreamLoadTask task = new StreamLoadTask(1023, new Database(), new OlapTable(), "t_label24", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        task.waitCoordFinish(resp);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testCommitTxnInCancelledState() throws StarRocksException {
+        StreamLoadTask task = new StreamLoadTask(1024, new Database(), new OlapTable(), "t_label25", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        task.commitTxn(null, resp);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testManualCancelTaskWhenCancelFails() throws StarRocksException {
+        StreamLoadTask task = new StreamLoadTask(1025, new Database(), new OlapTable(), "t_label26", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        // Set state to CANCELLED so cancelTask will return error message
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "already cancelled");
+        TransactionResult resp = new TransactionResult();
+        task.manualCancelTask(resp);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testCancelCoordinatorOnly(@Mocked Coordinator c) throws StarRocksException {
+        StreamLoadTask task = new StreamLoadTask(1026, new Database(), new OlapTable(), "t_label27", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        TUniqueId loadId = new TUniqueId(100, 200);
+        task.setTUniqueId(loadId);
+        task.setCoordinator(c);
+        Deencapsulation.setField(task, "isSyncStreamLoad", false);
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.LOADING);
+        QeProcessorImpl.INSTANCE.registerQuery(loadId, c);
+        Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+
+        new Expectations() {
+            {
+                c.cancel(anyString);
+            }
+        };
+
+        task.cancelCoordinatorOnly("test cancel reason");
+
+        Assertions.assertEquals(StreamLoadTask.State.CANCELLED,
+                Deencapsulation.getField(task, "state"));
+        Assertions.assertEquals("test cancel reason",
+                Deencapsulation.getField(task, "errorMsg"));
+        Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+    }
+
+    @Test
+    public void testCancelCoordinatorOnlyInUnreversibleState() {
+        StreamLoadTask task = new StreamLoadTask(1027, new Database(), new OlapTable(), "t_label28", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.FINISHED);
+
+        task.cancelCoordinatorOnly("test cancel reason");
+
+        // State should remain FINISHED since it's an unreversible state
+        Assertions.assertEquals(StreamLoadTask.State.FINISHED,
+                Deencapsulation.getField(task, "state"));
     }
 }
