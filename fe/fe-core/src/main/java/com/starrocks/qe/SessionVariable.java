@@ -420,6 +420,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String STRUCT_LOW_CARDINALITY_OPTIMIZE = "struct_low_cardinality_optimize";
     public static final String ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL =
                     "enable_low_cardinality_optimize_for_union_all";
+    public static final String ARRAY_AGG_LOW_CARDINALITY_OPTIMIZE = "array_agg_low_cardinality_optimize";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -1763,6 +1764,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = STRUCT_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableStructLowCardinalityOptimize = true;
 
+    @VarAttr(name = ARRAY_AGG_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableArrayAggLowCardinalityOptimize = true;
+
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
@@ -2318,6 +2322,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableStructLowCardinalityOptimize;
     }
 
+    public boolean isEnableArrayAggLowCardinalityOptimize() {
+        return enableArrayAggLowCardinalityOptimize;
+    }
+
+    public void setEnableArrayAggLowCardinalityOptimize(boolean enableArrayAggLowCardinalityOptimize) {
+        this.enableArrayAggLowCardinalityOptimize = enableArrayAggLowCardinalityOptimize;
+    }
 
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = true;
