@@ -55,6 +55,16 @@ public class DataSkew {
         }
     }
 
+    public record SkewCandidates(boolean includeNull,
+                                 List<Pair<String, Long>> mcvs,
+                                 Optional<Double> nullSkewFactor,
+                                 Optional<Double> mcvSkewFactor,
+                                 Optional<Double> maxMcvRatio) {
+        public boolean isSkewed() {
+            return includeNull || (mcvs != null && !mcvs.isEmpty());
+        }
+    }
+
     private record McvSkewInfo(boolean skewed, Optional<Double> mcvSkewFactor, Optional<List<Pair<String, Long>>> mcvs) {
         public McvSkewInfo(boolean skewed) {
             this(skewed, Optional.empty(), Optional.empty());
@@ -140,6 +150,44 @@ public class DataSkew {
 
         // Can not deduce skew.
         return new SkewInfo(SkewType.NOT_SKEWED);
+    }
+
+    public static SkewCandidates getSkewCandidates(@NotNull Statistics statistics,
+                                                   @NotNull ColumnStatistic columnStatistic,
+                                                   Thresholds thresholds,
+                                                   double singleMcvThreshold) {
+        if (statistics.isTableRowCountMayInaccurate() || statistics.getOutputRowCount() < 1) {
+            return new SkewCandidates(false, List.of(), Optional.empty(), Optional.empty(), Optional.empty());
+        }
+
+        final var rowCount = statistics.getOutputRowCount();
+        final var nullSkewInfo = getNullSkewInfo(columnStatistic, thresholds);
+        final var mcvSkewInfo = getMcvSkewInfo(statistics, columnStatistic, thresholds);
+
+        boolean includeNull = nullSkewInfo.skewed;
+
+        List<Pair<String, Long>> mcvCandidates = List.of();
+        Optional<Double> maxMcvRatio = Optional.empty();
+        if (mcvSkewInfo.skewed && mcvSkewInfo.mcvs.isPresent()) {
+            List<Pair<String, Long>> topK = mcvSkewInfo.mcvs.get();
+            // Filter candidates by per-value threshold if needed.
+            if (singleMcvThreshold > 0) {
+                topK = topK.stream()
+                        .filter(p -> (p.second / rowCount) >= singleMcvThreshold)
+                        .toList();
+            }
+            mcvCandidates = topK;
+
+            maxMcvRatio = mcvCandidates.stream()
+                    .mapToDouble(p -> p.second / rowCount)
+                    .max()
+                    .stream()
+                    .boxed()
+                    .findFirst();
+        }
+
+        return new SkewCandidates(includeNull, mcvCandidates,
+                nullSkewInfo.nullSkewFactor, mcvSkewInfo.mcvSkewFactor, maxMcvRatio);
     }
 
     /**
