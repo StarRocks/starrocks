@@ -219,7 +219,7 @@ ParquetFileWriter::ParquetFileWriter(std::string location, std::shared_ptr<arrow
                                      std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                      TCompressionType::type compression_type,
                                      std::shared_ptr<ParquetWriterOptions> writer_options,
-                                     const std::function<void()>& rollback_action)
+                                     std::function<void()> rollback_action, std::vector<bool> nullable)
         : _location(std::move(location)),
           _output_stream(std::move(output_stream)),
           _column_names(std::move(column_names)),
@@ -227,20 +227,23 @@ ParquetFileWriter::ParquetFileWriter(std::string location, std::shared_ptr<arrow
           _column_evaluators(std::move(column_evaluators)),
           _compression_type(compression_type),
           _writer_options(std::move(writer_options)),
+          _nullable(std::move(nullable)),
           _rollback_action(std::move(rollback_action)) {}
 
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::_make_schema(
         const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
-        const std::vector<FileColumnId>& file_column_ids) {
+        const std::vector<FileColumnId>& file_column_ids, const std::vector<bool>& nullable) {
     ::parquet::schema::NodeVector fields;
     parquet::ParquetSchemaOptions schema_options{
             .use_legacy_decimal_encoding = _writer_options->use_legacy_decimal_encoding,
             .use_int96_timestamp_encoding = _writer_options->use_int96_timestamp_encoding,
     };
     for (int i = 0; i < type_descs.size(); i++) {
-        ARROW_ASSIGN_OR_RAISE(auto node, parquet::ParquetBuildHelper::make_schema_node(
-                                                 column_names[i], type_descs[i], ::parquet::Repetition::OPTIONAL,
-                                                 file_column_ids[i], schema_options))
+        ::parquet::Repetition::type repetition =
+                (nullable.empty() || nullable[i]) ? ::parquet::Repetition::OPTIONAL : ::parquet::Repetition::REQUIRED;
+        ARROW_ASSIGN_OR_RAISE(auto node,
+                              parquet::ParquetBuildHelper::make_schema_node(column_names[i], type_descs[i], repetition,
+                                                                            file_column_ids[i], schema_options))
         DCHECK(node != nullptr);
         fields.push_back(std::move(node));
     }
@@ -256,11 +259,11 @@ Status ParquetFileWriter::init() {
 
     auto status = [&]() {
         if (_writer_options->column_ids.has_value()) {
-            ARROW_ASSIGN_OR_RAISE(_schema,
-                                  _make_schema(_column_names, _type_descs, _writer_options->column_ids.value()));
+            ARROW_ASSIGN_OR_RAISE(
+                    _schema, _make_schema(_column_names, _type_descs, _writer_options->column_ids.value(), _nullable));
         } else {
             std::vector<FileColumnId> column_ids(_type_descs.size());
-            ARROW_ASSIGN_OR_RAISE(_schema, _make_schema(_column_names, _type_descs, column_ids));
+            ARROW_ASSIGN_OR_RAISE(_schema, _make_schema(_column_names, _type_descs, column_ids, _nullable));
         }
         return arrow::Status::OK();
     }();
@@ -292,7 +295,7 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(
         std::map<std::string, std::string> options, std::vector<std::string> column_names,
         std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
         std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
-        RuntimeState* runtime_state)
+        RuntimeState* runtime_state, std::vector<bool> nullable)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
           _field_ids(std::move(field_ids)),
@@ -300,7 +303,8 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(
           _column_names(std::move(column_names)),
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors),
-          _runtime_state(runtime_state) {}
+          _runtime_state(runtime_state),
+          _nullable(std::move(nullable)) {}
 
 Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(*_column_evaluators));
@@ -347,7 +351,7 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());
     auto writer = std::make_unique<ParquetFileWriter>(path, parquet_output_stream, _column_names, types,
                                                       std::move(column_evaluators), _compression_type, _parsed_options,
-                                                      rollback_action);
+                                                      rollback_action, _nullable);
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),
