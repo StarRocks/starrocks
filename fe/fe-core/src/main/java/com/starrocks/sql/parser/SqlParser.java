@@ -97,26 +97,17 @@ public class SqlParser {
             // In Trino parser AstBuilder, it could throw ParsingException for unexpected exception,
             // use StarRocks parser to parse now.
             LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
-            if (sessionVariable.isEnableDialectDowngrade()) {
-                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
-            }
-            throw e;
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
         } catch (io.trino.sql.parser.ParsingException e) {
             // This sql does not use Trino syntax，use StarRocks parser to parse now.
             if (sql.toLowerCase().contains("select")) {
                 LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
             }
-            if (sessionVariable.isEnableDialectDowngrade()) {
-                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
-            }
-            throw e;
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
         } catch (TrinoParserUnsupportedException e) {
             // We only support Trino partial syntax now, and for Trino parser unsupported statement,
             // try to use StarRocks parser to parse
-            if (sessionVariable.isEnableDialectDowngrade()) {
-                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
-            }
-            throw e;
+            return rollbackStarRocksDialect(sql, sessionVariable, e);
         } catch (UnsupportedException e) {
             // For unsupported statement, it can not be parsed by trino or StarRocks parser, both parser
             // can not support it now, we just throw the exception here to give user more information
@@ -127,6 +118,17 @@ public class SqlParser {
             return parseWithStarRocksDialect(sql, sessionVariable);
         }
         return statements;
+    }
+
+    private static List<StatementBase> rollbackStarRocksDialect(String sql, SessionVariable sessionVariable,
+                                                                RuntimeException exception) {
+        if (ConnectContext.get() != null) {
+            ConnectContext.get().setRelationAliasCaseInSensitive(false);
+        }
+        if (sessionVariable.isEnableDialectDowngrade()) {
+            return tryParseWithStarRocksDialect(sql, sessionVariable, exception);
+        }
+        throw exception;
     }
 
     private static List<StatementBase> tryParseWithStarRocksDialect(String sql, SessionVariable sessionVariable,
