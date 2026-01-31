@@ -891,6 +891,8 @@ vectorized_functions = [
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
     [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
+    [110113, "is_json_scalar", False, False, "BOOLEAN", ["JSON"], "JsonFunctions::is_json_scalar"],
+
 
     # variant type function
     [110200, "variant_query", False, False, "VARIANT", ["VARIANT", "VARCHAR"], "VariantFunctions::variant_query",
