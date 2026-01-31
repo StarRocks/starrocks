@@ -165,6 +165,9 @@ public class AuditEvent {
     @AuditField(value = "CustomQueryId")
     public String customQueryId = "";
 
+    @AuditField(value = "CustomSessionName")
+    public String customSessionName = "";
+
     @AuditField(value = "TransmittedBytes")
     public long transmittedBytes = -1;
 
@@ -472,6 +475,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setCustomQueryId(String customQueryId) {
             auditEvent.customQueryId = customQueryId;
+            return this;
+        }
+
+        public AuditEventBuilder setCustomSessionName(String customSessionName) {
+            auditEvent.customSessionName = customSessionName;
             return this;
         }
 
