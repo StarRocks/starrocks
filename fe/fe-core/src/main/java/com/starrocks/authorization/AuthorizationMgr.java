@@ -23,6 +23,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.common.Config;
@@ -901,8 +902,38 @@ public class AuthorizationMgr {
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
         try {
-            PrivilegeCollectionV2 collection = mergePrivilegeCollection(
-                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
+            AccessControlContext acc = context.getAccessControlContext();
+            UserIdentity checkUser;
+            Set<String> checkGroups;
+            Set<Long> checkRoleIds;
+
+            UserIdentity original = acc.getOriginalUserIdentity();
+            UserIdentity current = context.getCurrentUserIdentity();
+            if (original == null) {
+                // No original context (fallback): use current user/group/roles
+                checkUser = current;
+                checkGroups = context.getGroups();
+                checkRoleIds = context.getCurrentRoleIds();
+            } else if (current == null || !current.equals(original)) {
+                // No current identity OR impersonating: use original(login) user context
+                // This allows chaining EXECUTE AS on the same session based on the original user's privileges.
+                checkUser = original;
+                checkGroups = acc.getOriginalGroups();
+                checkRoleIds = acc.getOriginalRoleIds();
+            } else {
+                // Not impersonating (current == original): use current* to respect SET ROLE
+                checkUser = current;
+                checkGroups = context.getGroups();
+                checkRoleIds = context.getCurrentRoleIds();
+            }
+
+            // Defensive check: if somehow both original and current are null, deny access
+            if (checkUser == null) {
+                LOG.warn("canExecuteAs: checkUser is null, denying access to impersonate {}", impersonateUser);
+                return false;
+            }
+
+            PrivilegeCollectionV2 collection = mergePrivilegeCollection(checkUser, checkGroups, checkRoleIds);
             PEntryObject object = provider.generateUserObject(ObjectType.USER, impersonateUser);
             return provider.check(ObjectType.USER, PrivilegeType.IMPERSONATE, object, collection);
         } catch (PrivilegeException e) {

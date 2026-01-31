@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -37,6 +38,15 @@ public class AccessControlContext {
     // `currentUserIdentity` and `qualifiedUser` are the same user,
     // but currentUserIdentity may be modified by execute as statement.
     private UserIdentity currentUserIdentity;
+
+    // Original (login) user context snapshot.
+    // Set/updated after each successful authentication; reset before re-authentication (e.g. CHANGE USER).
+    // Unchanged by EXECUTE AS. Restored from backup when CHANGE USER fails.
+    // Used for permission checks (e.g. IMPERSONATE) that must be based on the original login user
+    // instead of the current impersonated user.
+    private UserIdentity originalUserIdentity = null;
+    private Set<String> originalGroups = null;
+    private Set<Long> originalRoleIds = null;
 
     // Distinguished name (DN) used for LDAP authentication and group resolution
     // In LDAP context, this represents the unique identifier of a user in the directory
@@ -89,6 +99,69 @@ public class AccessControlContext {
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
         this.currentUserIdentity = currentUserIdentity;
+    }
+
+    /**
+     * Initialize or update the original(login) user context from the result of a successful
+     * authentication. Called once per login and again on re-authentication of the same
+     * connection (e.g. to refresh roles after grant/revoke). For CHANGE USER, the caller
+     * must invoke {@link #resetOriginalUserContext()} before re-auth so this sets the new user.
+     */
+    public void initOriginalUserContext(UserIdentity userIdentity, Set<String> groups, Set<Long> roleIds) {
+        this.originalUserIdentity = userIdentity;
+        this.originalGroups = groups == null ? new HashSet<>() : new HashSet<>(groups);
+        this.originalRoleIds = roleIds == null ? new HashSet<>() : new HashSet<>(roleIds);
+    }
+
+    /**
+     * Reset the original(login) user context.
+     * This should be called when re-authenticating (e.g., MySQL CHANGE USER) to prevent
+     * the new user from inheriting IMPERSONATE privileges from the previous login user.
+     */
+    public void resetOriginalUserContext() {
+        this.originalUserIdentity = null;
+        this.originalGroups = null;
+        this.originalRoleIds = null;
+    }
+
+    /**
+     * Restore the original(login) user context from a backup.
+     * Used when re-authentication (e.g., CHANGE USER) fails and the session must remain
+     * unchanged; otherwise the original snapshot would be lost and EXECUTE AS chaining
+     * would use the wrong privileges.
+     */
+    public void setOriginalUserContext(UserIdentity userIdentity, Set<String> groups, Set<Long> roleIds) {
+        this.originalUserIdentity = userIdentity;
+        this.originalGroups = groups == null ? null : new HashSet<>(groups);
+        this.originalRoleIds = roleIds == null ? null : new HashSet<>(roleIds);
+    }
+
+    public UserIdentity getOriginalUserIdentity() {
+        return originalUserIdentity;
+    }
+
+    public Set<String> getOriginalGroups() {
+        return originalGroups == null ? Collections.emptySet() : originalGroups;
+    }
+
+    public Set<Long> getOriginalRoleIds() {
+        return originalRoleIds == null ? Collections.emptySet() : originalRoleIds;
+    }
+
+    /**
+     * Update originalRoleIds to match current session's role IDs if not yet impersonating.
+     * This ensures SET ROLE executed BEFORE the first EXECUTE AS is honored when chaining.
+     * Should be called right before the first EXECUTE AS changes currentUserIdentity.
+     *
+     * @param currentUser the current user identity before EXECUTE AS
+     * @param currentRoleIds the current role IDs (reflecting any SET ROLE changes)
+     */
+    public void snapshotRoleIdsIfNotImpersonating(UserIdentity currentUser, Set<Long> currentRoleIds) {
+        // Only update if we haven't started impersonating yet (current == original)
+        if (this.originalUserIdentity != null && currentUser != null
+                && currentUser.equals(this.originalUserIdentity)) {
+            this.originalRoleIds = currentRoleIds == null ? new HashSet<>() : new HashSet<>(currentRoleIds);
+        }
     }
 
     public void setDistinguishedName(String distinguishedName) {

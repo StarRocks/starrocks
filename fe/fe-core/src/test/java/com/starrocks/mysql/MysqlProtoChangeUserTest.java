@@ -20,6 +20,7 @@ import com.starrocks.authorization.MockedLocalMetaStore;
 import com.starrocks.authorization.RBACMockedMetadataMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
@@ -398,6 +399,66 @@ public class MysqlProtoChangeUserTest {
         Assertions.assertEquals(originalUser, context.getQualifiedUser(), "User should be reverted");
         Assertions.assertEquals(originalUserIdentity, context.getCurrentUserIdentity(), "User identity should be reverted");
         Assertions.assertEquals(originalDb, context.getDatabase(), "Database should remain original");
+    }
+
+    /**
+     * Test change user failure when previous session has original context (after EXECUTE AS).
+     * This covers line 240 in MysqlProto.restorePreviousSession() where setOriginalUserContext
+     * is called when prevOriginalUserIdentity != null.
+     */
+    @Test
+    public void testChangeUserFailWithOriginalContext() throws Exception {
+        // Setup: Simulate a session with original context set (as if after EXECUTE AS)
+        // We don't actually authenticate - just set up the context state directly
+        
+        UserIdentity user1Identity = UserIdentity.createAnalyzedUserIdentWithIp("user1", "%");
+        UserIdentity user2Identity = UserIdentity.createAnalyzedUserIdentWithIp("user2", "%");
+        
+        // Setup context as if: login as user1, then EXECUTE AS user2
+        // original = user1, current = user2
+        context.getAccessControlContext().initOriginalUserContext(user1Identity, null, null);
+        context.setCurrentUserIdentity(user2Identity);
+        context.setQualifiedUser("user2");
+        
+        // Verify setup
+        Assertions.assertEquals("user2", context.getCurrentUserIdentity().getUser());
+        Assertions.assertEquals("user1", context.getAccessControlContext().getOriginalUserIdentity().getUser(),
+                "Original should be user1");
+        
+        // Mock ConnectScheduler to return failure (simulating user limit reached)
+        new MockUp<ConnectScheduler>() {
+            @Mock
+            public com.starrocks.common.Pair<Boolean, String> onUserChanged(
+                    ConnectContext ctx, String previousUser, String newUser) {
+                return new com.starrocks.common.Pair<>(false, "Too many connections");
+            }
+        };
+        
+        // Mock ExecuteEnv
+        new MockUp<ExecuteEnv>() {
+            @Mock
+            public ConnectScheduler getScheduler() {
+                return new ConnectScheduler(1000);
+            }
+        };
+        
+        // Save original context before CHANGE USER
+        UserIdentity prevOriginal = context.getAccessControlContext().getOriginalUserIdentity();
+        String prevOriginalUser = prevOriginal.getUser();
+        
+        // Attempt CHANGE USER to user3 (will fail at onUserChanged)
+        ByteBuffer changeUserPacket = createChangeUserPacket("user3", "password3", null);
+        boolean result = MysqlProto.changeUser(context, changeUserPacket);
+        
+        // Verify failure and that original context is restored (line 240 path)
+        Assertions.assertFalse(result, "Change user should fail when scheduler rejects");
+        Assertions.assertEquals("user2", context.getCurrentUserIdentity().getUser(), 
+                "Current user should be restored to user2");
+        Assertions.assertNotNull(context.getAccessControlContext().getOriginalUserIdentity(),
+                "Original context should be restored (not null)");
+        Assertions.assertEquals(prevOriginalUser, 
+                context.getAccessControlContext().getOriginalUserIdentity().getUser(),
+                "Original context should be restored to user1 (line 240: setOriginalUserContext called)");
     }
 
     /**
