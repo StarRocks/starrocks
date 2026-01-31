@@ -3179,6 +3179,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：启用时，StarRocks 允许 Lake 表对相关事务使用 combined transaction log 路径。仅在集群以 shared-data 模式运行（RunMode.isSharedDataMode()）时此标志才会被考虑。设置 `lake_use_combined_txn_log = true` 时，类型为 BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING 和 BATCH_LOAD_JOB 的加载事务将有资格使用 combined txn logs（参见 LakeTableHelper.supportCombinedTxnLog）。包含 compaction 的代码路径通过 isTransactionSupportCombinedTxnLog 检查 combined-log 支持。如果禁用或不在 shared-data 模式下，则不使用 combined transaction log 行为。
 - 引入版本：`v3.3.7, v3.4.0, v3.5.0`
 
+##### lake_enable_drop_tablet_cache
+
+- 默认值：`true`
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：shared-data 模式下，在实际数据被删除前，清理 BE/CN 上的缓存。
+- 引入版本：v4.0
+
 ##### enable_iceberg_commit_queue
 
 - 默认值：`true`
