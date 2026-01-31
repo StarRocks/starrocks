@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
-ADD_BE_LIB(Base
+ADD_BE_STATIC_LIBS(Base
   status.cpp
   statusor.cpp
 )
