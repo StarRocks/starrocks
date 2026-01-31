@@ -606,13 +606,28 @@ inline int StringParser::StringParseTraits<int16_t>::max_ascii_len() {
 }
 
 template <>
+inline int StringParser::StringParseTraits<uint16_t>::max_ascii_len() {
+    return 5; // max value: 65535
+}
+
+template <>
 inline int StringParser::StringParseTraits<int32_t>::max_ascii_len() {
     return 10;
 }
 
 template <>
+inline int StringParser::StringParseTraits<uint32_t>::max_ascii_len() {
+    return 10; // max value: 4294967295
+}
+
+template <>
 inline int StringParser::StringParseTraits<int64_t>::max_ascii_len() {
     return 19;
+}
+
+template <>
+inline int StringParser::StringParseTraits<uint64_t>::max_ascii_len() {
+    return 20; // max value: 18446744073709551615
 }
 
 template <>

@@ -33,6 +33,7 @@ import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
@@ -209,7 +210,7 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     /**
      * Register an existing table in the catalog using the given metadata file location.
-     * 
+     *
      * @param context The connect context
      * @param dbName The database name
      * @param tableName The table name
@@ -226,6 +227,9 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService refreshExecutor) {
     }
 
+    default void invalidateTableCache(String dbName, String tableName) {
+    }
+
     default void invalidatePartitionCache(String dbName, String tableName) {
     }
 
@@ -236,8 +240,12 @@ public interface IcebergCatalog extends MemoryTrackable {
         return new StarRocksIcebergTableScan(
                 table,
                 table.schema(),
-                newTableScanContext(table),
+                newTableScanContext(table, srScanContext),
                 srScanContext);
+    }
+
+    default Map<String, String> getCatalogProperties() {
+        return new HashMap<>();
     }
 
     default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
@@ -295,24 +303,23 @@ public interface IcebergCatalog extends MemoryTrackable {
                     // equality_delete_file_count,
                     // last_updated_at,
                     // last_updated_snapshot_id
-                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                    for (StructLike row : rows) {
-                        // Get the last updated time of the table according to the table schema
-                        long lastUpdated = -1;
-                        try {
-                            lastUpdated = row.get(7, Long.class);
-                        } catch (NullPointerException e) {
-                            // It is a known issue but we do not hanle it right now. If the refresh frequency of
-                            // the materialized view is very high, an excessive number of error logs will be printed.
-                            // Therefore, only brief logs are printed now.
-                            logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId);
+                    try (CloseableIterable<StructLike> rows = task.asDataTask().rows()) {
+                        for (StructLike row : rows) {
+                            // Get the last updated time of the table according to the table schema
+                            // last_updated_at can be null if the referenced snapshot has been expired.
+                            // Use Long wrapper to avoid NPE during auto-unboxing.
+                            long lastUpdated = getPartitionLastUpdatedTime(icebergTable, row, 7,
+                                    EMPTY_PARTITION_NAME, snapshotId);
+                            partition = new Partition(lastUpdated);
+                            break;
                         }
-                        partition = new Partition(lastUpdated);
-                        break;
                     }
                 }
                 if (partition == null) {
-                    partition = new Partition(-1);
+                    long tableLastestSnapshotTime = getTableLastestSnapshotTime(icebergTable, logger);
+                    logger.warn("The unpartitioned table [{}] has no partitions in PartitionsTable, " +
+                            "using {} as last updated time", nativeTable.name(), tableLastestSnapshotTime);
+                    partition = new Partition(tableLastestSnapshotTime);
                 }
                 partitionMap.put(EMPTY_PARTITION_NAME, partition);
             } catch (IOException e) {
@@ -334,25 +341,20 @@ public interface IcebergCatalog extends MemoryTrackable {
                     // equality_delete_file_count,
                     // last_updated_at,
                     // last_updated_snapshot_id
-                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                    for (StructLike row : rows) {
-                        // Get the partition data/spec id/last updated time according to the table schema
-                        StructProjection partitionData = row.get(0, StructProjection.class);
-                        int specId = row.get(1, Integer.class);
-                        PartitionSpec spec = nativeTable.specs().get(specId);
+                    try (CloseableIterable<StructLike> rows = task.asDataTask().rows()) {
+                        for (StructLike row : rows) {
+                            // Get the partition data/spec id/last updated time according to the table schema
+                            StructProjection partitionData = row.get(0, StructProjection.class);
+                            int specId = row.get(1, Integer.class);
+                            PartitionSpec spec = nativeTable.specs().get(specId);
 
-                        String partitionName =
-                                PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
-
-                        long lastUpdated = -1;
-                        try {
-                            lastUpdated = row.get(9, Long.class);
-                        } catch (NullPointerException e) {
-                            logger.error("The table [{}.{}] snapshot [{}] has been expired", nativeTable.name(), partitionName,
-                                    snapshotId, e);
+                            String partitionName =
+                                    PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
+                            long lastUpdated =
+                                    getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
+                            Partition partition = new Partition(lastUpdated, specId);
+                            partitionMap.put(partitionName, partition);
                         }
-                        Partition partition = new Partition(lastUpdated, specId);
-                        partitionMap.put(partitionName, partition);
                     }
                 }
             } catch (IOException e) {
@@ -362,16 +364,53 @@ public interface IcebergCatalog extends MemoryTrackable {
         return partitionMap;
     }
 
+    private long getPartitionLastUpdatedTime(IcebergTable icebergTable, StructLike row,
+                                             int columnIndex, String partitionName,
+                                             long snapshotId) {
+        Table nativeTable = icebergTable.getNativeTable();
+        Logger logger = getLogger();
+        // last_updated_at can be null if the referenced snapshot has been expired.
+        // Use Long wrapper to avoid NPE during auto-unboxing.
+        long lastUpdated = -1;
+        if (row != null) {
+            try {
+                lastUpdated = row.get(columnIndex, Long.class);
+            } catch (Exception e) {
+                logger.error("Failed to get last_updated_at for partition [{}] of table [{}] " +
+                                "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);
+            }
+        }
+        if (lastUpdated ==  -1) {
+            // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
+            lastUpdated = getTableLastestSnapshotTime(icebergTable, logger);
+            logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
+                    "using current snapshot timestamp: {}", nativeTable.name(), snapshotId, lastUpdated);
+        }
+        return lastUpdated;
+    }
+
+    private long getTableLastestSnapshotTime(IcebergTable icebergTable,
+                                             Logger logger) {
+        Table nativeTable = icebergTable.getNativeTable();
+        Snapshot snapshot = nativeTable.currentSnapshot();
+        if (snapshot == null) {
+            logger.warn("The table [{}] has no current snapshot, using -1 as last updated time",
+                    nativeTable.name());
+            return -1;
+        }
+        return snapshot.timestampMillis();
+    }
+
     default List<String> listPartitionNames(IcebergTable icebergTable,
                                             ConnectorMetadatRequestContext requestContext,
                                             ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
 
-        // Call public method so subclasses can override and optimize this method.
-        Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
         if (nativeTable.spec().isUnpartitioned()) {
             return List.of();
         } else {
+            // Call public method so subclasses can override and optimize this method.
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
             return new ArrayList<>(partitionMap.keySet());
         }
     }

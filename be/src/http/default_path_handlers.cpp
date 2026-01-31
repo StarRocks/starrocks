@@ -174,8 +174,20 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
             auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
             update_item->parent = root;
 
+            // passthrough memory tracker not in RootMemTrackerTree
+            MemTracker* passthrough_mem_tracker = GlobalEnv::GetInstance()->passthrough_mem_tracker();
+            auto* passthrough_item = passthrough_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            passthrough_item->parent = root;
+
+            // Brpc iobuf memory statistics use the old memory framework,
+            MemTracker* brpc_iobuf_mem_tracker = GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker();
+            auto* brpc_iobuf_item = brpc_iobuf_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            brpc_iobuf_item->parent = root;
+
             root->childs.emplace_back(meta_item);
             root->childs.emplace_back(update_item);
+            root->childs.emplace_back(passthrough_item);
+            root->childs.emplace_back(brpc_iobuf_item);
         }
 
         print_mem_str(output, *root);

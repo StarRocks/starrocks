@@ -38,7 +38,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
@@ -61,6 +60,7 @@ import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -426,8 +426,8 @@ public class FileScanNode extends LoadScanNode {
                             + destSlotDesc.getColumn().getName() + "=hll_hash(xxx)");
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
-                if (!fn.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH) &&
-                        !fn.getFnName().getFunction().equalsIgnoreCase("hll_empty")) {
+                if (!fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH) &&
+                        !fn.getFunctionName().equalsIgnoreCase("hll_empty")) {
                     throw new AnalysisException("HLL column must use hll_hash function, like "
                             + destSlotDesc.getColumn().getName() + "=hll_hash(xxx) or " +
                             destSlotDesc.getColumn().getName() + "=hll_empty()");

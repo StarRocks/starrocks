@@ -33,6 +33,8 @@
 
 namespace starrocks {
 
+DEFINE_FAIL_POINT(always_use_partition_join);
+
 class SingleHashJoinProberImpl final : public HashJoinProberImpl {
 public:
     SingleHashJoinProberImpl(HashJoiner& hash_joiner) : HashJoinProberImpl(hash_joiner) {}
@@ -367,7 +369,9 @@ bool SingleHashJoinBuilder::anti_join_key_column_has_null() const {
     auto& column = _ht.get_key_columns()[0];
     if (column->is_nullable()) {
         const auto& null_column = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
-        DCHECK_GT(null_column->size(), 0);
+        if (null_column->empty()) {
+            return false;
+        }
         return null_column->contain_value(1, null_column->size(), 1);
     }
     return false;
@@ -387,7 +391,7 @@ Status SingleHashJoinBuilder::do_append_chunk(RuntimeState* state, const ChunkPt
 
 Status SingleHashJoinBuilder::build(RuntimeState* state) {
     SCOPED_TIMER(_hash_joiner.build_metrics().build_ht_timer);
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state, !_is_sub_partition)));
     _ready = true;
     return Status::OK();
 }
@@ -593,16 +597,21 @@ size_t AdaptivePartitionHashJoinBuilder::_estimate_cost_by_bytes<CacheLevel::MEM
 }
 
 bool AdaptivePartitionHashJoinBuilder::_need_partition_join_for_build(size_t ht_num_rows) const {
+    // only use partition join when hash table is not empty
+    if (ht_num_rows == 0) return false;
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, true);
     return (_partition_join_l2_min_rows < ht_num_rows && ht_num_rows <= _partition_join_l2_max_rows) ||
            (_partition_join_l3_min_rows < ht_num_rows && ht_num_rows <= _partition_join_l3_max_rows);
 }
 
 bool AdaptivePartitionHashJoinBuilder::_need_partition_join_for_append(size_t ht_num_rows) const {
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, true);
     return ht_num_rows <= _partition_join_l2_max_rows || ht_num_rows <= _partition_join_l3_max_rows;
 }
 
 void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t hash_table_bytes_per_row,
                                                               size_t hash_table_probing_bytes_per_row) {
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, (void)0);
     if (hash_table_bytes_per_row == _hash_table_bytes_per_row &&
         hash_table_probing_bytes_per_row == _hash_table_probing_bytes_per_row) {
         return; // No need to adjust partition rows.
@@ -950,6 +959,7 @@ Status AdaptivePartitionHashJoinBuilder::build(RuntimeState* state) {
     }
 
     for (auto& builder : _builders) {
+        builder->set_is_sub_partition(_partition_num > 1);
         RETURN_IF_ERROR(builder->build(state));
     }
     _ready = true;

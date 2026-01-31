@@ -56,7 +56,7 @@ select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
 -- !result
 select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- result:
-[REGEX]E: \(1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:.*'\)
+[REGEX].*global dict size:500 greater than low_cardinality_threshold:255: BE:.*
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:
@@ -89,7 +89,7 @@ select dict_merge(get_json_string(c1, 'f3'), 255) from js2 [_META_];
 -- !result
 select dict_merge(get_json_string(c1, 'f4'), 255) from js2 [_META_];
 -- result:
-[REGEX]E: \(1064, 'global dict size:500 greater than low_cardinality_threshold:255: BE:.*'\)
+[REGEX].*global dict size:500 greater than low_cardinality_threshold:255: BE:.*
 -- !result
 select dict_merge(get_json_string(c1, 'f5'), 255) from js2 [_META_];
 -- result:

@@ -126,7 +126,7 @@ public class BinlogScanNode extends ScanNode {
         long dbId = -1;
         String dbName = null;
         for (PhysicalPartition partition : CollectionUtils.emptyIfNull(olapTable.getAllPhysicalPartitions())) {
-            MaterializedIndex table = partition.getBaseIndex();
+            MaterializedIndex table = partition.getLatestBaseIndex();
             long partitionId = partition.getId();
             long tableId = olapTable.getId();
 
@@ -153,7 +153,7 @@ public class BinlogScanNode extends ScanNode {
                 locations.setScan_range(scanRange);
 
                 // Choose replicas
-                int schemaHash = olapTable.getSchemaHashByIndexId(olapTable.getBaseIndexId());
+                int schemaHash = olapTable.getSchemaHashByIndexMetaId(olapTable.getBaseIndexMetaId());
                 long visibleVersion = partition.getVisibleVersion();
 
                 List<Replica> allQueryableReplicas = Lists.newArrayList();

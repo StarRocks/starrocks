@@ -1149,7 +1149,7 @@ Text-based materialized view rewrite is enabled by default. You can manually dis
 
 The FE configuration item `enable_materialized_view_text_based_rewrite` controls whether to build the abstract syntax tree while creating an asynchronous materialized view. This feature is also enabled by default. Setting this item to `false` will disable text-based materialized view rewrite on the system level.
 
-The variable `materialized_view_subuqery_text_match_max_count` controls the maximum number of times to compare the abstract syntax trees of the materialized view and the sub-queries. The default value is `4`. Increasing this value will also increase the time consumption of the optimizer.
+The variable `materialized_view_subquery_text_match_max_count` controls the maximum number of times to compare the abstract syntax trees of the materialized view and the sub-queries. The default value is `4`. Increasing this value will also increase the time consumption of the optimizer.
 
 Please note that, only when the materialized view meets the timeliness (data consistency) requirement can it be used for text-based query rewrite. You can manually set the consistency check rule using the property `query_rewrite_consistency` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 

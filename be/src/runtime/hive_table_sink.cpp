@@ -82,6 +82,9 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
         DCHECK(boost::iequals(t_hive_sink.file_format, formats::TEXTFILE));
         sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = DEFAULT_FIELD_DELIM;
         sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = DEFAULT_LINE_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::COLLECTION_DELIM] = DEFAULT_COLLECTION_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::MAPKEY_DELIM] = DEFAULT_MAPKEY_DELIM;
+        sink_ctx->options[formats::CSVWriterOptions::IS_HIVE] = "true";
 
         // use customized value if specified
         if (t_hive_sink.text_file_desc.__isset.field_delim) {
@@ -89,6 +92,13 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
         }
         if (t_hive_sink.text_file_desc.__isset.line_delim) {
             sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = t_hive_sink.text_file_desc.line_delim;
+        }
+        if (t_hive_sink.text_file_desc.__isset.collection_delim) {
+            sink_ctx->options[formats::CSVWriterOptions::COLLECTION_DELIM] =
+                    t_hive_sink.text_file_desc.collection_delim;
+        }
+        if (t_hive_sink.text_file_desc.__isset.mapkey_delim) {
+            sink_ctx->options[formats::CSVWriterOptions::MAPKEY_DELIM] = t_hive_sink.text_file_desc.mapkey_delim;
         }
     }
     sink_ctx->fragment_context = fragment_ctx;

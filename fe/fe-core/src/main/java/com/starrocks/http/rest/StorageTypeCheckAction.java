@@ -95,10 +95,10 @@ public class StorageTypeCheckAction extends RestBaseAction {
 
                 OlapTable olapTbl = (OlapTable) tbl;
                 JSONObject indexObj = new JSONObject();
-                for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTbl.getIndexIdToMeta().entrySet()) {
+                for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTbl.getIndexMetaIdToMeta().entrySet()) {
                     MaterializedIndexMeta indexMeta = entry.getValue();
                     if (indexMeta.getStorageType() == TStorageType.ROW) {
-                        indexObj.put(olapTbl.getIndexNameById(entry.getKey()), indexMeta.getStorageType().name());
+                        indexObj.put(olapTbl.getIndexNameByMetaId(entry.getKey()), indexMeta.getStorageType().name());
                     }
                 }
                 root.put(tbl.getName(), indexObj);

@@ -94,7 +94,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap(), null);
 
         for (Partition partition : ((OlapTable) table).getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
         }
     }
 

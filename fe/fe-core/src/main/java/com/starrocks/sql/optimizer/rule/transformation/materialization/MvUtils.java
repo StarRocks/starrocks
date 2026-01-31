@@ -156,14 +156,17 @@ public class MvUtils {
         if (tablesToCheck.isEmpty()) {
             return Sets.newTreeSet();
         }
-        SortedSet<MaterializedViewWrapper> mvs = Sets.newTreeSet();
-        getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
-        return mvs;
+        Map<MaterializedView, Integer> mvToLevel = Maps.newHashMap();
+        getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvToLevel);
+        return mvToLevel.entrySet().stream()
+                .map(e -> MaterializedViewWrapper.create(e.getKey(), e.getValue()))
+                .collect(Collectors.toCollection(() -> Sets.newTreeSet()));
     }
 
     public static void getRelatedMvs(ConnectContext connectContext,
                                      int maxLevel, int currentLevel,
-                                     Set<Table> tablesToCheck, Set<MaterializedViewWrapper> mvs) {
+                                     Set<Table> tablesToCheck,
+                                     Map<MaterializedView, Integer> mvs) {
         if (currentLevel >= maxLevel) {
             logMVPrepare("Current level {} is greater than max level {}", currentLevel, maxLevel);
             return;
@@ -197,7 +200,12 @@ public class MvUtils {
                 continue;
             }
             newMvs.add(table);
-            mvs.add(MaterializedViewWrapper.create((MaterializedView) table, currentLevel));
+            MaterializedView curMV = (MaterializedView) table;
+            Integer curLevel = mvs.get(curMV);
+            // update to higher level if a mv is found again
+            if (curLevel == null || curLevel < currentLevel) {
+                mvs.put((MaterializedView) table, currentLevel);
+            }
         }
         getRelatedMvs(connectContext, maxLevel, currentLevel + 1, newMvs, mvs);
     }
@@ -1525,7 +1533,7 @@ public class MvUtils {
             return false;
         }
         return expr instanceof FunctionCallExpr
-                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(expectFuncName);
+                && ((FunctionCallExpr) expr).getFunctionName().equalsIgnoreCase(expectFuncName);
     }
 
     public static boolean isStr2Date(Expr expr) {

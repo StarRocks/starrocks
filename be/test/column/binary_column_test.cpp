@@ -27,7 +27,7 @@ namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_create) {
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
     ASSERT_TRUE(column->is_binary());
     ASSERT_FALSE(column->is_nullable());
     ASSERT_EQ(0u, column->size());
@@ -36,7 +36,7 @@ PARALLEL_TEST(BinaryColumnTest, test_create) {
 // NOLINTNEXTLINE
 GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
     // small column
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
     for (size_t i = 0; i < 10; i++) {
         column->append(std::to_string(i));
     }
@@ -73,14 +73,14 @@ GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflo
 
 // NOLINTNEXTLINE
 GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
     column->append_string("test");
     ASSERT_FALSE(column->has_large_column());
     auto ret = column->downgrade();
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
 
-    LargeBinaryColumn::Ptr large_column = LargeBinaryColumn::create();
+    auto large_column = LargeBinaryColumn::create();
     ASSERT_TRUE(large_column->has_large_column());
     for (size_t i = 0; i < 10; i++) {
         large_column->append_string(std::to_string(i));
@@ -104,11 +104,11 @@ GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_get_data) {
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
     for (int i = 0; i < 100; i++) {
         column->append(std::string("str:").append(std::to_string(i)));
     }
-    auto& slices = column->get_data();
+    auto& slices = ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_data();
     for (int i = 0; i < slices.size(); ++i) {
         ASSERT_EQ(std::string("str:").append(std::to_string(i)), slices[i].to_string());
     }
@@ -116,7 +116,7 @@ PARALLEL_TEST(BinaryColumnTest, test_get_data) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_byte_size) {
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
     ASSERT_EQ(sizeof(BinaryColumn::Offset), column->byte_size());
     std::string s("test_string");
     for (int i = 0; i < 10; i++) {
@@ -129,20 +129,20 @@ PARALLEL_TEST(BinaryColumnTest, test_byte_size) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_filter) {
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
     for (int i = 0; i < 100; ++i) {
         column->append(std::to_string(i));
     }
 
     Filter filter;
     for (int k = 0; k < 100; ++k) {
-        filter.push_back(k % 2);
+        filter.emplace_back(k % 2);
     }
 
     column->filter(filter);
     ASSERT_EQ(50, column->size());
 
-    const auto& slices = column->get_data();
+    const auto& slices = ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_data();
 
     for (int i = 0; i < 50; ++i) {
         ASSERT_EQ(std::to_string(i * 2 + 1), slices[i].to_string());
@@ -152,28 +152,28 @@ PARALLEL_TEST(BinaryColumnTest, test_filter) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_append_strings) {
     std::vector<Slice> values{{"hello"}, {"starrocks"}};
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     ASSERT_TRUE(c1->append_strings(values.data(), values.size()));
     ASSERT_EQ(values.size(), c1->size());
     for (size_t i = 0; i < values.size(); i++) {
-        ASSERT_EQ(values[i], c1->get_data()[i]);
+        ASSERT_EQ(values[i], ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data()[i]);
     }
 
     std::vector<Slice> values2{{"abcd"}, {"123456"}};
     ASSERT_TRUE(c1->append_strings(values2.data(), values2.size()));
     ASSERT_EQ(values.size() + values2.size(), c1->size());
     for (size_t i = 0; i < values.size(); i++) {
-        ASSERT_EQ(values[i], c1->get_data()[i]);
+        ASSERT_EQ(values[i], ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data()[i]);
     }
     for (size_t i = 0; i < values2.size(); i++) {
-        ASSERT_EQ(values2[i], c1->get_data()[i + 2]);
+        ASSERT_EQ(values2[i], ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data()[i + 2]);
     }
 
     // Nullable BinaryColumn
-    NullableColumn::Ptr c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     ASSERT_TRUE(c2->append_strings(values.data(), values.size()));
     ASSERT_EQ(values.size(), c2->size());
-    auto* c = reinterpret_cast<BinaryColumn*>(c2->mutable_data_column());
+    auto* c = reinterpret_cast<BinaryColumn*>(c2->data_column_raw_ptr());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], c->get_data()[i]);
     }
@@ -185,18 +185,18 @@ PARALLEL_TEST(BinaryColumnTest, test_append_numbers) {
     void* buff = values.data();
     size_t length = values.size() * sizeof(values[0]);
 
-    BinaryColumn::Ptr c4 = BinaryColumn::create();
+    auto c4 = BinaryColumn::create();
     ASSERT_EQ(-1, c4->append_numbers(buff, length));
 }
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_append_nulls) {
     // BinaryColumn
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     ASSERT_FALSE(c1->append_nulls(10));
 
     // NullableColumn
-    NullableColumn::Ptr c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     ASSERT_TRUE(c2->append_nulls(10));
     ASSERT_EQ(10U, c2->size());
     for (int i = 0; i < 10; i++) {
@@ -218,7 +218,7 @@ PARALLEL_TEST(BinaryColumnTest, test_murmur_hash) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_append_defaults) {
     // BinaryColumn
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_default(10);
     ASSERT_EQ(10U, c1->size());
     for (int i = 0; i < 10; i++) {
@@ -226,7 +226,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_defaults) {
     }
 
     // NullableColumn
-    NullableColumn::Ptr c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     c2->append_default(10);
     ASSERT_EQ(10U, c2->size());
     for (int i = 0; i < 10; i++) {
@@ -238,8 +238,8 @@ PARALLEL_TEST(BinaryColumnTest, test_append_defaults) {
 PARALLEL_TEST(BinaryColumnTest, test_compare_at) {
     // Binary columns
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
-    BinaryColumn::Ptr c2 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
     c1->append_strings(strings.data(), strings.size());
     c2->append_strings(strings.data(), strings.size());
     for (size_t i = 0; i < strings.size(); i++) {
@@ -256,8 +256,8 @@ PARALLEL_TEST(BinaryColumnTest, test_compare_at) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_append_binary) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
-    BinaryColumn::Ptr c2 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
     c1->append(Slice("first"));
 
     c2->append(Slice("second"));
@@ -283,7 +283,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_binary) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_filter_range) {
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
 
     column->append(Slice("m"));
 
@@ -314,7 +314,7 @@ PARALLEL_TEST(BinaryColumnTest, test_filter_range) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_resize) {
-    BinaryColumn::Ptr c = BinaryColumn::create();
+    auto c = BinaryColumn::create();
     c->append(Slice("abc"));
     c->append(Slice("def"));
     c->append(Slice("xyz"));
@@ -336,8 +336,8 @@ PARALLEL_TEST(BinaryColumnTest, test_resize) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_assign) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
-    BinaryColumn::Ptr c2 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
     c1->append_strings(strings.data(), strings.size());
     c2->append_strings(strings.data(), strings.size());
 
@@ -355,33 +355,33 @@ PARALLEL_TEST(BinaryColumnTest, test_assign) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_reset_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_strings(strings.data(), strings.size());
     c1->set_delete_state(DEL_PARTIAL_SATISFIED);
 
     c1->reset_column();
     ASSERT_EQ(0, c1->size());
-    ASSERT_EQ(0, c1->get_data().size());
+    ASSERT_EQ(0, ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data().size());
     ASSERT_EQ(DEL_NOT_SATISFIED, c1->delete_state());
 }
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_swap_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_strings(strings.data(), strings.size());
     c1->set_delete_state(DEL_PARTIAL_SATISFIED);
 
-    BinaryColumn::Ptr c2 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
 
     c1->swap_column(*c2);
 
     ASSERT_EQ(0, c1->size());
-    ASSERT_EQ(0, c1->get_data().size());
+    ASSERT_EQ(0, ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data().size());
     ASSERT_EQ(DEL_NOT_SATISFIED, c1->delete_state());
 
     ASSERT_EQ(3, c2->size());
-    ASSERT_EQ(3, c2->get_data().size());
+    ASSERT_EQ(3, ColumnHelper::as_raw_column<BinaryColumn>(c2.get())->get_data().size());
     ASSERT_EQ(DEL_PARTIAL_SATISFIED, c2->delete_state());
     ASSERT_EQ("bbb", c2->get_slice(0));
     ASSERT_EQ("bbc", c2->get_slice(1));
@@ -390,20 +390,20 @@ PARALLEL_TEST(BinaryColumnTest, test_swap_column) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_slice_cache) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
-    c1->get_data().reserve(10);
+    auto c1 = BinaryColumn::create();
+    ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data().reserve(10);
     c1->append_default();
     ASSERT_FALSE(c1->_slices_cache);
     ASSERT_EQ(c1->get_offset().size(), 2);
 
-    BinaryColumn::Ptr c2 = BinaryColumn::create();
-    c2->get_data().reserve(10);
+    auto c2 = BinaryColumn::create();
+    ColumnHelper::as_raw_column<BinaryColumn>(c2.get())->get_data().reserve(10);
     c2->append_default(5);
     ASSERT_FALSE(c2->_slices_cache);
     ASSERT_EQ(c2->get_offset().size(), 6);
 
-    BinaryColumn::Ptr c3 = BinaryColumn::create();
-    c3->get_data().reserve(10);
+    auto c3 = BinaryColumn::create();
+    ColumnHelper::as_raw_column<BinaryColumn>(c3.get())->get_data().reserve(10);
     c3->append(Slice("1"));
     ASSERT_FALSE(c3->_slices_cache);
     ASSERT_EQ(c3->get_offset().size(), 2);
@@ -411,7 +411,7 @@ PARALLEL_TEST(BinaryColumnTest, test_slice_cache) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_reserve) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->reserve(10, 40);
 
     ASSERT_FALSE(c1->_slices_cache);
@@ -421,12 +421,12 @@ PARALLEL_TEST(BinaryColumnTest, test_reserve) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_copy_constructor) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -441,12 +441,12 @@ PARALLEL_TEST(BinaryColumnTest, test_copy_constructor) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_move_constructor) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -461,12 +461,12 @@ PARALLEL_TEST(BinaryColumnTest, test_move_constructor) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_copy_assignment) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -482,12 +482,12 @@ PARALLEL_TEST(BinaryColumnTest, test_copy_assignment) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_move_assignment) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -503,12 +503,12 @@ PARALLEL_TEST(BinaryColumnTest, test_move_assignment) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_clone) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -524,12 +524,12 @@ PARALLEL_TEST(BinaryColumnTest, test_clone) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_clone_shared) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -546,12 +546,12 @@ PARALLEL_TEST(BinaryColumnTest, test_clone_shared) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_clone_empty) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -564,7 +564,7 @@ PARALLEL_TEST(BinaryColumnTest, test_clone_empty) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
     c1->append_datum("ghi");
@@ -572,7 +572,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     c1->append_datum("mno");
 
     std::vector<uint32_t> replace_idxes = {1, 3};
-    BinaryColumn::Ptr c2 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
     c2->append_datum("pq");
     c2->append_datum("rstu");
     c1->update_rows(*c2.get(), replace_idxes.data());
@@ -585,7 +585,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     ASSERT_EQ("rstu", slices[3]);
     ASSERT_EQ("mno", slices[4]);
 
-    BinaryColumn::Ptr c3 = BinaryColumn::create();
+    auto c3 = BinaryColumn::create();
     c3->append_datum("ab");
     c3->append_datum("cdef");
     c1->update_rows(*c3.get(), replace_idxes.data());
@@ -598,7 +598,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     ASSERT_EQ("cdef", slices[3]);
     ASSERT_EQ("mno", slices[4]);
 
-    BinaryColumn::Ptr c4 = BinaryColumn::create();
+    auto c4 = BinaryColumn::create();
     std::vector<uint32_t> new_replace_idxes = {0, 1};
     c4->append_datum("ab");
     c4->append_datum("cdef");
@@ -617,14 +617,14 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     // So i temp comment it and will open if i find one better solution
     /*
     size_t count = (1ul << 31ul) + 5;
-    BinaryColumn::Ptr c5 = BinaryColumn::create();
+    auto c5 = BinaryColumn::create();
     c5->get_bytes().resize(count);
     c5->get_offset().resize(count + 1);
     for (size_t i = 0; i < c5->get_offset().size(); i++) {
         c5->get_offset()[i] = i;
     }
 
-    BinaryColumn::Ptr c6 = BinaryColumn::create();
+    auto c6 = BinaryColumn::create();
     c6->append("22");
 
     std::vector<uint32_t> c6_replace_idxes = {0};
@@ -636,7 +636,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_xor_checksum) {
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
     std::string str;
     str.reserve(3000);
     for (int i = 0; i <= 1000; i++) {
@@ -650,18 +650,18 @@ PARALLEL_TEST(BinaryColumnTest, test_xor_checksum) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_replicate) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
     c1->append_datum("def");
 
     Offsets offsets;
-    offsets.push_back(0);
-    offsets.push_back(3);
-    offsets.push_back(5);
+    offsets.emplace_back(0);
+    offsets.emplace_back(3);
+    offsets.emplace_back(5);
 
     auto c2 = c1->replicate(offsets).value();
 
-    auto slices = down_cast<BinaryColumn*>(c2.get())->get_data();
+    auto slices = down_cast<const BinaryColumn*>(c2.get())->get_data();
     ASSERT_EQ(5, c2->size());
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("abc", slices[1]);
@@ -671,7 +671,7 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
 }
 
 PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
-    BinaryColumn::Ptr column = BinaryColumn::create();
+    auto column = BinaryColumn::create();
     column->append("");
     column->append("1");
     column->append("23");
@@ -685,7 +685,7 @@ class BinaryColumnAppendSelectiveTestFixture : public ::testing::TestWithParam<s
 TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
     const uint32_t num_rows = std::get<0>(GetParam());
 
-    BinaryColumn::Ptr src_col = BinaryColumn::create();
+    auto src_col = BinaryColumn::create();
     for (uint32_t i = 0; i < num_rows; i++) {
         const size_t str_len = i % 16 + 8; // Length between 8 and 23
         std::string str(str_len, 'a' + (i % 26));
@@ -696,11 +696,11 @@ TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
     indexes.reserve(num_rows / 16);
     for (uint32_t i = 0; i < num_rows; i++) {
         if (i % 16 == 0) {
-            indexes.push_back(i);
+            indexes.emplace_back(i);
         }
     }
 
-    BinaryColumn::Ptr dst_col = BinaryColumn::create();
+    auto dst_col = BinaryColumn::create();
 
     dst_col->append_selective(*src_col, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     const size_t num_dst_rows = dst_col->size();

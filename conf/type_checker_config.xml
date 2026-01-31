@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+  Type Checker Configuration
+  
+  This XML file defines mappings between Java class names and type validation rules.
+  All type checkers are now configured via XML with explicit type-rule elements.
+  
+  Each <type-mapping> element specifies:
+  - java_class: The fully qualified Java class name
+  - display_name: Human-readable name for error messages
+  - <type-rule> child elements defining allowed type conversions
+  
+  Each <type-rule> specifies:
+  - allowed_type: StarRocks type that can accept this Java type
+  - return_type: StarRocks type to return for this conversion
+-->
+<type-checkers>
+  <!-- Java Byte type -->
+  <type-mapping java_class="java.lang.Byte" display_name="Byte">
+    <type-rule allowed_type="TYPE_BOOLEAN" return_type="TYPE_BOOLEAN"/>
+    <type-rule allowed_type="TYPE_TINYINT" return_type="TYPE_TINYINT"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_TINYINT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_TINYINT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_TINYINT"/>
+  </type-mapping>
+  
+  <!-- Java Short type -->
+  <type-mapping java_class="java.lang.Short" display_name="Short">
+    <type-rule allowed_type="TYPE_TINYINT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_SMALLINT"/>
+  </type-mapping>
+  
+  <!-- Java Integer type -->
+  <type-mapping java_class="java.lang.Integer" display_name="Integer">
+    <type-rule allowed_type="TYPE_TINYINT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_INT"/>
+  </type-mapping>
+  
+  <!-- Java Long type -->
+  <type-mapping java_class="java.lang.Long" display_name="Long">
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_BIGINT"/>
+  </type-mapping>
+  
+  <!-- Java BigInteger type -->
+  <type-mapping java_class="java.math.BigInteger" display_name="BigInteger">
+    <type-rule allowed_type="TYPE_LARGEINT" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- Java Boolean type -->
+  <type-mapping java_class="java.lang.Boolean" display_name="Boolean">
+    <type-rule allowed_type="TYPE_BOOLEAN" return_type="TYPE_BOOLEAN"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_BOOLEAN"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_BOOLEAN"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_BOOLEAN"/>
+  </type-mapping>
+  
+  <!-- Java Float type -->
+  <type-mapping java_class="java.lang.Float" display_name="Float">
+    <type-rule allowed_type="TYPE_FLOAT" return_type="TYPE_FLOAT"/>
+  </type-mapping>
+  
+  <!-- Java Double type -->
+  <type-mapping java_class="java.lang.Double" display_name="Double">
+    <type-rule allowed_type="TYPE_DOUBLE" return_type="TYPE_DOUBLE"/>
+    <type-rule allowed_type="TYPE_FLOAT" return_type="TYPE_DOUBLE"/>
+  </type-mapping>
+  
+  <!-- Java String type -->
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_CHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- java.sql.Timestamp type -->
+  <type-mapping java_class="java.sql.Timestamp" display_name="Timestamp">
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- java.sql.Date type -->
+  <type-mapping java_class="java.sql.Date" display_name="Date">
+    <type-rule allowed_type="TYPE_DATE" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- java.sql.Time type -->
+  <type-mapping java_class="java.sql.Time" display_name="Time">
+    <type-rule allowed_type="TYPE_TIME" return_type="TYPE_TIME"/>
+  </type-mapping>
+  
+  <!-- java.time.LocalDateTime type -->
+  <type-mapping java_class="java.time.LocalDateTime" display_name="LocalDateTime">
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- java.time.LocalDate type -->
+  <type-mapping java_class="java.time.LocalDate" display_name="LocalDate">
+    <type-rule allowed_type="TYPE_DATE" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- java.math.BigDecimal type -->
+  <type-mapping java_class="java.math.BigDecimal" display_name="BigDecimal">
+    <type-rule allowed_type="TYPE_DECIMAL32" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DECIMAL64" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DECIMAL128" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DECIMAL256" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DOUBLE" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- Oracle TIMESTAMP types -->
+  <type-mapping java_class="oracle.sql.TIMESTAMP" display_name="OracleTimestamp">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <type-mapping java_class="oracle.sql.TIMESTAMPLTZ" display_name="OracleTimestampLTZ">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <type-mapping java_class="oracle.sql.TIMESTAMPTZ" display_name="OracleTimestampTZ">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- SQL Server DateTimeOffset type -->
+  <type-mapping java_class="microsoft.sql.DateTimeOffset" display_name="DateTimeOffset">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- Binary types -->
+  <type-mapping java_class="byte[]" display_name="ByteArray">
+    <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARBINARY"/>
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
+  </type-mapping>
+  
+  <type-mapping java_class="oracle.jdbc.OracleBlob" display_name="OracleBlob">
+    <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARBINARY"/>
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
+  </type-mapping>
+  
+  <type-mapping java_class="[B" display_name="ByteArrayB">
+    <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARBINARY"/>
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
+  </type-mapping>
+  
+  <!-- UUID is stored as byte array in StarRocks for efficient storage and comparison -->
+  <type-mapping java_class="java.util.UUID" display_name="UUID">
+    <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARBINARY"/>
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
+  </type-mapping>
+  
+  <!-- ClickHouse unsigned types -->
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" display_name="UnsignedByte">
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_SMALLINT"/>
+  </type-mapping>
+  
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedShort" display_name="UnsignedShort">
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_INT"/>
+  </type-mapping>
+  
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedInteger" display_name="UnsignedInteger">
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_BIGINT"/>
+  </type-mapping>
+  
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedLong" display_name="UnsignedLong">
+    <type-rule allowed_type="TYPE_LARGEINT" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  
+  <!-- Default fallback for unknown types -->
+  <type-mapping java_class="*" display_name="Default">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+</type-checkers>

@@ -32,13 +32,13 @@ public class ClusterSnapshotJobsTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("SNAPSHOT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SNAPSHOT_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("JOB_ID", IntegerType.BIGINT)
                         .column("CREATED_TIME", DateType.DATETIME)
                         .column("FINISHED_TIME", DateType.DATETIME)
-                        .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DETAIL_INFO", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("ERROR_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DETAIL_INFO", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ERROR_MESSAGE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_CLUSTER_SNAPSHOT_JOBS);
     }
 }

@@ -99,3 +99,43 @@ The reason for this issue is as follows:
 The column separator specified in the load command or statement differs from the column separator that is actually used in the source data file. In the preceding example, the CSV-formatted data file consists of three columns, which are separated with commas (`,`). However, `\t` is specified as the column separator in the load command or statement. As a result, the three columns from the source data file are incorrectly parsed into one column.
 
 Specify commas (`,`) as the column separator in the load command or statement. Then, submit the load job again.
+
+## 6. What do I do if the "current running txns on db XXX is 100, larger than limit 100" error occurs?
+
+Increase the value of the FE configuration `max_running_txn_num_per_db`.
+
+## 7. Why do I get a curl ERRORURL saying `be/storage/error_log` does not exist during data import?
+
+BE error logs are kept for 48 hours by default and are cleaned up afterward. You can adjust the retention time using `load_error_log_reserve_hours`.
+
+## 8. How do I troubleshoot the error “Tablet is in error state … prepare_segment_writer meet invalid rssid” during import?
+
+This issue is usually caused by version lag. Compare tablet versions at the partition level to check whether publish is stuck.
+Use the following SQL to compare versions:
+
+```SQL
+SELECT * FROM information_schema.be_tablets;
+SELECT * FROM information_schema.partitions_meta;
+```
+
+If only a few tablets are inconsistent, mark the lagging replicas as bad so they can be cloned from healthy ones.
+
+If it's caused by an ongoing large table update or schema change, locate the affected partition based on the error and consider deleting and reloading it.
+
+If the issue persists, try restarting FE and the problematic BE; if still ineffective, restart all BEs.
+
+## 9. Why does DELETE fail with “failed to execute delete, transaction id xxx, timeout(ms) 30000”?
+
+Increase the value of the FE configuration `load_straggler_wait_second` to 600 (Default: 300).
+
+## 10. How to handle the error “StarRocks planner use long time 3000 ms …”?
+
+The SQL may be too complex. Increase the value of the session variable `new_planner_optimize_timeout`.
+
+## 11. How to fix the error “Primary-key index exceeds the limit.”?
+
+It is because that the Primary Key index exceeded memory limits. You can enable persistent index by setting the table property `enable_persistent_index` to `true`.
+
+## 12. How to resolve “current running txns on db XXX is 100, larger than limit 100”?
+
+Increase the value of the FE configuration `max_running_txn_num_per_db`.

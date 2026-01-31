@@ -15,6 +15,7 @@
 #include "storage/index/inverted/inverted_plugin_factory.h"
 
 #include "common/statusor.h"
+#include "storage/index/inverted/builtin/builtin_plugin.h"
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 
 namespace starrocks {
@@ -22,6 +23,8 @@ StatusOr<InvertedPlugin*> InvertedPluginFactory::get_plugin(InvertedImplementTyp
     switch (imp_type) {
     case InvertedImplementType::CLUCENE:
         return &CLucenePlugin::get_instance();
+    case InvertedImplementType::BUILTIN:
+        return &BuiltinPlugin::get_instance();
     default:
         return Status::InternalError("Invalid implement of inverted type");
     }

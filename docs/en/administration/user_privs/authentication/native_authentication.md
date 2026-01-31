@@ -7,7 +7,7 @@ sidebar_position: 10
 
 Create and manage users using the native authentication within StarRocks through SQL commands.
 
-StarRocks native authentication is a password-based authentication method. In addition to that, StarRocks also supports integrating with external authentication systems such as LDAP, OpenID Connect, and OAuth 2.0. For more instructions, see [Authenticate with Security Integration](./security_integration.md).
+StarRocks native authentication is a password-based authentication method. In addition to that, StarRocks also supports integrating with external authentication systems such as LDAP. For more instructions, see [Authenticate with Security Integration](./security_integration.md).
 
 :::note
 

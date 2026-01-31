@@ -98,6 +98,9 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
     private boolean withLocalShuffle = false;
 
+    // direct set limit will introduce a limit on ExchangeNode
+    private long localLimit = -1;
+
     // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
     // 1. bucket shuffle join,
     // 2. colocate join,
@@ -110,6 +113,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
     private boolean withRuntimeFilters = false;
 
     private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats = Lists.newArrayList();
+
+    // used for Top-N optimization for aggregation
+    private SortInfo topNSortInfo;
+    private long topNLimit = -1;
 
     /**
      * Create an agg node that is not an intermediate node.
@@ -174,6 +181,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         this.usePerBucketOptimize = usePerBucketOptimize;
     }
 
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
+    }
+
     public void setGroupByMinMaxStats(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats) {
         this.groupByMinMaxStats = groupByMinMaxStats;
     }
@@ -214,6 +225,22 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         return identicallyDistributed;
     }
 
+    public void setTopNSortInfo(SortInfo topNSortInfo) {
+        this.topNSortInfo = topNSortInfo;
+    }
+
+    public SortInfo getTopNSortInfo() {
+        return topNSortInfo;
+    }
+
+    public void setTopNLimit(long topNLimit) {
+        this.topNLimit = topNLimit;
+    }
+
+    public long getTopNLimit() {
+        return topNLimit;
+    }
+
     @Override
     protected String debugString() {
         return MoreObjects.toStringHelper(this).add("aggInfo", aggInfo.debugString()).addValue(
@@ -246,6 +273,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         }
         msg.agg_node.setUse_sort_agg(useSortAgg);
         msg.agg_node.setUse_per_bucket_optimize(usePerBucketOptimize);
+        if (localLimit > 0) {
+            Preconditions.checkState(!hasLimit());
+            msg.limit = localLimit;
+        }
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
@@ -363,6 +394,9 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
         if (withLocalShuffle) {
             output.append(detailPrefix).append("withLocalShuffle: true\n");
+        }
+        if (localLimit > 0) {
+            output.append(detailPrefix).append("limit: ").append(localLimit).append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
@@ -551,6 +585,12 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             Expr groupingExpr = aggInfo.getGroupingExprs().get(0);
             pushDownUnaryInRuntimeFilter(generator, groupingExpr, descTbl, execGroupSets, 0);
         }
+        // generate topn runtime filter
+        if (sv.getEnableTopNRuntimeFilter() && topNSortInfo != null
+                && !topNSortInfo.getOrderingExprs().isEmpty()) {
+            Expr topnExpr = topNSortInfo.getOrderingExprs().get(0);
+            pushDownUnaryTopNRuntimeFilter(generator, topnExpr, descTbl, execGroupSets, 0);
+        }
         withRuntimeFilters = !buildRuntimeFilters.isEmpty();
     }
 
@@ -592,6 +632,40 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         pushDownUnaryAggInRuntimeFilter(generator, expr, descTbl, execGroupSets,
                 RuntimeFilterDescription.RuntimeFilterType.AGG_IN_FILTER, exprOrder,
                 JoinNode.DistributionMode.PARTITIONED);
+    }
+
+    private void pushDownUnaryAggTopNRuntimeFilter(IdGenerator<RuntimeFilterId> generator, Expr expr,
+                                                 DescriptorTable descTbl,
+                                                 ExecGroupSets execGroupSets,
+                                                 RuntimeFilterDescription.RuntimeFilterType type,
+                                                 int exprOrder,
+                                                 JoinNode.DistributionMode mode) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
+        rf.setFilterId(generator.getNextId().asInt());
+        rf.setBuildPlanNodeId(getId().asInt());
+        rf.setExprOrder(exprOrder);
+        rf.setJoinMode(mode);
+        rf.setBuildExpr(expr);
+        rf.setRuntimeFilterType(type);
+        rf.setOnlyLocal(true);
+        rf.setSortInfo(topNSortInfo);
+        rf.setTopN(topNLimit);
+        rf.setEqualCount(1);
+        RuntimeFilterPushDownContext rfPushDownCtx = new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+        for (PlanNode child : children) {
+            if (child.pushDownRuntimeFilters(rfPushDownCtx, expr, Lists.newArrayList())) {
+                this.buildRuntimeFilters.add(rf);
+            }
+        }
+    }
+
+    private void pushDownUnaryTopNRuntimeFilter(IdGenerator<RuntimeFilterId> generator, Expr expr,
+                                                DescriptorTable descTbl, ExecGroupSets execGroupSets,
+                                                int exprOrder) {
+        pushDownUnaryAggTopNRuntimeFilter(generator, expr, descTbl, execGroupSets,
+                RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER, exprOrder,
+                JoinNode.DistributionMode.BROADCAST);
     }
 
     @Override

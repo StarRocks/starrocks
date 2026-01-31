@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -477,8 +478,8 @@ public class BrokerLoadJobTest {
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         new MockUp<EditLog>() {
             @Mock
-            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
-
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation, WALApplier walApplier) {
+                walApplier.apply(loadJobFinalOperation);
             }
         };
 
@@ -592,7 +593,9 @@ public class BrokerLoadJobTest {
                                                       @Injectable BrokerLoadingTaskAttachment attachment2,
                                                       @Injectable LoadTask loadTask1,
                                                       @Injectable LoadTask loadTask2,
+                                                      @Mocked EditLog editLog,
                                                       @Mocked GlobalStateMgr globalStateMgr) {
+        new FakeEditLog();
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         Map<Long, LoadTask> idToTasks = Maps.newHashMap();
@@ -601,6 +604,9 @@ public class BrokerLoadJobTest {
         Deencapsulation.setField(brokerLoadJob, "idToTasks", idToTasks);
         new Expectations() {
             {
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
                 attachment1.getCounter(BrokerLoadJob.DPP_NORMAL_ALL);
                 minTimes = 0;
                 result = 10;

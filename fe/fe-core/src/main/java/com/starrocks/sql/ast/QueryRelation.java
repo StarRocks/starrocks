@@ -30,6 +30,7 @@ public abstract class QueryRelation extends Relation {
     protected List<OrderByElement> sortClause;
     protected LimitElement limit;
     private final List<CTERelation> cteRelations = new ArrayList<>();
+    private boolean hasRecursiveCTE = false;
 
     protected QueryRelation() {
         this(NodePosition.ZERO);
@@ -69,7 +70,9 @@ public abstract class QueryRelation extends Relation {
     }
 
     public void clearOrder() {
-        sortClause.clear();
+        if (sortClause != null) {
+            sortClause.clear();
+        }
     }
 
     public LimitElement getLimit() {
@@ -82,6 +85,14 @@ public abstract class QueryRelation extends Relation {
 
     public boolean hasLimit() {
         return limit != null;
+    }
+
+    public boolean isHasRecursiveCTE() {
+        return hasRecursiveCTE;
+    }
+
+    public void setHasRecursiveCTE(boolean hasRecursiveCTE) {
+        this.hasRecursiveCTE = hasRecursiveCTE;
     }
 
     public long getOffset() {

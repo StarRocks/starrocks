@@ -46,6 +46,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -62,6 +63,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
@@ -88,7 +90,7 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
@@ -193,6 +195,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected long dbId;
     @SerializedName("t")
     protected long tableId;
+    // TODO: record user identity
     // this code is used to verify be task request
     protected long authCode;
     //    protected RoutineLoadDesc routineLoadDesc; // optional
@@ -469,7 +472,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             rowDelimiter = routineLoadDesc.getRowDelimiter();
         }
         if (routineLoadDesc.getPartitionNames() != null) {
-            partitions = routineLoadDesc.getPartitionNames();
+            PartitionRef partitionRef = routineLoadDesc.getPartitionNames();
+            partitions = new PartitionNames(partitionRef.isTemp(), partitionRef.getPartitionNames(), partitionRef.getPos());
         }
     }
 
@@ -919,8 +923,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
             StreamLoadPlanner planner =
-                    new StreamLoadPlanner(db, (OlapTable) table, info);
+                    new StreamLoadPlanner(Load.createLoadConnectContext(db.getFullName()), db, (OlapTable) table, info);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
+
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
@@ -942,13 +947,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     add("label", label).
                     add("streamLoadTaskId", streamLoadTask.getId()));
 
-            // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
             if (txnState == null) {
                 throw new StarRocksException("txn does not exist: " + txnId);
             }
-            txnState.addTableIndexes(planner.getDestTable());
 
             planParams.setImport_label(txnState.getLabel());
             planParams.setDb_name(db.getFullName());
@@ -1363,7 +1366,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             return;
         }
 
-        PartitionNames partitionNames = routineLoadDesc.getPartitionNames();
+        PartitionRef partitionNames = routineLoadDesc.getPartitionNames();
         if (partitionNames == null) {
             return;
         }
@@ -1482,7 +1485,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         state = JobState.STOPPED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "RoutineLoad: name: " + name);
     }
 
     private void executeCancel(ErrorReason reason) {
@@ -1490,7 +1493,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         state = JobState.CANCELLED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "RoutineLoad: name: " + name);
     }
 
     private void clearTasks() {

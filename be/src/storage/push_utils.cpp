@@ -149,7 +149,7 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
     new_bytes.assign(num_rows * len, 0); // padding 0
 
     uint32_t from = 0;
-    const auto bytes = binary->get_bytes();
+    auto bytes = binary->get_immutable_bytes();
     for (size_t i = 0; i < num_rows; ++i) {
         uint32_t copy_data_len = std::min(len, offsets[i + 1] - offsets[i]);
         strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offsets[i], copy_data_len);
@@ -174,11 +174,11 @@ Status PushBrokerReader::_convert_chunk(const ChunkPtr& from, ChunkPtr* to) {
     size_t num_rows = from->num_rows();
     for (int i = 0; i < from->num_columns(); ++i) {
         auto from_col = from->get_column_by_index(i);
-        auto to_col = (*to)->get_column_by_index(i);
+        auto* to_col = (*to)->get_column_raw_ptr_by_index(i);
 
         const SlotDescriptor* slot_desc = _tuple_desc->slots().at(i);
         const TypeDescriptor& type_desc = slot_desc->type();
-        from_col = ColumnHelper::unfold_const_column(type_desc, num_rows, from_col);
+        from_col = ColumnHelper::unfold_const_column(type_desc, num_rows, std::move(from_col));
 
         switch (type_desc.type) {
         case TYPE_OBJECT:

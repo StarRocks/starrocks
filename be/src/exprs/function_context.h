@@ -57,7 +57,6 @@ public:
         /// concurrently on a single host if the UDF will be evaluated in multiple plan
         /// fragments on that host. In general, read-only state that doesn't need to be
         /// recomputed for every UDF call should be fragment-local.
-        /// TODO: not yet implemented
         FRAGMENT_LOCAL,
 
         /// Indicates that the function state is local to the execution thread. This state
@@ -139,7 +138,7 @@ public:
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
 
-    ColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
+    MutableColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
 
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.

@@ -1,0 +1,161 @@
+-- name: test_force_partition_hash_join @sequential
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+insert into t1 select * from t0;
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(40960, 40960 + 20000));
+-- result:
+-- !result
+admin enable failpoint 'always_use_partition_join';
+-- result:
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t1 r on l.c0 = r.c0 and l.c1 = r.c1;
+-- result:
+40961	20480.999975586532	40961	40961	40961
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join t1 r on l.c0 = r.c0 and l.c1 = r.c1;
+-- result:
+60961	30480.671904988434	60961	60961	40961
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join t1 r on l.c0 = r.c0 and l.c1 = r.c1;
+-- result:
+40961	20480.999975586532	40961	40961	40961
+-- !result
+select count(*) from (select * from t0 where c0 not in (select c0 from t1)) t;
+-- result:
+20000
+-- !result
+select count(*) from (select * from t0 where c0 not in (select c0 from t1 where t0.c1  )) t;
+-- result:
+20000
+-- !result
+insert into t1 values(null,null,null,null);
+-- result:
+-- !result
+select count(*) from (select * from t0 where c0 not in (select c0 from t1)) t;
+-- result:
+0
+-- !result
+CREATE TABLE `nullaware_anti_join_test` (
+  `k1` int(11) COMMENT "",
+  `k2` int(11)  COMMENT "",
+  `k3` int(11)
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into nullaware_anti_join_test values (1,1,1),(1,2,1),(1,3,2),(11,1,11),(11,2,1),(2,3,2),(2,3,null),(null,null,null);
+-- result:
+-- !result
+select * from nullaware_anti_join_test l1 where l1.k1 not in ( select l3.k1 from nullaware_anti_join_test l3 ) order by 1,2,3;
+-- result:
+-- !result
+select * from nullaware_anti_join_test l1 where l1.k1 in ( select l3.k1 from nullaware_anti_join_test l3 ) order by 1,2,3;
+-- result:
+1	1	1
+1	2	1
+1	3	2
+2	3	None
+2	3	2
+11	1	11
+11	2	1
+-- !result
+select * from nullaware_anti_join_test l1 where l1.k1 not in ( select l3.k1 from nullaware_anti_join_test l3 where  l3.k3 = l1.k3 ) order by 1,2,3;
+-- result:
+None	None	None
+2	3	None
+-- !result
+select * from nullaware_anti_join_test l1 where l1.k1 not in ( select l3.k1 from nullaware_anti_join_test l3 where  l3.k3 != l1.k3 ) order by 1,2,3;
+-- result:
+None	None	None
+2	3	None
+2	3	2
+-- !result
+select * from nullaware_anti_join_test l1 where not exists ( select 1 from nullaware_anti_join_test l3 where l3.k1 = l1.k1 and l3.k3 != l1.k3) order by 1,2,3;
+-- result:
+None	None	None
+2	3	None
+2	3	2
+-- !result
+CREATE TABLE `t2` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t3` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t2 values(null,null,null,null);
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+-- result:
+-- !result
+select count(*) from (select * from t2 where c0 not in (select c0 from t3 where if(t3.c0=1,t2.c1, true)  )) t;
+-- result:
+0
+-- !result
+select count(*) from (select * from t2 where c0 not in (select c0 from t3 where if(t3.c0!=2,t2.c0 is not null, true)  )) t;
+-- result:
+0
+-- !result
+admin disable failpoint 'always_use_partition_join';
+-- result:
+-- !result

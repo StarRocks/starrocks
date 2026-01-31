@@ -173,6 +173,12 @@ void PInternalService_RecoverableStub::process_dictionary_cache(
     auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
     stub()->process_dictionary_cache(controller, request, response, closure);
 }
+void PInternalService_RecoverableStub::lookup(google::protobuf::RpcController* controller,
+                                              const PLookUpRequest* request, PLookUpResponse* response,
+                                              google::protobuf::Closure* done) {
+    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
+    _stub->lookup(controller, request, response, closure);
+}
 
 void PInternalService_RecoverableStub::fetch_datacache(::google::protobuf::RpcController* controller,
                                                        const ::starrocks::PFetchDataCacheRequest* request,

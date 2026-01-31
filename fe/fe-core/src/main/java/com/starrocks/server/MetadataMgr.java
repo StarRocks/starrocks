@@ -80,6 +80,7 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -417,7 +418,11 @@ public class MetadataMgr {
 
     public void dropTable(String catalogName, String dbName, String tblName) {
         TableName tableName = new TableName(catalogName, dbName, tblName);
-        DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
+        com.starrocks.sql.ast.QualifiedName qualifiedName = com.starrocks.sql.ast.QualifiedName.of(
+                catalogName != null ? java.util.Arrays.asList(catalogName, dbName, tblName)
+                        : java.util.Arrays.asList(dbName, tblName));
+        TableRef tableRef = new TableRef(qualifiedName, null, com.starrocks.sql.parser.NodePosition.ZERO);
+        DropTableStmt dropTableStmt = new DropTableStmt(false, tableRef, false);
         dropTable(ConnectContext.get(), dropTableStmt);
     }
 

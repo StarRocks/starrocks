@@ -100,36 +100,35 @@ private:
             if (output) {
                 auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
                 if (!column->is_nullable()) {
-                    _copy_probe_column(&column, chunk, slot, to_nullable);
+                    _copy_probe_column(column, chunk, slot, to_nullable);
                 } else {
-                    _copy_probe_nullable_column(&column, chunk, slot);
+                    _copy_probe_nullable_column(column, chunk, slot);
                 }
             }
         }
     }
 
-    void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
+    void _copy_probe_column(ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
         if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
             if (to_nullable) {
-                MutableColumnPtr dest_column = NullableColumn::create((*src_column)->as_mutable_ptr(),
-                                                                      NullColumn::create(_probe_state->count));
+                auto dest_column = NullableColumn::create(src_column, NullColumn::create(_probe_state->count));
                 (*chunk)->append_column(std::move(dest_column), slot->id());
             } else {
-                (*chunk)->append_column(*src_column, slot->id());
+                (*chunk)->append_column(src_column, slot->id());
             }
         } else {
             MutableColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
-            dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+            dest_column->append_selective(*src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
             (*chunk)->append_column(std::move(dest_column), slot->id());
         }
     }
 
-    void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot) {
+    void _copy_probe_nullable_column(ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot) {
         if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
-            (*chunk)->append_column(*src_column, slot->id());
+            (*chunk)->append_column(src_column, slot->id());
         } else {
             MutableColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
-            dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+            dest_column->append_selective(*src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
             (*chunk)->append_column(std::move(dest_column), slot->id());
         }
     }
@@ -211,9 +210,9 @@ private:
     void _build_output(ChunkPtr* chunk);
     void _build_default_output(ChunkPtr* chunk, size_t count);
 
-    void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
+    void _copy_probe_column(ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
 
-    void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+    void _copy_probe_nullable_column(ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
 

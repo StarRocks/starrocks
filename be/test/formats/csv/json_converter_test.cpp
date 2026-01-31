@@ -17,7 +17,7 @@
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
+#include "io/formatted_output_stream_string.h"
 #include "runtime/types.h"
 #include "util/json.h"
 
@@ -77,14 +77,14 @@ TEST_F(JsonConverterTest, test_write_string) {
     json = JsonValue::parse(R"({"name": "name", "num": 3, "sites": [ "Google", "Runoob", "Taobao" ]})");
     json_column->append(&json.value());
 
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *json_column, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *json_column, 1, Converter::Options()).ok());
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("{\"a\": 1, \"b\": 2}{\"name\": \"name\", \"num\": 3, \"sites\": [\"Google\", \"Runoob\", \"Taobao\"]}",
               buff.as_string());
 
-    csv::OutputStreamString buff2;
+    io::FormattedOutputStreamString buff2;
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *json_column, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *json_column, 1, Converter::Options()).ok());
     ASSERT_TRUE(buff2.finalize().ok());

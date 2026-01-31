@@ -17,7 +17,9 @@
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/utils.h"
 #include "formats/utils.h"
+#include "runtime/types.h"
 #include "util/failpoint/fail_point.h"
 
 namespace starrocks::parquet {
@@ -175,12 +177,15 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
 
     int metadata_index = -1;
     int value_index = -1;
+    int typed_value_index = -1;
     for (size_t i = 0; i < variant_field->children.size(); ++i) {
         const auto& child = variant_field->children[i];
         if (child.name == "metadata") {
             metadata_index = i;
         } else if (child.name == "value") {
             value_index = i;
+        } else if (child.name == "typed_value") {
+            typed_value_index = i;
         }
     }
     if (metadata_index == -1 || value_index == -1) {
@@ -194,7 +199,20 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
             metadata_field, &(column_chunks[metadata_field->physical_column_index]), &TYPE_VARBINARY_DESC, opts);
     auto _value_reader = std::make_unique<ScalarColumnReader>(
             value_field, &(column_chunks[value_field->physical_column_index]), &TYPE_VARBINARY_DESC, opts);
-    return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader));
+
+    ColumnReaderPtr typed_value_reader = nullptr;
+    TypeDescriptor typed_value_type(TYPE_UNKNOWN);
+    if (typed_value_index != -1) {
+        const ParquetField* typed_value_field = &variant_field->children[typed_value_index];
+        typed_value_type = ParquetUtils::to_type_desc(*typed_value_field);
+        if (!typed_value_type.is_unknown_type()) {
+            ASSIGN_OR_RETURN(typed_value_reader,
+                             ColumnReaderFactory::create(opts, typed_value_field, typed_value_type));
+        }
+    }
+
+    return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
+                                                 std::move(typed_value_reader), std::move(typed_value_type));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader, const GlobalDictMap* dict,

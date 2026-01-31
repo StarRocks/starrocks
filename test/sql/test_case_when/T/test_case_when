@@ -541,3 +541,194 @@ select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 end in (2
 select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 end in (2, 3, null)) is not null order by 1,2,3,4,5;
 select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is null order by 1,2,3,4,5;
 select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is not null order by 1,2,3,4,5;
+
+CREATE TABLE `ads_opt_t_goods_odd_important_kd_di` (
+  `region` varchar(128) NOT NULL COMMENT "",
+  `handed_dept_name` int NOT NULL COMMENT "")
+ENGINE=OLAP
+DUPLICATE KEY(`region`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+SELECT *,
+       CASE
+         WHEN `handling_department_2` LIKE '%Ganzhou Transfer Yard%'
+           THEN REPLACE(`handling_department_2`, 'Ganzhou Transfer Yard', 'Ganzhou Transfer Yard Loading/Unloading Team 1')
+         WHEN `handling_department_2` LIKE '%Guangzhou Fanlong Distribution Station Loading/Unloading Team 1%'
+           THEN REPLACE(`handling_department_2`, 'Guangzhou Fanlong Distribution Station Loading/Unloading Team 1', 'Guangzhou Fanlong Distribution Station Loading/Unloading Team')
+         WHEN `handling_department_2` LIKE '%Jingzhou Transfer Yard Loading/Unloading Department%'
+           THEN REPLACE(`handling_department_2`, 'Jingzhou Transfer Yard Loading/Unloading Department', 'Jingzhou Transfer Yard Loading/Unloading Team')
+         WHEN `handling_department_2` LIKE '%Tangshan Loading/Unloading Team 1%'
+           THEN REPLACE(`handling_department_2`, 'Tangshan Loading/Unloading Team 1', 'Tangshan Loading/Unloading Team')
+         WHEN `handling_department_2` LIKE '%Zhexi Hub Center%'
+           THEN REPLACE(`handling_department_2`, 'Zhexi Hub Center', 'Hangzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Shanghai Hub Center%'
+           THEN REPLACE(`handling_department_2`, 'Shanghai Hub Center', 'Shanghai Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Shunde Hub Center%'
+           THEN REPLACE(`handling_department_2`, 'Shunde Hub Center', 'Shunde Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Sunan Hub Center%'
+           THEN REPLACE(`handling_department_2`, 'Sunan Hub Center', 'Suzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Tianjin Hub Center%'
+           THEN REPLACE(`handling_department_2`, 'Tianjin Hub Center', 'Tianjin Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Wuhan Hub Center%'
+           THEN REPLACE(`handling_department_2`, 'Wuhan Hub Center', 'Wuhan Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Northwest Hub Center%'
+           THEN REPLACE(`handling_department_2`, 'Northwest Hub Center', 'Xi\'an Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Zhengzhou Hub Center%'
+           THEN REPLACE(`handling_department_2`, 'Zhengzhou Hub Center', 'Zhengzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Changzhou Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Changzhou Transfer Center', 'Changzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Chaoshan Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Chaoshan Transfer Center', 'Chaoshan Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Fangshan Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Fangshan Transfer Center', 'Fangshan Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Fuzhou Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Fuzhou Transfer Center', 'Fuzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Guiyang Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Guiyang Transfer Center', 'Guiyang Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Harbin Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Harbin Transfer Center', 'Harbin Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Huaian Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Huaian Transfer Center', 'Huaian Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Jinhua Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Jinhua Transfer Center', 'Jinhua Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Kunming Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Kunming Transfer Center', 'Kunming Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Lanzhou Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Lanzhou Transfer Center', 'Lanzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Luohe Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Luohe Transfer Center', 'Luohe Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Nanchang Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Nanchang Transfer Center', 'Nanchang Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Nanjing Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Nanjing Transfer Center', 'Nanjing Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Nanning Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Nanning Transfer Center', 'Nanning Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Nantong Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Nantong Transfer Center', 'Nantong Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Pudong Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Pudong Transfer Center', 'Pudong Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Quanzhou Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Quanzhou Transfer Center', 'Quanzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Xiamen Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Xiamen Transfer Center', 'Xiamen Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Shenyang Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Shenyang Transfer Center', 'Shenyang Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Taiyuan Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Taiyuan Transfer Center', 'Taiyuan Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Wenzhou Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Wenzhou Transfer Center', 'Wenzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Wuhu Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Wuhu Transfer Center', 'Wuhu Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Xuzhou Shaji Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Xuzhou Shaji Transfer Center', 'Xuzhou Shaji Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Xuzhou Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Xuzhou Transfer Center', 'Xuzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Yantai Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Yantai Transfer Center', 'Yantai Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Yangzhou Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Yangzhou Transfer Center', 'Yangzhou Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Changchun Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Changchun Transfer Center', 'Changchun Transfer Yard')
+         WHEN `handling_department_2` LIKE '%Chongqing Baihe Transfer Center%'
+           THEN REPLACE(`handling_department_2`, 'Chongqing Baihe Transfer Center', 'Chongqing Baihe Transfer Yard')
+         ELSE `handling_department_2`
+       END AS `handling_department_3`
+FROM (
+    SELECT *,
+           CASE
+             WHEN `handling_department` LIKE '%Ganzhou Transfer Yard%'
+               THEN REPLACE(`handling_department`, 'Ganzhou Transfer Yard', 'Ganzhou Transfer Yard Loading/Unloading Team 1')
+             WHEN `handling_department` LIKE '%Guangzhou Fanlong Distribution Station Loading/Unloading Team 1%'
+               THEN REPLACE(`handling_department`, 'Guangzhou Fanlong Distribution Station Loading/Unloading Team 1', 'Guangzhou Fanlong Distribution Station Loading/Unloading Team')
+             WHEN `handling_department` LIKE '%Jingzhou Transfer Yard Loading/Unloading Department%'
+               THEN REPLACE(`handling_department`, 'Jingzhou Transfer Yard Loading/Unloading Department', 'Jingzhou Transfer Yard Loading/Unloading Team')
+             WHEN `handling_department` LIKE '%Tangshan Loading/Unloading Team 1%'
+               THEN REPLACE(`handling_department`, 'Tangshan Loading/Unloading Team 1', 'Tangshan Loading/Unloading Team')
+             WHEN `handling_department` LIKE '%Zhexi Hub Center%'
+               THEN REPLACE(`handling_department`, 'Zhexi Hub Center', 'Hangzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Shanghai Hub Center%'
+               THEN REPLACE(`handling_department`, 'Shanghai Hub Center', 'Shanghai Transfer Yard')
+             WHEN `handling_department` LIKE '%Shunde Hub Center%'
+               THEN REPLACE(`handling_department`, 'Shunde Hub Center', 'Shunde Transfer Yard')
+             WHEN `handling_department` LIKE '%Sunan Hub Center%'
+               THEN REPLACE(`handling_department`, 'Sunan Hub Center', 'Suzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Tianjin Hub Center%'
+               THEN REPLACE(`handling_department`, 'Tianjin Hub Center', 'Tianjin Transfer Yard')
+             WHEN `handling_department` LIKE '%Wuhan Hub Center%'
+               THEN REPLACE(`handling_department`, 'Wuhan Hub Center', 'Wuhan Transfer Yard')
+             WHEN `handling_department` LIKE '%Northwest Hub Center%'
+               THEN REPLACE(`handling_department`, 'Northwest Hub Center', 'Xi\'an Transfer Yard')
+             WHEN `handling_department` LIKE '%Zhengzhou Hub Center%'
+               THEN REPLACE(`handling_department`, 'Zhengzhou Hub Center', 'Zhengzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Changzhou Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Changzhou Transfer Center', 'Changzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Chaoshan Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Chaoshan Transfer Center', 'Chaoshan Transfer Yard')
+             WHEN `handling_department` LIKE '%Fangshan Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Fangshan Transfer Center', 'Fangshan Transfer Yard')
+             WHEN `handling_department` LIKE '%Fuzhou Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Fuzhou Transfer Center', 'Fuzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Guiyang Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Guiyang Transfer Center', 'Guiyang Transfer Yard')
+             WHEN `handling_department` LIKE '%Harbin Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Harbin Transfer Center', 'Harbin Transfer Yard')
+             WHEN `handling_department` LIKE '%Huaian Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Huaian Transfer Center', 'Huaian Transfer Yard')
+             WHEN `handling_department` LIKE '%Jinhua Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Jinhua Transfer Center', 'Jinhua Transfer Yard')
+             WHEN `handling_department` LIKE '%Kunming Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Kunming Transfer Center', 'Kunming Transfer Yard')
+             WHEN `handling_department` LIKE '%Lanzhou Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Lanzhou Transfer Center', 'Lanzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Luohe Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Luohe Transfer Center', 'Luohe Transfer Yard')
+             WHEN `handling_department` LIKE '%Nanchang Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Nanchang Transfer Center', 'Nanchang Transfer Yard')
+             WHEN `handling_department` LIKE '%Nanjing Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Nanjing Transfer Center', 'Nanjing Transfer Yard')
+             WHEN `handling_department` LIKE '%Nanning Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Nanning Transfer Center', 'Nanning Transfer Yard')
+             WHEN `handling_department` LIKE '%Nantong Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Nantong Transfer Center', 'Nantong Transfer Yard')
+             WHEN `handling_department` LIKE '%Pudong Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Pudong Transfer Center', 'Pudong Transfer Yard')
+             WHEN `handling_department` LIKE '%Quanzhou Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Quanzhou Transfer Center', 'Quanzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Xiamen Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Xiamen Transfer Center', 'Xiamen Transfer Yard')
+             WHEN `handling_department` LIKE '%Shenyang Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Shenyang Transfer Center', 'Shenyang Transfer Yard')
+             WHEN `handling_department` LIKE '%Taiyuan Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Taiyuan Transfer Center', 'Taiyuan Transfer Yard')
+             WHEN `handling_department` LIKE '%Wenzhou Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Wenzhou Transfer Center', 'Wenzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Wuhu Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Wuhu Transfer Center', 'Wuhu Transfer Yard')
+             WHEN `handling_department` LIKE '%Xuzhou Shaji Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Xuzhou Shaji Transfer Center', 'Xuzhou Shaji Transfer Yard')
+             WHEN `handling_department` LIKE '%Xuzhou Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Xuzhou Transfer Center', 'Xuzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Yantai Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Yantai Transfer Center', 'Yantai Transfer Yard')
+             WHEN `handling_department` LIKE '%Yangzhou Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Yangzhou Transfer Center', 'Yangzhou Transfer Yard')
+             WHEN `handling_department` LIKE '%Changchun Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Changchun Transfer Center', 'Changchun Transfer Yard')
+             WHEN `handling_department` LIKE '%Chongqing Baihe Transfer Center%'
+               THEN REPLACE(`handling_department`, 'Chongqing Baihe Transfer Center', 'Chongqing Baihe Transfer Yard')
+             ELSE `handling_department`
+           END AS `handling_department_2`
+    FROM (
+        SELECT CAST(`handling_department` AS STRING) AS `handling_department`
+        FROM (
+            SELECT handed_dept_name AS `handling_department`
+            FROM ads_opt_t_goods_odd_important_kd_di
+        ) dataset_table
+    ) table_1
+) table_2;

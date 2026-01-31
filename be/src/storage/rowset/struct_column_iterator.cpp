@@ -126,8 +126,8 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         struct_column = down_cast<StructColumn*>(dst);
     }
@@ -138,11 +138,11 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
-    DCHECK_EQ(struct_column->fields_column().size(), _access_iters.size());
-    auto& fields = struct_column->fields_column();
+    DCHECK_EQ(struct_column->fields_size(), _access_iters.size());
     for (int i = 0; i < _access_iters.size(); ++i) {
         auto num_to_read = *n;
-        RETURN_IF_ERROR(_access_iters[i]->next_batch(&num_to_read, fields[i].get()));
+        auto& field_column = struct_column->get_column_by_idx(i);
+        RETURN_IF_ERROR(_access_iters[i]->next_batch(&num_to_read, field_column->as_mutable_raw_ptr()));
     }
 
     _current_ordinal = _access_iters[0]->get_current_ordinal();
@@ -155,8 +155,8 @@ Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         struct_column = down_cast<StructColumn*>(dst);
     }
@@ -166,11 +166,11 @@ Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
-    DCHECK_EQ(struct_column->fields_column().size(), _access_iters.size());
+    DCHECK_EQ(struct_column->fields_size(), _access_iters.size());
     // Read all fields
-    auto& fields = struct_column->fields_column();
     for (int i = 0; i < _access_iters.size(); ++i) {
-        RETURN_IF_ERROR(_access_iters[i]->next_batch(range, fields[i].get()));
+        auto* field_column = struct_column->field_column_raw_ptr(i);
+        RETURN_IF_ERROR(_access_iters[i]->next_batch(range, field_column));
     }
 
     _current_ordinal = _access_iters[0]->get_current_ordinal();
@@ -198,19 +198,19 @@ Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t
     // 1. Read null column
     if (_null_iter != nullptr) {
         auto* nullable_column = down_cast<NullableColumn*>(values);
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
         RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
         nullable_column->update_has_null();
     } else {
         struct_column = down_cast<StructColumn*>(values);
     }
 
-    DCHECK_EQ(struct_column->fields_column().size(), _access_iters.size());
+    DCHECK_EQ(struct_column->fields_size(), _access_iters.size());
     // read all fields
-    auto& fields = struct_column->fields_column();
     for (int i = 0; i < _access_iters.size(); ++i) {
-        RETURN_IF_ERROR(_access_iters[i]->fetch_values_by_rowid(rowids, size, fields[i].get()));
+        auto* field_column = struct_column->field_column_raw_ptr(i);
+        RETURN_IF_ERROR(_access_iters[i]->fetch_values_by_rowid(rowids, size, field_column));
     }
 
     _current_ordinal = _access_iters[0]->get_current_ordinal();
@@ -259,8 +259,8 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst, ColumnAccessPath
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         struct_column = down_cast<StructColumn*>(dst);
     }
@@ -271,26 +271,28 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst, ColumnAccessPath
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
-    DCHECK_EQ(struct_column->fields_column().size(), _access_iters.size());
+    DCHECK_EQ(struct_column->fields_size(), _access_iters.size());
     // 3. Read fields
     size_t row_count = 0;
-    auto& fields = struct_column->fields_column();
     for (int i = 0; i < _access_iters.size(); ++i) {
         if (predicate_access_flags[i]) {
             auto num_to_read = *n;
-            RETURN_IF_ERROR(_access_iters[i]->next_batch(&num_to_read, fields[i].get(), predicate_child_paths[i]));
-            row_count = fields[i]->size();
+            auto& field_column = struct_column->get_column_by_idx(i);
+            RETURN_IF_ERROR(_access_iters[i]->next_batch(&num_to_read, field_column->as_mutable_raw_ptr(),
+                                                         predicate_child_paths[i]));
+            row_count = field_column->size();
             _current_ordinal = _access_iters[i]->get_current_ordinal();
         }
     }
 
     for (int i = 0; i < _access_iters.size(); ++i) {
         if (!predicate_access_flags[i]) {
-            if (!fields[i]->is_constant()) {
-                fields[i]->append_default(1);
-                fields[i] = ConstColumn::create(fields[i], 1);
+            auto& field_column = struct_column->get_column_by_idx(i);
+            if (!field_column->is_constant()) {
+                field_column->as_mutable_raw_ptr()->append_default(1);
+                field_column = ConstColumn::create(std::move(field_column), 1);
             }
-            fields[i]->resize(row_count);
+            field_column->as_mutable_raw_ptr()->resize(row_count);
         }
     }
     return Status::OK();
@@ -317,8 +319,8 @@ Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst,
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         struct_column = down_cast<StructColumn*>(dst);
     }
@@ -329,23 +331,25 @@ Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst,
     }
     // Read all fields
     size_t row_count = 0;
-    auto& fields = struct_column->fields_column();
     for (int i = 0; i < _access_iters.size(); ++i) {
         if (!predicate_access_flags[i]) {
             continue;
         }
-        RETURN_IF_ERROR(_access_iters[i]->next_batch(range, fields[i].get(), predicate_child_paths[i]));
-        row_count = fields[i]->size();
+        auto& field_column = struct_column->get_column_by_idx(i);
+        RETURN_IF_ERROR(
+                _access_iters[i]->next_batch(range, field_column->as_mutable_raw_ptr(), predicate_child_paths[i]));
+        row_count = field_column->size();
         _current_ordinal = _access_iters[i]->get_current_ordinal();
     }
 
     for (int i = 0; i < _access_iters.size(); ++i) {
         if (!predicate_access_flags[i]) {
-            if (!fields[i]->is_constant()) {
-                fields[i]->append_default(1);
-                fields[i] = ConstColumn::create(fields[i], 1);
+            auto& field_column = struct_column->get_column_by_idx(i);
+            if (!field_column->is_constant()) {
+                field_column->as_mutable_raw_ptr()->append_default(1);
+                field_column = ConstColumn::create(std::move(field_column), 1);
             }
-            fields[i]->resize(row_count);
+            field_column->as_mutable_raw_ptr()->resize(row_count);
         }
     }
     return Status::OK();
@@ -356,25 +360,25 @@ Status StructColumnIterator::fetch_subfield_by_rowid(const rowid_t* rowids, size
     // 1. null column was readed
     if (_null_iter != nullptr) {
         auto* nullable_column = down_cast<NullableColumn*>(values);
-        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
     } else {
         struct_column = down_cast<StructColumn*>(values);
     }
 
-    DCHECK_EQ(struct_column->fields_column().size(), _access_iters.size());
+    DCHECK_EQ(struct_column->fields_size(), _access_iters.size());
     // read all fields
-    auto& fields = struct_column->fields_column();
     for (int i = 0; i < _access_iters.size(); ++i) {
-        if (fields[i]->is_constant()) {
+        auto& field = struct_column->get_column_by_idx(i);
+        if (field->is_constant()) {
             // doesn't meterialized
-            fields[i] = down_cast<ConstColumn*>(fields[i].get())->data_column();
-            fields[i]->resize_uninitialized(0);
-            RETURN_IF_ERROR(_access_iters[i]->fetch_values_by_rowid(rowids, size, fields[i].get()));
+            field = down_cast<ConstColumn*>(field->as_mutable_raw_ptr())->data_column();
+            field->as_mutable_raw_ptr()->resize_uninitialized(0);
+            RETURN_IF_ERROR(_access_iters[i]->fetch_values_by_rowid(rowids, size, field->as_mutable_raw_ptr()));
         } else {
             // handle nested struct
             // structA -> structB -> e (meterialized)
             //                    -> f (un-meterialized)
-            RETURN_IF_ERROR(_access_iters[i]->fetch_subfield_by_rowid(rowids, size, fields[i].get()));
+            RETURN_IF_ERROR(_access_iters[i]->fetch_subfield_by_rowid(rowids, size, field->as_mutable_raw_ptr()));
         }
     }
     _current_ordinal = _access_iters[0]->get_current_ordinal();

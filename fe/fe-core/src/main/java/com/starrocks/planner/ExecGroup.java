@@ -61,6 +61,21 @@ public class ExecGroup {
         this.disableColocateGroup = true;
     }
 
+    // disable colocate group for all children
+    public void setDisableColocateGroupForAllChildren(PlanNode root, ExecGroupSets groups) {
+        disableColocateGroup(root);
+        for (PlanNode child : root.getChildren()) {
+            // only disable when they are the same fragment
+            if (root.getFragment() == child.getFragment()) {
+                for (ExecGroup execGroup : groups.getExecGroups()) {
+                    if (execGroup.contains(child)) {
+                        execGroup.disableColocateGroup = true;
+                    }
+                }
+            }
+        }
+    }
+
     private void clearRuntimeFilterExecGroupInfo(PlanNode root) {
         if (!nodeIds.contains(root.getId().asInt())) {
             return;

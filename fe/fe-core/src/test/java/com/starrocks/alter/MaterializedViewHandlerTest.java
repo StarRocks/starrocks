@@ -36,15 +36,15 @@ package com.starrocks.alter;
 
 import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -116,7 +116,7 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
+                olapTable.getIndexMetaIdByName(baseIndexName);
                 result = null;
             }
         };
@@ -137,7 +137,7 @@ public class MaterializedViewHandlerTest {
                                   @Injectable PhysicalPartition partition,
                                   @Injectable MaterializedIndex materializedIndex) {
         final String baseIndexName = "t1";
-        final Long baseIndexId = Long.valueOf(1);
+        final Long baseIndexMetaId = Long.valueOf(1);
         new Expectations() {
             {
                 createMaterializedViewStmt.getBaseIndexName();
@@ -146,12 +146,12 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
-                result = baseIndexId;
+                olapTable.getIndexMetaIdByName(baseIndexName);
+                result = baseIndexMetaId;
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
 
-                partition.getIndex(baseIndexId);
+                partition.getLatestIndex(baseIndexMetaId);
                 result = materializedIndex;
 
                 materializedIndex.getState();
@@ -335,15 +335,15 @@ public class MaterializedViewHandlerTest {
                 result = "table1";
                 olapTable.hasMaterializedIndex(mvName);
                 result = true;
-                olapTable.getIndexIdByName(mvName);
+                olapTable.getIndexMetaIdByName(mvName);
                 result = 1L;
-                olapTable.getSchemaHashByIndexId(1L);
+                olapTable.getSchemaHashByIndexMetaId(1L);
                 result = 1;
 
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
 
-                partition.getIndex(1L);
+                partition.getLatestIndex(1L);
                 result = materializedIndex;
             }
         };

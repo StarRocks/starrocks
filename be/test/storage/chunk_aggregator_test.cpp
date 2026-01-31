@@ -55,7 +55,7 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
 
     Columns cols({std::move(k_col), std::move(v_col)});
 
-    ChunkPtr chunk = std::make_shared<Chunk>(cols, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(std::move(cols), schema);
 
     aggregator.update_source(chunk);
     ASSERT_EQ(true, aggregator.is_do_aggregate());
@@ -73,7 +73,7 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
 
     ASSERT_EQ(1, ck->num_rows());
 
-    auto r_col = down_cast<Int32Column*>(ck->get_column_by_index(1).get());
+    auto r_col = down_cast<const Int32Column*>(ck->get_column_raw_ptr_by_index(1));
 
     ASSERT_EQ(1024, r_col->get_data()[0]);
 
@@ -105,7 +105,7 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
         }
     }
     Columns cols{std::move(v_col)};
-    ChunkPtr chunk = std::make_shared<Chunk>(cols, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(std::move(cols), schema);
 
     aggregator.update_source(chunk, &source_masks);
     ASSERT_EQ(true, aggregator.is_do_aggregate());
@@ -120,7 +120,7 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
 
     auto ck = aggregator.aggregate_result();
     ASSERT_EQ(512, ck->num_rows());
-    auto r_col = down_cast<Int32Column*>(ck->get_column_by_index(0).get());
+    auto r_col = down_cast<const Int32Column*>(ck->get_column_raw_ptr_by_index(0));
     for (size_t i = 0; i < ck->num_rows(); ++i) {
         ASSERT_EQ(2, r_col->get_data()[i]);
     }

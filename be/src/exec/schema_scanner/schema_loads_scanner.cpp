@@ -82,104 +82,104 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 26) {
                 return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.job_id);
                 break;
             }
             case 2: {
                 // label
                 Slice label = Slice(info.label);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&label);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&label);
                 break;
             }
             case 3: {
                 // profile_id
                 if (info.__isset.profile_id) {
                     Slice profile_id = Slice(info.profile_id);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&profile_id);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&profile_id);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 4: {
                 // database
                 Slice db = Slice(info.db);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&db);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&db);
                 break;
             }
             case 5: {
                 // table
                 Slice table = Slice(info.table);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&table);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&table);
                 break;
             }
             case 6: {
                 // user
                 Slice user = Slice(info.user);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&user);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&user);
                 break;
             }
             case 7: {
                 // warehouse
                 if (info.__isset.warehouse) {
                     Slice warehouse = Slice(info.warehouse);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&warehouse);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&warehouse);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 8: {
                 // state
                 Slice state = Slice(info.state);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&state);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&state);
                 break;
             }
             case 9: {
                 // progress
                 Slice progress = Slice(info.progress);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&progress);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&progress);
                 break;
             }
             case 10: {
                 // type
                 Slice type = Slice(info.type);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&type);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&type);
                 break;
             }
             case 11: {
                 // priority
                 Slice priority = Slice(info.priority);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&priority);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&priority);
                 break;
             }
             case 12: {
                 // scan_rows
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_scan_rows);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_scan_rows);
                 break;
             }
             case 13: {
                 // scan_bytes
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_scan_bytes);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_scan_bytes);
                 break;
             }
             case 14: {
                 // filtered_rows
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_filtered_rows);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_filtered_rows);
                 break;
             }
             case 15: {
                 // unselected_rows
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_unselected_rows);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_unselected_rows);
                 break;
             }
             case 16: {
                 // sink_rows
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_sink_rows);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_sink_rows);
                 break;
             }
             case 17: {
@@ -191,9 +191,9 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 if (!s.ok()) {
                     LOG(WARNING) << "parse runtime details failed. runtime details:" << runtime_details.to_string()
                                  << " error:" << s;
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 } else {
-                    fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
+                    fill_column_with_slot<TYPE_JSON>(column, (void*)&json_value_ptr);
                 }
                 break;
             }
@@ -202,11 +202,11 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.create_time) {
                     if (t.from_date_str(info.create_time.data(), info.create_time.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 19: {
@@ -214,11 +214,11 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.load_start_time) {
                     if (t.from_date_str(info.load_start_time.data(), info.load_start_time.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 20: {
@@ -226,11 +226,11 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.load_commit_time) {
                     if (t.from_date_str(info.load_commit_time.data(), info.load_commit_time.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 21: {
@@ -238,11 +238,11 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (info.__isset.load_finish_time) {
                     if (t.from_date_str(info.load_finish_time.data(), info.load_finish_time.size())) {
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                         break;
                     }
                 }
-                down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                down_cast<NullableColumn*>(column)->append_nulls(1);
                 break;
             }
             case 22: {
@@ -253,9 +253,9 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 Status s = JsonValue::parse(properties, &json_value);
                 if (!s.ok()) {
                     LOG(WARNING) << "parse properties failed. properties:" << properties.to_string() << " error:" << s;
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 } else {
-                    fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
+                    fill_column_with_slot<TYPE_JSON>(column, (void*)&json_value_ptr);
                 }
                 break;
             }
@@ -263,9 +263,9 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 // error_msg
                 if (info.__isset.error_msg) {
                     Slice error_msg = Slice(info.error_msg);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&error_msg);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&error_msg);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
@@ -273,9 +273,9 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 // tracking sql
                 if (info.__isset.tracking_sql) {
                     Slice sql = Slice(info.tracking_sql);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&sql);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&sql);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
@@ -283,15 +283,15 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 // rejected record path
                 if (info.__isset.rejected_record_path) {
                     Slice path = Slice(info.rejected_record_path);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&path);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&path);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 26: {
                 // job id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.job_id);
                 break;
             }
             default:

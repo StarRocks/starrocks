@@ -22,6 +22,7 @@ set(CACHE_FILES
   disk_space_monitor.cpp
   mem_space_monitor.cpp
   datacache.cpp
+  datacache_metrics.cpp
   datacache_utils.cpp
   data_cache_hit_rate_counter.hpp
   mem_cache/lrucache_engine.cpp

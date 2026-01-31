@@ -146,7 +146,7 @@ Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         return Status::OK();
     }
 
-    Columns decode_columns(_encode_column_cids.size());
+    MutableColumns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         ColumnPtr& encode_column = (*chunk)->get_column_by_slot_id(_encode_column_cids[i]);
         TypeDescriptor desc;

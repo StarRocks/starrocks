@@ -58,7 +58,9 @@ enum TDataSinkType {
     BLACKHOLE_TABLE_SINK,
     DICTIONARY_CACHE_SINK,
     MULTI_OLAP_TABLE_SINK,
-    SPLIT_DATA_STREAM_SINK
+    SPLIT_DATA_STREAM_SINK,
+    NOOP_SINK,
+    ICEBERG_DELETE_SINK
 }
 
 enum TResultSinkType {
@@ -189,6 +191,10 @@ struct TExportSink {
 
     // export file name prefix
     30: optional string file_name_prefix
+    // column names for CSV header row
+    31: optional list<string> column_names
+    // whether to include header row in CSV output
+    32: optional bool with_header = false
 }
 
 struct TDictionaryCacheSink {

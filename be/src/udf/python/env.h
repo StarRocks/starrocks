@@ -60,8 +60,8 @@ public:
     void terminate_and_wait() {
         lock_free_call_once(_once, [this]() {
             terminate();
-            wait();
             remove_unix_socket();
+            wait();
         });
     }
     void remove_unix_socket();
@@ -96,6 +96,11 @@ public:
 
     static std::string unix_socket(pid_t pid) {
         std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
+        return unix_socket;
+    }
+
+    static std::string unix_socket_prefix() {
+        std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_", config::local_library_dir);
         return unix_socket;
     }
 

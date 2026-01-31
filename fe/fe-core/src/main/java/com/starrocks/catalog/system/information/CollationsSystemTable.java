@@ -32,11 +32,11 @@ public class CollationsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("COLLATION_NAME", TypeFactory.createVarchar(512))
-                        .column("CHARACTER_SET_NAME", TypeFactory.createVarchar(64))
+                        .column("COLLATION_NAME", TypeFactory.createVarcharType(512))
+                        .column("CHARACTER_SET_NAME", TypeFactory.createVarcharType(64))
                         .column("ID", IntegerType.BIGINT)
-                        .column("IS_DEFAULT", TypeFactory.createVarchar(64))
-                        .column("IS_COMPILED", TypeFactory.createVarchar(64))
+                        .column("IS_DEFAULT", TypeFactory.createVarcharType(64))
+                        .column("IS_COMPILED", TypeFactory.createVarcharType(64))
                         .column("SORTLEN", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_COLLATIONS);
     }

@@ -38,12 +38,12 @@
 
 #include <boost/container/flat_set.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/variant.hpp>
 #include <cstdint>
 #include <map>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "exec/olap_utils.h"
 #include "exec/scan_node.h"
@@ -52,7 +52,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
-#include "storage/tuple.h"
+#include "storage/olap_tuple.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
 #include "util/slice.h"

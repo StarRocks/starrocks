@@ -24,6 +24,8 @@
 #include <string>
 #include <string_view>
 
+#include "common/statusor.h"
+
 // Forward declare global StringPiece and cctz::time_zone used throughout BE
 class StringPiece;
 namespace cctz {
@@ -183,6 +185,10 @@ public:
     DateValue get_date() const;
     UuidValue get_uuid() const;
     VariantMetadata metadata() const;
+
+    std::string_view value() const;
+    StatusOr<Variant> get_object_by_key(std::string_view key) const;
+    StatusOr<Variant> get_element_at_index(uint32_t index) const;
 
 private:
     VariantType _type{VariantType::null_type};

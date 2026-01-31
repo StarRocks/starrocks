@@ -60,7 +60,7 @@ public class LargeIntVariant extends Variant {
     }
 
     @Override
-    public int compareTo(Variant other) {
+    protected int compareToImpl(Variant other) {
         if (other instanceof LargeIntVariant) {
             return this.value.compareTo(((LargeIntVariant) other).value);
         } else {

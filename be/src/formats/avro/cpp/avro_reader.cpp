@@ -21,6 +21,7 @@
 #include <avrocpp/ValidSchema.hh>
 
 #include "column/adaptive_nullable_column.h"
+#include "column/chunk.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "formats/avro/cpp/avro_schema_builder.h"
 #include "formats/avro/cpp/utils.h"
@@ -186,7 +187,7 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
             continue;
         }
 
-        column_raw_ptrs[i] = down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_slot_id(desc->id()).get());
+        column_raw_ptrs[i] = down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(desc->id()));
     }
 
     try {

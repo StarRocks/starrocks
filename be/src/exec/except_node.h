@@ -16,11 +16,11 @@
 
 #include <unordered_set>
 
-#include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exec/except_hash_set.h"
+#include "exec/exec_node.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/expr_context.h"

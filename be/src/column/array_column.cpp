@@ -456,52 +456,6 @@ void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* 
     }
 }
 
-void ArrayColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    const auto offsets = _offsets->immutable_data();
-
-    uint32_t offset = offsets[idx];
-    // Should use size_t not uint32_t for compatible
-    size_t array_size = offsets[idx + 1] - offset;
-
-    *hash = HashUtil::fnv_hash(&array_size, sizeof(array_size), *hash);
-    for (size_t i = 0; i < array_size; ++i) {
-        uint32_t ele_offset = offset + static_cast<uint32_t>(i);
-        _elements->fnv_hash_at(hash, ele_offset);
-    }
-}
-
-void ArrayColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    const auto offsets = _offsets->immutable_data();
-
-    uint32_t offset = offsets[idx];
-    // Should use size_t not uint32_t for compatible
-    size_t array_size = offsets[idx + 1] - offset;
-
-    *hash = HashUtil::zlib_crc_hash(&array_size, static_cast<uint32_t>(sizeof(array_size)), *hash);
-    for (size_t i = 0; i < array_size; ++i) {
-        uint32_t ele_offset = offset + static_cast<uint32_t>(i);
-        _elements->crc32_hash_at(hash, ele_offset);
-    }
-}
-
-// TODO: fnv_hash and crc32_hash in array column may has performance problem
-// We need to make it possible in the future to provide vistor interface to iterator data
-// as much as possible
-
-void ArrayColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        fnv_hash_at(hash + i, i);
-    }
-}
-
-void ArrayColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        crc32_hash_at(hash + i, i);
-    }
-}
-
 int64_t ArrayColumn::xor_checksum(uint32_t from, uint32_t to) const {
     const auto offsets = _offsets->immutable_data();
     // The XOR of ArrayColumn
@@ -622,21 +576,30 @@ std::string ArrayColumn::debug_string() const {
     return ss.str();
 }
 
-StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> ArrayColumn::upgrade_if_overflow() {
     if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of ArrayColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_elements);
+    auto ret = upgrade_helper_func(_elements->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _elements = std::move(ret.value());
+    }
+    return ret;
 }
 
-StatusOr<ColumnPtr> ArrayColumn::downgrade() {
-    return downgrade_helper_func(&_elements);
+StatusOr<MutableColumnPtr> ArrayColumn::downgrade() {
+    auto ret = downgrade_helper_func(_elements->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _elements = std::move(ret.value());
+    }
+    return ret;
 }
 
 Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     DCHECK(type.children.size() == 1) << "Array schema does not match data's";
-    _elements = ColumnHelper::unfold_const_column(type.children[0], _elements->size(), _elements);
+    size_t col_size = _elements->size();
+    _elements = ColumnHelper::unfold_const_column(type.children[0], col_size, _elements);
     return Status::OK();
 }
 

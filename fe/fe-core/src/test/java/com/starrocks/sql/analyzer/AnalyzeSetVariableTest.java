@@ -170,6 +170,32 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
+    public void testConnectorSinkShuffleModeVariables() {
+        analyzeSuccess("set connector_sink_shuffle_mode = 'auto'");
+        analyzeSuccess("set connector_sink_shuffle_mode = 'force'");
+        analyzeSuccess("set connector_sink_shuffle_mode = 'never'");
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            com.starrocks.sql.ast.StatementBase stmt = AnalyzeTestUtil.parseSql(
+                    "set connector_sink_shuffle_mode = 'unknown'");
+            Analyzer.analyze(stmt, connectContext);
+        });
+
+        analyzeSuccess("set connector_sink_shuffle_partition_threshold = 1");
+        analyzeFail("set connector_sink_shuffle_partition_threshold = 0",
+                "connector_sink_shuffle_partition_threshold must be equal or greater than 1");
+
+        analyzeSuccess("set connector_sink_shuffle_partition_node_ratio = 0.1");
+        analyzeFail("set connector_sink_shuffle_partition_node_ratio = 0",
+                "connector_sink_shuffle_partition_node_ratio should be a positive finite number");
+        analyzeFail("set connector_sink_shuffle_partition_node_ratio = 'NaN'",
+                "connector_sink_shuffle_partition_node_ratio should be a positive finite number");
+        analyzeFail("set connector_sink_shuffle_partition_node_ratio = 'Infinity'",
+                "connector_sink_shuffle_partition_node_ratio should be a positive finite number");
+        analyzeFail("set connector_sink_shuffle_partition_node_ratio = 'abc'",
+                "failed to parse connector_sink_shuffle_partition_node_ratio");
+    }
+
+    @Test
     public void testSetNames() {
         String sql = "SET NAMES 'utf8mb4' COLLATE 'bogus'";
         analyzeSuccess(sql);

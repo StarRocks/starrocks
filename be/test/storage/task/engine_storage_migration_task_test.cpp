@@ -101,7 +101,7 @@ public:
 
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
                 cols[0]->append_datum(Datum(key));
@@ -258,7 +258,7 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -472,7 +472,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -550,7 +550,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int64_t>(i)));
             cols[1]->append_datum(Datum(static_cast<int16_t>(i + 1)));
             cols[2]->append_datum(Datum(static_cast<int32_t>(i + 2)));

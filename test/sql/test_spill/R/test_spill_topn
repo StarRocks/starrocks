@@ -1,0 +1,278 @@
+-- name: test_spill_topn
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="auto";
+-- result:
+-- !result
+set spill_operator_min_bytes=0;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(100))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE TABLE tempty (
+    k1 INT,
+    k2 VARCHAR(100))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t1 SELECT generate_series, 100000 - generate_series FROM TABLE(generate_series(1, 300000));
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 100) t;
+-- result:
+5050	201699808478
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000, 10)t;
+-- result:
+2700055	24200037139
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000)t;
+-- result:
+36450135000	579822478136512
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 1;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 100;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 1000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 10000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 100000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 10000000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 100) t;
+-- result:
+None	None
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 270000, 10)t;
+-- result:
+None	None
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 270000)t;
+-- result:
+None	None
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 1;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 100;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 1000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 10000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 100000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 10000000;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 1;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+1	2634760556
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 100;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+5050	201699808478
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 1000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+500500	2018592550316
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+50005000	21474836212664
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 100000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+5000050000	214774248501138
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+45000150000	644247848463746
+-- !result
+drop table tmp;
+-- result:
+-- !result
+select count(*), sum(rn) from (select row_number() over (partition by k1, k2) as rn from t1) tb;
+-- result:
+300000	300000
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 100) t;
+-- result:
+5050	201699808478
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000, 10)t;
+-- result:
+2700055	24200037139
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000)t;
+-- result:
+36450135000	579822478136512
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 1;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 100;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 1000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 10000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 100000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 10000000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 100) t;
+-- result:
+None	None
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 270000, 10)t;
+-- result:
+None	None
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 270000)t;
+-- result:
+None	None
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 1;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 100;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 1000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 10000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 100000;
+-- result:
+-- !result
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 10000000;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 1;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+1	2634760556
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 100;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+5050	201699808478
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 1000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+500500	2018592550316
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+50005000	21474836212664
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 100000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+5000050000	214774248501138
+-- !result
+drop table tmp;
+-- result:
+-- !result
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000000;
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from tmp;
+-- result:
+45000150000	644247848463746
+-- !result
+drop table tmp;
+-- result:
+-- !result
+select count(*), sum(rn) from (select row_number() over (partition by k1, k2) as rn from t1) tb;
+-- result:
+300000	300000
+-- !result

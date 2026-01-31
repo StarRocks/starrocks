@@ -58,7 +58,7 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                 }
             }
         } else {
-            ColumnPtr src_column = converter->create_src_column();
+            MutableColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
                 if (null_pages[i]) {
                     ret &= src_column->append_nulls(1);
@@ -67,7 +67,7 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                     ret &= (src_column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
                 }
             }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
+            RETURN_IF_ERROR(converter->convert(src_column.get(), column.get()));
         }
         break;
     }
@@ -83,7 +83,7 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                 }
             }
         } else {
-            ColumnPtr src_column = converter->create_src_column();
+            MutableColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
                 if (null_pages[i]) {
                     ret &= src_column->append_nulls(1);
@@ -92,7 +92,7 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                     ret &= (src_column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
                 }
             }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
+            RETURN_IF_ERROR(converter->convert(src_column.get(), column.get()));
         }
         break;
     }
@@ -110,7 +110,7 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                 }
             }
         } else {
-            ColumnPtr src_column = converter->create_src_column();
+            MutableColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
                 if (null_pages[i]) {
                     ret &= src_column->append_nulls(1);
@@ -119,7 +119,7 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                     ret &= src_column->append_strings(std::vector<Slice>{decode_value});
                 }
             }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
+            RETURN_IF_ERROR(converter->convert(src_column.get(), column.get()));
         }
         break;
     }

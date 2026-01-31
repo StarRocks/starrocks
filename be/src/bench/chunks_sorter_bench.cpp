@@ -221,7 +221,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         null_first.push_back(true);
         map[i] = i;
     }
-    auto chunk = std::make_shared<Chunk>(columns, map);
+    auto chunk = std::make_shared<Chunk>(std::move(columns), map);
 
     RuntimeState* runtime_state = suite._runtime_state.get();
     int64_t item_processed = 0;
@@ -336,7 +336,7 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
         null_first.push_back(true);
         map[i] = i;
     }
-    ChunkPtr base_chunk = std::make_shared<Chunk>(columns, map);
+    ChunkPtr base_chunk = std::make_shared<Chunk>(std::move(columns), map);
 
     int64_t num_rows = 0;
     for (auto _ : state) {
@@ -421,7 +421,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
         map[i] = i;
     }
     ChunkPtr chunk1 = std::make_shared<Chunk>(columns, map);
-    ChunkPtr chunk2 = std::make_shared<Chunk>(columns, map);
+    ChunkPtr chunk2 = std::make_shared<Chunk>(std::move(columns), map);
 
     int64_t num_rows = 0;
     SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
@@ -470,7 +470,7 @@ static void do_bench_materialize(benchmark::State& state, LogicalType data_type,
         columns.push_back(column);
         map[i] = i;
     }
-    auto template_chunk = std::make_shared<Chunk>(columns, map);
+    auto template_chunk = std::make_shared<Chunk>(std::move(columns), map);
 
     std::vector<ChunkPtr> chunks;
     std::vector<PermutationItem> perm;

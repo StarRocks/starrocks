@@ -14,18 +14,26 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+#include <unordered_set>
+
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/logging.h"
+#include "runtime/types.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
@@ -94,7 +102,7 @@ public:
             ASSERT_OK(writer->write(chunk1));
             ASSERT_OK(writer->finish());
 
-            auto files = writer->files();
+            const auto& files = writer->segments();
             ASSERT_EQ(3, files.size());
 
             // add rowset metadata
@@ -103,8 +111,8 @@ public:
             rowset->set_id(1);
             rowset->set_next_compaction_offset(1);
             auto* segs = rowset->mutable_segments();
-            for (auto& file : writer->files()) {
-                segs->Add(std::move(file.path));
+            for (const auto& file : writer->segments()) {
+                segs->Add()->assign(file.path);
             }
 
             writer->close();
@@ -235,7 +243,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         // generate segment y
         ASSERT_OK(writer->write(chunk0));
         ASSERT_OK(writer->finish());
-        ASSERT_EQ(2, writer->files().size());
+        ASSERT_EQ(2, writer->segments().size());
     }
 
     {
@@ -260,8 +268,8 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         std::vector<string> files_to_delete;
         collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
         EXPECT_EQ(files_to_delete.size(), 2);
-        EXPECT_TRUE(files_to_delete[0].find(writer->files()[0].path) != std::string::npos);
-        EXPECT_TRUE(files_to_delete[1].find(writer->files()[1].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[0].find(writer->segments()[0].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[1].find(writer->segments()[1].path) != std::string::npos);
     }
 
     {
@@ -283,8 +291,8 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         std::vector<string> files_to_delete;
         collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
         EXPECT_EQ(files_to_delete.size(), 2);
-        EXPECT_TRUE(files_to_delete[0].find(writer->files()[0].path) != std::string::npos);
-        EXPECT_TRUE(files_to_delete[1].find(writer->files()[1].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[0].find(writer->segments()[0].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[1].find(writer->segments()[1].path) != std::string::npos);
     }
 }
 
@@ -315,6 +323,737 @@ TEST_F(LakeRowsetTest, test_read_by_column_hash_is_congruent) {
     ASSERT_OK(rowset->read(input_schema, rs_opts));
     ASSERT_ERROR(rowset->get_each_segment_iterator(input_schema, false, &stats));
     ASSERT_ERROR(rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
+}
+
+namespace {
+
+static VariantPB make_int_variant_pb(int32_t v) {
+    VariantPB var;
+    TypeDescriptor td(TYPE_INT);
+    *var.mutable_type() = td.to_protobuf();
+    var.set_value(std::to_string(v));
+    return var;
+}
+
+static void set_tablet_range_int(TabletMetadata* tablet_meta, std::optional<int32_t> lower, bool lower_included,
+                                 std::optional<int32_t> upper, bool upper_included) {
+    auto* range = tablet_meta->mutable_range();
+    range->Clear();
+    if (lower.has_value()) {
+        auto* tuple = range->mutable_lower_bound();
+        *tuple->add_values() = make_int_variant_pb(lower.value());
+        range->set_lower_bound_included(lower_included);
+    }
+    if (upper.has_value()) {
+        auto* tuple = range->mutable_upper_bound();
+        *tuple->add_values() = make_int_variant_pb(upper.value());
+        range->set_upper_bound_included(upper_included);
+    }
+}
+
+static void set_rowset_shared_segments(RowsetMetadataPB* rowset_meta, bool shared) {
+    rowset_meta->clear_shared_segments();
+    for (int i = 0; i < rowset_meta->segments_size(); i++) {
+        rowset_meta->add_shared_segments(shared);
+    }
+}
+
+static size_t count_rows_from_iters(const std::vector<ChunkIteratorPtr>& iters, int chunk_size = 1024) {
+    size_t rows = 0;
+    for (const auto& it : iters) {
+        CHECK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        CHECK(it->init_output_schema(std::unordered_set<uint32_t>()).ok());
+        auto chunk = ChunkHelper::new_chunk(it->schema(), chunk_size);
+        while (true) {
+            chunk->reset();
+            auto st = it->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK(st.ok()) << st.to_string();
+            rows += chunk->num_rows();
+        }
+    }
+    return rows;
+}
+
+} // namespace
+
+TEST_F(LakeRowsetTest, test_tablet_range_pruning_only_for_shared_segments) {
+    create_rowsets_for_testing();
+
+    // Apply tablet range [10, 12) but do NOT mark segments as shared.
+    // Because segments are not marked as shared, tablet range should NOT take effect.
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, false);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_EQ(count_rows_from_iters(iters), 3 * (22 + 12));
+
+    // Mark all segments as shared, tablet range should prune rows.
+    set_rowset_shared_segments(rs_meta, true);
+    auto rowset2 =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    ASSIGN_OR_ABORT(auto iters2, rowset2->read(input_schema, rs_opts));
+    // Now tablet range [10, 12) should prune rows: per segment keys {10, 11}, total segments = 3.
+    ASSERT_EQ(count_rows_from_iters(iters2), 3 * 2);
+}
+
+TEST_F(LakeRowsetTest, test_tablet_range_pruning_inclusive_exclusive) {
+    create_rowsets_for_testing();
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, true);
+
+    auto make_rowset_and_count = [&](std::optional<int32_t> lower, bool lower_inc, std::optional<int32_t> upper,
+                                     bool upper_inc) -> size_t {
+        set_tablet_range_int(_tablet_metadata.get(), lower, lower_inc, upper, upper_inc);
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        RowsetReadOptions rs_opts;
+        OlapReaderStatistics stats;
+        rs_opts.stats = &stats;
+        rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+        auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+        ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+        return count_rows_from_iters(iters);
+    };
+
+    // Per segment keys include 10,11,12. Total segments = 3.
+    // With tablet range [10, 12) (closed-open), each segment contributes keys {10, 11}.
+    ASSERT_EQ(make_rowset_and_count(10, true, 12, false), 3 * 2);
+}
+
+TEST_F(LakeRowsetTest, test_tablet_range_pb_invalid_bounds) {
+    create_rowsets_for_testing();
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, true);
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+
+    // 1) Missing type.
+    {
+        auto* range = _tablet_metadata->mutable_range();
+        range->Clear();
+        auto* lb = range->mutable_lower_bound();
+        auto* v = lb->add_values();
+        v->set_value("10");
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        auto res = rowset->read(input_schema, rs_opts);
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_corruption());
+    }
+
+    // 2) Missing value.
+    {
+        auto* range = _tablet_metadata->mutable_range();
+        range->Clear();
+        auto* lb = range->mutable_lower_bound();
+        auto* v = lb->add_values();
+        TypeDescriptor td(TYPE_INT);
+        *v->mutable_type() = td.to_protobuf();
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        auto res = rowset->read(input_schema, rs_opts);
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_corruption());
+    }
+
+    // 3) Tuple size exceeds sort key size.
+    {
+        auto* range = _tablet_metadata->mutable_range();
+        range->Clear();
+        auto* lb = range->mutable_lower_bound();
+        *lb->add_values() = make_int_variant_pb(1);
+        *lb->add_values() = make_int_variant_pb(2); // sort key size is 1 in this test schema
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        auto res = rowset->read(input_schema, rs_opts);
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_corruption());
+    }
+}
+
+TEST_F(LakeRowsetTest, test_tablet_range_missing_does_not_prune) {
+    create_rowsets_for_testing();
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, true);
+    _tablet_metadata->clear_range();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_EQ(count_rows_from_iters(iters), 3 * (22 + 12));
+}
+
+TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
+    // Rebuild a tablet with two key columns so that TabletRangePB carries
+    // a multi-column range and Rowset / SegmentIterator must honor it.
+    _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    _tablet_metadata->set_id(next_id());
+    _tablet_metadata->set_version(1);
+    _tablet_metadata->mutable_schema()->set_id(next_id());
+
+    auto* schema_pb = _tablet_metadata->mutable_schema();
+    schema_pb->clear_column();
+
+    // Key columns: (c0 INT, c1 INT), plus one non-key column.
+    {
+        auto* c0 = schema_pb->add_column();
+        c0->set_unique_id(next_id());
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    {
+        auto* c1 = schema_pb->add_column();
+        c1->set_unique_id(next_id());
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(true);
+        c1->set_is_nullable(false);
+    }
+    {
+        auto* c2 = schema_pb->add_column();
+        c2->set_unique_id(next_id());
+        c2->set_name("v");
+        c2->set_type("INT");
+        c2->set_is_key(false);
+        c2->set_is_nullable(false);
+    }
+    schema_pb->set_num_short_key_columns(2);
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    auto tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto v = Int32Column::create();
+
+    // Insert a small grid of (c0, c1) pairs:
+    //   (0,0), (0,1), (0,2),
+    //   (1,0), (1,1), (1,2),
+    //   (2,0), (2,1), (2,2)
+    for (int k0 = 0; k0 < 3; ++k0) {
+        for (int k1 = 0; k1 < 3; ++k1) {
+            c0->append(k0);
+            c1->append(k1);
+            v->append(k0 * 10 + k1);
+        }
+    }
+
+    Chunk chunk({c0, c1, v}, schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    auto files = writer->segments();
+    writer->close();
+
+    // Build rowset metadata for the written segment.
+    _tablet_metadata->set_version(2);
+    auto* rowset = _tablet_metadata->add_rowsets();
+    rowset->set_overlapped(true);
+    rowset->set_id(1);
+    for (auto& file : files) {
+        rowset->add_segments(std::move(file.path));
+    }
+    set_rowset_shared_segments(rowset, true);
+
+    // Set tablet range: [ (1,1), (2,2) ) (closed-open).
+    auto* range = _tablet_metadata->mutable_range();
+    range->Clear();
+    {
+        auto* lb = range->mutable_lower_bound();
+        *lb->add_values() = make_int_variant_pb(1);
+        *lb->add_values() = make_int_variant_pb(1);
+        range->set_lower_bound_included(true);
+    }
+    {
+        auto* ub = range->mutable_upper_bound();
+        *ub->add_values() = make_int_variant_pb(2);
+        *ub->add_values() = make_int_variant_pb(2);
+        range->set_upper_bound_included(false);
+    }
+
+    auto rowset_obj =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+
+    // Read both key columns so that we can assert the effective key range.
+    auto input_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0, 1});
+    ASSIGN_OR_ABORT(auto iters, rowset_obj->read(input_schema, rs_opts));
+
+    size_t rows = 0;
+    for (const auto& it : iters) {
+        ASSERT_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        ASSERT_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
+        auto out_chunk = ChunkHelper::new_chunk(it->schema(), 16);
+        while (true) {
+            out_chunk->reset();
+            auto st = it->get_next(out_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            auto kc0 = down_cast<const Int32Column*>(out_chunk->get_column_raw_ptr_by_index(0));
+            auto kc1 = down_cast<const Int32Column*>(out_chunk->get_column_raw_ptr_by_index(1));
+            for (int i = 0; i < out_chunk->num_rows(); ++i) {
+                int v0 = kc0->get_data()[i];
+                int v1 = kc1->get_data()[i];
+                ASSERT_GE(v0, 1);
+                ASSERT_LE(v0, 2);
+                if (v0 == 1) {
+                    ASSERT_GE(v1, 1);
+                }
+                if (v0 == 2) {
+                    ASSERT_LE(v1, 2);
+                }
+            }
+            rows += out_chunk->num_rows();
+        }
+    }
+
+    // The valid pairs within [ (1,1), (2,2) ) are:
+    //   (1,1), (1,2), (2,0), (2,1) => 4 rows.
+    ASSERT_EQ(rows, 4);
+}
+
+TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
+    // Build a new tablet whose sort key column type is CHAR so that Rowset::_get_tablet_range() will
+    // take the TYPE_CHAR parsing branch.
+    auto tablet_meta = generate_simple_tablet_metadata(DUP_KEYS);
+    tablet_meta->set_id(next_id());
+    tablet_meta->set_version(1);
+    tablet_meta->mutable_schema()->set_id(next_id());
+
+    auto* schema_pb = tablet_meta->mutable_schema();
+    ASSERT_GE(schema_pb->column_size(), 1);
+    auto* c0 = schema_pb->mutable_column(0);
+    c0->set_type("CHAR");
+    c0->set_length(20);
+    c0->set_index_length(20);
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*tablet_meta));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_meta->id()));
+
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    auto tablet_schema = TabletSchema::create(tablet_meta->schema());
+    auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    auto col0 = BinaryColumn::create();
+    auto col1 = Int32Column::create();
+    std::vector<std::string> keys = {"aa", "bb", "cc", "dd"};
+    for (int i = 0; i < keys.size(); i++) {
+        col0->append(Slice(keys[i]));
+        col1->append(i);
+    }
+    Chunk chunk({std::move(col0), std::move(col1)}, schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    auto files = writer->segments();
+    writer->close();
+
+    // Build rowset metadata for the written segment.
+    tablet_meta->set_version(2);
+    auto* rowset = tablet_meta->add_rowsets();
+    rowset->set_overlapped(true);
+    rowset->set_id(1);
+    for (auto& file : files) {
+        rowset->add_segments(std::move(file.path));
+    }
+    set_rowset_shared_segments(rowset, true);
+
+    // Set tablet range: [bb, cc) (closed-open) with VariantPB type = CHAR.
+    auto* range = tablet_meta->mutable_range();
+    range->Clear();
+    {
+        auto* lb = range->mutable_lower_bound();
+        auto* v = lb->add_values();
+        TypeDescriptor td = TypeDescriptor::create_char_type(20);
+        *v->mutable_type() = td.to_protobuf();
+        v->set_value("bb");
+        range->set_lower_bound_included(true);
+    }
+    {
+        auto* ub = range->mutable_upper_bound();
+        auto* v = ub->add_values();
+        TypeDescriptor td = TypeDescriptor::create_char_type(20);
+        *v->mutable_type() = td.to_protobuf();
+        v->set_value("cc");
+        range->set_upper_bound_included(false);
+    }
+
+    auto rowset_obj =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), tablet_meta, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(tablet_meta->schema());
+    auto input_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset_obj->read(input_schema, rs_opts));
+    // Keys are {"aa","bb","cc","dd"}, with [bb, cc) we only keep "bb".
+    ASSERT_EQ(count_rows_from_iters(iters), 1);
+}
+
+TEST_F(LakeRowsetTest, test_get_each_segment_iterator_respects_tablet_range) {
+    create_rowsets_for_testing();
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, true);
+
+    // Apply tablet range [10, 12) and verify per-segment iterators see only keys in range.
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    OlapReaderStatistics stats;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator(input_schema, false /*file_data_cache*/, &stats));
+
+    // Each of the 3 segments contributes keys 10, 11.
+    ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
+}
+
+TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_tablet_range) {
+    create_rowsets_for_testing();
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, true);
+
+    // Apply tablet range [10, 12) and verify delvec-aware per-segment iterators
+    // see only keys in range.
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    OlapReaderStatistics stats;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
+
+    ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
+}
+
+// Test class for segment metadata filter and parallel load with skip_segment_idxs
+class LakeRowsetSegmentMetadataFilterTest : public TestBase {
+public:
+    LakeRowsetSegmentMetadataFilterTest() : TestBase(kTestDirectory) {
+        // Create a tablet schema with one INT sort key column
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_id(next_id());
+
+        auto* c0 = schema_pb.add_column();
+        c0->set_unique_id(next_id());
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+
+        auto* c1 = schema_pb.add_column();
+        c1->set_unique_id(next_id());
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        c1->set_aggregation("NONE");
+
+        // Set sort key column index
+        schema_pb.add_sort_key_idxes(0);
+
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_cumulative_point(0);
+        _tablet_metadata->set_next_rowset_id(1);
+        *_tablet_metadata->mutable_schema() = schema_pb;
+
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+    // Create rowsets with segment_metas for testing
+    // Creates 3 segments with sort key ranges: [0,10], [20,30], [40,50]
+    void create_rowsets_with_segment_metas() {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+
+        // Segment 0: keys [0, 10]
+        {
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            for (int i = 0; i <= 10; i++) {
+                c0->append(i);
+                c1->append(i * 2);
+            }
+            Chunk chunk({c0, c1}, _schema);
+            ASSERT_OK(writer->write(chunk));
+            ASSERT_OK(writer->finish());
+        }
+
+        // Segment 1: keys [20, 30]
+        {
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            for (int i = 20; i <= 30; i++) {
+                c0->append(i);
+                c1->append(i * 2);
+            }
+            Chunk chunk({c0, c1}, _schema);
+            ASSERT_OK(writer->write(chunk));
+            ASSERT_OK(writer->finish());
+        }
+
+        // Segment 2: keys [40, 50]
+        {
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            for (int i = 40; i <= 50; i++) {
+                c0->append(i);
+                c1->append(i * 2);
+            }
+            Chunk chunk({c0, c1}, _schema);
+            ASSERT_OK(writer->write(chunk));
+            ASSERT_OK(writer->finish());
+        }
+
+        const auto& files = writer->segments();
+        ASSERT_EQ(3, files.size());
+
+        // Build rowset metadata with segment_metas
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        rowset->set_num_rows(33); // 11 + 11 + 11
+
+        for (const auto& file : files) {
+            rowset->add_segments(file.path);
+        }
+
+        // Add segment_metas with sort_key_min/max
+        // Segment 0: [0, 10]
+        {
+            auto* seg_meta = rowset->add_segment_metas();
+            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* min_var = min_tuple->add_values();
+            TypeDescriptor td(TYPE_INT);
+            *min_var->mutable_type() = td.to_protobuf();
+            min_var->set_value("0");
+
+            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_var = max_tuple->add_values();
+            *max_var->mutable_type() = td.to_protobuf();
+            max_var->set_value("10");
+
+            seg_meta->set_num_rows(11);
+        }
+
+        // Segment 1: [20, 30]
+        {
+            auto* seg_meta = rowset->add_segment_metas();
+            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* min_var = min_tuple->add_values();
+            TypeDescriptor td(TYPE_INT);
+            *min_var->mutable_type() = td.to_protobuf();
+            min_var->set_value("20");
+
+            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_var = max_tuple->add_values();
+            *max_var->mutable_type() = td.to_protobuf();
+            max_var->set_value("30");
+
+            seg_meta->set_num_rows(11);
+        }
+
+        // Segment 2: [40, 50]
+        {
+            auto* seg_meta = rowset->add_segment_metas();
+            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* min_var = min_tuple->add_values();
+            TypeDescriptor td(TYPE_INT);
+            *min_var->mutable_type() = td.to_protobuf();
+            min_var->set_value("40");
+
+            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_var = max_tuple->add_values();
+            *max_var->mutable_type() = td.to_protobuf();
+            max_var->set_value("50");
+
+            seg_meta->set_num_rows(11);
+        }
+
+        writer->close();
+
+        _tablet_metadata->set_version(2);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_rowset_segment_metadata_filter";
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+};
+
+// Test: Segment metadata filter skips segments based on predicate
+TEST_F(LakeRowsetSegmentMetadataFilterTest, test_segment_metadata_filter_skips_segments) {
+    create_rowsets_with_segment_metas();
+
+    // Ensure metadata filter is enabled
+    ConfigResetGuard<bool> guard(&config::enable_lake_segment_metadata_filter, true);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+
+    // Create predicate: c0 = 25 (only matches segment 1 with range [20, 30])
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "25"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(pred.get()));
+    rs_opts.pred_tree_for_zone_map = PredicateTree::create(std::move(root));
+
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+
+    // Verify stats: 2 segments should be filtered (segment 0 and segment 2)
+    ASSERT_EQ(stats.segments_metadata_filtered, 2);
+    // Filtered rows = 11 (segment 0) + 11 (segment 2) = 22
+    ASSERT_EQ(stats.segment_metadata_filtered, 22);
+    // Only 1 segment should be read
+    ASSERT_EQ(stats.segments_read_count, 1);
+}
+
+// Test: Segment metadata filter disabled by config
+TEST_F(LakeRowsetSegmentMetadataFilterTest, test_segment_metadata_filter_disabled) {
+    create_rowsets_with_segment_metas();
+
+    // Disable metadata filter
+    ConfigResetGuard<bool> guard(&config::enable_lake_segment_metadata_filter, false);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+
+    // Create predicate: c0 = 25
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "25"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(pred.get()));
+    rs_opts.pred_tree_for_zone_map = PredicateTree::create(std::move(root));
+
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+
+    // No segments should be filtered when config is disabled
+    ASSERT_EQ(stats.segments_metadata_filtered, 0);
+    ASSERT_EQ(stats.segment_metadata_filtered, 0);
+    // All 3 segments should be read
+    ASSERT_EQ(stats.segments_read_count, 3);
+}
+
+// Test: load_segments with skip_segment_idxs in serial mode
+TEST_F(LakeRowsetSegmentMetadataFilterTest, test_load_segments_with_skip_segment_idxs) {
+    create_rowsets_with_segment_metas();
+
+    // Disable parallel load to test serial mode
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    std::vector<SegmentPtr> segments;
+    SegmentReadOptions seg_options;
+    seg_options.lake_io_opts.fill_data_cache = false;
+    seg_options.lake_io_opts.fill_metadata_cache = false;
+
+    // Skip segment 1
+    std::unordered_set<int> skip_segment_idxs = {1};
+
+    ASSERT_OK(rowset->load_segments(&segments, seg_options, nullptr, &skip_segment_idxs));
+
+    // Should have 3 entries (including nullptr placeholder)
+    ASSERT_EQ(segments.size(), 3);
+
+    // Segment 0 should be loaded
+    ASSERT_NE(segments[0], nullptr);
+    // Segment 1 should be skipped (nullptr)
+    ASSERT_EQ(segments[1], nullptr);
+    // Segment 2 should be loaded
+    ASSERT_NE(segments[2], nullptr);
+}
+
+// Test: load_segments with skip_segment_idxs in parallel mode with index mapping
+TEST_F(LakeRowsetSegmentMetadataFilterTest, test_load_segments_parallel_with_skip_segment_idxs) {
+    create_rowsets_with_segment_metas();
+
+    // Enable parallel load to test parallel mode with index mapping
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    std::vector<SegmentPtr> segments;
+    SegmentReadOptions seg_options;
+    seg_options.lake_io_opts.fill_data_cache = false;
+    seg_options.lake_io_opts.fill_metadata_cache = false;
+
+    // Skip segment 1
+    std::unordered_set<int> skip_segment_idxs = {1};
+
+    ASSERT_OK(rowset->load_segments(&segments, seg_options, nullptr, &skip_segment_idxs));
+
+    // Should have 3 entries with correct index mapping
+    ASSERT_EQ(segments.size(), 3);
+
+    // Segment 0 should be loaded at index 0
+    ASSERT_NE(segments[0], nullptr);
+    // Segment 1 should be skipped (nullptr) at index 1
+    ASSERT_EQ(segments[1], nullptr);
+    // Segment 2 should be loaded at index 2
+    ASSERT_NE(segments[2], nullptr);
 }
 
 } // namespace starrocks::lake

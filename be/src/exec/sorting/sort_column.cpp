@@ -401,8 +401,16 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        // TODO(SmithCruise)
-        return Status::NotSupported("Not support");
+        auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+            auto& lhs_col = _vertical_columns[lhs.chunk_index];
+            auto& rhs_col = _vertical_columns[rhs.chunk_index];
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+        };
+
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                            _build_tie, _limit, &_pruned_limit));
+        _prune_limit();
+        return Status::OK();
     }
 
     template <typename T>
@@ -501,7 +509,7 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
+        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     if (sort_descs != nullptr) {
@@ -516,8 +524,7 @@ static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column*
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        auto* mutable_col = const_cast<Column*>(column);
-        down_cast<NullableColumn*>(mutable_col)->fill_null_with_default();
+        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
     if (sort_descs != nullptr) {
@@ -659,7 +666,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& col
 
     for (auto& col : columns) {
         if (col->is_nullable() && !col->is_constant()) {
-            ColumnHelper::as_column<NullableColumn>(col)->fill_null_with_default();
+            ColumnHelper::as_raw_column<NullableColumn>(col->as_mutable_raw_ptr())->fill_null_with_default();
         }
     }
 

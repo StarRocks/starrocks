@@ -68,11 +68,11 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     // decompose array<string>
     auto array_str_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
-    NullColumnPtr nulls = nullptr;
+    NullColumn::Ptr nulls = nullptr;
     if (array_str_column->is_nullable()) {
-        nulls = down_cast<NullableColumn*>(array_str_column.get())->null_column();
+        nulls = down_cast<const NullableColumn*>(array_str_column.get())->null_column();
     }
-    auto* array_str = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(array_str_column.get()));
+    const auto* array_str = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(array_str_column.get()));
     auto offsets = array_str->offsets_column();
     auto nullable_str = array_str->elements_column(); // no null here
 

@@ -14,7 +14,6 @@
 
 plugins {
     java
-    checkstyle
 }
 
 java {
@@ -47,18 +46,4 @@ tasks.withType<Test> {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
-}
-
-// Checkstyle configuration to match Maven behavior
-checkstyle {
-    toolVersion = "10.21.1"  // puppycrawl.version from parent pom
-    configFile = rootProject.file("checkstyle.xml")
-}
-
-// Configure Checkstyle tasks to match Maven behavior
-tasks.withType<Checkstyle>().configureEach {
-    exclude("**/sql/parser/gen/**")
-    ignoreFailures = false  // Match Maven behavior: failsOnError=true
-    // Avoid circular dependency: Checkstyle should not depend on compiled classes
-    classpath = files()
 }

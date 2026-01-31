@@ -123,7 +123,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(1, j);
         }
     }
@@ -180,7 +180,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(result);
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(1, j);
         }
     }
@@ -244,7 +244,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
             }
         }
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(20, j);
         }
     }

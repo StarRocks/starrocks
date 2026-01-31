@@ -49,7 +49,9 @@ JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
           _next_range(0),
           _max_chunk_size(state->chunk_size()),
           _cur_file_reader(nullptr),
-          _cur_file_eof(true) {}
+          _cur_file_eof(true) {
+    _file_format_str = "json";
+}
 
 JsonScanner::~JsonScanner() = default;
 
@@ -222,7 +224,7 @@ void JsonScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chun
     chunk->materialized_nullable();
     for (int i = 0; i < chunk->num_columns(); i++) {
         AdaptiveNullableColumn* adaptive_column =
-                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
         chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
                                                              adaptive_column->materialized_raw_null_column()),
                                       i);
@@ -250,6 +252,7 @@ Status JsonScanner::_open_next_reader() {
         return st;
     }
     _next_range++;
+    ++_counter->num_files_read;
     return Status::OK();
 }
 
@@ -281,7 +284,7 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
-          _type_descs(std::move(std::move(type_descs))),
+          _type_descs(std::move(type_descs)),
           _op_col_index(-1),
           _range_desc(range_desc) {
     int index = 0;
@@ -302,7 +305,11 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
 Status JsonReader::open() {
     Status st = _read_and_parse_json();
     if (!st.ok()) {
-        _append_error_msg("", st.to_string());
+        // Timeout can happen when reading from a TimeBoundedStreamLoadPipe (e.g. merge-commit).
+        // It's a retryable condition and should not be written into user-facing error logs.
+        if (!st.is_time_out()) {
+            _append_error_msg("", st.to_string());
+        }
         return st;
     }
     _empty_parser = false;
@@ -544,11 +551,11 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             } else {
                 _parsed_columns[column_index] = true;
             }
-            auto& column = chunk->get_column_by_index(column_index);
+            auto* column = chunk->get_column_raw_ptr_by_index(column_index);
             simdjson::ondemand::value val = field.value();
 
             // construct column with value.
-            RETURN_IF_ERROR(_construct_column(val, column.get(), _prev_parsed_position[key_index].type,
+            RETURN_IF_ERROR(_construct_column(val, column, _prev_parsed_position[key_index].type,
                                               _prev_parsed_position[key_index].key));
 
             key_index++;
@@ -562,7 +569,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
     // append null to the column without data.
     for (int i = 0; i < chunk->num_columns(); i++) {
         if (!_parsed_columns[i]) {
-            auto& column = chunk->get_column_by_index(i);
+            auto* column = chunk->get_column_raw_ptr_by_index(i);
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
@@ -588,7 +595,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
         const char* column_name = _slot_descs[i]->col_name().c_str();
 
         // The columns in JsonReader's chunk are all in NullableColumn type;
-        auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(_slot_descs[i]->id()).get());
+        auto* column = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(_slot_descs[i]->id()));
         if (i >= jsonpath_size) {
             if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null

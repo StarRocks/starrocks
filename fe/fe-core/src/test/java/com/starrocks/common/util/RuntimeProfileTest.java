@@ -43,6 +43,7 @@ import com.google.gson.JsonObject;
 import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
+import com.starrocks.thrift.TCounterMinMaxType;
 import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
@@ -899,5 +900,204 @@ public class RuntimeProfileTest {
         Assertions.assertEquals(5, baseC3.getMinValue().get().longValue());
         Assertions.assertTrue(baseC3.getMaxValue().isPresent());
         Assertions.assertEquals(15, baseC3.getMaxValue().get().longValue());
+    }
+
+    @Test
+    public void testShouldDisplayWithThreshold() {
+        // Test that counters are displayed by default for compatibility
+        Counter zeroCounter = new Counter(TUnit.UNIT, null, 0);
+        Assertions.assertTrue(zeroCounter.shouldDisplay(), "Zero-value counter should display by default for compatibility");
+
+        Counter nonZeroCounter = new Counter(TUnit.UNIT, null, 100);
+        Assertions.assertTrue(nonZeroCounter.shouldDisplay(), "Non-zero counter should display");
+
+        // Test with display_threshold > 0 (only display if value > threshold)
+        TCounterStrategy thresholdStrategy = new TCounterStrategy();
+        thresholdStrategy.aggregate_type = TCounterAggregateType.SUM;
+        thresholdStrategy.merge_type = TCounterMergeType.MERGE_ALL;
+        thresholdStrategy.min_max_type = TCounterMinMaxType.MIN_MAX_ALL;
+        thresholdStrategy.display_threshold = 50;
+
+        Counter belowThresholdCounter = new Counter(TUnit.UNIT, thresholdStrategy, 30);
+        Assertions.assertFalse(belowThresholdCounter.shouldDisplay(), 
+                "Counter below threshold should not display");
+
+        Counter aboveThresholdCounter = new Counter(TUnit.UNIT, thresholdStrategy, 100);
+        Assertions.assertTrue(aboveThresholdCounter.shouldDisplay(), 
+                "Counter above threshold should display");
+
+        // Test with display_threshold <= 0 (always display)
+        TCounterStrategy alwaysDisplayStrategy = new TCounterStrategy();
+        alwaysDisplayStrategy.aggregate_type = TCounterAggregateType.SUM;
+        alwaysDisplayStrategy.merge_type = TCounterMergeType.MERGE_ALL;
+        alwaysDisplayStrategy.min_max_type = TCounterMinMaxType.MIN_MAX_ALL;
+        alwaysDisplayStrategy.display_threshold = -1;
+
+        Counter forceZeroCounter = new Counter(TUnit.UNIT, alwaysDisplayStrategy, 0);
+        Assertions.assertTrue(forceZeroCounter.shouldDisplay(), 
+                "Counter with negative threshold should always display");
+    }
+
+    @Test
+    public void testPrintCounterWithMinMax() {
+        // Test counter without min/max
+        Counter simpleCounter = new Counter(TUnit.UNIT, null, 100);
+        String simpleOutput = RuntimeProfile.printCounterWithMinMax(simpleCounter);
+        Assertions.assertEquals("100", simpleOutput);
+
+        // Test counter with min/max same as value
+        Counter sameMinMaxCounter = new Counter(TUnit.UNIT, null, 100);
+        sameMinMaxCounter.setMinValue(100);
+        sameMinMaxCounter.setMaxValue(100);
+        String sameMinMaxOutput = RuntimeProfile.printCounterWithMinMax(sameMinMaxCounter);
+        Assertions.assertEquals("100", sameMinMaxOutput, 
+                "Should not show min/max if they equal the value");
+
+        // Test counter with different min/max
+        Counter rangeCounter = new Counter(TUnit.UNIT, null, 100);
+        rangeCounter.setMinValue(50);
+        rangeCounter.setMaxValue(150);
+        String rangeOutput = RuntimeProfile.printCounterWithMinMax(rangeCounter);
+        Assertions.assertEquals("100 [50, 150]", rangeOutput, 
+                "Should show min/max range when different from value");
+
+        // Test with TIME_NS type
+        Counter timeCounter = new Counter(TUnit.TIME_NS, null, 1000000000L); // 1 second
+        timeCounter.setMinValue(500000000L);  // 0.5 second
+        timeCounter.setMaxValue(2000000000L); // 2 seconds
+        String timeOutput = RuntimeProfile.printCounterWithMinMax(timeCounter);
+        Assertions.assertTrue(timeOutput.contains("["), 
+                "Time counter with range should include min/max");
+    }
+
+    @Test
+    public void testPrettyPrintShowsAllCounters() {
+        RuntimeProfile profile = new RuntimeProfile("TestProfile");
+        
+        Counter zeroCounter = profile.addCounter("ZeroCounter", TUnit.UNIT, null);
+        zeroCounter.setValue(0);
+        
+        Counter nonZeroCounter = profile.addCounter("NonZeroCounter", TUnit.UNIT, null);
+        nonZeroCounter.setValue(100);
+
+        StringBuilder builder = new StringBuilder();
+        profile.prettyPrint(builder, "");
+        String output = builder.toString();
+
+        // Both counters should be displayed by default for compatibility
+        Assertions.assertTrue(output.contains("ZeroCounter"), 
+                "Zero-value counter should be included in output for compatibility");
+        Assertions.assertTrue(output.contains("NonZeroCounter"), 
+                "Non-zero counter should be included in output");
+    }
+
+    @Test
+    public void testPrettyPrintMinMaxInline() {
+        // Test that printCounterWithMinMax works correctly
+        // Note: The default prettyPrint behavior preserves __MIN_OF_/__MAX_OF_ counters
+        // for backward compatibility. printCounterWithMinMax is available for future use.
+        RuntimeProfile profile = new RuntimeProfile("TestProfile");
+        
+        Counter counter = profile.addCounter("TestCounter", TUnit.UNIT, null);
+        counter.setValue(100);
+        counter.setMinValue(50);
+        counter.setMaxValue(150);
+
+        // Test the printCounterWithMinMax utility method directly
+        String inlineOutput = RuntimeProfile.printCounterWithMinMax(counter);
+        Assertions.assertEquals("100 [50, 150]", inlineOutput,
+                "printCounterWithMinMax should format as 'value [min, max]'");
+        
+        // Default prettyPrint shows the counter value without inline min/max
+        StringBuilder builder = new StringBuilder();
+        profile.prettyPrint(builder, "");
+        String output = builder.toString();
+        Assertions.assertTrue(output.contains("TestCounter: 100"),
+                "Counter value should be shown in output");
+    }
+
+    @Test
+    public void testGetMaxCounterWorks() {
+        // This test verifies that getMaxCounter() works correctly.
+        // This is important for ANALYZE PROFILE and other tools that rely on these counters.
+        RuntimeProfile profile = new RuntimeProfile("TestProfile");
+        
+        // Add a main counter and its MIN/MAX variants (simulating merged profile)
+        Counter mainCounter = profile.addCounter("TestCounter", TUnit.UNIT, null);
+        mainCounter.setValue(100);
+        
+        Counter minCounter = profile.addCounter(
+                RuntimeProfile.MERGED_INFO_PREFIX_MIN + "TestCounter", TUnit.UNIT, null);
+        minCounter.setValue(50);
+        
+        Counter maxCounter = profile.addCounter(
+                RuntimeProfile.MERGED_INFO_PREFIX_MAX + "TestCounter", TUnit.UNIT, null);
+        maxCounter.setValue(150);
+        
+        // Verify getMaxCounter() returns the __MAX_OF_ counter
+        Counter retrievedMaxCounter = profile.getMaxCounter("TestCounter");
+        Assertions.assertNotNull(retrievedMaxCounter, 
+                "getMaxCounter should return the MAX counter");
+        Assertions.assertEquals(150, retrievedMaxCounter.getValue(),
+                "getMaxCounter should return the value from __MAX_OF_ counter");
+        
+        // Verify getCounter() still returns the main counter
+        Counter retrievedMainCounter = profile.getCounter("TestCounter");
+        Assertions.assertNotNull(retrievedMainCounter);
+        Assertions.assertEquals(100, retrievedMainCounter.getValue());
+        
+        // prettyPrint should show MIN/MAX counters (for backward compatibility)
+        StringBuilder builder = new StringBuilder();
+        profile.prettyPrint(builder, "");
+        String output = builder.toString();
+        
+        // MIN/MAX counters should be visible in text output
+        Assertions.assertTrue(output.contains("__MIN_OF_TestCounter"), 
+                "MIN counter should appear in output for compatibility");
+        Assertions.assertTrue(output.contains("__MAX_OF_TestCounter"), 
+                "MAX counter should appear in output for compatibility");
+    }
+
+    @Test
+    public void testPrettyPrintFormatVersion2() {
+        // Test that format version 2 shows inline min/max and hides __MIN_OF_/__MAX_OF_ counters
+        RuntimeProfile profile = new RuntimeProfile("TestProfile");
+        
+        // Add a main counter with embedded min/max values
+        Counter counter = profile.addCounter("TestCounter", TUnit.UNIT, null);
+        counter.setValue(100);
+        counter.setMinValue(50);
+        counter.setMaxValue(150);
+        
+        // Also add the legacy __MIN_OF_/__MAX_OF_ counters
+        Counter minCounter = profile.addCounter(
+                RuntimeProfile.MERGED_INFO_PREFIX_MIN + "TestCounter", TUnit.UNIT, null);
+        minCounter.setValue(50);
+        
+        Counter maxCounter = profile.addCounter(
+                RuntimeProfile.MERGED_INFO_PREFIX_MAX + "TestCounter", TUnit.UNIT, null);
+        maxCounter.setValue(150);
+        
+        // Test format version 1 (legacy) - shows separate MIN/MAX counters
+        StringBuilder builderV1 = new StringBuilder();
+        profile.prettyPrint(builderV1, "", 1);
+        String outputV1 = builderV1.toString();
+        Assertions.assertTrue(outputV1.contains("__MIN_OF_TestCounter"), 
+                "Format v1 should show MIN counter separately");
+        Assertions.assertTrue(outputV1.contains("__MAX_OF_TestCounter"), 
+                "Format v1 should show MAX counter separately");
+        Assertions.assertFalse(outputV1.contains("[50, 150]"),
+                "Format v1 should NOT show inline min/max");
+        
+        // Test format version 2 (compact) - shows inline min/max, hides separate counters
+        StringBuilder builderV2 = new StringBuilder();
+        profile.prettyPrint(builderV2, "", 2);
+        String outputV2 = builderV2.toString();
+        Assertions.assertFalse(outputV2.contains("__MIN_OF_TestCounter"), 
+                "Format v2 should NOT show MIN counter separately");
+        Assertions.assertFalse(outputV2.contains("__MAX_OF_TestCounter"), 
+                "Format v2 should NOT show MAX counter separately");
+        Assertions.assertTrue(outputV2.contains("TestCounter: 100 [50, 150]"),
+                "Format v2 should show inline min/max");
     }
 }

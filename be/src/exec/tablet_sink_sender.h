@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exec/range_router.h"
 #include "exec/tablet_sink_index_channel.h"
 
 namespace starrocks {
@@ -68,7 +69,9 @@ public:
     }
 
 protected:
-    Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
+    // Virtual to allow tests or derived senders (e.g. colocate sender) to intercept
+    // how chunks are dispatched to BE nodes.
+    virtual Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
     Status _write_combined_txn_log();
     void _mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool _is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }

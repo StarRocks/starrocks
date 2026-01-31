@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/column.h"
+#include "exprs/agg/aggregate.h"
 #ifdef __x86_64__
 #include <immintrin.h>
 #elif defined(__ARM_NEON) && defined(__aarch64__)
@@ -47,11 +48,22 @@ inline constexpr bool IsUnresizableWindowFunctionState<MinAggregateData<TYPE_VAR
 template <LogicalType LT>
 inline constexpr bool IsUnresizableWindowFunctionState<ApproxTopKState<LT>> = true;
 
+template <LogicalType LT, bool is_distinct, typename MyHashSet>
+inline constexpr bool IsUnresizableWindowFunctionState<ArrayAggWindowState<LT, is_distinct, MyHashSet>> = true;
+
+template <>
+inline constexpr bool IsUnresizableWindowFunctionState<ArrayAggWindowStateV2> = true;
+
 template <typename T>
 constexpr bool IsNeverNullFunctionState = false;
 
 template <LogicalType LT>
 inline constexpr bool IsNeverNullFunctionState<ApproxTopKState<LT>> = true;
+
+template <LogicalType LT, bool is_distinct, typename MyHashSet>
+inline constexpr bool IsNeverNullFunctionState<ArrayAggWindowState<LT, is_distinct, MyHashSet>> = true;
+template <>
+inline constexpr bool IsNeverNullFunctionState<ArrayAggWindowStateV2> = true;
 
 struct NullableAggregateWindowFunctionState {
     // The following two fields are only used in "update_state_removable_cumulatively"
@@ -156,7 +168,7 @@ public:
         auto* nullable_column = down_cast<NullableColumn*>(to);
         if (LIKELY(!this->data(state).is_null)) {
             nested_function->serialize_to_column(ctx, this->data(state).nested_state(),
-                                                 nullable_column->mutable_data_column());
+                                                 nullable_column->data_column_raw_ptr());
             nullable_column->null_column_data().push_back(0);
         } else {
             nullable_column->append_default();
@@ -168,7 +180,7 @@ public:
             if (to->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(to);
                 nested_function->finalize_to_column(ctx, this->data(state).nested_state(),
-                                                    nullable_column->mutable_data_column());
+                                                    nullable_column->data_column_raw_ptr());
                 nullable_column->null_column_data().push_back(0);
             } else {
                 nested_function->finalize_to_column(ctx, this->data(state).nested_state(), to);
@@ -193,24 +205,25 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if constexpr (is_result_always_nullable) {
             // For the case that input is non-nullable but output is nullable, the serialized output type
             // is non-nullable, because only the state of input needs to be serialized.
-            if (!(*dst)->is_nullable()) {
+            if (!dst->is_nullable()) {
                 DCHECK(!src[0]->is_nullable());
                 nested_function->convert_to_serialize_format(ctx, src, chunk_size, dst);
                 return;
             }
         }
 
-        DCHECK((*dst)->is_nullable());
-        auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
+        DCHECK(dst->is_nullable());
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
+        auto dst_data_column = dst_nullable_column->data_column()->as_mutable_ptr();
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
             if constexpr (IsNeverNullFunctionState<State>) {
                 dst_nullable_column->null_column_data().resize(chunk_size);
-                nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
+                nested_function->convert_to_serialize_format(ctx, src, chunk_size, dst_data_column);
             } else if (nullable_column->has_null()) {
                 dst_nullable_column->set_has_null(true);
                 const auto src_null_data = nullable_column->immutable_null_column_data();
@@ -224,10 +237,9 @@ public:
                         Columns src_data_columns(1);
                         src_data_columns[0] = nullable_column->data_column();
                         nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size,
-                                                                     &dst_nullable_column->data_column());
+                                                                     dst_data_column);
                     } else {
-                        nested_function->convert_to_serialize_format(ctx, src, chunk_size,
-                                                                     &dst_nullable_column->data_column());
+                        nested_function->convert_to_serialize_format(ctx, src, chunk_size, dst_data_column);
                     }
                 }
             } else {
@@ -235,13 +247,13 @@ public:
 
                 Columns src_data_columns(1);
                 src_data_columns[0] = nullable_column->data_column();
-                nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size,
-                                                             &dst_nullable_column->data_column());
+                nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size, dst_data_column);
             }
         } else {
             dst_nullable_column->null_column_data().resize(chunk_size);
-            nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
+            nested_function->convert_to_serialize_format(ctx, src, chunk_size, dst_data_column);
         }
+        dst_nullable_column->data_column() = std::move(dst_data_column);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -253,7 +265,7 @@ public:
         // for slice type, we need to emplace back null data
         if (IsNeverNullFunctionState<NestedState> ||
             (!this->data(state).is_null && !null_pred(this->data(state).nested_state_with_type()))) {
-            nested_function->get_values(ctx, this->data(state).nested_state(), nullable_column->mutable_data_column(),
+            nested_function->get_values(ctx, this->data(state).nested_state(), nullable_column->data_column_raw_ptr(),
                                         start, end);
             if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
                 NullData& null_data = nullable_column->null_column_data();
@@ -831,7 +843,7 @@ public:
                         is_current_frame_end_null = true;
                         this->data(state).null_count++;
                     }
-                    const Column* columns[2]{data_column, column->immutable_null_column()};
+                    const Column* columns[2]{data_column, column->null_column_raw_ptr()};
                     this->nested_function->update_state_removable_cumulatively(
                             ctx, this->data(state).mutable_nest_state(), columns, current_row_position, partition_start,
                             partition_end, rows_start_offset, rows_end_offset, is_previous_frame_start_null,
@@ -941,13 +953,13 @@ public:
 };
 
 template <typename State,
-          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+          IsAggNullPred<typename State::NestedState> AggNullPredType = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionVariadic final
-        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred> {
+        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPredType> {
 public:
-    NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function,
-                                      AggNullPred null_pred = AggNullPred())
-            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred>(
+    NullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function,
+                                      AggNullPredType null_pred = AggNullPredType())
+            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPredType>(
                       nested_function, std::move(null_pred)) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -1065,8 +1077,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
 
         // dst's null_column, initial with false.
         dst_nullable_column->null_column_data().resize(chunk_size);
@@ -1081,7 +1093,6 @@ public:
         for (const auto& i : src) {
             if (i->is_nullable()) {
                 has_nullable_column = true;
-
                 const auto* nullable_column = down_cast<const NullableColumn*>(
                         ColumnHelper::unpack_and_duplicate_const_column(i->size(), i).get());
                 data_columns.emplace_back(nullable_column->data_column());
@@ -1092,7 +1103,7 @@ public:
                     size_t null_size = SIMD::count_nonzero(src_null_data);
                     // if one column only has null element, set dst_column all null
                     if (null_size == chunk_size) {
-                        dst_nullable_column->data_column()->resize(chunk_size);
+                        dst_nullable_column->data_column_raw_ptr()->resize(chunk_size);
                         for (int j = 0; j < chunk_size; ++j) {
                             dst_null_data[j] |= 1;
                         }
@@ -1109,13 +1120,14 @@ public:
             }
         }
 
+        auto data_col = dst_nullable_column->data_column()->as_mutable_ptr();
         if (!has_nullable_column) {
-            this->nested_function->convert_to_serialize_format(ctx, src, chunk_size,
-                                                               &dst_nullable_column->data_column());
+            this->nested_function->convert_to_serialize_format(ctx, src, chunk_size, data_col);
         } else {
-            this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size,
-                                                               &dst_nullable_column->data_column());
+            this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size, data_col);
         }
+        // since data_col maybe changed, we need to get it again
+        dst_nullable_column->data_column() = std::move(data_col);
     }
 
     void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

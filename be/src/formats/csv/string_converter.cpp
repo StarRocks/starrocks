@@ -22,10 +22,10 @@
 
 namespace starrocks::csv {
 
-Status StringConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status StringConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                      const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    const auto& bytes = binary->get_bytes();
+    auto bytes = binary->get_immutable_bytes();
     const auto& offsets = binary->get_offset();
 
     Slice s(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
@@ -33,10 +33,10 @@ Status StringConverter::write_string(OutputStream* os, const Column& column, siz
     return os->write(s);
 }
 
-Status StringConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status StringConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                             const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    const auto& bytes = binary->get_bytes();
+    auto bytes = binary->get_immutable_bytes();
     const auto& offsets = binary->get_offset();
 
     Slice s(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);

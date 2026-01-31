@@ -65,7 +65,7 @@ public:
     std::string listeners(int32_t filter_id);
 
 private:
-    void publish_skew_boradcast_join_key_columns(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
+    void publish_skew_broadcast_join_key_columns(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
                                                  bool null_safe, const TypeDescriptor& type_desc);
     void static prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
                                RuntimeFilterBuildDescriptor* rf_desc);
@@ -199,7 +199,7 @@ struct RuntimeFilterWorkerEvent {
     std::vector<TNetworkAddress> transmit_addrs;
     std::vector<TRuntimeFilterDestination> destinations;
     int transmit_timeout_ms;
-    int64_t transmit_via_http_min_size = 64L * 1024 * 1024;
+    int64_t transmit_via_http_min_size;
     // For SEND_PART_RF, RECEIVE_PART_RF, and RECEIVE_TOTAL_RF.
     PTransmitRuntimeFilterParams transmit_rf_request;
 };

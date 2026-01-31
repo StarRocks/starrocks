@@ -46,6 +46,9 @@ public:
 
     Status next_batch(const SparseRange<>& range, Column* dst) override { return _parent->next_dict_codes(range, dst); }
 
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override {
+        return _parent->fetch_dict_codes_by_rowid(rowids, values);
+    }
     std::string name() const override { return "DictCodeColumnIterator"; }
 
 private:
@@ -83,6 +86,10 @@ public:
         return Status::OK();
     }
 
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override {
+        return _parent->fetch_dict_codes_by_rowid(rowids, values);
+    }
+
     Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("GlobalDictCodeColumnIterator does not support next_dict_codes");
     }
@@ -115,7 +122,7 @@ private:
     int16_t* _local_to_global;
     int32_t _dict_size;
 
-    ColumnPtr _local_dict_code_col;
+    MutableColumnPtr _local_dict_code_col;
 };
 
 } // namespace starrocks

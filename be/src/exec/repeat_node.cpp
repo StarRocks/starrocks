@@ -185,7 +185,7 @@ void RepeatNode::extend_and_update_columns(ChunkPtr* curr_chunk, ChunkPtr* chunk
         for (auto slot_id : null_slot_ids) {
             auto null_column = generate_null_column((*curr_chunk)->num_rows());
 
-            (*curr_chunk)->update_column(null_column, slot_id);
+            (*curr_chunk)->update_column(std::move(null_column), slot_id);
         }
     }
 

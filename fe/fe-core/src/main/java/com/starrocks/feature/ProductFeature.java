@@ -57,6 +57,11 @@ public class ProductFeature {
                 "privilege system with full RBAC functionalities, supporting role inheritance and default roles.",
                 "https://docs.starrocks.io/en-us/latest/administration/privilege_overview"
         ));
+        features.add(new ProductFeature(
+                "ArrowFlightSQL",
+                "high-performance columnar data transfer using Apache Arrow.",
+                "https://docs.starrocks.io/docs/unloading/arrow_flight/"
+        ));
         FEATURES = ImmutableList.copyOf(features);
     }
 

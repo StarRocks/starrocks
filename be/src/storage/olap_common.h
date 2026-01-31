@@ -277,8 +277,15 @@ struct OlapReaderStatistics {
 
     int64_t rows_del_vec_filtered = 0;
 
-    int64_t rows_gin_filtered = 0;
     int64_t gin_index_filter_ns = 0;
+    int64_t rows_gin_filtered = 0;
+    int64_t gin_prefix_filter_ns = 0;
+    int64_t gin_ngram_filter_dict_ns = 0;
+    int64_t gin_predicate_filter_dict_ns = 0;
+    int64_t gin_dict_count = 0;
+    int64_t gin_ngram_dict_count = 0;
+    int64_t gin_ngram_dict_filtered = 0;
+    int64_t gin_predicate_dict_filtered = 0;
 
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
@@ -289,6 +296,11 @@ struct OlapReaderStatistics {
     int64_t read_pk_index_ns = 0;
 
     // ------ for lake tablet ------
+    // Rows skipped by segment metadata filter (sort key range filtering).
+    int64_t segment_metadata_filtered = 0;
+    // Number of segments skipped by segment metadata filter.
+    int64_t segments_metadata_filtered = 0;
+
     int64_t pages_from_local_disk = 0;
 
     int64_t compressed_bytes_read_local_disk = 0;

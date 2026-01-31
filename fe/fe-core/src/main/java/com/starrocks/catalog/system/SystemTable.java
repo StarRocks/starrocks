@@ -282,6 +282,6 @@ public class SystemTable extends Table {
     }
 
     public static ScalarType createNameType() {
-        return TypeFactory.createVarchar(NAME_CHAR_LEN);
+        return TypeFactory.createVarcharType(NAME_CHAR_LEN);
     }
 }

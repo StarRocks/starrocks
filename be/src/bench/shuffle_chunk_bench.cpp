@@ -109,10 +109,10 @@ ColumnPtr ShuffleChunkPerf::init_dest_column(const TypeDescriptor& type) {
 ChunkPtr ShuffleChunkPerf::init_src_chunk() {
     auto chunk = std::make_unique<Chunk>();
     auto col = init_src_key_column(_types[0]);
-    chunk->append_column(col, 0);
+    chunk->append_column(std::move(col), 0);
     for (int i = 1; i < _column_count; i++) {
         col = init_src_column(_types[i]);
-        chunk->append_column(col, i);
+        chunk->append_column(std::move(col), i);
     }
     return chunk;
 }
@@ -137,7 +137,7 @@ ChunkPtr ShuffleChunkPerf::init_dest_chunk() {
     auto chunk = std::make_unique<Chunk>();
     for (int i = 0; i < _column_count; i++) {
         auto col = init_dest_column(_types[i]);
-        chunk->append_column(col, i);
+        chunk->append_column(std::move(col), i);
     }
     return chunk;
 }
@@ -311,7 +311,7 @@ public:
         auto chunk = std::make_unique<Chunk>();
         for (int i = 0; i < _column_count; i++) {
             auto col = init_dest_column(_types[i], chunk_size);
-            chunk->append_column(col, i);
+            chunk->append_column(std::move(col), i);
         }
         return chunk;
     }

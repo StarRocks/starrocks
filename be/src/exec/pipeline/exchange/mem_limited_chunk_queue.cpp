@@ -263,6 +263,11 @@ void MemLimitedChunkQueue::close_consumer(int32_t consumer_index) {
     }
 }
 
+bool MemLimitedChunkQueue::is_all_source_finished() const {
+    std::shared_lock l(_mutex);
+    return _opened_source_number == 0;
+}
+
 void MemLimitedChunkQueue::open_producer() {
     std::unique_lock l(_mutex);
     _opened_sink_number++;
@@ -518,8 +523,9 @@ Status MemLimitedChunkQueue::_load(Block* block) {
     for (auto& chunk : chunks) {
         chunk = _chunk_builder->clone_empty();
         for (auto& column : chunk->columns()) {
-            ASSIGN_OR_RETURN(read_cursor, serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false,
-                                                                               _opts.encode_level));
+            ASSIGN_OR_RETURN(read_cursor,
+                             serde::ColumnArraySerde::deserialize(read_cursor, column->as_mutable_raw_ptr(), false,
+                                                                  _opts.encode_level));
         }
     }
     {

@@ -63,7 +63,8 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
 }
 
 Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                             WritableFile* wf, uint64_t* filesz) {
+                                             WritableFile* wf, uint64_t* filesz,
+                                             PersistentIndexSstableRangePB* range_pb) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
@@ -79,6 +80,11 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();
+    if (range_pb != nullptr) {
+        auto [key_start, key_end] = builder.KeyRange();
+        range_pb->set_start_key(key_start.to_string());
+        range_pb->set_end_key(key_end.to_string());
+    }
     return Status::OK();
 }
 
@@ -88,6 +94,16 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    std::unique_ptr<RandomAccessFile> rf;
+    if (config::enable_pk_index_parallel_execution) {
+        RandomAccessFileOptions opts;
+        if (!_sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, _rf->filename()));
+    }
+    options.file = rf.get();
     // Currently, there is no need to set predicate for MultiGet of persistent index sstable. Because predicate
     // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
@@ -149,6 +165,27 @@ size_t PersistentIndexSstable::memory_usage() const {
     return (_sst != nullptr) ? _sst->memory_usage() : 0;
 }
 
+Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
+    if (_sst == nullptr) {
+        return Status::InvalidArgument("SSTable is not initialized");
+    }
+    return _sst->sample_keys(keys, sample_interval_bytes);
+}
+
+StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
+        const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
+        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RandomAccessFileOptions opts;
+    if (!sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
+    return std::move(sstable);
+}
+
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
                                                                          std::string encryption_meta)
         : _wf(std::move(wf)), _finished(false), _encryption_meta(std::move(encryption_meta)) {
@@ -194,6 +231,11 @@ FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
     file_info.size = _table_builder ? _table_builder->FileSize() : 0;
     file_info.encryption_meta = _encryption_meta;
     return file_info;
+}
+
+std::pair<Slice, Slice> PersistentIndexSstableStreamBuilder::key_range() const {
+    DCHECK(_table_builder != nullptr);
+    return _table_builder->KeyRange();
 }
 
 } // namespace starrocks::lake

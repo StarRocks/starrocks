@@ -1745,7 +1745,7 @@ TEST(ColumnPredicateTest, test_in_bitset) {
     // ---------------------------------------------
 
     {
-        std::vector<uint16_t> sel{0, 1, 2, 3, 5, 6, 7};
+        std::vector<uint16_t> sel{0, 1, 2, 3, 4, 5, 6};
         auto status_sel_size = bitset_pred->evaluate_branchless(nullable_col.get(), sel.data(), 7);
         ASSERT_TRUE(status_sel_size.ok());
         ASSERT_EQ(2, status_sel_size.value());
@@ -1753,15 +1753,15 @@ TEST(ColumnPredicateTest, test_in_bitset) {
         ASSERT_EQ("1,3", to_string(sel));
     }
     {
-        std::vector<uint16_t> sel{0, 2, 3, 5, 6, 7};
-        auto status_sel_size = bitset_pred->evaluate_branchless(nullable_col.get(), sel.data(), 6);
+        std::vector<uint16_t> sel{0, 2, 3, 5, 6};
+        auto status_sel_size = bitset_pred->evaluate_branchless(nullable_col.get(), sel.data(), 5);
         ASSERT_TRUE(status_sel_size.ok());
         ASSERT_EQ(1, status_sel_size.value());
         sel.resize(1);
         ASSERT_EQ("3", to_string(sel));
     }
     {
-        std::vector<uint16_t> sel{0, 1, 2, 3, 5, 6, 7};
+        std::vector<uint16_t> sel{0, 1, 2, 3, 4};
         auto status_sel_size = bitset_pred->evaluate_branchless(col.get(), sel.data(), 5);
         ASSERT_TRUE(status_sel_size.ok());
         ASSERT_EQ(2, status_sel_size.value());
@@ -1769,7 +1769,7 @@ TEST(ColumnPredicateTest, test_in_bitset) {
         ASSERT_EQ("1,3", to_string(sel));
     }
     {
-        std::vector<uint16_t> sel{0, 2, 3, 5, 6, 7};
+        std::vector<uint16_t> sel{0, 2, 3, 4};
         auto status_sel_size = bitset_pred->evaluate_branchless(col.get(), sel.data(), 4);
         ASSERT_TRUE(status_sel_size.ok());
         ASSERT_EQ(1, status_sel_size.value());

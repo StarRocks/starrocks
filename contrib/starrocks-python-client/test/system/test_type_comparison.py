@@ -25,7 +25,8 @@ definition and expects Alembic to generate the appropriate migration.
 """
 import logging
 
-from sqlalchemy import Column, Engine, inspect
+from sqlalchemy import Column, inspect
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base
 
 from starrocks.datatype import ARRAY, BOOLEAN, DECIMAL, INTEGER, MAP, STRING, STRUCT, TINYINT, VARCHAR

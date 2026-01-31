@@ -250,6 +250,7 @@ public:
         std::vector<uint32_t> round_hashes;
         std::vector<uint32_t> bucket_ids;
         std::vector<uint32_t> round_ids;
+        int32_t exchange_hash_function_version = 0; // 0: FNV, 1: XXH3
     };
 
     virtual RuntimeFilterSerializeType type() const { return RuntimeFilterSerializeType::NONE; }
@@ -262,10 +263,11 @@ public:
     virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                          RunningContext* ctx) const {}
     virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                         uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const {}
+                                         uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values,
+                                         RunningContext* ctx) const {}
     virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                          uint8_t* selection, uint16_t from, uint16_t to,
-                                         std::vector<uint32_t>& hash_values) const {}
+                                         std::vector<uint32_t>& hash_values, RunningContext* ctx) const {}
 
     /// Evaluate in the vectorized way.
     virtual void evaluate(const Column* input_column, RunningContext* ctx) const = 0;
@@ -373,6 +375,7 @@ struct FullScanIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash;
+    static constexpr HashFuncType XXH3_HASH = &Column::xxh3_hash;
 
     FullScanIterator(std::vector<uint32_t>& hash_values, size_t num_rows)
             : hash_values(hash_values), num_rows(num_rows) {}
@@ -414,6 +417,7 @@ struct SelectionIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint8_t*, uint16_t, uint16_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_with_selection;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_with_selection;
+    static constexpr HashFuncType XXH3_HASH = &Column::xxh3_hash_with_selection;
 
     SelectionIterator(std::vector<uint32_t>& hash_values, uint8_t* selection, uint16_t from, uint16_t to)
             : hash_values(hash_values), selection(selection), from(from), to(to) {}
@@ -443,6 +447,7 @@ struct SelectedIndexIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint16_t*, uint16_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_selective;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_selective;
+    static constexpr HashFuncType XXH3_HASH = &Column::xxh3_hash_selective;
 
     SelectedIndexIterator(std::vector<uint32_t>& hash_values, uint16_t* sel, uint16_t sel_size)
             : hash_values(hash_values), sel(sel), sel_size(sel_size) {}
@@ -470,25 +475,34 @@ struct WithModuloArg {
     template <TRuntimeFilterLayoutMode::type M>
     struct HashValueCompute {
         void operator()(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                        size_t real_num_partitions, IteratorType iterator) const {
+                        size_t real_num_partitions, IteratorType iterator,
+                        int32_t exchange_hash_function_version = 0) const {
             if constexpr (layout_is_singleton<M>) {
                 iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = 0; });
                 return;
             }
             if constexpr (layout_is_shuffle<M>) {
-                process_shuffle(layout, columns, real_num_partitions, iterator);
+                process_shuffle(layout, columns, real_num_partitions, iterator, exchange_hash_function_version);
             } else if (layout_is_bucket<M>) {
                 process_bucket(layout, columns, real_num_partitions, iterator);
             }
         }
 
         void process_shuffle(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                             size_t real_num_partitions, IteratorType& iterator) const {
+                             size_t real_num_partitions, IteratorType& iterator,
+                             int32_t exchange_hash_function_version) const {
             [[maybe_unused]] const auto num_instances = layout.num_instances();
             [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
             [[maybe_unused]] const auto num_partitions = num_instances * num_drivers_per_instance;
-            iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = HashUtil::FNV_SEED; });
-            iterator.compute_hash(columns, IteratorType::FNV_HASH);
+
+            // Select hash function based on exchange_hash_function_version
+            // 0: FNV (default for backward compatibility), 1: XXH3
+            typename IteratorType::HashFuncType hash_func =
+                    (exchange_hash_function_version == 1) ? IteratorType::XXH3_HASH : IteratorType::FNV_HASH;
+            uint32_t hash_seed = (exchange_hash_function_version == 1) ? HashUtil::XXH3_SEED_32 : HashUtil::FNV_SEED;
+
+            iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = hash_seed; });
+            iterator.compute_hash(columns, hash_func);
             iterator.for_each([&](size_t i, uint32_t& hash_value) {
                 if constexpr (layout_is_pipeline_shuffle<M>) {
                     hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
@@ -536,7 +550,8 @@ struct WithModuloArg<ModuloOp, BucketAwareFullScanIterator> {
     template <TRuntimeFilterLayoutMode::type M>
     struct HashValueCompute {
         void operator()(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                        size_t real_num_partitions, BucketAwareFullScanIterator iterator) const {
+                        size_t real_num_partitions, BucketAwareFullScanIterator iterator,
+                        int32_t exchange_hash_function_version = 0) const {
             if constexpr (layout_is_singleton<M>) {
                 iterator.for_each([&](size_t i, uint32_t& hash_value, uint32_t& bucket_id) { hash_value = 0; });
                 return;
@@ -1332,59 +1347,71 @@ public:
         // compute hash_values
         auto use_reduce = !ctx->compatibility && (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
                                                   _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
+        int32_t exchange_hash_function_version = ctx->exchange_hash_function_version;
         if (use_reduce) {
             dispatch_layout<WithModuloArg<ReduceOp, FullScanIterator>::HashValueCompute>(
-                    _global, layout, columns, _hash_partition_bf.size(), FullScanIterator(_hash_values, num_rows));
+                    _global, layout, columns, _hash_partition_bf.size(), FullScanIterator(_hash_values, num_rows),
+                    exchange_hash_function_version);
         } else {
             if (layout.bucket_properties().empty()) {
                 dispatch_layout<WithModuloArg<ModuloOp, FullScanIterator>::HashValueCompute>(
-                        _global, layout, columns, _hash_partition_bf.size(), FullScanIterator(_hash_values, num_rows));
+                        _global, layout, columns, _hash_partition_bf.size(), FullScanIterator(_hash_values, num_rows),
+                        exchange_hash_function_version);
             } else {
                 BucketAwarePartitionCtx bctx(layout.bucket_properties(), ctx->hash_values, ctx->round_hashes,
                                              ctx->bucket_ids, ctx->round_ids);
                 dispatch_layout<WithModuloArg<ModuloOp, BucketAwareFullScanIterator>::HashValueCompute>(
                         _global, layout, columns, _hash_partition_bf.size(),
-                        BucketAwareFullScanIterator(bctx, num_rows));
+                        BucketAwareFullScanIterator(bctx, num_rows), exchange_hash_function_version);
             }
         }
     }
+
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
         if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
 
         size_t num_rows = columns[0]->size();
         DCHECK_EQ(hash_values.size(), num_rows);
 
+        // For SelectedIndexIterator, default to FNV (version 0) for backward compatibility
+        // XXH3 selection/selective variants may not be implemented yet
+        int32_t exchange_hash_function_version = ctx->exchange_hash_function_version;
         auto use_reduce = (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
                            _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
         if (use_reduce) {
             dispatch_layout<WithModuloArg<ReduceOp, SelectedIndexIterator>::HashValueCompute>(
                     _global, layout, columns, _hash_partition_bf.size(),
-                    SelectedIndexIterator(hash_values, sel, sel_size));
+                    SelectedIndexIterator(hash_values, sel, sel_size), exchange_hash_function_version);
         } else {
             dispatch_layout<WithModuloArg<ModuloOp, SelectedIndexIterator>::HashValueCompute>(
                     _global, layout, columns, _hash_partition_bf.size(),
-                    SelectedIndexIterator(hash_values, sel, sel_size));
+                    SelectedIndexIterator(hash_values, sel, sel_size), exchange_hash_function_version);
         }
     }
 
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint8_t* selection, uint16_t from, uint16_t to,
-                                 std::vector<uint32_t>& hash_values) const override {
+                                 uint8_t* selection, uint16_t from, uint16_t to, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
         if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
         size_t num_rows = columns[0]->size();
         DCHECK_EQ(hash_values.size(), num_rows);
+
+        // For SelectionIterator, default to FNV (version 0) for backward compatibility
+        // XXH3 selection/selective variants may not be implemented yet
+        int32_t exchange_hash_function_version = ctx->exchange_hash_function_version;
         auto use_reduce = (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
                            _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
         if (use_reduce) {
             dispatch_layout<WithModuloArg<ReduceOp, SelectionIterator>::HashValueCompute>(
                     _global, layout, columns, _hash_partition_bf.size(),
-                    SelectionIterator(hash_values, selection, from, to));
+                    SelectionIterator(hash_values, selection, from, to), exchange_hash_function_version);
 
         } else {
             dispatch_layout<WithModuloArg<ModuloOp, SelectionIterator>::HashValueCompute>(
                     _global, layout, columns, _hash_partition_bf.size(),
-                    SelectionIterator(hash_values, selection, from, to));
+                    SelectionIterator(hash_values, selection, from, to), exchange_hash_function_version);
         }
     }
 
@@ -1941,13 +1968,14 @@ public:
         membership_filter().compute_partition_index(layout, columns, ctx);
     }
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
-        membership_filter().compute_partition_index(layout, columns, sel, sel_size, hash_values);
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
+        membership_filter().compute_partition_index(layout, columns, sel, sel_size, hash_values, ctx);
     }
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint8_t* selection, uint16_t from, uint16_t to,
-                                 std::vector<uint32_t>& hash_values) const override {
-        membership_filter().compute_partition_index(layout, columns, selection, from, to, hash_values);
+                                 uint8_t* selection, uint16_t from, uint16_t to, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
+        membership_filter().compute_partition_index(layout, columns, selection, from, to, hash_values, ctx);
     }
 
 private:

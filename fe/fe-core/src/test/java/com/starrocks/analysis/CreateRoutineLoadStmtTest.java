@@ -37,7 +37,6 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.TableName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
@@ -54,14 +53,15 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -400,9 +400,6 @@ public class CreateRoutineLoadStmtTest {
         String topicName = "topic1";
         String serverAddress = "http://127.0.0.1:8080";
         String kafkaPartitionString = "1,2,3";
-        List<String> partitionNameString = Lists.newArrayList();
-        partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
 
         // duplicate load property
@@ -441,7 +438,7 @@ public class CreateRoutineLoadStmtTest {
         String timeZone = "8:00";
         List<String> partitionNameString = Lists.newArrayList();
         partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
+        PartitionRef partitionNames = new PartitionRef(partitionNameString, false, NodePosition.ZERO);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
 
         // duplicate load property
@@ -546,7 +543,7 @@ public class CreateRoutineLoadStmtTest {
         // load property
         List<String> partitionNameString = Lists.newArrayList();
         partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
+        PartitionRef partitionNames = new PartitionRef(partitionNameString, false, NodePosition.ZERO);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
         List<ParseNode> loadPropertyList = new ArrayList<>();
         loadPropertyList.add(columnSeparator);

@@ -128,7 +128,7 @@ public class CompactionMgr implements MemoryTrackable {
         }
     }
 
-    protected void removeFromStartupActiveCompactionTransactionMap(long txnId) {
+    public void removeFromStartupActiveCompactionTransactionMap(long txnId) {
         if (remainedActiveCompactionTxnWhenStart.isEmpty()) {
             return;
         }

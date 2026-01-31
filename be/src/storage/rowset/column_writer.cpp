@@ -256,7 +256,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 class DictColumnWriter final : public ColumnWriter {
@@ -299,7 +299,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
@@ -577,7 +577,7 @@ Status ScalarColumnWriter::write_bloom_filter_index() {
 Status ScalarColumnWriter::write_inverted_index() {
 #ifndef __APPLE__
     if (_inverted_index_builder != nullptr) {
-        return _inverted_index_builder->finish();
+        return _inverted_index_builder->finish(_wfile, _opts.meta);
     }
 #endif
     return Status::OK();

@@ -30,7 +30,6 @@ import com.google.common.graph.MutableGraph;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -42,6 +41,7 @@ import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PermutationGenerator;
@@ -1266,7 +1266,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                                                    RewriteContext rewriteContext,
                                                    ColumnRewriter columnRewriter,
                                                    Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp) {
-        final MVCompensation mvCompensation = materializationContext.getMvCompensation();
+        final MVCompensation mvCompensation = materializationContext.getMvCompensation(rewriteContext.getQueryExpression());
         final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
         final MaterializedView mv = materializationContext.getMv();
         final List<ColumnRefOperator>  originalOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
@@ -1313,11 +1313,12 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 rewriteContext.getMvPredicateSplit(),
                 true);
         // check mv context again if mv can be applied for rewrite.
-        if (materializationContext.isNoRewrite()) {
+        OptExpression queryOptExpression = rewriteContext.getQueryExpression();
+        if (materializationContext.isNoRewrite(queryOptExpression)) {
             logMVRewrite(mvRewriteContext, "MV cannot be applied for rewrite");
             return null;
         }
-        MVCompensation mvCompensation = materializationContext.getMvCompensation();
+        MVCompensation mvCompensation = materializationContext.getMvCompensation(queryOptExpression);
         boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
         logMVRewrite(mvRewriteContext, "Get compensation predicates:{}, isTransparentRewrite: {}",
                 compensationPredicates, isTransparentRewrite);

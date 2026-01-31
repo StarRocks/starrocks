@@ -20,7 +20,7 @@
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
 #include "util/compression/compression_utils.h"
-#include "util/compression/stream_compression.h"
+#include "util/compression/stream_decompressor.h"
 #include "util/utf8_check.h"
 
 namespace starrocks {
@@ -329,7 +329,7 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
     int num_columns = chunk->get()->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get()->get_column_by_index(i).get();
+        _column_raw_ptrs[i] = chunk->get()->get_column_raw_ptr_by_index(i);
         _column_raw_ptrs[i]->reserve(chunk_size);
     }
 

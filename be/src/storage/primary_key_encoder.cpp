@@ -629,7 +629,7 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
         Slice s = bkeys.get_slice(offset + i);
         bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == SKIP_DECODE_FLAG);
         for (int j = 0; j < ncol; j++) {
-            auto& column = *(dest->get_column_by_index(j));
+            auto& column = *(dest->get_column_raw_ptr_by_index(j));
             if (skip_decode) {
                 column.append_default();
                 continue;
@@ -708,7 +708,7 @@ Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_
                                  std::vector<uint8_t>* value_encode_flags) {
     if (schema.num_key_fields() == 1) {
         // simple decoding, src & dest should have same type
-        dest->get_column_by_index(0)->append(keys, offset, len);
+        dest->get_column_raw_ptr_by_index(0)->append(keys, offset, len);
     } else {
         RETURN_ERROR_IF_FALSE(keys.is_binary() || keys.is_large_binary());
         if (keys.is_binary()) {

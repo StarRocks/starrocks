@@ -15,9 +15,10 @@
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from sqlalchemy import ClauseElement, Column, Table, event
+from sqlalchemy import Column, Table, event
 from sqlalchemy.schema import MetaData
 from sqlalchemy.sql.selectable import Selectable
+from sqlalchemy.sql.expression import ClauseElement
 
 from starrocks.common.params import DialectName, TableInfoKey, TableInfoKeyWithPrefix, TableKind, TableObjectInfoKey
 from starrocks.datatype import STRING

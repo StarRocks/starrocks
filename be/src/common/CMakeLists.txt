@@ -17,10 +17,9 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 ADD_BE_LIB(Common
   daemon.cpp
   greplog.cpp
-  status.cpp
-  statusor.cpp
   logconfig.cpp
   configbase.cpp
+  config.cpp
   s3_uri.cpp
   tracer.cpp
   process_exit.cpp

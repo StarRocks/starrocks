@@ -32,18 +32,19 @@ public class BatchDropInfo implements Writable {
     private long dbId;
     @SerializedName(value = "tableId")
     private long tableId;
+    // not change the SerializedName for compatibility
     @SerializedName(value = "indexIdSet")
-    private Set<Long> indexIdSet;
+    private Set<Long> indexMetaIdSet;
 
-    public BatchDropInfo(long dbId, long tableId, Set<Long> indexIdSet) {
+    public BatchDropInfo(long dbId, long tableId, Set<Long> indexMetaIdSet) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.indexIdSet = indexIdSet;
+        this.indexMetaIdSet = indexMetaIdSet;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(dbId, tableId, indexIdSet);
+        return Objects.hash(dbId, tableId, indexMetaIdSet);
     }
 
     public boolean equals(Object other) {
@@ -55,11 +56,11 @@ public class BatchDropInfo implements Writable {
         }
         BatchDropInfo otherBatchDropInfo = (BatchDropInfo) other;
         return this.dbId == otherBatchDropInfo.dbId && this.tableId == otherBatchDropInfo.tableId
-                && this.indexIdSet.equals(otherBatchDropInfo.indexIdSet);
+                && this.indexMetaIdSet.equals(otherBatchDropInfo.indexMetaIdSet);
     }
 
-    public Set<Long> getIndexIdSet() {
-        return indexIdSet;
+    public Set<Long> getIndexMetaIdSet() {
+        return indexMetaIdSet;
     }
 
     public long getDbId() {

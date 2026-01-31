@@ -105,7 +105,7 @@ select * from agg_test;
 drop table agg_test;
 drop database sort_key_test_agg;
 
--- name: test_sort_key_agg_tbl_duplicate_row
+-- name: test_sort_key_agg_tbl_duplicate_row @native
 create database test_sort_key_agg_tbl_duplicate_row;
 use test_sort_key_agg_tbl_duplicate_row;
 
@@ -136,7 +136,7 @@ function: manual_compact("test_sort_key_agg_tbl_duplicate_row", "agg_test")
 select * from agg_test;
 
 
--- name: test_sort_key_agg_tbl_with_rollup;
+-- name: test_sort_key_agg_tbl_with_rollup; @native
 
 create database sort_key_test_agg_with_rollup;
 use sort_key_test_agg_with_rollup;

@@ -166,7 +166,7 @@ public class SPMAst2SQLBuilder {
                     return "?";
                 }
                 List<String> children = node.getChildren().stream().map(this::visit).toList();
-                return SPMFunctions.toSQL(node.getFnName().getFunction(), children);
+                return SPMFunctions.toSQL(node.getFunctionName(), children);
             }
             return super.visitFunctionCall(node, context);
         }

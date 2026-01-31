@@ -30,7 +30,7 @@ BE をインストールすると、システムは起動エラーを報告し�
 
 ## ERROR 1064 (HY000): Could not initialize class com.starrocks.rpc.BackendServiceProxy というエラーが発生した場合はどうすればよいですか？
 
-このエラーは、Java Runtime Environment (JRE) でプログラムを実行するときに発生します。この問題を解決するには、JRE を Java Development Kit (JDK) に置き換えてください。Oracle の JDK 1.8 以降を使用することをお勧めします。
+このエラーは、Java Runtime Environment (JRE) でプログラムを実行するときに発生します。この問題を解決するには、JRE を Java Development Kit (JDK) に置き換えてください。Oracle の JDK 17 以降を使用することをお勧めします。
 
 ## FE と BE の設定項目を変更して、クラスタを再起動せずに有効にすることはできますか？
 
@@ -111,3 +111,44 @@ OpenSSH Daemon (sshd) が有効になっているか確認してください。�
 ## FE が実行中でログに `transfer: follower` と表示されるときに Alive が `false` になるのはなぜですか？
 
 この問題は、Java Virtual Machine (JVM) のメモリの半分以上が使用され、チェックポイントがマークされていない場合に発生します。通常、システムが 50,000 件のログを蓄積した後にチェックポイントがマークされます。各 FE の JVM パラメータを変更し、これらの FEs が重くロードされていないときに再起動することをお勧めします。
+
+クエリエラー: "could not initialize class com.starrocks.rpc.BackendServiceProxy"。この問題を解決するにはどうすればよいですか？
+
+- 環境変数 `$JAVA_HOME` が正しい JDK パスを指していることを確認してください。
+- すべてのノードが同一のJDKバージョンを使用していることを確認してください。すべてのノードは同一のJDKバージョンを使用する必要があります。
+
+## StarRocks をインストールするための MySQL バージョン要件は何ですか？
+
+StarRocks に接続するには MySQL 5.7 以降を推奨します。
+
+## FE と BE を同じマシンにデプロイした場合、どのように分離できますか？
+
+最初に BE ノードをスケールアウトすることをお勧めします。クラスタのバランスが完了した後、元の BE ノードをスケールインできます。
+
+## FE が「Replica exceeds max permissible delta:5000ms」というエラーで起動に失敗した場合はどうすればよいですか？
+
+FE ノード間のクロックが同期されていません。FE ノード間の時間差は5秒未満である必要があります。
+
+## 本番環境に5台の物理マシンがある場合、推奨される StarRocks のデプロイメントは何ですか？
+
+推奨されるデプロイメントは、3つの FE ノードと5つの BE ノードです。
+
+## StarRocks をインストールする際に root ユーザーを使用すべきですか？
+
+root ユーザーは権限が過剰であるため、使用することは推奨されません。StarRocks をインストールするための専用ユーザーを作成してください。
+
+## MySQL クライアントを任意のマシンにインストールできますか？
+
+はい。これは単なるクライアントツールであり、StarRocks と同じマシンで実行する必要はありません。MySQL クライアントがクラスタにアクセスできることを確認してください。
+
+## BE ノード上の tablet の数に制限はありますか？たとえば、64 GB RAM と 16 コアのサーバーの場合、tablet 数の合理的な範囲はどのくらいですか？
+
+tablet 数に厳密な制限はありません。ただし、tablet サイズについては、各 tablet を約 1 GB に保つことをお勧めします。適切なパーティショニングとバケッティング戦略がクエリパフォーマンスを向上させます。tablet サイズの計画は重要です。
+
+## BE を起動すると「error while loading shared libraries: libjvm.so: cannot open shared object file: No such file or directory」というエラーが表示され、手動で `lib/starrocks_be` ディレクトリを作成すると、許可が拒否されるエラーが発生します。どうすればよいですか？
+
+JDK のインストールに問題があります。JDK 環境を再インストールして適切に構成してください。
+
+## StarRocks は AMD AVX2 での実行をサポートしていますか？Intel と AMD サーバーを混在させると問題が発生しますか？
+
+StarRocks は AMD で実行できます。Intel と AMD サーバーを混在させることは推奨されません。ハードウェアの異質性が問題を引き起こす可能性があるためです。AMD への移行前に StarRocks を十分にテストすることをお勧めします。

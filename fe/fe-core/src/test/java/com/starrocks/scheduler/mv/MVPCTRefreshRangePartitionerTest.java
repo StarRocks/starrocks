@@ -50,6 +50,7 @@ public class MVPCTRefreshRangePartitionerTest {
         when(mv.isPartitionedTable()).thenReturn(true);
 
         OlapTable refTable1 = Mockito.mock(OlapTable.class);
+        Mockito.when(refTable1.isNativeTableOrMaterializedView()).thenReturn(true);
         PCellWithName pCellWithName1 = PCellWithName.of("partition1", new PCellNone());
         PCellWithName pCellWithName2 = PCellWithName.of("partition2", new PCellNone());
         PCellSortedSet refTablePartition1 = PCellSortedSet.of(Set.of(pCellWithName1, pCellWithName2));

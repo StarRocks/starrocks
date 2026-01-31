@@ -91,6 +91,9 @@ public:
                          const ::starrocks::PFetchDataCacheRequest* request,
                          ::starrocks::PFetchDataCacheResponse* response, ::google::protobuf::Closure* done);
 
+    void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
+                google::protobuf::Closure* done) override;
+
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
     const butil::EndPoint _endpoint;

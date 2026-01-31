@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <string>
 
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -108,6 +109,8 @@ public:
         Put(reinterpret_cast<const T*>(vals), static_cast<int>(count));
         return Status::OK();
     }
+
+    std::string to_string() const override { return fmt::format("DeltaBinaryPackedEncoder<{}>", typeid(T).name()); }
 
 private:
     const uint32_t values_per_block_;
@@ -249,6 +252,8 @@ public:
     using UT = std::make_unsigned_t<T>;
     DeltaBinaryPackedDecoder() = default;
     ~DeltaBinaryPackedDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("DeltaBinaryPackedDecoder<{}>", typeid(T).name()); }
 
     Status set_data(const Slice& data) override {
         _data = data;
@@ -514,6 +519,8 @@ public:
         return Status::OK();
     }
 
+    std::string to_string() const override { return "DeltaLengthByteArrayEncoder"; }
+
 private:
     faststring string_buffer_;
     DeltaBinaryPackedEncoder<int> length_encoder_;
@@ -573,6 +580,8 @@ public:
     DeltaLengthByteArrayDecoder() = default;
     ~DeltaLengthByteArrayDecoder() override = default;
 
+    std::string to_string() const override { return "DeltaLengthByteArrayDecoder"; }
+
     Status set_data(const Slice& data) override {
         RETURN_IF_ERROR(len_decoder_.set_data(data));
         RETURN_IF_ERROR(DecodeLengths());
@@ -598,7 +607,7 @@ public:
         RETURN_IF_ERROR(Decode(slice_buffer_.data(), static_cast<int>(count)));
 
         if (dst->is_nullable()) {
-            down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+            down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
         binary_column->append_continuous_strings(slice_buffer_.data(), count);
@@ -720,6 +729,8 @@ public:
     DeltaByteArrayEncoder() = default;
     ~DeltaByteArrayEncoder() override = default;
 
+    std::string to_string() const override { return "DeltaByteArrayEncoder"; }
+
     Slice build() override {
         FlushValues();
         return Slice(sink_.data(), sink_.size());
@@ -808,6 +819,8 @@ public:
     DeltaByteArrayDecoder() = default;
     ~DeltaByteArrayDecoder() override = default;
 
+    std::string to_string() const override { return "DeltaByteArrayDecoder"; }
+
 private:
     DeltaBinaryPackedDecoder<int32_t> prefix_len_decoder_;
     DeltaLengthByteArrayDecoder<tparquet::Type::BYTE_ARRAY> suffix_decoder_;
@@ -864,7 +877,7 @@ public:
         RETURN_IF_ERROR(GetInternal(slice_buffer_.data(), static_cast<int>(count)));
 
         if (dst->is_nullable()) {
-            down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+            down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
         binary_column->append_continuous_strings(slice_buffer_.data(), count);

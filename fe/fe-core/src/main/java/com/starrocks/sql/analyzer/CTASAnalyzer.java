@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
@@ -27,11 +26,13 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
@@ -86,8 +87,13 @@ public class CTASAnalyzer {
             }
         }
 
-        TableName tableNameObject = createTableStmt.getDbTbl();
-        tableNameObject.normalization(session);
+        TableRef tableRef = createTableStmt.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference is null in CTAS statement");
+        }
+        TableRef normalizedTableRef = AnalyzerUtils.normalizedTableRef(tableRef, session);
+        createTableStmt.setTableRef(normalizedTableRef);
+        TableName tableNameObject = TableName.fromTableRef(normalizedTableRef);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
 
         for (int i = 0; i < allFields.size(); i++) {

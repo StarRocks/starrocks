@@ -42,9 +42,14 @@ public:
         DCHECK((_long_values != nullptr) ^ (_string_values != nullptr));
     }
 
-    bool has_output() const override { return _next_processed_row_index < _rows_total; }
+    bool has_output() const override { return !is_finished(); }
 
-    bool is_finished() const override { return !has_output(); }
+    bool is_finished() const override { return _is_finished || _next_processed_row_index >= _rows_total; }
+
+    Status set_finished(RuntimeState* state) override {
+        _is_finished = true;
+        return Status::OK();
+    }
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -58,6 +63,7 @@ private:
     const size_t _start_index;
     const size_t _rows_total;
     size_t _next_processed_row_index{0};
+    bool _is_finished{false};
 };
 
 class RawValuesSourceOperatorFactory final : public SourceOperatorFactory {

@@ -27,10 +27,10 @@
 
 namespace starrocks::csv {
 
-Status VarBinaryConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status VarBinaryConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                         const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    auto& bytes = binary->get_bytes();
+    auto& bytes = binary->get_immutable_bytes();
     auto& offsets = binary->get_offset();
     // TODO: support binary type config later
 
@@ -45,7 +45,7 @@ Status VarBinaryConverter::write_string(OutputStream* os, const Column& column, 
     return os->write(Slice(buf, encoded_len));
 }
 
-Status VarBinaryConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status VarBinaryConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                                const Options& options) const {
     RETURN_IF_ERROR(os->write('"'));
     RETURN_IF_ERROR(write_string(os, column, row_num, options));

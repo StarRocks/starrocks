@@ -10,12 +10,18 @@ shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_b
 -- query
 desc files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "csv",
     "csv.column_separator" = ",",
     "csv.row_delimiter" = "\n",
     "auto_detect_sample_files" = "1");
 select * from files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "csv",
     "csv.column_separator" = ",",
     "csv.row_delimiter" = "\n",
@@ -23,6 +29,9 @@ select * from files(
     "fill_mismatch_column_with" = "null");
 select * from files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "csv",
     "csv.column_separator" = ",",
     "csv.row_delimiter" = "\n",
@@ -36,6 +45,9 @@ create table t1 (k1 bigint, k2 varchar(256), k3 double, k4 boolean);
 insert into t1 
 select * from files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "csv",
     "csv.column_separator" = ",",
     "csv.row_delimiter" = "\n",
@@ -45,27 +57,36 @@ select * from files(
 insert into t1 properties ("max_filter_ratio" = "0.5") 
 select * from files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "csv",
     "csv.column_separator" = ",",
     "csv.row_delimiter" = "\n",
     "auto_detect_sample_files" = "1",
     "fill_mismatch_column_with" = "none");
-select * from t1;
+select * from t1 order by 1;
 truncate table t1;
 
 insert into t1 
 select * from files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "csv",
     "csv.column_separator" = ",",
     "csv.row_delimiter" = "\n",
     "auto_detect_sample_files" = "1",
     "fill_mismatch_column_with" = "null");
-select * from t1;
+select * from t1 order by 1;
 
 -- error property
 select * from files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "csv",
     "csv.column_separator" = ",",
     "csv.row_delimiter" = "\n",

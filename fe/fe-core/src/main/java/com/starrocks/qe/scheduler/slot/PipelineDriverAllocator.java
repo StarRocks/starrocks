@@ -25,11 +25,13 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * Calculate proper pipeline DOP for adaptive DOP query according to the fragments and DOP of running queries.
@@ -111,36 +113,42 @@ public class PipelineDriverAllocator {
     }
 
     private void allocateInBatch() {
-        List<AllocationRequest> requests = new ArrayList<>();
+        List<AllocationRequest> allRequests = new ArrayList<>();
         // Use synchronized to guarantee that only one requester is handling all current allocation requests at the same time.
         synchronized (allocationRequests) {
-            while (!allocationRequests.isEmpty() && requests.size() < NUM_BATCH_SLOTS) {
-                requests.add(allocationRequests.poll());
+            while (!allocationRequests.isEmpty() && allRequests.size() < NUM_BATCH_SLOTS) {
+                allRequests.add(allocationRequests.poll());
             }
         }
 
-        if (requests.isEmpty()) {
+        if (allRequests.isEmpty()) {
             return;
         }
 
-        int numFragments = requests.stream().mapToInt(req -> req.slot.getNumFragments()).sum();
-        int dop = calculateDop(numAllocatedDrivers.get(), numFragments, requests.size());
+        Map<Integer, List<AllocationRequest>> defaultDopToRequests = allRequests.stream().collect(
+                Collectors.groupingBy(req -> BackendResourceStat.getInstance().getDefaultDOP(req.slot.getWarehouseId())));
+        defaultDopToRequests.forEach((defaultDop, requests) -> {
+            int numFragments = requests.stream().mapToInt(req -> req.slot.getNumFragments()).sum();
+            int dop = calculateDop(numAllocatedDrivers.get(), numFragments, requests.size(), defaultDop);
+            requests.forEach(req -> {
+                req.slot.setPipelineDop(dop);
+                numAllocatedDrivers.getAndAdd(req.slot.getNumDrivers());
+            });
+        });
 
-        for (AllocationRequest req : requests) {
-            req.slot.setPipelineDop(dop);
-            numAllocatedDrivers.getAndAdd(req.slot.getNumDrivers());
+        for (AllocationRequest req : allRequests) {
             req.finish();
         }
     }
 
-    private int calculateDop(int curNumAllocatedDrivers, int numFragments, int numSlots) {
+    private int calculateDop(int curNumAllocatedDrivers, int numFragments, int numSlots, int defaultDop) {
         if (numFragments <= 0) {
             return 1;
         }
 
         // Calculate DOP by driverHighWater.
         final int hardLimit = GlobalVariable.getQueryQueueDriverHighWater();
-        int dop = calculateDopByLimit(curNumAllocatedDrivers, numFragments, hardLimit);
+        int dop = calculateDopByLimit(curNumAllocatedDrivers, numFragments, hardLimit, defaultDop);
 
         if (dop <= 1) {
             return 1;
@@ -162,20 +170,20 @@ public class PipelineDriverAllocator {
             int delta = hardLimit - softLimit;
             dop = dop * (delta - exceedSoftLimit) / delta;
 
-            int minDop = calculateDopByLimit(curNumAllocatedDrivers, numFragments, softLimit);
+            int minDop = calculateDopByLimit(curNumAllocatedDrivers, numFragments, softLimit, defaultDop);
             dop = Math.max(dop, minDop);
         }
 
         return dop;
     }
 
-    private int calculateDopByLimit(int curNumAllocatedDrivers, int numFragments, int limit) {
+    private int calculateDopByLimit(int curNumAllocatedDrivers, int numFragments, int limit, int defaultDop) {
         if (curNumAllocatedDrivers + numFragments >= limit) {
             return 1;
         }
 
         int dop = (limit - curNumAllocatedDrivers) / numFragments;
-        dop = Math.min(dop, BackendResourceStat.getInstance().getDefaultDOP());
+        dop = Math.min(dop, defaultDop);
         dop = Math.max(1, dop);
 
         return dop;

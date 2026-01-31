@@ -211,8 +211,24 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
-
-            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
+            if (fn.name.function_name == "array_agg") {
+                // set order by info
+                std::vector<bool> is_asc_order;
+                std::vector<bool> nulls_first;
+                auto is_distinct = false;
+                if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
+                    !fn.aggregate_fn.is_asc_order.empty()) {
+                    is_asc_order = fn.aggregate_fn.is_asc_order;
+                    nulls_first = fn.aggregate_fn.nulls_first;
+                }
+                if (fn.aggregate_fn.__isset.is_distinct) {
+                    is_distinct = fn.aggregate_fn.is_distinct;
+                }
+                _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs,
+                                                                  is_distinct, is_asc_order, nulls_first);
+            } else {
+                _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
+            }
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -573,7 +589,7 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-                _agg_intput_columns[i][j]->remove_first_n_values(remove_rows);
+                _agg_intput_columns[i][j]->as_mutable_raw_ptr()->remove_first_n_values(remove_rows);
             }
         }
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
@@ -622,7 +638,8 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
                 // When chunk's column is const, maybe need to unpack it.
-                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+                TRY_CATCH_BAD_ALLOC(
+                        _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
 
                 RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
@@ -656,9 +673,10 @@ void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& 
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
         // Unpack const column, then append it to dst.
-        auto* const_column = down_cast<ConstColumn*>(src_column.get());
-        const_column->data_column()->assign(chunk_size, 0);
-        dst_column->append(*const_column->data_column(), 0, chunk_size);
+        auto* const_column = down_cast<ConstColumn*>(src_column->as_mutable_raw_ptr());
+        auto* data_column = const_column->data_column_raw_ptr();
+        data_column->assign(chunk_size, 0);
+        dst_column->append(*data_column, 0, chunk_size);
     } else {
         // Most cases.
         dst_column->append(*src_column, 0, chunk_size);
@@ -1053,12 +1071,14 @@ void Analytor::_init_window_result_columns() {
                 ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
         // Binary column cound't call resize method like Numeric Column,
         // so we only reserve it.
-        if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+        if (_agg_functions[i]->get_name().ends_with("fused_multi_distinct")) {
+            _result_window_columns[i]->resize(chunk_size);
+        } else if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
             _result_window_columns[i]->reserve(chunk_size);
         } else {
             _result_window_columns[i]->resize(chunk_size);

@@ -89,7 +89,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         size_t size = keys.size();
         for (size_t i = 0; i < size; i++) {
             cols[0]->append_datum(Datum(keys[i]));

@@ -29,6 +29,7 @@ import com.starrocks.type.BitmapType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.PercentileType;
@@ -253,7 +254,7 @@ public class ShowResultTest {
                 .column("char_col", TypeFactory.createCharType(10))
                 .column("varchar_col", TypeFactory.createVarcharType(255))
                 .column("varbinary_col", TypeFactory.createVarbinary(1024))
-                .column("hll_col", TypeFactory.createHllType())
+                .column("hll_col", HLLType.HLL)
                 .column("bitmap_col", BitmapType.BITMAP)
                 .column("percentile_col", PercentileType.PERCENTILE)
                 .column("json_col", JsonType.JSON)

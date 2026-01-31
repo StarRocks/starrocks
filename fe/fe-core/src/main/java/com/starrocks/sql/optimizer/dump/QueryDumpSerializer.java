@@ -66,12 +66,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         long beNum = ctx.getAliveBackendNumber();
         dumpJson.addProperty("be_number", beNum);
         // backend core stat
-        JsonObject backendCoreStat = new JsonObject();
-        backendCoreStat.addProperty("numOfHardwareCoresPerBe",
-                GsonUtils.GSON.toJson(BackendResourceStat.getInstance().getNumHardwareCoresPerBe()));
-        backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
-                BackendResourceStat.getInstance().getCachedAvgNumHardwareCores());
-        dumpJson.add("be_core_stat", backendCoreStat);
+        BackendResourceStat.getInstance().dump(dumpJson, ctx);
         // exception
         JsonArray exceptions = new JsonArray();
         for (String ex : dumpInfo.getExceptionList()) {

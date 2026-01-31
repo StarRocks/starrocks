@@ -94,6 +94,10 @@ void SpillableMultiCastLocalExchanger::close_sink_operator() {
     _queue->close_producer();
 }
 
+bool SpillableMultiCastLocalExchanger::is_all_sources_finished() const {
+    return _queue->is_all_source_finished();
+}
+
 void SpillableMultiCastLocalExchanger::enter_release_memory_mode() {
     _queue->enter_release_memory_mode();
 }

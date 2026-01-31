@@ -21,13 +21,14 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -96,7 +97,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
         Map<ColumnRefOperator, CallOperator> aggs = aggregationOperator.getAggregations();
 
-        Map<Integer, String> aggColumnIdToNames = Maps.newHashMap();
+        Map<Integer, Pair<String, Column>> aggColumnIdToColumns = Maps.newHashMap();
         Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
         // this variable is introduced to solve compatibility issues,
@@ -106,20 +107,24 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
             CallOperator aggCall = kv.getValue();
             ColumnRefOperator usedColumn;
+            String aggFuncName;
             String metaColumnName;
             if (!aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 ColumnRefSet usedColumns = aggCall.getUsedColumns();
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
                 usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
-                metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
+                aggFuncName = aggCall.getFnName();
+                metaColumnName = aggFuncName + "_" + usedColumn.getName();
             } else {
                 usedColumn = scanOperator.getOutputColumns().get(0);
                 // for count, distinguish between count(*) and count(column)
                 if (aggCall.getUsedColumns().isEmpty()) {
                     // count(*) - should count all rows including NULLs, use "rows" as field name
+                    aggFuncName = "rows";
                     metaColumnName = "rows_" + usedColumn.getName();
                 } else {
                     // count(column) - should count non-NULL values, use "count" as field name
+                    aggFuncName = "count";
                     metaColumnName = "count_" + usedColumn.getName();
                 }
             }
@@ -139,7 +144,6 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 metaColumn = columnRefFactory.create(metaColumnName, columnType, true);
             }
 
-            aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             Column c = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
 
             Column copiedColumn = new Column(c);
@@ -148,6 +152,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             }
             copiedColumn.setIsAllowNull(true);
             newScanColumnRefs.put(metaColumn, copiedColumn);
+            aggColumnIdToColumns.put(metaColumn.getId(), Pair.create(aggFuncName, copiedColumn));
 
             Function aggFunction = aggCall.getFunction();
             String newAggFnName = aggCall.getFnName();
@@ -169,9 +174,10 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
                 .setTable(scanOperator.getTable())
                 .setSelectPartitionNames(selectedPartitionNames)
-                .setSelectedIndexId(scanOperator.getSelectedIndexId())
+                .setSelectedIndexId(scanOperator.getSelectedIndexMetaId())
+                .setHintsTabletIds(scanOperator.getHintsTabletIds())
                 .setColRefToColumnMetaMap(newScanColumnRefs)
-                .setAggColumnIdToNames(aggColumnIdToNames).build();
+                .setAggColumnIdToColumns(aggColumnIdToColumns).build();
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
                 aggregationOperator.getGroupingKeys(), newAggCalls);
 
@@ -223,7 +229,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             return false;
         }
-        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByMetaId(table.getBaseIndexMetaId());
         boolean hasSchemaChange = currentIndexMeta.getSchemaVersion() > 0;
 
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
@@ -281,6 +287,14 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         return allValid;
     }
 
+    private boolean containsAllPartitions(OlapTable table, List<Long> partitionIds) {
+        if (partitionIds == null) {
+            return true;
+        }
+        long allPartitionNum = table.getVisiblePartitions().stream().filter(Partition::hasData).count();
+        return partitionIds.size() == allPartitionNum;
+    }
+
     public Optional<OptExpression> tryReplaceByMetaData(OptExpression input,
                                                         OptimizerContext context, ColumnRefFactory factory) {
         if (context.getSessionVariable().getScanOlapPartitionNumLimit() != 0) {
@@ -288,11 +302,11 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         }
         LogicalAggregationOperator aggregationOperator = input.getOp().cast();
         LogicalOlapScanOperator scanOperator = input.inputAt(0).inputAt(0).getOp().cast();
-        if (!scanOperator.getSelectedPartitionId().isEmpty()) {
+        OlapTable table = (OlapTable) scanOperator.getTable();
+        if (!containsAllPartitions(table, scanOperator.getSelectedPartitionId())) {
             return Optional.empty();
         }
 
-        OlapTable table = (OlapTable) scanOperator.getTable();
         LocalDateTime lastUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         Long lastUpdateTimestamp = StatisticUtils.getTableLastUpdateTimestamp(table);
 
@@ -341,7 +355,10 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             } else if (call.getFnName().equals(FunctionSet.COUNT) && !call.isDistinct()
                     && call.getUsedColumns().size() <= 1 && GlobalStateMgr.getCurrentState().getTabletStatMgr()
                     .workTimeIsMustAfter(lastUpdateTime)) {
-                long count = table.getVisiblePartitions().stream().mapToLong(Partition::getRowCount).sum();
+                long count = table.getVisiblePartitions().stream()
+                        .flatMap(partition -> partition.getSubPartitions().stream())
+                        .mapToLong(physicalPartition -> physicalPartition.getLatestBaseIndex().getRowCount())
+                        .sum();
                 constantMap.put(entry.getKey(), ConstantOperator.createBigint(count));
             } else {
                 newAggCalls.put(entry.getKey(), entry.getValue());
@@ -358,8 +375,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (constantMap.size() == aggregationOperator.getAggregations().size()) {
             // all aggregations can be replaced
             Preconditions.checkState(newAggCalls.isEmpty());
-            LogicalValuesOperator row = new LogicalValuesOperator(scanOperator.getOutputColumns().subList(0, 1),
-                    List.of(List.of(ConstantOperator.createNull(IntegerType.BIGINT))));
+            ColumnRefOperator dummy = factory.create("dummy", IntegerType.BIGINT, true);
+            LogicalValuesOperator row = new LogicalValuesOperator(List.of(dummy),
+                    List.of(List.of(ConstantOperator.createExampleValueByType(IntegerType.BIGINT))));
             return Optional.of(OptExpression.create(project, OptExpression.create(row)));
         }
 

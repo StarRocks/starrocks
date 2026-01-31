@@ -245,4 +245,60 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         Assertions.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,
                 new Scope(RelationId.anonymous(), new RelationFields())));
     }
+
+    @Test
+    public void testDatePartAnalyzer() {
+        ConnectContext session = new ConnectContext();
+        ExpressionAnalyzer analyzer = new ExpressionAnalyzer(session);
+        AnalyzeState analyzeState = new AnalyzeState();
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+
+        java.util.function.Consumer<String> verifySuccess = (sql) -> {
+            Expr expr = SqlParser.parseSqlToExpr(sql, session.getSessionVariable().getSqlMode());
+            analyzer.analyze(expr, analyzeState, scope);
+        };
+
+        java.util.function.BiConsumer<String, String> verifyFail = (sql, errorMsg) -> {
+            Expr expr = SqlParser.parseSqlToExpr(sql, session.getSessionVariable().getSqlMode());
+            try {
+                analyzer.analyze(expr, analyzeState, scope);
+                Assertions.fail("Should have failed: " + sql);
+            } catch (SemanticException e) {
+                Assertions.assertTrue(e.getMessage().contains(errorMsg), "Error message mismatch: " + e.getMessage());
+            }
+        };
+
+        verifySuccess.accept("date_part('year', '2023-01-01')");
+        verifySuccess.accept("date_part('quarter', '2023-01-01')");
+        verifySuccess.accept("date_part('month', '2023-01-01')");
+        verifySuccess.accept("date_part('week', '2023-01-01')");
+        verifySuccess.accept("date_part('day', '2023-01-01')");
+        
+        verifySuccess.accept("date_part('hour', '2023-01-01 12:00:00')");
+        verifySuccess.accept("date_part('minute', '2023-01-01 12:00:00')");
+        verifySuccess.accept("date_part('second', '2023-01-01 12:00:00')");
+
+        verifySuccess.accept("date_part('yy', '2023-01-01')");
+        verifySuccess.accept("date_part('qq', '2023-01-01')");
+        verifySuccess.accept("date_part('mm', '2023-01-01')"); 
+        verifySuccess.accept("date_part('wk', '2023-01-01')");
+        verifySuccess.accept("date_part('dd', '2023-01-01')");
+        verifySuccess.accept("date_part('hh', '2023-01-01 12:00:00')");
+        verifySuccess.accept("date_part('mi', '2023-01-01 12:00:00')");
+        verifySuccess.accept("date_part('ss', '2023-01-01 12:00:00')");
+        
+        verifySuccess.accept("date_part('dow', '2023-01-01')");
+        verifySuccess.accept("date_part('doy', '2023-01-01')");
+
+        verifyFail.accept("date_part('year')", "DATE_PART requires 2 arguments");
+        verifyFail.accept("date_part(123, '2023-01-01')", "must be a constant string literal");
+        verifyFail.accept("date_part('invalid_unit', '2023-01-01')", "Unsupported unit for DATE_PART");
+    }
+
+    @Test
+    public void testCurrentWarehouse() throws Exception {
+        String currentWarehouseName = connectContext.getCurrentWarehouseName();
+        String plan = getFragmentPlan("select current_warehouse()");
+        assertContains(plan, currentWarehouseName);
+    }
 }

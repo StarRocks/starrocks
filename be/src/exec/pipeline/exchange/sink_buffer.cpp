@@ -16,10 +16,13 @@
 
 #include <bthread/bthread.h>
 
+#include <cstddef>
 #include <mutex>
 #include <string_view>
 
+#include "common/config.h"
 #include "fmt/core.h"
+#include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/time.h"
@@ -60,6 +63,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             ctx.finst_id = std::move(finst_id);
         }
     }
+    _memory_limit = config::sink_buffer_mem_limit_per_driver * _sink_ctxs.size();
 }
 
 SinkBuffer::~SinkBuffer() {
@@ -73,7 +77,6 @@ SinkBuffer::~SinkBuffer() {
 }
 
 void SinkBuffer::incr_sinker(RuntimeState* state) {
-    _num_uncancelled_sinkers++;
     for (auto& [_, sink_ctx] : _sink_ctxs) {
         sink_ctx->num_sinker++;
     }
@@ -126,10 +129,9 @@ bool SinkBuffer::is_full() const {
     }
     bool is_full = buffer_size > max_buffer_size;
 
-    if (!is_full) {
-        is_full = _buffered_mem_usage->consumption() > config::sink_buffer_mem_limit_per_driver * _sink_ctxs.size();
+    if (!is_full && buffer_size > 0) {
+        is_full = _buffered_mem_usage->consumption() > _memory_limit;
     }
-
     int64_t last_full_timestamp = _last_full_timestamp;
     int64_t full_time = _full_time;
 
@@ -144,6 +146,19 @@ bool SinkBuffer::is_full() const {
     }
 
     return is_full;
+}
+
+void SinkBuffer::update_memory_limit(size_t mem_limit) {
+    _memory_limit = mem_limit;
+}
+
+std::string SinkBuffer::to_string() const {
+    size_t buffer_size = 0;
+    for (auto& [_, context] : _sink_ctxs) {
+        buffer_size += context->buffer.size();
+    }
+    return fmt::format("mem_limit:{} buffered_mem_usage: {}, buffer_size: {}", _memory_limit,
+                       _buffered_mem_usage->consumption(), buffer_size);
 }
 
 void SinkBuffer::set_finishing() {
@@ -218,16 +233,14 @@ int64_t SinkBuffer::_network_time() {
 
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
-    if (--_num_uncancelled_sinkers == 0) {
-        _is_finishing = true;
-    }
+    _is_finishing = true;
     if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
-                "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
+                "fragment_instance_id {}, _is_finishing {}, _num_remaining_eos {}, "
                 "_num_sending_rpc {}, chunk is full {}",
-                print_id(_fragment_ctx->fragment_instance_id()), _num_uncancelled_sinkers, _is_finishing,
-                _num_remaining_eos, _num_sending_rpc, is_full());
+                print_id(_fragment_ctx->fragment_instance_id()), _is_finishing, _num_remaining_eos, _num_sending_rpc,
+                is_full());
     }
 }
 
@@ -388,6 +401,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
+            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             const auto& dest_addr = context.dest_addrs;
             std::string err_msg =
@@ -410,6 +424,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
+            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             if (!status.ok()) {
                 _is_finishing = true;

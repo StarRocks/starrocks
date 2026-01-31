@@ -150,6 +150,10 @@ public class ExecutionDAG {
                 .collect(Collectors.toList());
     }
 
+    public int getWorkerNum() {
+        return workerIdToNumInstances.size();
+    }
+
     public List<ExecutionFragment> getFragmentsInCreatedOrder() {
         return fragments;
     }
@@ -457,6 +461,7 @@ public class ExecutionDAG {
             if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
                 throw new NonRecoverableException("CTE consumer fragment cannot be bucket shuffle join");
             } else {
+                Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
                 // add destination host to this fragment's destination
                 for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
@@ -585,6 +590,7 @@ public class ExecutionDAG {
             if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
                 throw new NonRecoverableException("Split fragment cannot be bucket shuffle join");
             } else {
+                Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
                 // add destination host to this fragment's destination
                 for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
@@ -611,10 +617,10 @@ public class ExecutionDAG {
         instanceIdToInstance.put(instanceId, instance);
     }
 
-    public void cancelQueryContext(PPlanFragmentCancelReason cancelReason) {
+    public void cancelQueryContext(PPlanFragmentCancelReason cancelReason, String errorMessage) {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("cancel query context id:{} reason:{}", DebugUtil.printId(jobSpec.getQueryId()),
-                    cancelReason.name());
+            LOG.debug("cancel query context id:{} reason:{} error:{}", DebugUtil.printId(jobSpec.getQueryId()),
+                    cancelReason.name(), errorMessage);
         }
 
         Set<ComputeNode> workers = Sets.newHashSet();
@@ -630,7 +636,7 @@ public class ExecutionDAG {
             try {
                 BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
                         jobSpec.getQueryId(), dummyInstanceId, cancelReason,
-                        jobSpec.isEnablePipeline());
+                        jobSpec.isEnablePipeline(), errorMessage);
             } catch (RpcException e) {
                 LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                         brpcAddress.getPort(), e);

@@ -28,6 +28,7 @@
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "util/monotime.h"
+#include "util/time.h"
 
 namespace starrocks::connector {
 
@@ -60,6 +61,7 @@ void PartitionChunkWriter::commit_file() {
     if (!_file_writer) {
         return;
     }
+    SCOPED_TIMER(_sink_profile ? _sink_profile->commit_file_timer : nullptr);
     auto result = _file_writer->commit();
     _commit_callback(result.set_extra_data(_commit_extra_data));
     _file_writer = nullptr;
@@ -69,6 +71,7 @@ void PartitionChunkWriter::commit_file() {
 }
 
 Status BufferPartitionChunkWriter::init() {
+    RETURN_IF_ERROR(create_file_writer_if_needed());
     return Status::OK();
 }
 
@@ -77,6 +80,7 @@ Status BufferPartitionChunkWriter::write(const ChunkPtr& chunk) {
         commit_file();
     }
     RETURN_IF_ERROR(create_file_writer_if_needed());
+    SCOPED_TIMER(_sink_profile ? _sink_profile->write_file_timer : nullptr);
     return _file_writer->write(chunk.get());
 }
 
@@ -125,6 +129,7 @@ Status SpillPartitionChunkWriter::init() {
     RETURN_IF_ERROR(_load_spill_block_mgr->init());
     _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(_load_spill_block_mgr.get(),
                                                              _fragment_context->runtime_state()->runtime_profile());
+    RETURN_IF_ERROR(create_file_writer_if_needed());
     return Status::OK();
 }
 
@@ -198,6 +203,7 @@ bool SpillPartitionChunkWriter::is_finished() {
 }
 
 Status SpillPartitionChunkWriter::merge_blocks() {
+    SCOPED_TIMER(_sink_profile ? _sink_profile->merge_blocks_timer : nullptr);
     _chunk_spill_token->wait();
     auto write_func = [this](Chunk* chunk) { return _flush_chunk(chunk, false); };
     auto flush_func = [this]() {
@@ -208,13 +214,14 @@ Status SpillPartitionChunkWriter::merge_blocks() {
         }
         return Status::OK();
     };
-    Status st = _load_chunk_spiller->merge_write(_max_file_size, _sort_ordering != nullptr, false /* do_agg */,
-                                                 write_func, flush_func);
+    Status st = _load_chunk_spiller->merge_write(_max_file_size, _max_file_size, _sort_ordering != nullptr,
+                                                 false /* do_agg */, write_func, flush_func);
     VLOG(2) << "finish merge blocks, query_id: " << _fragment_context->query_id() << ", status: " << st.message();
     return st;
 }
 
 Status SpillPartitionChunkWriter::_sort() {
+    SCOPED_TIMER(_sink_profile ? _sink_profile->sort_timer : nullptr);
     RETURN_IF(!_result_chunk, Status::OK());
 
     auto chunk = _result_chunk->clone_empty_with_schema(0);
@@ -240,7 +247,17 @@ Status SpillPartitionChunkWriter::_spill() {
         RETURN_IF_ERROR(_sort());
     }
 
-    auto callback = [this](const ChunkPtr& chunk, const StatusOr<size_t>& res) {
+    // Record the time when the async spill task is submitted. Note that the
+    // corresponding timer below will measure the duration from this point
+    // until the callback is executed, which includes both the actual spill
+    // work and any queuing or scheduling delays in the thread pool.
+    int64_t spill_start_ns = MonotonicNanos();
+    RuntimeProfile::Counter* spill_timer = _sink_profile ? _sink_profile->spill_chunk_timer : nullptr;
+    auto callback = [this, spill_start_ns, spill_timer](const ChunkPtr& chunk, const StatusOr<size_t>& res) {
+        // Update spill timer with complete async execution time
+        if (spill_timer) {
+            COUNTER_UPDATE(spill_timer, MonotonicNanos() - spill_start_ns);
+        }
         if (!res.ok()) {
             LOG(ERROR) << "fail to spill connector partition chunk sink, write it to remote file directly. msg: "
                        << res.status().message();
@@ -258,6 +275,10 @@ Status SpillPartitionChunkWriter::_spill() {
                                                        std::move(callback));
     RETURN_IF_ERROR(_chunk_spill_token->submit(spill_task));
     _spilling_bytes_usage.fetch_add(_result_chunk->bytes_usage(), std::memory_order_relaxed);
+    if (_sink_profile) {
+        COUNTER_SET(_sink_profile->spilling_bytes_usage_peak, _spilling_bytes_usage.load(std::memory_order_relaxed));
+    }
+
     _chunk_bytes_usage = 0;
     _result_chunk.reset();
     return Status::OK();
@@ -308,6 +329,7 @@ Status SpillPartitionChunkWriter::_write_chunk(Chunk* chunk) {
         commit_file();
     }
     RETURN_IF_ERROR(create_file_writer_if_needed());
+    SCOPED_TIMER(_sink_profile ? _sink_profile->write_file_timer : nullptr);
     RETURN_IF_ERROR(_file_writer->write(chunk));
     return Status::OK();
 }
@@ -323,14 +345,14 @@ Status SpillPartitionChunkWriter::_merge_chunks() {
                                       [](int sum, const ChunkPtr& chunk) { return sum + chunk->num_rows(); });
     _result_chunk = _create_schema_chunk(_chunks.front(), num_rows);
 
-    std::unordered_map<Column*, size_t> col_ptr_index_map;
+    std::unordered_map<const Column*, size_t> col_ptr_index_map;
     auto& columns = _chunks.front()->columns();
     for (size_t i = 0; i < columns.size(); ++i) {
         col_ptr_index_map[columns[i]->get_ptr()] = i;
     }
     for (auto& chunk : _chunks) {
         for (size_t i = 0; i < _result_chunk->num_columns(); ++i) {
-            auto* dst_col = _result_chunk->get_column_by_index(i).get();
+            auto* dst_col = _result_chunk->get_column_raw_ptr_by_index(i);
             ColumnPtr src_col;
             if (_column_evaluators) {
                 ASSIGN_OR_RETURN(src_col, (*_column_evaluators)[i]->evaluate(chunk.get()));
@@ -367,10 +389,9 @@ void SpillPartitionChunkWriter::_handle_err(const Status& st) {
 
 SchemaPtr SpillPartitionChunkWriter::_make_schema() {
     Fields fields;
+    fields.reserve(_tuple_desc->slots().size());
     for (auto& slot : _tuple_desc->slots()) {
-        TypeDescriptor type_desc = slot->type();
-        TypeInfoPtr type_info = get_type_info(type_desc.type, type_desc.precision, type_desc.scale);
-        auto field = std::make_shared<Field>(slot->id(), slot->col_name(), type_info, slot->is_nullable());
+        auto field = Field::convert_from_slot_desc(*slot);
         fields.push_back(field);
     }
 

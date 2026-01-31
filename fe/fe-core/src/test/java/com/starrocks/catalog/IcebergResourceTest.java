@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.persist.AlterResourceInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,7 +31,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class IcebergResourceTest {
@@ -65,9 +65,7 @@ public class IcebergResourceTest {
         Assertions.assertEquals(type, resource.getType().name().toLowerCase());
         Assertions.assertEquals(IcebergCatalogType.fromString(catalogType), resource.getCatalogType());
         Assertions.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
-        Map<String, String> newURI = new HashMap<>();
-        newURI.put("iceberg.catalog.hive.metastore.uris", "thrift://127.0.0.2:9380");
-        resource.alterProperties(newURI);
+        resource.alterProperties(new AlterResourceInfo(resource.name, "thrift://127.0.0.2:9380"));
         Assertions.assertEquals("thrift://127.0.0.2:9380", resource.getHiveMetastoreURIs());
     }
 

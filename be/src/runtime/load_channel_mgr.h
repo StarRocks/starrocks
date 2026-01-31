@@ -61,9 +61,47 @@ class Controller;
 namespace starrocks {
 
 class Cache;
+class StatusPB;
 
 // LoadChannelMgr -> LoadChannel -> TabletsChannel -> DeltaWriter
 // All dispatched load data for this backend is routed from this class
+//                            +------------------+
+//                            |    Load Start    |
+//                            +------------------+
+//                                     |
+//                                     v
+//                            +------------------+
+//                            | Create Load Chan |
+//                            +------------------+
+//                                     |
+//                                     v
+//                        +--------------------------+
+//                        | Insert into Load Chan Map|
+//                        | (Active Channels)        |
+//                        +--------------------------+
+//                                     |
+//                +--------------------+--------------------+
+//                |                                         |
+//                v                                         v
+//          [ Success ]                             [ Fail / Timeout ]
+//                |                                         |
+//                v                                         v
+//    +--------------------------+              +--------------------------+
+//    | Remove from Load Chan Map|              | Transfer to Aborted Map  |
+//    | (Immediate Removal)      |              | (Pending Cleanup)        |
+//    +--------------------------+              +--------------------------+
+//                |                                         |
+//                |                                         v
+//                |                             +--------------------------+
+//                |                             | Background Cleanup       |
+//                |                             | (Wait for cleanup cycle) |
+//                |                             +--------------------------+
+//                |                                         |
+//                v                                         v
+//    +--------------------------+              +--------------------------+
+//    |          End             |              | Cleaned from System      |
+//    +--------------------------+              +--------------------------+
+//
 class LoadChannelMgr {
 public:
     LoadChannelMgr();
@@ -90,9 +128,10 @@ public:
     void load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
                        google::protobuf::Closure* done);
 
+    // This method should be only called when the load is finished normally.
     std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
-    void abort_txn(int64_t txn_id);
+    void abort_txn(int64_t txn_id, const std::string& reason);
 
     void close();
 
@@ -107,6 +146,16 @@ public:
 private:
     friend class ChannelOpenTask;
 
+    std::shared_ptr<LoadChannel> _abort_load_channel(const UniqueId& load_id, const std::string& abort_reason);
+
+    // the actual implementation of remove_load_channel
+    std::shared_ptr<LoadChannel> _remove_load_channel(const UniqueId& load_id, bool is_abort,
+                                                      const std::string& abort_reason);
+
+    std::pair<bool, std::string> _is_load_channel_aborted(const UniqueId& load_id) const;
+
+    void _fail_rpc_request(const UniqueId& load_id, StatusPB* response_status);
+
     static void* load_channel_clean_bg_worker(void* arg);
 
     void _open(LoadChannelOpenContext open_context);
@@ -115,10 +164,13 @@ private:
     std::shared_ptr<LoadChannel> _find_load_channel(int64_t txn_id);
     void _start_load_channels_clean();
 
-    // lock protect the load channel map
-    bthread::Mutex _lock;
+    // lock protect the load channel map and aborted load channels map.
+    // performance is not critical here, so rw lock is not used.
+    mutable bthread::Mutex _lock;
     // load id -> load channel
     std::unordered_map<UniqueId, std::shared_ptr<LoadChannel>> _load_channels;
+    // load id -> aborted time point, used to reject late-arriving RPC requests for aborted loads
+    std::unordered_map<UniqueId, std::pair<time_t, std::string>> _aborted_load_channels;
 
     // check the total load mem consumption of this Backend
     MemTracker* _mem_tracker;

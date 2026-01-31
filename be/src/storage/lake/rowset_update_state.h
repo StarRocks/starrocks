@@ -82,24 +82,26 @@ struct RowsetUpdateStateParams {
     const RssidFileInfoContainer& container;
 };
 
-class SegmentPKEncodeResult {
+class SegmentPKIterator {
 public:
-    SegmentPKEncodeResult() = default;
-    ~SegmentPKEncodeResult() { close(); }
+    SegmentPKIterator() = default;
+    ~SegmentPKIterator() { close(); }
     Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool load_whole);
     void next();
     bool done();
     Status status();
     void close();
-    // <Current pk column, begin rowid>
-    std::pair<Column*, size_t> current();
+    // <Current pk column chunk, begin rowid>
+    std::pair<ChunkPtr, size_t> current();
 
     // Return the memory usage of this encode pk column.
     // If _lazy_load is true, return 0, because memory allocation is lazy.
     size_t memory_usage() const { return _memory_usage; }
 
-    // For large segment, we need to load segment file piece by piece.
-    MutableColumnPtr pk_column;
+    // Encode `pk_column_chunk` to the given |pk_column|
+    StatusOr<MutableColumnPtr> encoded_pk_column(const Chunk* chunk);
+
+    const MutableColumnPtr& standalone_pk_column() const { return _standalone_pk_column; }
 
 private:
     Status _load();
@@ -122,9 +124,13 @@ private:
     bool _lazy_load = false;
     // If enable lazy load, `_memory_usage` will record first piece of pk column memory usage.
     size_t _memory_usage = 0;
+    // For large segment, we need to load segment file piece by piece.
+    ChunkUniquePtr _pk_column_chunk;
+    // For no lazy load, we can load whole pk column and encode at once.
+    MutableColumnPtr _standalone_pk_column;
 };
 
-using SegmentPKEncodeResultPtr = std::unique_ptr<SegmentPKEncodeResult>;
+using SegmentPKIteratorPtr = std::unique_ptr<SegmentPKIterator>;
 
 class RowsetUpdateState {
 public:
@@ -168,7 +174,7 @@ public:
     // Release `del_id`-th delete file's state.
     void release_delete(uint32_t del_id);
 
-    const SegmentPKEncodeResultPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
+    const SegmentPKIteratorPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
     const MutableColumnPtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
 
     std::size_t memory_usage() const { return _memory_usage; }
@@ -209,9 +215,9 @@ private:
     void _reset();
 
     // one for each segment file
-    std::vector<SegmentPKEncodeResultPtr> _upserts;
+    std::vector<SegmentPKIteratorPtr> _upserts;
     // one for each delete file
-    std::vector<MutableColumnPtr> _deletes;
+    MutableColumns _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
     // Because we can load partial segments when preload, so need vector to track their version.
@@ -223,7 +229,7 @@ private:
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 
-    std::vector<MutableColumnPtr> _auto_increment_delete_pks;
+    MutableColumns _auto_increment_delete_pks;
 
     // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
     RowsetMetadataUniquePtr _rowset_meta_ptr;

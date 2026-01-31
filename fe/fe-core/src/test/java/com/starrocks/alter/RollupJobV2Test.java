@@ -162,11 +162,11 @@ public class RollupJobV2Test extends DDLTestBase {
         rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
         assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();
@@ -205,7 +205,7 @@ public class RollupJobV2Test extends DDLTestBase {
         assertEquals(1, alterJobsV2.size());
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(MaterializedIndex.IndexState.NORMAL, baseIndex.getState());
         assertEquals(Partition.PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.ROLLUP, olapTable.getState());
@@ -228,11 +228,11 @@ public class RollupJobV2Test extends DDLTestBase {
         rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
         assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();

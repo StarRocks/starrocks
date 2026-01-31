@@ -93,10 +93,10 @@ Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
 }
 
 void HorizontalGeneralTabletWriter::close() {
-    if (!_finished && !_files.empty()) {
+    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty())) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_files.size());
-        for (const auto& f : _files) {
+        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size());
+        for (const auto& f : _segments) {
             std::string path;
             if (_location_provider) {
                 path = _location_provider->segment_location(_tablet_id, f.path);
@@ -105,9 +105,38 @@ void HorizontalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        for (const auto& f : _dels) {
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->del_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->del_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
+        for (const auto& f : _ssts) {
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->sst_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->sst_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
         delete_files_async(std::move(full_paths_to_delete));
     }
-    _files.clear();
+    _segments.clear();
+    _dels.clear();
+    _ssts.clear();
+}
+
+StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() const {
+    auto writer =
+            std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr, _tablet_id, _schema, _txn_id, _is_compaction,
+                                                            _flush_pool, _bundle_file_context, _global_dicts);
+    RETURN_IF_ERROR(writer->open());
+    writer->set_auto_flush(auto_flush());
+    return writer;
 }
 
 Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
@@ -138,7 +167,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
             return fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name));
         }
     };
-    if (_bundle_file_context != nullptr && _files.empty() && eos) {
+    if (_bundle_file_context != nullptr && _segments.empty() && eos) {
         // If this is the first data file writer and it is the end of stream,
         // then we will create a shared file for this segment writer.
         RETURN_IF_ERROR(_bundle_file_context->try_create_bundle_file(create_file_fn));
@@ -158,14 +187,18 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         uint64_t index_size = 0;
         uint64_t footer_position = 0;
         RETURN_IF_ERROR(_seg_writer->finalize(&segment_size, &index_size, &footer_position));
+        SegmentFileInfo& segment_file_info = _segments.emplace_back();
         const std::string& segment_path = _seg_writer->segment_path();
-        std::string segment_name = std::string(basename(segment_path));
-        auto file_info = FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()};
+        segment_file_info.path = std::string(basename(segment_path));
+        segment_file_info.size = segment_size;
+        segment_file_info.encryption_meta = _seg_writer->encryption_meta();
         if (_seg_writer->bundle_file_offset() >= 0) {
             // This is a bundle data file.
-            file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
+            segment_file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
         }
-        _files.emplace_back(file_info);
+        segment_file_info.sort_key_min = _seg_writer->get_sort_key_min();
+        segment_file_info.sort_key_max = _seg_writer->get_sort_key_max();
+        segment_file_info.num_rows = _seg_writer->num_rows();
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
@@ -175,18 +208,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
             segment->set_path(segment_path);
             segment->set_encryption_meta(_seg_writer->encryption_meta());
         }
-        const auto& seg_global_dict_columns_valid_info = _seg_writer->global_dict_columns_valid_info();
-        for (const auto& it : seg_global_dict_columns_valid_info) {
-            if (!it.second) {
-                _global_dict_columns_valid_info[it.first] = false;
-            } else {
-                if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
-                    iter == _global_dict_columns_valid_info.end()) {
-                    _global_dict_columns_valid_info[it.first] = true;
-                }
-            }
-        }
-
+        check_global_dict(_seg_writer.get());
         _seg_writer.reset();
     }
     return Status::OK();
@@ -310,9 +332,14 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
         RETURN_IF_ERROR(segment_writer->finalize_footer(&segment_size, &footer_position));
+        SegmentFileInfo& segment_file_info = _segments.emplace_back();
         const std::string& segment_path = segment_writer->segment_path();
-        std::string segment_name = std::string(basename(segment_path));
-        _files.emplace_back(FileInfo{segment_name, segment_size, segment_writer->encryption_meta()});
+        segment_file_info.path = std::string(basename(segment_path));
+        segment_file_info.size = segment_size;
+        segment_file_info.encryption_meta = segment_writer->encryption_meta();
+        segment_file_info.sort_key_min = segment_writer->get_sort_key_min();
+        segment_file_info.sort_key_max = segment_writer->get_sort_key_max();
+        segment_file_info.num_rows = segment_writer->num_rows();
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
@@ -327,10 +354,10 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
 }
 
 void VerticalGeneralTabletWriter::close() {
-    if (!_finished && !_files.empty()) {
+    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty())) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_files.size());
-        for (const auto& f : _files) {
+        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size());
+        for (const auto& f : _segments) {
             std::string path;
             if (_location_provider) {
                 path = _location_provider->segment_location(_tablet_id, f.path);
@@ -339,9 +366,29 @@ void VerticalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        for (const auto& f : _dels) {
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->del_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->del_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
+        for (const auto& f : _ssts) {
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->sst_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->sst_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
         delete_files_async(std::move(full_paths_to_delete));
     }
-    _files.clear();
+    _segments.clear();
+    _dels.clear();
+    _ssts.clear();
 }
 
 StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(

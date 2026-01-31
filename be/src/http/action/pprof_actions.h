@@ -38,8 +38,6 @@
 
 namespace starrocks {
 
-class BfdParser;
-
 class HeapAction : public HttpHandler {
 public:
     HeapAction() = default;
@@ -96,12 +94,9 @@ public:
 
 class SymbolAction : public HttpHandler {
 public:
-    SymbolAction(BfdParser* parser) : _parser(parser) {}
+    SymbolAction() = default;
     ~SymbolAction() override = default;
 
     void handle(HttpRequest* req) override;
-
-private:
-    BfdParser* _parser;
 };
 } // namespace starrocks

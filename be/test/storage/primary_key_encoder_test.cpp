@@ -52,7 +52,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int32(i * 2343);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
     }
     PrimaryKeyEncoder::encode(*sc, *pchunk, 0, n, dest.get());
     auto dchunk = pchunk->clone_empty_with_schema();
@@ -73,7 +73,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int128(i * 2343);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
     }
     vector<uint32_t> indexes;
     for (int i = 0; i < n; i++) {
@@ -98,18 +98,18 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     for (int i = 0; i < n; i++) {
         Datum tmp;
         tmp.set_int32(i * 2343);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
         string tmpstr = StringPrintf("slice000%d", i * 17);
         if (i % 5 == 0) {
             // set some '\0'
             tmpstr[rand() % tmpstr.size()] = '\0';
         }
         tmp.set_slice(tmpstr);
-        pchunk->columns()[1]->append_datum(tmp);
+        pchunk->mutable_columns()[1]->append_datum(tmp);
         tmp.set_int16(i);
-        pchunk->columns()[2]->append_datum(tmp);
+        pchunk->mutable_columns()[2]->append_datum(tmp);
         tmp.set_uint8(i % 2);
-        pchunk->columns()[3]->append_datum(tmp);
+        pchunk->mutable_columns()[3]->append_datum(tmp);
     }
     vector<uint32_t> indexes;
     for (int i = 0; i < n; i++) {
@@ -138,15 +138,15 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         Datum tmp;
         tmp.set_int32(42);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
         string tmpstr("slice0000");
         tmpstr[tmpstr.size() - 1] = '\0';
         tmp.set_slice(tmpstr);
-        pchunk->columns()[1]->append_datum(tmp);
+        pchunk->mutable_columns()[1]->append_datum(tmp);
         tmp.set_int16(10);
-        pchunk->columns()[2]->append_datum(tmp);
+        pchunk->mutable_columns()[2]->append_datum(tmp);
         tmp.set_uint8(1);
-        pchunk->columns()[3]->append_datum(tmp);
+        pchunk->mutable_columns()[3]->append_datum(tmp);
         EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 10));
         EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
     }
@@ -157,15 +157,15 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         Datum tmp;
         tmp.set_int32(42);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
         string tmpstr(128, 's');
         tmpstr[tmpstr.size() - 1] = '\0';
         tmp.set_slice(tmpstr);
-        pchunk->columns()[1]->append_datum(tmp);
+        pchunk->mutable_columns()[1]->append_datum(tmp);
         tmp.set_int16(10);
-        pchunk->columns()[2]->append_datum(tmp);
+        pchunk->mutable_columns()[2]->append_datum(tmp);
         tmp.set_uint8(1);
-        pchunk->columns()[3]->append_datum(tmp);
+        pchunk->mutable_columns()[3]->append_datum(tmp);
         EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
     }
 }
@@ -178,12 +178,12 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
         Datum tmp;
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
         tmpstr = "slice000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
                  "0000"
                  "00000000000000000000000000000000000";
         tmp.set_slice(tmpstr);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
         EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
     }
     {
@@ -191,10 +191,10 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
         Datum tmp;
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
         tmpstr = "slice00000000000000000000000000000000000";
         tmp.set_slice(tmpstr);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
         EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
     }
 }

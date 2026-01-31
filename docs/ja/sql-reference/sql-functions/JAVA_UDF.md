@@ -17,7 +17,7 @@ sidebar_position: 0.9
 
 - [Apache Maven](https://maven.apache.org/download.cgi) をインストールしており、Java プロジェクトを作成およびコンパイルできます。
 
-- サーバーに JDK 1.8 をインストールしています。
+- サーバーに JDK 17 をインストールしています。
 
 - Java UDF 機能が有効になっています。この機能を有効にするには、FE 設定ファイル **fe/conf/fe.conf** の FE 設定項目 `enable_udf` を `true` に設定し、FE ノードを再起動して設定を有効にします。詳細については、[パラメーター設定](../../administration/management/FE_configuration.md)を参照してください。
 
@@ -56,8 +56,8 @@ project
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
     </properties>
 
     <dependencies>

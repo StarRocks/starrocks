@@ -36,9 +36,11 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.thrift.TSortInfo;
 
 import java.util.List;
 
@@ -170,6 +172,10 @@ public class SortInfo {
     @Override
     public SortInfo clone() {
         return new SortInfo(this);
+    }
+
+    public TSortInfo toTSortInfo() {
+        return new TSortInfo(ExprToThrift.treesToThrift(getOrderingExprs()), getIsAscOrder(), getNullsFirst());
     }
 }
 

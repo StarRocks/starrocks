@@ -21,7 +21,9 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet.h"
+#include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
 #include "testutil/sync_point.h"
@@ -42,8 +44,11 @@ Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetada
                                    const MetaFileBuilder* builder) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_lock);
-    if (_loaded) {
+    if (_loaded && !need_rebuild()) {
         return _status;
+    }
+    if (need_rebuild()) {
+        unload_without_lock();
     }
     _status = _do_lake_load(tablet_mgr, metadata, base_version, builder);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
@@ -155,7 +160,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    Column* pkc = nullptr;
+                    const Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
@@ -201,15 +206,16 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
     return Status::OK();
 }
 
-Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version,
-                                    const DelvecPagePB& delvec_page, DelVectorPtr delvec) {
+Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range,
+                                    uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
+                                    DelVectorPtr delvec) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }
 
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, delvec_page, std::move(delvec));
+        return lake_persistent_index->ingest_sst(sst_meta, sst_range, rssid, version, delvec_page, std::move(delvec));
     } else {
         return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
@@ -310,6 +316,219 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
         return Status::InternalError("Unsupported lake_persistent_index_type " +
                                      PersistentIndexTypePB_Name(metadata->persistent_index_type()));
     }
+}
+
+int32_t LakePrimaryIndex::current_fileset_index() const {
+    if (!_enable_persistent_index) {
+        return -1;
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->current_fileset_index();
+    } else {
+        return -1;
+    }
+}
+
+StatusOr<AsyncCompactCBPtr> LakePrimaryIndex::early_sst_compact(
+        lake::LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
+        const TabletMetadataPtr& metadata, int32_t fileset_start_idx) {
+    if (!_enable_persistent_index) {
+        return nullptr;
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->early_sst_compact(compact_mgr, tablet_mgr, metadata, fileset_start_idx);
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+    }
+}
+
+Status LakePrimaryIndex::flush_memtable(bool force) {
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->flush_memtable(force);
+    }
+
+    return Status::OK();
+}
+
+// Query index for existing rows matching primary keys from all segments.
+// This is used during read-only publish when index files already exist.
+//
+// Parameters:
+// - token: Thread pool token for parallel execution. If null, executes serially.
+// - segment_pk_iterator: Iterator over all segments containing primary keys to query.
+// - new_deletes: Output map to store rows that need to be marked as deleted.
+//
+// Parallel Execution:
+// - If token is set, submits each segment as a separate task to the thread pool
+// - Otherwise, processes each segment inline (serial mode)
+// - Waits for all tasks to complete before returning
+//
+// The function performs for each segment:
+// 1. Get encoded primary keys for the segment
+// 2. Query index to find existing row IDs (old_values)
+// 3. Add found row IDs to the deletes map (rows to be marked as deleted)
+//
+// Thread Safety:
+// - Each task allocates its own slot to avoid data races during parallel execution
+// - Shared state (deletes, status) is protected by mutex when updated
+// - Errors are accumulated and checked after all tasks complete
+Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
+                                      DeletesMap* new_deletes) {
+    // Prepare parallel execution infrastructure if enabled
+    std::mutex mutex; // Protects shared state (deletes, status) during parallel execution
+    Status status = Status::OK();
+
+    // Setup context shared across all parallel tasks
+    ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
+    auto* context_ptr = &context;
+
+    // Process each segment in the iterator
+    for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
+        auto current = segment_pk_iterator->current();
+
+        // `extend_slots` is not thread-safe, must be called before submitting task
+        context.extend_slots(); // Allocate a slot for this task's working data
+        auto slot = context.slots.back().get();
+
+        // Define the task to execute (either async in thread pool or inline)
+        auto func = [this, context_ptr, current, slot, segment_pk_iterator]() {
+            // Error handling: Must not throw or early return, as we need to wait for all tasks
+            Status st = Status::OK();
+
+            // Encode primary keys for this segment
+            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
+            DCHECK(context_ptr->slots.size() > 0);
+
+            if (pk_column_st.ok()) {
+                // Query index for existing rows with these primary keys
+                slot->pk_column = std::move(pk_column_st.value());
+                slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
+                st = get(*slot->pk_column, &slot->old_values);
+            } else {
+                st = pk_column_st.status();
+            }
+
+            // Update shared state under lock
+            std::lock_guard<std::mutex> l(*context_ptr->mutex);
+            context_ptr->status->update(st);
+
+            // Collect rows to delete: extract segment ID and row ID from old_values
+            // Format: old_value = (segment_id << 32) | row_id
+            if (context_ptr->status->ok()) {
+                for (unsigned long old : slot->old_values) {
+                    if (old != NullIndexValue) {
+                        (*context_ptr->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    }
+                }
+            }
+        };
+
+        if (token) {
+            // Parallel mode: Submit task to thread pool
+            auto st = token->submit_func(func);
+            TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
+
+            // Record submit errors (actual execution errors will be recorded by the task)
+            std::lock_guard<std::mutex> l(*context.mutex);
+            context.status->update(st);
+        } else {
+            // Serial mode: Execute inline
+            func();
+            RETURN_IF_ERROR(*context.status);
+        }
+    }
+    if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
+        token->wait(); // Wait for all submitted tasks to complete
+    }
+
+    RETURN_IF_ERROR(status); // Check for errors from parallel tasks
+    return segment_pk_iterator->status();
+}
+
+// Update index with new primary keys from all segments.
+// This is used during write operations (non-read-only publish) to insert/update index entries.
+//
+// Parameters:
+// - token: Thread pool token for parallel execution. If null, executes serially.
+// - rssid: RowSet Segment ID, identifies the rowset being processed.
+// - segment_pk_iterator: Iterator over all segments containing primary keys to upsert.
+// - new_deletes: Output map to store rows that need to be marked as deleted.
+//
+// Parallel Execution:
+// - If token is set, submits each segment as a separate task to the thread pool
+// - Otherwise, processes each segment inline (serial mode)
+// - Waits for all tasks to complete before returning
+// - After all tasks finish, flushes accumulated updates to sstable file
+//
+// Thread Safety:
+// - Each parallel task gets its own slot with independent pk_column storage
+// - Errors are accumulated in shared status under mutex protection
+// - Function returns error status after checking all tasks have completed
+//
+// Note: Unlike parallel_get which is read-only, this writes to the index memtable
+Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
+                                         DeletesMap* new_deletes) {
+    // Prepare parallel execution infrastructure if enabled
+    std::mutex mutex; // Protects shared state (deletes, status) during parallel execution
+    Status status = Status::OK();
+
+    // Setup context shared across all parallel tasks
+    ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
+
+    // Process each segment in the iterator
+    for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
+        auto current = segment_pk_iterator->current();
+        if (token) {
+            // Parallel mode: Allocate a slot for this task to store its pk_column
+            context.extend_slots();
+            auto slot = context.slots.back().get();
+
+            // We can't return error directly, because we need to wait all previous tasks finish.
+            // Instead, we accumulate errors in context->status for later checking.
+            Status st = Status::OK();
+            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
+            if (pk_column_st.ok()) {
+                // Store pk_column in this task's slot to avoid data races
+                slot->pk_column = std::move(pk_column_st.value());
+
+                // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
+                // them in the context (not used for upsert, only for parallel_get)
+                st = upsert(rssid, current.second, *slot->pk_column, nullptr /* stat */, &context);
+                TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
+            } else {
+                st = pk_column_st.status();
+            }
+
+            // Update shared status under mutex if error occurred
+            if (!st.ok()) {
+                std::lock_guard<std::mutex> l(*context.mutex);
+                context.status->update(st);
+            }
+        } else {
+            // Serial mode: Execute inline with direct error propagation
+            ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.first.get()));
+            RETURN_IF_ERROR(upsert(rssid, current.second, *pk_column, context.deletes));
+        }
+    }
+    // Synchronize parallel execution if enabled
+    if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
+        token->wait(); // Wait for all submitted tasks to complete
+
+        // Check for errors from parallel tasks
+        RETURN_IF_ERROR(status);
+        // Flush accumulated updates to sstable file (batch optimization)
+        RETURN_IF_ERROR(flush_memtable());
+    }
+    return segment_pk_iterator->status();
 }
 
 } // namespace starrocks::lake

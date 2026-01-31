@@ -20,7 +20,7 @@
 
 namespace starrocks::csv {
 
-Status NullableConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status NullableConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                        const Options& options) const {
     if (column.is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(&column);
@@ -36,7 +36,7 @@ Status NullableConverter::write_string(OutputStream* os, const Column& column, s
     }
 }
 
-Status NullableConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status NullableConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                               const Options& options) const {
     if (column.is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(&column);
@@ -58,7 +58,7 @@ bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Sli
     if (s == "\\N") {
         return nullable_column->append_nulls(1);
     }
-    auto* data = nullable_column->mutable_begin_append_not_default_value();
+    auto* data = nullable_column->begin_append_not_default_value();
     if (_base_converter->read_string(data, s, options)) {
         nullable_column->finish_append_one_not_default_value();
         return true;
@@ -71,12 +71,12 @@ bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Sli
 
 bool NullableConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     auto* nullable = down_cast<NullableColumn*>(column);
-    auto* data = nullable->data_column().get();
+    auto* data = nullable->data_column_raw_ptr();
 
     if (s == "\\N") {
         return nullable->append_nulls(1);
     } else if (_base_converter->read_string(data, s, options)) {
-        nullable->null_column()->append(0);
+        nullable->null_column_raw_ptr()->append(0);
         return true;
     } else if (options.invalid_field_as_null) {
         return nullable->append_nulls(1);
@@ -87,12 +87,12 @@ bool NullableConverter::read_string(Column* column, const Slice& s, const Option
 
 bool NullableConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     auto* nullable = down_cast<NullableColumn*>(column);
-    auto* data = nullable->data_column().get();
+    auto* data = nullable->data_column_raw_ptr();
 
     if (s == "null") {
         return nullable->append_nulls(1);
     } else if (_base_converter->read_quoted_string(data, s, options)) {
-        nullable->null_column()->append(0);
+        nullable->null_column_raw_ptr()->append(0);
         return true;
     } else if (options.invalid_field_as_null) {
         return nullable->append_nulls(1);

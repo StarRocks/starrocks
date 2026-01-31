@@ -1,0 +1,18 @@
+-- name: test_create_resource_group_with_mem_pool
+
+[UC] drop resource group shared_resource_group_for_test_user;
+
+[UC] create resource group shared_resource_group_for_test_user
+to (user='test_user') 
+with (
+  'cpu_weight' = '12',
+  'mem_limit' = '20%',
+  'mem_pool' = 'test_pool_1'
+);
+
+show verbose resource groups all;
+-- result:
+[REGEX]shared_resource_group_for_test_user.+12.+20(\.\d+)?%.+NORMAL.+\(id=\d+,.+user=test_user\)\s*(test_pool_1)
+-- !result
+
+[UC] drop resource group shared_resource_group_for_test_user;

@@ -15,12 +15,16 @@
 package com.starrocks.alter;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -34,7 +38,13 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AlterReplicaTask;
+import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -45,11 +55,14 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -58,7 +71,6 @@ public class LakeTableSchemaChangeJobTest {
     private static ConnectContext connectContext;
     private static final String DB_NAME = "db_lake_schema_change_test";
     private static Database db;
-    private LakeTableSchemaChangeJob schemaChangeJob;
     private LakeTable table;
 
     public LakeTableSchemaChangeJobTest() {
@@ -68,16 +80,7 @@ public class LakeTableSchemaChangeJobTest {
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
-        // Schema change job is executed manually, so stop the schema change daemon to avoid interfering with the test.
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
-        schemaChangeHandler.setStop();
-        schemaChangeHandler.interrupt();
-        long startTime = System.currentTimeMillis();
-        while (schemaChangeHandler.isRunning()) {
-            Thread.sleep(100);
-            Assertions.assertTrue(System.currentTimeMillis() - startTime < 60000,
-                    "Schema change handler is not stopped in 60 seconds");
-        }
+        UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
     }
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
@@ -103,6 +106,11 @@ public class LakeTableSchemaChangeJobTest {
         return (LakeTableSchemaChangeJob) alterJob;
     }
 
+    private LakeTableSchemaChangeJob alterTableAddColumn() throws Exception {
+        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 BIGINT key NOT NULL default \"0\"");
+        return getAlterJob(table);
+    }
+
     @BeforeEach
     public void before() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
@@ -112,10 +120,6 @@ public class LakeTableSchemaChangeJobTest {
         db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(DB_NAME);
         table = createTable(connectContext, "CREATE TABLE t0(c0 INT) duplicate key(c0) distributed by hash(c0) buckets "
                     + NUM_BUCKETS);
-        Config.enable_fast_schema_evolution_in_share_data_mode = false;
-        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 BIGINT AS c0 + 2");
-        schemaChangeJob = getAlterJob(table);
-        Config.enable_fast_schema_evolution_in_share_data_mode = true;
     }
 
     @AfterEach
@@ -124,7 +128,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testCancelPendingJob() throws IOException {
+    public void testCancelPendingJob() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -134,15 +139,16 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testDropTableBeforeCancel() {
+    public void testDropTableBeforeCancel() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         db.dropTable(table.getName());
-
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testPendingJobNoAliveBackend() {
+    public void testPendingJobNoAliveBackend() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -176,7 +182,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testTableDroppedInPending() {
+    public void testTableDroppedInPending() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<Utils>() {
             @Mock
             public Long chooseNodeId(LakeTablet tablet) {
@@ -202,7 +209,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testCreateTabletFailed() {
+    public void testCreateTabletFailed() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
@@ -222,7 +230,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testCreateTabletSuccess() throws AlterCancelException {
+    public void testCreateTabletSuccess() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
@@ -233,11 +242,12 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testPreviousTxnNotFinished() throws AlterCancelException {
+    public void testPreviousTxnNotFinished() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
@@ -258,11 +268,12 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testThrowAnalysisExceptionWhileWaitingTxn() throws AlterCancelException {
+    public void testThrowAnalysisExceptionWhileWaitingTxn() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
@@ -284,11 +295,12 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
+    public void testTableNotExistWhileWaitingTxn() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
@@ -312,11 +324,12 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testTableDroppedBeforeRewriting() throws AlterCancelException {
+    public void testTableDroppedBeforeRewriting() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
@@ -343,11 +356,12 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testAlterTabletFailed() throws AlterCancelException {
+    public void testAlterTabletFailed() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -373,11 +387,12 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testAlterTabletSuccess() throws AlterCancelException {
+    public void testAlterTabletSuccess() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -400,7 +415,7 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -418,6 +433,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testAlterTabletSuccessEnableFileBundling() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -448,7 +464,7 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -463,6 +479,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testAlterTabletSuccessDisableFileBundling() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -493,7 +510,7 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -507,7 +524,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testPublishVersion() throws AlterCancelException, InterruptedException {
+    public void testPublishVersion() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -535,7 +553,7 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
@@ -579,11 +597,11 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(4, partition.getDefaultPhysicalPartition().getNextVersion());
 
-        shadowIndexes = partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        shadowIndexes = partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.SHADOW);
         Assertions.assertEquals(0, shadowIndexes.size());
 
         List<MaterializedIndex> normalIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.VISIBLE);
         Assertions.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
 
@@ -594,6 +612,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testPublishRetry() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         AtomicInteger numPublishRetry = new AtomicInteger(0);
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
@@ -643,7 +662,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testTransactionRaceCondition() throws AlterCancelException {
+    public void testTransactionRaceCondition() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -705,6 +725,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testCancelPendingJobWithFlag() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.setIsCancelling(true);
         schemaChangeJob.runPendingJob();
         schemaChangeJob.setIsCancelling(false);
@@ -712,5 +733,150 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.setWaitingCreatingReplica(true);
         schemaChangeJob.cancel("");
         schemaChangeJob.setWaitingCreatingReplica(false);
+    }
+
+    @Test
+    public void testInsertConcurrent() throws Exception {
+        TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
+                TransactionState.TxnSourceType.BE, "127.0.0.1");
+        // block the schema change job to simulate concurrent insert
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        schemaChangeJob.run();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, "insert into t0 values (1)").second;
+        List<Column> fullSchema = table.getFullSchema();
+        Assertions.assertEquals(2, fullSchema.size());
+        Assertions.assertEquals("c0", fullSchema.get(0).getName());
+        Assertions.assertEquals("c1", fullSchema.get(1).getName());
+        List<Expr> outputExprs = execPlan.getOutputExprs();
+        Assertions.assertEquals(fullSchema.size(), outputExprs.size());
+        for (int i = 0; i < fullSchema.size(); i++) {
+            Assertions.assertEquals(fullSchema.get(i).getType(), outputExprs.get(i).getType());
+        }
+    }
+
+    @Test
+    public void testAlterAfterFseV2() throws Exception {
+        // Create a table with multiple partitions
+        LakeTable multiPartitionTable = createTable(connectContext,
+                "CREATE TABLE t_multi_partition(c0 INT) duplicate key(c0) " +
+                        "PARTITION BY RANGE(c0) (" +
+                        "PARTITION p1 VALUES [(\"0\"), (\"100\"))," +
+                        "PARTITION p2 VALUES [(\"100\"), (\"200\"))" +
+                        ") " +
+                        "distributed by hash(c0) buckets 3");
+
+        // Alter table to add a value column which is expected to use fast schema evolution v2
+        alterTable(connectContext, "ALTER TABLE t_multi_partition ADD COLUMN c1 BIGINT");
+        // Alter table to add a generated column
+        alterTable(connectContext, "ALTER TABLE t_multi_partition ADD COLUMN c2 BIGINT AS c0 + c1");
+        LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(multiPartitionTable);
+
+        // Capture AgentBatchTask objects
+        List<AgentBatchTask> capturedBatchTasks = new ArrayList<>();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                capturedBatchTasks.add(batchTask);
+                // Mark tasks as finished to allow job to proceed
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        schemaChangeJob.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+        schemaChangeJob.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+
+        schemaChangeJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        // Verify that we captured at least one batch task
+        Assertions.assertFalse(capturedBatchTasks.isEmpty(), "Should have captured at least one AgentBatchTask");
+
+        // Extract all AlterReplicaTask objects
+        List<AlterReplicaTask> alterReplicaTasks = new ArrayList<>();
+        for (AgentBatchTask batchTask : capturedBatchTasks) {
+            for (com.starrocks.task.AgentTask agentTask : batchTask.getAllTasks()) {
+                if (agentTask instanceof AlterReplicaTask) {
+                    alterReplicaTasks.add((AlterReplicaTask) agentTask);
+                }
+            }
+        }
+
+        Assertions.assertFalse(alterReplicaTasks.isEmpty(), "Should have at least one AlterReplicaTask");
+
+        // Get table and TabletInvertedIndex for verification
+        OlapTable tbl = (OlapTable) multiPartitionTable;
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        // Group tasks by originIndexId (the index ID of the origin tablet)
+        Map<Long, List<AlterReplicaTask>> tasksByOriginIndexId = new HashMap<>();
+        Map<Long, TTabletSchema> expectedSchemasByIndexId = new HashMap<>();
+
+        for (AlterReplicaTask task : alterReplicaTasks) {
+            // Verify baseTabletReadSchema is not null
+            TAlterTabletReqV2 request = task.toThrift();
+            Assertions.assertTrue(request.isSetBase_tablet_read_schema(),
+                    "base_tablet_read_schema should be set for tablet " + task.getBaseTabletId());
+            Assertions.assertNotNull(request.getBase_tablet_read_schema(),
+                    "base_tablet_read_schema should not be null for tablet " + task.getBaseTabletId());
+
+            // Get originIndexId from TabletInvertedIndex using baseTabletId
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(task.getBaseTabletId());
+            Assertions.assertNotNull(tabletMeta, "TabletMeta should exist for tablet " + task.getBaseTabletId());
+            long originIndexId = tabletMeta.getIndexId();
+
+            // Group tasks by originIndexId
+            tasksByOriginIndexId.computeIfAbsent(originIndexId, k -> new ArrayList<>()).add(task);
+
+            // Create expected schema if not already created
+            if (!expectedSchemasByIndexId.containsKey(originIndexId)) {
+                TTabletSchema expectedSchema = SchemaInfo.fromMaterializedIndex(
+                        tbl, originIndexId, tbl.getIndexMetaByMetaId(originIndexId)).toTabletSchema();
+                expectedSchemasByIndexId.put(originIndexId, expectedSchema);
+            }
+        }
+
+        // Verify that tasks with the same originIndexId use the same baseTabletReadSchema
+        for (Map.Entry<Long, List<AlterReplicaTask>> entry : tasksByOriginIndexId.entrySet()) {
+            long originIndexId = entry.getKey();
+            List<AlterReplicaTask> tasks = entry.getValue();
+            TTabletSchema expectedSchema = expectedSchemasByIndexId.get(originIndexId);
+
+            Assertions.assertNotNull(expectedSchema, "Expected schema should exist for index " + originIndexId);
+
+            // Verify all tasks for this index use the same schema
+            for (AlterReplicaTask task : tasks) {
+                TAlterTabletReqV2 request = task.toThrift();
+                TTabletSchema actualSchema = request.getBase_tablet_read_schema();
+
+                // Verify schema ID matches
+                Assertions.assertEquals(expectedSchema.getId(), actualSchema.getId(),
+                        "Schema ID should match for index " + originIndexId);
+                Assertions.assertEquals(expectedSchema.getKeys_type(), actualSchema.getKeys_type(),
+                        "Keys type should match for index " + originIndexId);
+                Assertions.assertEquals(expectedSchema.getShort_key_column_count(),
+                        actualSchema.getShort_key_column_count(),
+                        "Short key column count should match for index " + originIndexId);
+                Assertions.assertEquals(expectedSchema.getColumns().size(), actualSchema.getColumns().size(),
+                        "Column count should match for index " + originIndexId);
+            }
+        }
+
+        // Verify that different originIndexId use different schemas (if there are multiple indices)
+        if (tasksByOriginIndexId.size() > 1) {
+            List<Long> indexIds = new ArrayList<>(tasksByOriginIndexId.keySet());
+            TTabletSchema schema1 = expectedSchemasByIndexId.get(indexIds.get(0));
+            TTabletSchema schema2 = expectedSchemasByIndexId.get(indexIds.get(1));
+            // They might have the same schema if they're from the same origin index, but structure should be correct
+            Assertions.assertNotNull(schema1);
+            Assertions.assertNotNull(schema2);
+        }
     }
 }

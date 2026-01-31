@@ -104,6 +104,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     auto driver = std::make_shared<PipelineDriver>(ops, _query_ctx, _fragment_ctx, pipeline.get(), 0);
 
     driver->prepare(_runtime_state);
+    driver->prepare_local_state(_runtime_state);
 
     // Now simulate GlobalDriverExecutor to cancel the driver due to source operator failure
     auto status = Status::NotFound("file not found");

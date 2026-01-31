@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -289,5 +290,12 @@ public class JDBCTableTest {
             System.out.println(e.getMessage());
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testGetSupportedOperationsWithoutResource() throws Exception {
+        Map<String, String> jdbcProperties = getMockedJDBCProperties("jdbc:mysql://127.0.0.1:3306");
+        JDBCTable table = new JDBCTable(2000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        Assertions.assertEquals(Set.of(TableOperation.READ, TableOperation.ALTER), table.getSupportedOperations());
     }
 }

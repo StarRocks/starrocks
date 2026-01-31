@@ -74,11 +74,11 @@ public:
             for (int i = 2; i < ctx->get_num_constant_columns(); ++i) {
                 auto arg_column = ctx->get_constant_column(i);
                 auto arg_value = ColumnHelper::get_const_value<LT>(arg_column);
-                if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
-                    intersect.add_key(arg_value);
-                } else {
+                if constexpr (lt_is_string_or_binary<LT>) {
                     std::string key(arg_value.data, arg_value.size);
                     intersect.add_key(key);
+                } else {
+                    intersect.add_key(arg_value);
                 }
             }
             this->data(state).initial = true;
@@ -92,11 +92,11 @@ public:
         auto bimtap_value = bitmap_column->get_pool()[row_num];
         auto key_value = GetContainer<LT>::get_data(key_column)[row_num];
 
-        if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
-            intersect.update(key_value, bimtap_value);
-        } else {
+        if constexpr (lt_is_string_or_binary<LT>) {
             std::string key(key_value.data, key_value.size);
             intersect.update(key, bimtap_value);
+        } else {
+            intersect.update(key_value, bimtap_value);
         }
     }
 
@@ -123,18 +123,18 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK(src[0]->is_object());
 
         // initial keys in BitmapIntersect.
         BitmapIntersect<BitmapRuntimeCppType<LT>> intersect;
         for (int i = 2; i < src.size(); ++i) {
             auto arg_value = ColumnHelper::get_const_value<LT>(src[i]);
-            if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
-                intersect.add_key(arg_value);
-            } else {
+            if constexpr (lt_is_string_or_binary<LT>) {
                 std::string key(arg_value.data, arg_value.size);
                 intersect.add_key(key);
+            } else {
+                intersect.add_key(arg_value);
             }
         }
 
@@ -151,11 +151,11 @@ public:
             auto bimtap_value = bitmap_column->get_pool()[i];
             auto key_value = GetContainer<LT>::get_data(key_column)[i];
 
-            if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
-                intersect_per_row.update(key_value, bimtap_value);
-            } else {
+            if constexpr (lt_is_string_or_binary<LT>) {
                 std::string key(key_value.data, key_value.size);
                 intersect_per_row.update(key, bimtap_value);
+            } else {
+                intersect_per_row.update(key_value, bimtap_value);
             }
 
             new_size += intersect_per_row.size();
@@ -165,7 +165,7 @@ public:
             intersect_chunks.emplace_back(intersect_per_row);
         }
 
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         size_t old_size = bytes.size();
         bytes.resize(new_size);

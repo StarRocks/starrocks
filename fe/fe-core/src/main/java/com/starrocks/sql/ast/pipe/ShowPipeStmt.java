@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.Pipe;
@@ -33,8 +32,6 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Optional;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 public class ShowPipeStmt extends ShowStmt {
     private String dbName;
@@ -71,7 +68,9 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
         row.add(String.valueOf(pipe.getState()));
-        row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
+        row.add(Optional.ofNullable(pipe.getTargetTable())
+                .map(tableName -> tableName.toString())
+                .orElse(""));
         row.add(pipe.getLoadStatus().toJson());
         row.add(pipe.getLastErrorInfo().toJson());
         row.add(DateUtils.formatTimestampInSeconds(pipe.getCreatedTime()));
@@ -90,7 +89,7 @@ public class ShowPipeStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public String getDbName() {

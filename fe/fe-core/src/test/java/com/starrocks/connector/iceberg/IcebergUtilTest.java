@@ -15,11 +15,14 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.types.Types;
@@ -32,6 +35,7 @@ import java.util.Map;
 
 import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class IcebergUtilTest {
 
@@ -176,5 +180,39 @@ public class IcebergUtilTest {
             assertEquals(1, tExprMinMaxValueMap.get(5).min_int_value);
             assertEquals(10, tExprMinMaxValueMap.get(5).max_int_value);
         }
+    }
+
+    @Test
+    public void testCheckFileFormatSupportedDelete() {
+        FileScanTask parquetFileScanTask = createMockFileScanTask(FileFormat.PARQUET);
+        FileScanTask orcFileScanTask = createMockFileScanTask(FileFormat.ORC);
+        FileScanTask avroFileScanTask = createMockFileScanTask(FileFormat.AVRO);
+
+        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, true);
+
+        StarRocksConnectorException orcException = assertThrows(StarRocksConnectorException.class,
+                () -> IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, true));
+        assertEquals("Delete operations on Iceberg tables are only supported for Parquet format files. " +
+                "Found ORC format file: /test/orc/file.orc", orcException.getMessage());
+
+        StarRocksConnectorException avroException = assertThrows(StarRocksConnectorException.class,
+                () -> IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, true));
+        assertEquals("Delete operations on Iceberg tables are only supported for Parquet format files. " +
+                "Found AVRO format file: /test/avro/file.avro", avroException.getMessage());
+
+        IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, false);
+        IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, false);
+        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, false);
+    }
+
+    private FileScanTask createMockFileScanTask(FileFormat fileFormat) {
+        FileScanTask mockTask = org.mockito.Mockito.mock(FileScanTask.class);
+        org.apache.iceberg.DataFile mockFile = org.mockito.Mockito.mock(org.apache.iceberg.DataFile.class);
+        org.mockito.Mockito.when(mockTask.file()).thenReturn(mockFile);
+        org.mockito.Mockito.when(mockFile.format()).thenReturn(fileFormat);
+        String location = "/test/" + fileFormat.name().toLowerCase() + "/file." +
+                fileFormat.name().toLowerCase();
+        org.mockito.Mockito.when(mockFile.location()).thenReturn(location);
+        return mockTask;
     }
 }

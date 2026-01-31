@@ -189,11 +189,16 @@ public class LoadAction extends RestBaseAction {
             BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
         String label = request.getRequest().headers().get(LABEL_KEY);
 
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        } else {
+            Optional<String> userWarehouseName = getUserDefaultWarehouse(request);
+            if (userWarehouseName.isPresent() && warehouseManager.warehouseExists(userWarehouseName.get())) {
+                warehouseName = userWarehouseName.get();
+            }
         }
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
@@ -215,8 +220,9 @@ public class LoadAction extends RestBaseAction {
             BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
         TableId tableId = new TableId(dbName, tableName);
         StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
+        String user = Optional.ofNullable(request.getConnectContext()).map(ConnectContext::getQualifiedUser).orElse("");
         RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState()
-                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params);
+                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params, user);
         if (!result.isOk()) {
             BatchWriteResponseResult responseResult = new BatchWriteResponseResult(
                     result.getStatus().status_code.name(), ActionStatus.FAILED,

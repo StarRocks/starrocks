@@ -318,10 +318,10 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, stringType);
 
-        Assertions.assertEquals("varchar(65535)", toHiveType(TypeFactory.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
-        Assertions.assertEquals("varchar(65534)", toHiveType(TypeFactory.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(getOlapMaxVarcharLength())));
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
+        Assertions.assertEquals("varchar(65535)", toHiveType(TypeFactory.createVarcharType(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assertions.assertEquals("varchar(65534)", toHiveType(TypeFactory.createVarcharType(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(getOlapMaxVarcharLength())));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH)));
     }
 
     @Test
@@ -449,10 +449,10 @@ public class ColumnTypeConverterTest {
                 "Unsupported Hive type: CHAR(10000). Supported CHAR types: CHAR(<=255)",
                 () -> toHiveType(TypeFactory.createCharType(10000)));
 
-        Assertions.assertEquals("varchar(100)", toHiveType(TypeFactory.createVarchar(100)));
+        Assertions.assertEquals("varchar(100)", toHiveType(TypeFactory.createVarcharType(100)));
         Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(200000)));
 
-        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarchar(getOlapMaxVarcharLength())));
+        Assertions.assertEquals("string", toHiveType(TypeFactory.createVarcharType(getOlapMaxVarcharLength())));
 
         ScalarType itemType = DateType.DATE;
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));

@@ -45,10 +45,10 @@ import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
-import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.starrocks.connector.share.credential.AwsCredentialUtil.ensureSchemeInEndpoint;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_CATALOG_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_ENDPOINT;
@@ -79,7 +79,6 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
     private static final Logger LOG = LoggerFactory.getLogger(IcebergAwsClientFactory.class);
-    public static final String HTTPS_SCHEME = "https://";
 
     private AwsProperties awsProperties;
 
@@ -295,20 +294,6 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     @Override
     public DynamoDbClient dynamo() {
         return null;
-    }
-
-    /**
-     * Checks if the given 'endpoint' contains a scheme. If not, the default HTTPS scheme is added.
-     *
-     * @param endpoint The endpoint string to be checked
-     * @return The URI with the added scheme
-     */
-    public static URI ensureSchemeInEndpoint(String endpoint) {
-        URI uri = URI.create(endpoint);
-        if (uri.getScheme() != null) {
-            return uri;
-        }
-        return URI.create(HTTPS_SCHEME + endpoint);
     }
 
     public static Region tryToResolveRegion(String strRegion) {

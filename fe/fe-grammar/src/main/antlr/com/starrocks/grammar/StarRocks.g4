@@ -36,6 +36,7 @@ statement
     | setCatalogStatement
     | showDatabasesStatement
     | alterDbQuotaStatement
+    | alterDatabaseSetStatement
     | createDbStatement
     | dropDbStatement
     | showCreateDbStatement
@@ -118,6 +119,7 @@ statement
     | adminSetConfigStatement
     | adminSetReplicaStatusStatement
     | adminShowConfigStatement
+    | adminShowAutomatedSnapshotStatement
     | adminShowReplicaDistributionStatement
     | adminShowReplicaStatusStatement
     | adminRepairTableStatement
@@ -129,6 +131,7 @@ statement
     | executeScriptStatement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
+    | adminAlterAutomatedSnapshotIntervalStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -253,6 +256,11 @@ statement
     | showSqlBlackListStatement
     | showWhiteListStatement
 
+    // Sql Digest BlackList Statement
+    | addSqlDigestBlackListStatement
+    | delSqlDigestBlackListStatement
+    | showSqlDigestBlackListStatement
+
     // Backend BlackList
     | addBackendBlackListStatement
     | delBackendBlackListStatement
@@ -283,6 +291,17 @@ statement
     | createFileStatement
     | dropFileStatement
     | showSmallFilesStatement
+
+    // Warehouse Statement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | suspendWarehouseStatement
+    | resumeWarehouseStatement
+    | setWarehouseStatement
+    | showWarehousesStatement
+    | showClustersStatement
+    | showNodesStatement
+    | alterWarehouseStatement
 
     // Set Statement
     | setStatement
@@ -328,17 +347,6 @@ statement
     | truncatePlanAdvisorStatement
     | alterPlanAdvisorDropStatement
     | showPlanAdvisorStatement
-
-    // Warehouse Statement
-    | createWarehouseStatement
-    | dropWarehouseStatement
-    | suspendWarehouseStatement
-    | resumeWarehouseStatement
-    | setWarehouseStatement
-    | showWarehousesStatement
-    | showClustersStatement
-    | showNodesStatement
-    | alterWarehouseStatement
 
     // CNGroup Statement
     | createCNGroupStatement
@@ -391,6 +399,10 @@ showDatabasesStatement
 alterDbQuotaStatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
+    ;
+
+alterDatabaseSetStatement
+    : ALTER DATABASE identifier SET propertyList
     ;
 
 createDbStatement
@@ -453,7 +465,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')')
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')' | expression)
     ;
 
 generatedColumnDesc
@@ -751,6 +763,10 @@ adminShowConfigStatement
     : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
     ;
 
+adminShowAutomatedSnapshotStatement
+    : ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
+    ;
+
 adminShowReplicaDistributionStatement
     : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
     ;
@@ -760,7 +776,7 @@ adminShowReplicaStatusStatement
     ;
 
 adminRepairTableStatement
-    : ADMIN REPAIR TABLE qualifiedName partitionNames?
+    : ADMIN REPAIR TABLE qualifiedName partitionNames? properties?
     ;
 
 adminCancelRepairTableStatement
@@ -784,11 +800,15 @@ syncStatement
     ;
 
 adminSetAutomatedSnapshotOnStatement
-    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (STORAGE VOLUME svName=identifier)?
+    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (interval)? (STORAGE VOLUME svName=identifier)?
     ;
 
 adminSetAutomatedSnapshotOffStatement
     : ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
+    ;
+
+adminAlterAutomatedSnapshotIntervalStatement
+    : ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET interval
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
@@ -851,7 +871,7 @@ dropStorageVolumeStatement
     ;
 
 alterStorageVolumeStatement
-    : ALTER STORAGE VOLUME identifierOrString alterStorageVolumeClause (',' alterStorageVolumeClause)*
+    : ALTER STORAGE VOLUME (IF EXISTS)? identifierOrString alterStorageVolumeClause (',' alterStorageVolumeClause)*
     ;
 
 alterStorageVolumeClause
@@ -969,6 +989,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | mergeTabletClause
     | alterTableAutoIncrementClause
 
     //Alter partition clause
@@ -1230,6 +1251,16 @@ splitTabletClause
       properties?
     ;
 
+mergeTabletClause
+    : MERGE
+      (((TABLET | TABLETS) partitionNames?) | tabletGroupList)
+      properties?
+    ;
+
+tabletGroupList
+    : (TABLET | TABLETS) integer_list+
+    ;
+
 alterTableAutoIncrementClause
     : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
@@ -1439,7 +1470,7 @@ showHistogramMetaStatement
     ;
 
 killAnalyzeStatement
-    : KILL ANALYZE INTEGER_VALUE
+    : KILL ANALYZE (INTEGER_VALUE | userVariable)
     | KILL ALL PENDING ANALYZE
     ;
 
@@ -1448,6 +1479,8 @@ killAnalyzeStatement
 analyzeProfileStatement
     : ANALYZE PROFILE FROM string
     | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
+    | ANALYZE PROFILE FROM LAST_QUERY_ID '(' ')'
+    | ANALYZE PROFILE FROM LAST_QUERY_ID '(' ')' ',' INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 
@@ -1532,7 +1565,8 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction? #createUdfFunctionStmt
+    | CREATE orReplace GLOBAL? FUNCTION ifNotExists qualifiedName '(' functionArgsList ')' RETURNS expression #createInternalFunctionStmt
     ;
 inlineFunction
     : AS ATTACHMENT
@@ -1540,6 +1574,10 @@ inlineFunction
 
 typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
+    ;
+
+functionArgsList
+    : (identifier type)? (',' identifier type)*
     ;
 
 // ------------------------------------------- Load Statement ----------------------------------------------------------
@@ -1929,7 +1967,7 @@ backupStatement
     : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
     SNAPSHOT qualifiedName TO repoName=identifier
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 cancelBackupStatement
@@ -1946,7 +1984,7 @@ restoreStatement
     (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
     (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 cancelRestoreStatement
@@ -1966,7 +2004,7 @@ createRepositoryStatement
     : CREATE (READ ONLY)? REPOSITORY repoName=identifier
     WITH BROKER brokerName=identifierOrString?
     ON LOCATION location=string
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 dropRepositoryStatement
@@ -1990,6 +2028,21 @@ showSqlBlackListStatement
 showWhiteListStatement
     : SHOW WHITELIST
     ;
+
+// ------------------------------------------- Sql Digest BlackList Statement ------------------------------------------
+
+addSqlDigestBlackListStatement
+    : ADD SQL DIGEST BLACKLIST identifier
+    ;
+
+delSqlDigestBlackListStatement
+    : DELETE SQL DIGEST BLACKLIST identifier (',' identifier)*
+    ;
+
+showSqlDigestBlackListStatement
+    : SHOW SQL DIGEST BLACKLIST
+    ;
+
 
 // ------------------------------------ backend BlackList Statement ---------------------------------------------------
 
@@ -2274,8 +2327,8 @@ alterCNGroupStatement
 // ------------------------------------------- Transaction Statement ---------------------------------------------------
 
 beginStatement
-    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
-    | BEGIN WORK?
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)? (WITH LABEL label=identifier)?
+    | BEGIN WORK? (WITH LABEL label=identifier)?
     ;
 
 commitStatement
@@ -2315,7 +2368,7 @@ queryRelation
     ;
 
 withClause
-    : WITH commonTableExpression (',' commonTableExpression)*
+    : WITH RECURSIVE? commonTableExpression (',' commonTableExpression)*
     ;
 
 queryNoWith
@@ -2353,6 +2406,7 @@ rowConstructor
 
 sortItem
     : expression ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
+    | ALL ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
     ;
 
 limitConstExpr
@@ -2496,7 +2550,7 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
-    | '[' identifier '|' primaryExpression literalExpressionList']'
+    | '[' identifier '|' primaryExpression generalLiteralExpressionList']'
     ;
 
 hintMap
@@ -2688,6 +2742,12 @@ literalExpression
     | PARAMETER                                                                           #Parameter
     ;
 
+// can represents negative number along with other literal expression
+generalLiteralExpression
+    : literalExpression
+    | MINUS_SYMBOL number
+    ;
+
 functionCall
     : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
@@ -2711,6 +2771,7 @@ aggregationFunction
     | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | ARRAY_AGG_DISTINCT '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+    | STRING_AGG '(' setQuantifier? expression ',' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     ;
 
 userVariable
@@ -2733,6 +2794,7 @@ informationFunctionExpression
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE ('(' ')')?
     | name = CURRENT_GROUP ('(' ')')?
+    | name = CURRENT_WAREHOUSE ('(' ')')?
     ;
 
 specialDateTimeExpression
@@ -2766,6 +2828,7 @@ specialFunctionExpression
     | PASSWORD '(' string ')'
     | FLOOR '(' expression ')'
     | CEIL '(' expression ')'
+    | LAST_QUERY_ID '(' ')'
     ;
 
 windowFunction
@@ -2898,6 +2961,10 @@ literalExpressionList
     : '(' literalExpression (',' literalExpression)* ')'
     ;
 
+generalLiteralExpressionList
+    : '(' generalLiteralExpression (',' generalLiteralExpression)* ')'
+    ;
+
 rangePartitionDesc
     : singleRangePartition
     | multiRangePartition
@@ -2961,7 +3028,7 @@ statusDesc
     ;
 
 properties
-    : PROPERTIES '(' property (',' property)* ')'
+    : PROPERTIES propertyList
     ;
 
 extProperties
@@ -3192,7 +3259,7 @@ nonReserved
     | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTIONS | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DIGEST | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
@@ -3209,11 +3276,11 @@ nonReserved
     | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PROVIDER | PROVIDERS | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
-    | REPOSITORIES
+    | REPOSITORIES | RECURSIVE
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
-    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQLBLACKLIST | START | STARROCKS
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
+    | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES

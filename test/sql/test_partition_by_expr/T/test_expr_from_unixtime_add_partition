@@ -1,4 +1,4 @@
--- name: test_expr_from_unixtime_add_partition
+-- name: test_expr_from_unixtime_add_partition @native
 CREATE TABLE partition_unixtime (
         create_time bigint,
         sku_id varchar(100),

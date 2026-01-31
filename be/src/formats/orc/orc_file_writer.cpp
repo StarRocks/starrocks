@@ -21,9 +21,12 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "common/http/content_type.h"
+#include "formats/column_evaluator.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
+#include "io/async_flush_output_stream.h"
 #include "runtime/current_thread.h"
 #include "util/debug_util.h"
 
@@ -115,7 +118,9 @@ FileWriter::CommitResult ORCFileWriter::commit() {
     FileWriter::CommitResult result{
             .io_status = Status::OK(), .format = ORC, .location = _location, .rollback_action = _rollback_action};
     try {
-        _writer->close();
+        if (_writer != nullptr) {
+            _writer->close();
+        }
     } catch (const std::exception& e) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }
@@ -151,7 +156,7 @@ StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(Chunk*
     return cvb;
 }
 
-Status ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
+Status ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column,
                                     const TypeDescriptor& type_desc) {
     switch (type_desc.type) {
     case TYPE_BOOLEAN: {
@@ -212,7 +217,7 @@ inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
         return nullptr;
     }
-    auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
+    auto null_column = down_cast<const NullableColumn*>(col.get())->null_column();
     auto* raw_column = null_column->immutable_data().data();
     return raw_column;
 }
@@ -225,7 +230,7 @@ inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
 }
 
 template <LogicalType Type, typename VectorBatchType>
-Status ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column) {
     auto& number_orc_column = dynamic_cast<VectorBatchType&>(orc_column);
     auto column_size = column->size();
     orc_column.resize(column_size);
@@ -243,7 +248,7 @@ Status ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPt
     return Status::OK();
 }
 
-Status ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column) {
     auto& string_orc_column = dynamic_cast<orc::StringVectorBatch&>(orc_column);
     auto column_size = column->size();
     orc_column.resize(column_size);
@@ -264,8 +269,8 @@ Status ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPt
 }
 
 template <LogicalType DecimalType, typename VectorBatchType, typename T>
-Status ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision,
-                                                int scale) {
+Status ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column,
+                                                int precision, int scale) {
     auto& decimal_orc_column = dynamic_cast<VectorBatchType&>(orc_column);
     auto column_size = column->size();
     using Type = RunTimeCppType<DecimalType>;
@@ -295,7 +300,7 @@ Status ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_colu
     return Status::OK();
 }
 
-Status ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column) {
     auto& date_orc_column = dynamic_cast<orc::LongVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -314,7 +319,7 @@ Status ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     return Status::OK();
 }
 
-Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column) {
     auto& timestamp_orc_column = dynamic_cast<orc::TimestampVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -334,7 +339,8 @@ Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, Column
     return Status::OK();
 }
 
-Status ORCFileWriter::_write_map(const TypeDescriptor& type, orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_map(const TypeDescriptor& type, orc::ColumnVectorBatch& orc_column,
+                                 const ColumnPtr& column) {
     auto& map_column = dynamic_cast<orc::MapVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -342,11 +348,12 @@ Status ORCFileWriter::_write_map(const TypeDescriptor& type, orc::ColumnVectorBa
     map_column.numElements = column_size;
 
     auto* null_col = get_raw_null_column(column);
-    auto* data_col = down_cast<RunTimeColumnType<TYPE_MAP>*>(ColumnHelper::get_data_column(column.get()));
+    auto* data_col =
+            down_cast<RunTimeColumnType<TYPE_MAP>*>(ColumnHelper::get_data_column(column->as_mutable_raw_ptr()));
 
     _populate_orc_notnull(orc_column, null_col, column_size);
 
-    auto& offsets = data_col->offsets_column()->get_data();
+    auto& offsets = data_col->offsets_column()->immutable_data();
     for (size_t i = 0; i < offsets.size(); i++) {
         map_column.offsets[i] = static_cast<int64_t>(offsets[i]);
     }
@@ -489,7 +496,9 @@ Status ORCFileWriterFactory::init() {
 }
 
 StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
+    ASSIGN_OR_RETURN(auto file,
+                     _fs->new_writable_file(
+                             WritableFileOptions{.direct_write = true, .content_type = http::ContentType::ORC}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };

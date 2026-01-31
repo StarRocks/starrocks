@@ -277,12 +277,13 @@ public:
         throw std::runtime_error("not supported");
     }
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
         throw std::runtime_error("not supported");
     }
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint8_t* selection, uint16_t from, uint16_t to,
-                                 std::vector<uint32_t>& hash_values) const override {
+                                 uint8_t* selection, uint16_t from, uint16_t to, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
         throw std::runtime_error("not supported");
     }
 

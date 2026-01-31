@@ -503,6 +503,8 @@ public:
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
+    void set_arrow_flight_sql_version(int version) { this->_arrow_flight_sql_version = version; }
+    int arrow_flight_sql_version() const { return this->_arrow_flight_sql_version; }
 
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
@@ -577,6 +579,10 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+    bool enable_global_late_materialization() const {
+        return _query_options.__isset.enable_global_late_materialization &&
+               _query_options.enable_global_late_materialization;
+    }
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 
     bool fragment_prepared() const { return _fragment_prepared; }
@@ -599,6 +605,7 @@ private:
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
     int _func_version = 0;
+    int _arrow_flight_sql_version = 0;
 
     DescriptorTbl* _desc_tbl = nullptr;
 

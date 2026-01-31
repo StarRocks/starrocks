@@ -37,6 +37,7 @@
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/common.h>
 
+#include <optional>
 #include <ostream>
 #include <shared_mutex>
 #include <unordered_map>
@@ -63,30 +64,7 @@ class IcebergDeleteFileMeta;
 class OlapTableSchemaParam;
 class PTupleDescriptor;
 class PSlotDescriptor;
-
-// Location information for null indicator bit for particular slot.
-// For non-nullable slots, the byte_offset will be 0 and the bit_mask will be 0.
-// This allows us to do the NullIndicatorOffset operations (tuple + byte_offset &/|
-// bit_mask) regardless of whether the slot is nullable or not.
-// This is more efficient than branching to check if the slot is non-nullable.
-struct NullIndicatorOffset {
-    int byte_offset;
-    uint8_t bit_mask;   // to extract null indicator
-    uint8_t bit_offset; // only used to serialize, from 1 to 8
-
-    NullIndicatorOffset(int byte_offset, int bit_offset_)
-            : byte_offset(byte_offset),
-              bit_mask(bit_offset_ == -1 ? 0 : 1 << (7 - bit_offset_)),
-              bit_offset(bit_offset_) {}
-
-    bool equals(const NullIndicatorOffset& o) const {
-        return this->byte_offset == o.byte_offset && this->bit_mask == o.bit_mask;
-    }
-
-    std::string debug_string() const;
-};
-
-std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indicator);
+class RowPositionDescriptor;
 
 class SlotDescriptor {
 public:
@@ -98,7 +76,7 @@ public:
     TupleId parent() const { return _parent; }
     bool is_materialized() const { return _is_materialized; }
     bool is_output_column() const { return _is_output_column; }
-    bool is_nullable() const { return _null_indicator_offset.bit_mask != 0; }
+    bool is_nullable() const { return _is_nullable; }
 
     int slot_size() const { return _slot_size; }
 
@@ -123,7 +101,6 @@ private:
     const SlotId _id;
     TypeDescriptor _type;
     const TupleId _parent;
-    const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
     const int32_t _col_unique_id;
     const std::string _col_physical_name;
@@ -138,7 +115,6 @@ private:
     const bool _is_materialized;
     const bool _is_output_column;
 
-    // @todo: replace _null_indicator_offset when remove _null_indicator_offset
     const bool _is_nullable;
 
     SlotDescriptor(const PSlotDescriptor& pdesc);
@@ -257,6 +233,8 @@ public:
     const TSortOrder& sort_order() const { return _t_sort_order; }
 
     Status set_partition_desc_map(const TIcebergTable& thrift_table, ObjectPool* pool);
+
+    const std::vector<std::string>& partition_source_column_names() { return _source_column_names; }
 
 private:
     TIcebergSchema _t_iceberg_schema;
@@ -571,6 +549,47 @@ private:
 
     // map from TupleId to position of tuple w/in row
     std::vector<int> _tuple_idx_map;
+};
+
+// used to describe row position, only used in global late materialization
+class RowPositionDescriptor {
+public:
+    enum Type : uint8_t {
+        ICEBERG_V3 = 0,
+    };
+    RowPositionDescriptor(Type type, SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids,
+                          std::vector<SlotId> lookup_ref_slot_ids)
+            : _type(type),
+              _row_source_slot_id(row_source_slot_id),
+              _fetch_ref_slot_ids(std::move(fetch_ref_slot_ids)),
+              _lookup_ref_slot_ids(std::move(lookup_ref_slot_ids)) {}
+
+    virtual ~RowPositionDescriptor() = default;
+
+    Type type() const { return _type; }
+
+    SlotId get_row_source_slot_id() const { return _row_source_slot_id; }
+
+    const std::vector<SlotId>& get_fetch_ref_slot_ids() const { return _fetch_ref_slot_ids; }
+    const std::vector<SlotId>& get_lookup_ref_slot_ids() const { return _lookup_ref_slot_ids; }
+    std::string debug_string() const;
+
+    static RowPositionDescriptor* from_thrift(const TRowPositionDescriptor& t_desc, ObjectPool* pool);
+
+protected:
+    Type _type;
+    SlotId _row_source_slot_id;
+    std::vector<SlotId> _fetch_ref_slot_ids;
+    std::vector<SlotId> _lookup_ref_slot_ids;
+};
+
+class IcebergV3RowPositionDescriptor : public RowPositionDescriptor {
+public:
+    IcebergV3RowPositionDescriptor(SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids,
+                                   std::vector<SlotId> lookup_ref_slot_ids)
+            : RowPositionDescriptor(ICEBERG_V3, row_source_slot_id, std::move(fetch_ref_slot_ids),
+                                    std::move(lookup_ref_slot_ids)) {}
+    ~IcebergV3RowPositionDescriptor() override = default;
 };
 
 } // namespace starrocks

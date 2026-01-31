@@ -23,14 +23,14 @@ set(UTIL_FILES
   arrow/starrocks_column_to_arrow.cpp
   arrow/utils.cpp
   await.cpp
-  bfd_parser.cpp
   base85.cpp
   bloom_filter.cpp
   block_split_bloom_filter.cpp
   brpc_stub_cache.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
-  compression/stream_compression.cpp
+  compression/stream_compressor.cpp
+  compression/stream_decompressor.cpp
   coding.cpp
   cpu_info.cpp
   cpu_usage_info.cpp
@@ -51,6 +51,7 @@ set(UTIL_FILES
   starrocks_metrics.cpp
   mem_info.cpp
   metrics.cpp
+  metrics/file_scan_metrics.cpp
   misc.cpp
   murmur_hash3.cpp
   ndv_estimator.cpp
@@ -116,10 +117,13 @@ set(UTIL_FILES
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
-  variant_util.cpp
+  variant_converter.cpp
+  variant_encoder.cpp
   jvm_metrics.cpp
   llm_cache.cpp
   llm_query_service.cpp
+  variant.cpp
+  uuid_generator.cpp
 )
 
 ADD_BE_LIB(Util

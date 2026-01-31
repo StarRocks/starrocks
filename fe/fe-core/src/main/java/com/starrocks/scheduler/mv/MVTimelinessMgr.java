@@ -20,6 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.memory.MemoryTrackable;
@@ -50,12 +51,13 @@ public class MVTimelinessMgr implements MemoryTrackable {
         MV_PARTITION_DROPPED,
     }
 
-    public MvUpdateInfo getMVTimelinessInfo(MaterializedView mv) {
+    public MvUpdateInfo getMVTimelinessInfo(MaterializedView mv,
+                                            MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         if (!isEnableMVTimelinessGlobalCache(mv)) {
-            return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+            return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams);
         } else {
             return mvTimelinessMap.computeIfAbsent(mv,
-                    (ignored) -> MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true));
+                    (ignored) -> MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams));
         }
     }
 

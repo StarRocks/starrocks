@@ -77,6 +77,17 @@ public class LargeInPredicateOperator extends InPredicateOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        LargeInPredicateOperator that = (LargeInPredicateOperator) obj;
+        return constantCount == that.constantCount &&
+               Objects.equals(rawConstantList, that.rawConstantList) &&
+               Objects.equals(constantType, that.constantType);
+    }
+
+    @Override
     public int hashCodeSelf() {
         return Objects.hash(super.hashCodeSelf(), rawConstantList, constantCount, constantType);
     }

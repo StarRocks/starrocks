@@ -1,0 +1,139 @@
+-- name: test_mv_iceberg_rewrite_with_expired
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+
+create table mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+insert into mv_ice_tbl_${uuid0} values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2000, '2023-12-01');
+insert into mv_ice_tbl_${uuid0} values 
+  ('abc', 2000, '2023-12-02'),
+  (NULL, 2000, '2023-12-02');
+insert into mv_ice_tbl_${uuid0} values 
+  ('ab1d8cf2a2c0e14fa89d8117792be6eb6f', 2001, '2023-12-03'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2001, '2023-12-03');
+insert into mv_ice_tbl_${uuid0} values 
+  ('abc', 2001, '2023-12-04'),
+  (NULL, 2001, '2023-12-04');
+
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+);
+insert into t1 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2000, '2023-12-01');
+insert into t1 values 
+  ('abc', 2000, '2023-12-02'),
+  (NULL, 2000, '2023-12-02');
+insert into t1 values 
+  ('ab1d8cf2a2c0e14fa89d8117792be6eb6f', 2001, '2023-12-03'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2001, '2023-12-03');
+insert into t1 values 
+  ('abc', 2001, '2023-12-04'),
+  (NULL, 2001, '2023-12-04');
+
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+-- test partitioned mv
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+-- select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}$snapshots;
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+-- select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}$snapshots;
+
+[UC]select inspect_mv_refresh_info("test_mv1");
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv1");
+select count(1) from test_mv1;
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
+
+[UC]select inspect_mv_refresh_info("test_mv1");
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv1");
+select count(1) from test_mv1;
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
+[UC]select inspect_mv_refresh_info("test_mv1");
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv1");
+select count(1) from test_mv1;
+
+-- test non-partitioned mv
+CREATE MATERIALIZED VIEW test_mv2 
+REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+
+select count(1) from test_mv2;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 execute expire_snapshots(now());
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+[UC]select inspect_mv_refresh_info("test_mv2");
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv2");
+select count(1) from test_mv2;
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('test', 2002, '2023-12-05');
+
+[UC]select inspect_mv_refresh_info("test_mv2");
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv2");
+select count(1) from test_mv2;
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('test', 2002, '2023-12-06');
+[UC]select inspect_mv_refresh_info("test_mv2");
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv2");
+select count(1) from test_mv2;
+
+-- test partitioned mv
+CREATE MATERIALIZED VIEW test_mv3 
+REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+
+[UC]select inspect_mv_refresh_info("test_mv3");
+REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv3");
+select count(1) from test_mv3;
+
+[UC]select inspect_mv_refresh_info("test_mv3");
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
+REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv3");
+select count(1) from test_mv3;
+
+[UC]select inspect_mv_refresh_info("test_mv3");
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
+REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv3");
+select count(1) from test_mv3;
+
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+drop materialized view default_catalog.db_${uuid0}.test_mv2;
+drop materialized view default_catalog.db_${uuid0}.test_mv3;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+

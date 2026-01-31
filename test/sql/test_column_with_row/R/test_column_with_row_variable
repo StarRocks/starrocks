@@ -1,4 +1,4 @@
--- name: test_column_with_row_variable
+-- name: test_column_with_row_variable @no_arrow_flight_sql
 ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
 -- result:
 -- !result

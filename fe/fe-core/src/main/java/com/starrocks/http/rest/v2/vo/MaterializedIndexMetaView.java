@@ -41,7 +41,7 @@ public class MaterializedIndexMetaView {
      */
     public static MaterializedIndexMetaView createFrom(MaterializedIndexMeta indexMeta) {
         MaterializedIndexMetaView imvo = new MaterializedIndexMetaView();
-        imvo.setIndexId(indexMeta.getIndexId());
+        imvo.setIndexId(indexMeta.getIndexMetaId());
 
         Optional.ofNullable(indexMeta.getKeysType())
                 .ifPresent(keysType -> imvo.setKeysType(keysType.name()));

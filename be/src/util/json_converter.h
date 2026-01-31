@@ -12,12 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <simdjson.h>
+#include <velocypack/Slice.h>
 
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
+#include "runtime/decimalv3.h"
+#include "types/timestamp_value.h"
+#ifdef __APPLE__
+#include "simdjson.h"
+#else
+#include "simdjson/ondemand.h"
+#endif
 #include "util/json.h"
 
 namespace starrocks {
@@ -181,6 +188,50 @@ static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType
 
                 result.append(Slice(str));
             }
+        }
+        if constexpr (ResultType == TYPE_DATE) {
+            if (LIKELY(slice.isString())) {
+                vpack::ValueLength len;
+                const char* str = slice.getStringUnchecked(len);
+                DateValue dv;
+                if (dv.from_string(str, len)) {
+                    result.append(dv);
+                } else {
+                    if constexpr (AllowThrowException) {
+                        return Status::JsonFormatError(
+                                fmt::format("cast from JSON({}) to DATE failed", std::string(str, len)));
+                    }
+                    result.append_null();
+                }
+            } else {
+                if constexpr (AllowThrowException) {
+                    return Status::JsonFormatError("cast from JSON to DATE failed: not a string");
+                }
+                result.append_null();
+            }
+            return Status::OK();
+        }
+        if constexpr (ResultType == TYPE_DATETIME) {
+            if (LIKELY(slice.isString())) {
+                vpack::ValueLength len;
+                const char* str = slice.getStringUnchecked(len);
+                TimestampValue tv;
+                if (tv.from_string(str, len)) {
+                    result.append(tv);
+                } else {
+                    if constexpr (AllowThrowException) {
+                        return Status::JsonFormatError(
+                                fmt::format("cast from JSON({}) to DATETIME failed", std::string(str, len)));
+                    }
+                    result.append_null();
+                }
+            } else {
+                if constexpr (AllowThrowException) {
+                    return Status::JsonFormatError("cast from JSON to DATETIME failed: not a string");
+                }
+                result.append_null();
+            }
+            return Status::OK();
         }
     } catch (const vpack::Exception& e) {
         if constexpr (AllowThrowException) {

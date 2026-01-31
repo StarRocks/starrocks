@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -252,7 +253,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public void removeGlobalDict(long tableId, ColumnId columnName) {
+    public void removeGlobalDict(OlapTable table, ColumnId columnName) {
+        long tableId = table.getId();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
 
         // skip dictionary operator in checkpoint thread
@@ -275,7 +277,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 columnIdentifier = new ColumnIdentifier(tableId, ColumnId.create(rootColumn));
 
                 // Set dbId for the columnIdentifier to enable MetaUtils.getColumnByColumnId lookup
-                long dbId = MetaUtils.lookupDbIdByTableId(tableId);
+                long dbId = MetaUtils.lookupDbIdByTable(table);
                 if (dbId != -1) {
                     columnIdentifier.setDbId(dbId);
                     Column column = MetaUtils.getColumnByColumnId(columnIdentifier);
@@ -302,12 +304,13 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, ColumnId columnName, long collectVersion, long versionTime) {
+    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectVersion, long versionTime) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
 
+        long tableId = table.getId();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (!dictStatistics.asMap().containsKey(columnIdentifier)) {
             return;
@@ -324,7 +327,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                     long dictCollectVersion = columnDict.getCollectedVersion();
                     if (collectVersion != dictCollectVersion) {
                         LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
-                        removeGlobalDict(tableId, columnName);
+                        removeGlobalDict(table, columnName);
                         return;
                     }
                     columnDict.updateVersion(versionTime);
@@ -351,11 +354,12 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         return Optional.empty();
     }
 
-    public Optional<ColumnDict> getGlobalDictSync(long tableId, ColumnId columnName) {
+    public Optional<ColumnDict> getGlobalDictSync(OlapTable table, ColumnId columnName) {
+        long tableId = table.getId();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
 
         // NOTE: it's used to patch the dbId, because asyncLoad requires the dbId
-        long dbId = MetaUtils.lookupDbIdByTableId(tableId);
+        long dbId = MetaUtils.lookupDbIdByTable(table);
         if (dbId == -1) {
             throw new RuntimeException("table not found " + tableId);
         }

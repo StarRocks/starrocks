@@ -80,7 +80,7 @@ private:
 };
 
 template <typename T>
-inline ColumnPtr gen_input_column1() {
+inline MutableColumnPtr gen_input_column1() {
     using DataColumn = typename ColumnTraits<T>::ColumnType;
     auto column = DataColumn::create();
     for (int i = 0; i < 1024; i++) {
@@ -92,7 +92,7 @@ inline ColumnPtr gen_input_column1() {
 }
 
 template <LogicalType LT>
-ColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) {
+MutableColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) {
     auto column = RunTimeColumnType<LT>::create(type_desc->precision, type_desc->scale);
     for (int i = 0; i < 1024; i++) {
         column->append(i);
@@ -103,7 +103,7 @@ ColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) 
 }
 
 template <typename T>
-inline ColumnPtr gen_input_column2() {
+inline MutableColumnPtr gen_input_column2() {
     using DataColumn = typename ColumnTraits<T>::ColumnType;
     auto column = DataColumn::create();
     for (int i = 2000; i < 3000; i++) {
@@ -113,7 +113,7 @@ inline ColumnPtr gen_input_column2() {
 }
 
 template <>
-inline ColumnPtr gen_input_column1<Slice>() {
+inline MutableColumnPtr gen_input_column1<Slice>() {
     auto column = BinaryColumn::create();
     std::vector<Slice> strings{{"ddd"}, {"ddd"}, {"eeeee"}, {"ff"}, {"ff"}, {"ddd"}};
     column->append_strings(strings.data(), strings.size());
@@ -121,7 +121,7 @@ inline ColumnPtr gen_input_column1<Slice>() {
 }
 
 template <>
-inline ColumnPtr gen_input_column2<Slice>() {
+inline MutableColumnPtr gen_input_column2<Slice>() {
     auto column2 = BinaryColumn::create();
     std::vector<Slice> strings2{{"kkk"}, {"k"}, {"kk"}, {"kkk"}};
     column2->append_strings(strings2.data(), strings2.size());
@@ -129,7 +129,7 @@ inline ColumnPtr gen_input_column2<Slice>() {
 }
 
 template <>
-inline ColumnPtr gen_input_column1<DecimalV2Value>() {
+inline MutableColumnPtr gen_input_column1<DecimalV2Value>() {
     auto column = DecimalColumn::create();
     column->append(DecimalV2Value(1));
     column->append(DecimalV2Value(2));
@@ -138,7 +138,7 @@ inline ColumnPtr gen_input_column1<DecimalV2Value>() {
 }
 
 template <>
-inline ColumnPtr gen_input_column2<DecimalV2Value>() {
+inline MutableColumnPtr gen_input_column2<DecimalV2Value>() {
     auto column2 = DecimalColumn::create();
     column2->append(DecimalV2Value(7));
     column2->append(DecimalV2Value(8));
@@ -147,7 +147,7 @@ inline ColumnPtr gen_input_column2<DecimalV2Value>() {
 }
 
 template <>
-inline ColumnPtr gen_input_column1<TimestampValue>() {
+inline MutableColumnPtr gen_input_column1<TimestampValue>() {
     auto column = TimestampColumn::create();
     for (int j = 0; j < 20; ++j) {
         column->append(TimestampValue::create(2000 + j, 1, 1, 0, 30, 30));
@@ -158,7 +158,7 @@ inline ColumnPtr gen_input_column1<TimestampValue>() {
 }
 
 template <>
-inline ColumnPtr gen_input_column2<TimestampValue>() {
+inline MutableColumnPtr gen_input_column2<TimestampValue>() {
     auto column = TimestampColumn::create();
     for (int j = 0; j < 20; ++j) {
         column->append(TimestampValue::create(1000 + j, 1, 1, 0, 30, 30));
@@ -169,7 +169,7 @@ inline ColumnPtr gen_input_column2<TimestampValue>() {
 }
 
 template <>
-inline ColumnPtr gen_input_column1<DateValue>() {
+inline MutableColumnPtr gen_input_column1<DateValue>() {
     auto column = DateColumn::create();
     for (int j = 0; j < 20; ++j) {
         column->append(DateValue::create(2000 + j, 1, 1));
@@ -180,7 +180,7 @@ inline ColumnPtr gen_input_column1<DateValue>() {
 }
 
 template <>
-inline ColumnPtr gen_input_column2<DateValue>() {
+inline MutableColumnPtr gen_input_column2<DateValue>() {
     auto column = DateColumn::create();
     for (int j = 0; j < 20; ++j) {
         column->append(DateValue::create(1000 + j, 1, 1));
@@ -191,7 +191,7 @@ inline ColumnPtr gen_input_column2<DateValue>() {
 }
 
 template <LogicalType LT>
-ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) {
+MutableColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) {
     auto column = RunTimeColumnType<LT>::create(type_desc->precision, type_desc->scale);
     for (int i = 2000; i < 3000; i++) {
         column->append(i);
@@ -205,13 +205,12 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     int64_t mem_usage = 0;
     ctx->set_mem_usage_counter(&mem_usage);
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    using ResultColumnPtr = typename ColumnTraits<TResult>::ColumnType::Ptr;
+    using ResultColumnPtr = typename ColumnTraits<TResult>::ColumnType::MutablePtr;
     ResultColumnPtr result_column = ResultColumn::create();
 
     // update input column 1
     auto aggr_state = ManagedAggrState::create(ctx, func);
-    ColumnPtr column;
-    column = gen_input_column1<T>();
+    MutableColumnPtr column = gen_input_column1<T>();
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
     func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
@@ -219,15 +218,14 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
 
     // update input column 2
     auto aggr_state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2;
-    column2 = gen_input_column2<T>();
+    MutableColumnPtr column2 = gen_input_column2<T>();
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
     func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
     ASSERT_EQ(update_result2, result_column->get_data()[1]);
 
     // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
+    MutableColumnPtr serde_column = BinaryColumn::create();
     std::string func_name = func->get_name();
     if (func_name == "count" || func_name == "sum" || func_name == "maxmin") {
         serde_column = ResultColumn::create();
@@ -243,13 +241,13 @@ template <LogicalType LT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, ty
 void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                TResult update_result2, TResult merge_result) {
     using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
-    using ResultColumnPtr = typename RunTimeColumnType<TYPE_DECIMAL128>::Ptr;
+    using ResultColumnPtr = typename RunTimeColumnType<TYPE_DECIMAL128>::MutablePtr;
     const auto& result_type = ctx->get_return_type();
     ResultColumnPtr result_column = ResultColumn::create(result_type.precision, result_type.scale);
 
     // update input column 1
     auto aggr_state = ManagedAggrState::create(ctx, func);
-    ColumnPtr column = gen_input_decimal_column1<LT>(ctx->get_arg_type(0));
+    MutableColumnPtr column = gen_input_decimal_column1<LT>(ctx->get_arg_type(0));
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
     func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
@@ -257,14 +255,14 @@ void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* fu
 
     // update input column 2
     auto aggr_state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2 = gen_input_decimal_column2<LT>(ctx->get_arg_type(0));
+    MutableColumnPtr column2 = gen_input_decimal_column2<LT>(ctx->get_arg_type(0));
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
     func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
     ASSERT_EQ(update_result2, result_column->get_data()[1]);
 
     // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
+    MutableColumnPtr serde_column = BinaryColumn::create();
     std::string func_name = func->get_name();
     if (func_name == "count" || func_name == "sum" || func_name == "decimal_sum" || func_name == "maxmin") {
         serde_column = ResultColumn::create(result_type.precision, result_type.scale);
@@ -280,12 +278,12 @@ template <typename T, typename TResult>
 void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                 TResult update_result2, TResult merge_result) {
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    using ResultColumnPtr = typename ColumnTraits<TResult>::ColumnType::Ptr;
+    using ResultColumnPtr = typename ColumnTraits<TResult>::ColumnType::MutablePtr;
     ResultColumnPtr result_column = ResultColumn::create();
 
     auto state = ManagedAggrState::create(ctx, func);
     // update input column 1
-    ColumnPtr column = gen_input_column1<T>();
+    MutableColumnPtr column = gen_input_column1<T>();
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state->state());
     func->finalize_to_column(ctx, state->state(), result_column.get());
@@ -293,14 +291,14 @@ void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* f
 
     // update input column 2
     auto state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2 = gen_input_column2<T>();
+    MutableColumnPtr column2 = gen_input_column2<T>();
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state2->state());
     func->finalize_to_column(ctx, state2->state(), result_column.get());
     ASSERT_EQ(update_result2, result_column->get_data()[1]);
 
     // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
+    MutableColumnPtr serde_column = BinaryColumn::create();
     func->serialize_to_column(ctx, state->state(), serde_column.get());
     func->merge(ctx, serde_column.get(), state2->state(), 0);
     func->finalize_to_column(ctx, state2->state(), result_column.get());

@@ -27,7 +27,34 @@ select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c1=10.23;
 -- result:
 10.230
 -- !result
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 (
+    c1 decimal(23,3)
+);
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 values(10);
+-- result:
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=10;
+-- result:
+10.000
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 values(30);
+-- result:
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=30;
+-- result:
+30.000
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1<=30;
+-- result:
+10.000
+30.000
+-- !result
 drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 force;
 -- result:
 -- !result
 drop database iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0};

@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -27,7 +26,7 @@ public class CreateTemporaryTableStmt extends CreateTableStmt {
 
     public CreateTemporaryTableStmt(boolean ifNotExists,
                            boolean isExternal,
-                           TableName tableName,
+                           TableRef tableRef,
                            List<ColumnDef> columnDefinitions,
                            List<IndexDef> indexDefs,
                            String engineName,
@@ -39,13 +38,13 @@ public class CreateTemporaryTableStmt extends CreateTableStmt {
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> rollupAlterClauseList, List<OrderByElement> orderByElements,
                            NodePosition pos) {
-        super(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
+        super(ifNotExists, isExternal, tableRef, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
                 partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList, orderByElements, pos);
     }
 
     public CreateTemporaryTableStmt(boolean ifNotExists,
                                     boolean isExternal,
-                                    TableName tableName,
+                                    TableRef tableRef,
                                     List<ColumnDef> columnDefinitions,
                                     List<IndexDef> indexDefs,
                                     String engineName,
@@ -57,7 +56,7 @@ public class CreateTemporaryTableStmt extends CreateTableStmt {
                                     Map<String, String> extProperties,
                                     String comment, List<AlterClause> rollupAlterClauseList,
                                     List<OrderByElement> orderByElements) {
-        super(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
+        super(ifNotExists, isExternal, tableRef, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
                 partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList,
                 orderByElements, NodePosition.ZERO);
     }

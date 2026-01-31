@@ -133,42 +133,84 @@ http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/app_stat
 http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat
 ```
 
-结果如下图所示：
+结果如下所示：
 
-![img](../_assets/data_cache_observe.png)
+```json
+{
+    "page_cache_mem_quota_bytes": 10679976935,
+    "page_cache_mem_used_bytes": 10663052377,
+    "page_cache_mem_used_rate": 1.0,
+    "page_cache_hit_count": 276890,
+    "page_cache_miss_count": 153126,
+    "page_cache_hit_rate": 0.64,
+    "page_cache_hit_count_last_minute": 11196,
+    "page_cache_miss_count_last_minute": 9982,
+    "page_cache_hit_rate_last_minute": 0.53,
+    "block_cache_status": "NORMAL",
+    "block_cache_disk_quota_bytes": 214748364800,
+    "block_cache_disk_used_bytes": 11371020288,
+    "block_cache_disk_used_rate": 0.05,
+    "block_cache_disk_spaces": "/disk1/sr/be/storage/datacache:107374182400;/disk2/sr/be/storage/datacache:107374182400",
+    "block_cache_meta_used_bytes": 11756727,
+    "block_cache_hit_count": 57707,
+    "block_cache_miss_count": 2556,
+    "block_cache_hit_rate": 0.96,
+    "block_cache_hit_bytes": 15126253744,
+    "block_cache_miss_bytes": 620687633,
+    "block_cache_hit_count_last_minute": 18108,
+    "block_cache_miss_count_last_minute": 2449,
+    "block_cache_hit_bytes_last_minute": 4745613488,
+    "block_cache_miss_bytes_last_minute": 607536783,
+    "block_cache_read_disk_bytes": 15126253744,
+    "block_cache_write_bytes": 11338218093,
+    "block_cache_write_success_count": 43377,
+    "block_cache_write_fail_count": 36394,
+    "block_cache_remove_bytes": 0,
+    "block_cache_remove_success_count": 0,
+    "block_cache_remove_fail_count": 0,
+    "block_cache_current_reading_count": 0,
+    "block_cache_current_writing_count": 0,
+    "block_cache_current_removing_count": 0
+}
+```
 
 ### 指标说明
 
-| **指标**               | **说明**                                                     |
-| ---------------------- | ------------------------------------------------------------ |
-| status                 | Data Cache 实例状态，当前主要有这几种：`NORMAL`: 正常。`ABNORMAL`:  实例运行不正常，无法进行正常缓存读写，需要查看日志定位。`UPDATING`:  更新中，比如在线扩缩容过程中会出现短暂的 updating 状态。 |
-| mem_quota_bytes        | 用户配置的内存缓存容量。                                     |
-| mem_used_bytes         | 当前实际使用的内存缓存空间。                                 |
-| mem_used_rate          | 内存缓存使用率。                                             |
-| disk_quota_bytes       | 用户配置的总磁盘缓存容量。                                   |
-| disk_used_bytes        | 当前实际使用的磁盘缓存空间。                                 |
-| disk_used_rate         | 磁盘缓存使用率。                                             |
-| disk_spaces            | 用户配置的具体的磁盘缓存信息，包括各个缓存路径和大小。       |
-| meta_used_bytes        | 缓存系统元数据占用的内存空间。                               |
-| hit_count              | 缓存命中次数。                                               |
-| miss_count             | 缓存未命中次数。                                             |
-| hit_rate               | 缓存命中率。                                                 |
-| hit_bytes              | 缓存命中字节数。                                             |
-| miss_bytes             | 缓存未命中字节数。                                           |
-| hit_count_last_minute  | 最近一分钟内缓存命中次数。                                   |
-| miss_count_last_minute | 最近一分钟内缓存未命中次数。                                 |
-| hit_bytes_last_minute  | 最近一分钟内缓存命中字节数。                                 |
-| miss_bytes_last_minute | 最近一分钟内缓存未命中字节数。                               |
-| buffer_item_count      | 当前缓存的 Buffer 实例的数量。Buffer 实例指常见的数据缓存，例如我们从远端读取某个文件的部分原始数据，将其直接缓存到内存或者磁盘。 |
-| buffer_item_bytes      | 当前缓存的 Buffer 实例所占字节数。                           |
-| read_mem_bytes         | 从内存缓存中读取的字节数。                                   |
-| read_disk_bytes        | 从磁盘缓存中读取的字节数。                                   |
-| write_bytes            | 总共写入缓存的字节数。                                       |
-| write_success_count    | 写入成功的次数。                                             |
-| write_fail_count       | 写入失败的次数。                                             |
-| remove_bytes           | 删除的字节数。                                               |
-| remove_success_count   | 删除成功的次数。                                             |
-| remove_fail_count      | 删除失败的次数。                                             |
-| current_reading_count  | 当前正在执行的读缓存操作数量。                               |
-| current_writing_count  | 当前正在执行的写缓存操作数量。                               |
-| current_removing_count | 当前正在执行的删除缓存操作数量。                             |
+| **指标**                             | **说明**                                                                                                                       |
+|------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
+| page_cache_mem_quota_bytes         | 当前 Page Cache 内存上限。                                                                                                          |
+| page_cache_mem_used_bytes          | 当前实际使用 Page Cache 内存。                                                                                                        |
+| page_cache_mem_used_rate           | 当前 Page Cache 内存使用率。                                                                                                         |
+| page_cache_hit_count               | Page Cache 命中次数。                                                                                                             |
+| page_cache_miss_count              | Page Cache 未命中次数。                                                                                                            |
+| page_cache_hit_rate                | Page Cache 命中率。                                                                                                              |
+| page_cache_hit_count_last_minute   | Page Cache 最近一分钟的命中次数。                                                                                                       |
+| page_cache_miss_count_last_minute  | Page Cache 最近一分钟的未合中次数。                                                                                                      | 
+| page_cache_hit_rate_last_minute    | Page Cache 最近一分钟的命中率。                                                                                                        |
+| block_cache_status                 | Block Cache 状态，当前主要有这几种：`NORMAL`: 正常。`ABNORMAL`:  实例运行不正常，无法进行正常缓存读写，需要查看日志定位。`UPDATING`:  更新中，比如在线扩缩容过程中会出现短暂的 updating 状态。 |
+| block_cache_disk_quota_bytes       | 用户配置的 Block Cache 总磁盘缓存容量。                                                                                                   |
+| block_cache_disk_used_bytes        | 当前 Block Cache 实际使用的磁盘缓存空间。                                                                                                  |
+| block_cache_disk_used_rate         | Block Cache 磁盘缓存使用率。                                                                                                         |
+| block_cache_disk_spaces            | 用户配置的 Block Cache 具体的磁盘缓存信息，包括各个缓存路径和大小。                                                                                     |
+| block_cache_meta_used_bytes        | Block Cache 元数据占用的内存空间。                                                                                                      |
+| block_cache_hit_count              | Block Cache 命中次数。                                                                                                            |
+| block_cache_miss_count             | Block Cache 命中次数。                                                                                                            |
+| block_cache_hit_rate               | Block Cache 命中率。                                                                                                             |
+| block_cache_hit_bytes              | Block Cache 命中字节数。                                                                                                           |
+| block_cache_miss_bytes             | Block Cache 未命中字节数。                                                                                                          |
+| block_cache_hit_count_last_minute  | Block Cache 最近一分钟内命中次数。                                                                                                      |
+| block_cache_miss_count_last_minute | Block Cache 最近一分钟内未命中次数。                                                                                                     |
+| block_cache_hit_bytes_last_minute  | Block Cache 最近一分钟内命中字节数。                                                                                                     |
+| block_cache_miss_bytes_last_minute | Block Cache 最近一分钟内未命中字节数。                                                                                                    |
+| block_cache_buffer_item_count      | 当前 Block Cache 的 Buffer 实例的数量。Buffer 实例指常见的数据缓存，例如我们从远端读取某个文件的部分原始数据，将其直接缓存到内存或者磁盘。                                          |
+| block_cache_buffer_item_bytes      | 当前 Block Cache 的 Buffer 实例所占字节数。                                                                                             |
+| block_cache_read_disk_bytes        | 从 Block Cache 中读取的字节数。                                                                                                       |
+| block_cache_write_bytes            | 总共写入 Block Cache 的字节数。                                                                                                       |
+| block_cache_write_success_count    | Block Cache 写入成功的次数。                                                                                                         |
+| block_cache_write_fail_count       | Block Cache 写入失败的次数。                                                                                                         |
+| block_cache_remove_bytes           | Block Cache 删除的字节数。                                                                                                          |
+| block_cache_remove_success_count   | Block Cache 删除成功的次数。                                                                                                         |
+| block_cache_remove_fail_count      | Block Cache 删除失败的次数。                                                                                                         |
+| block_cache_current_reading_count  | Block Cache 当前正在执行的读操作数量。                                                                                                    |
+| block cache_current_writing_count  | Block Cache 当前正在执行的写操作数量。                                                                                                    |
+| block_cache_current_removing_count | Block Cache 当前正在执行的删除操作数量。                                                                                                   |

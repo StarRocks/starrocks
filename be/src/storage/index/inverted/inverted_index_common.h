@@ -21,6 +21,7 @@ namespace starrocks {
 enum class InvertedImplementType {
     UNKNOWN = 0,
     CLUCENE = 1,
+    BUILTIN = 2,
 };
 
 enum class InvertedIndexParserType {
@@ -33,6 +34,8 @@ enum class InvertedIndexParserType {
 
 const std::string INVERTED_IMP_KEY = "imp_lib";
 const std::string TYPE_CLUCENE = "clucene";
+const std::string TYPE_BUILTIN = "builtin";
+
 const std::string INVERTED_INDEX_PARSER_KEY = "parser";
 const std::string INVERTED_INDEX_PARSER_UNKNOWN = "unknown";
 const std::string INVERTED_INDEX_PARSER_NONE = "none";
@@ -40,6 +43,8 @@ const std::string INVERTED_INDEX_PARSER_STANDARD = "standard";
 const std::string INVERTED_INDEX_PARSER_ENGLISH = "english";
 const std::string INVERTED_INDEX_PARSER_CHINESE = "chinese";
 const std::string LIKE_FN_NAME = "like";
+
+const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";
 
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -73,7 +74,7 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
         }
 
         LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) input.inputAt(0).inputAt(0).getOp();
-        if (!metaScan.getAggColumnIdToNames().isEmpty()) {
+        if (!metaScan.getAggColumnIdToColumns().isEmpty()) {
             throw new SemanticException("flat_json_meta don't support complex meta");
         }
         return true;
@@ -87,7 +88,7 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
         Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
         List<ColumnRefOperator> newAggGroupBys = Lists.newArrayList();
 
-        Map<Integer, String> aggColumnIdToNames = Maps.newHashMap();
+        Map<Integer, Pair<String, Column>> aggColumnIdToColumns = Maps.newHashMap();
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
 
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : agg.getAggregations().entrySet()) {
@@ -98,16 +99,16 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
                 continue;
             }
             ColumnRefOperator usedColumn = aggCall.getColumnRefs().get(0);
-            String metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
-            aggColumnIdToNames.put(metaRef.getId(), metaColumnName);
+            String aggFuncName = aggCall.getFnName();
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
             newScanColumnRefs.put(metaRef, c);
             newAggGroupBys.add(metaRef);
+            aggColumnIdToColumns.put(metaRef.getId(), Pair.create(aggFuncName, c));
         }
 
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder().withOperator(metaScan)
                 .setColRefToColumnMetaMap(newScanColumnRefs)
-                .setAggColumnIdToNames(aggColumnIdToNames)
+                .setAggColumnIdToColumns(aggColumnIdToColumns)
                 .build();
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(

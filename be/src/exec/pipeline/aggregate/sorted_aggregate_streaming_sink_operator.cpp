@@ -29,7 +29,7 @@ SortedAggregateStreamingSinkOperator::SortedAggregateStreamingSinkOperator(
 
 Status SortedAggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     _accumulator.set_max_size(state->chunk_size());
     return _aggregator->open(state);
 }

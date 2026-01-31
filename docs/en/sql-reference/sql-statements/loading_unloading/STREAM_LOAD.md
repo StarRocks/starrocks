@@ -147,7 +147,7 @@ Note that the Merge Commit optimization is suitable for the scenario with **conc
 | enable_merge_commit      | No           | Whether to enable the Merge Commit for the loading request. Valid values: `true` and `false` (Default). |
 | merge_commit_async       | No           | The server's return mode. Valid values:<ul><li>`true`: Enables asynchronous mode, where the server returns immediately after receiving the data. This mode does not ensure the loading is successful.</li><li>`false`(Default): Enables synchronous mode, where the server returns only after the merged transaction is committed, ensuring the loading is successful and visible.</li></ul> |
 | merge_commit_interval_ms | Yes          | The size of the merging time window. Unit: milliseconds. Merge Commit attempts to merge loading requests received within this window into a single transaction. A larger window improves merging efficiency but increases latency. |
-| merge_commit_parallel    | Yes          | The degree of parallelism for the loading plan created for each merging window. Parallelism can be adjusted based on the load of ingestion. Increase this value if there are many requests and/or a large amount of data to load. The parallelism is limited to the number of BE nodes, calculated as `max(merge_commit_parallel, number of BE nodes)`. |
+| merge_commit_parallel    | Yes          | The degree of parallelism for the loading plan created for each merging window. Parallelism can be adjusted based on the load of ingestion. Increase this value if there are many requests and/or a large amount of data to load. The parallelism is limited to the number of BE nodes, calculated as `min(merge_commit_parallel, number of BE nodes)`. |
 
 :::note
 

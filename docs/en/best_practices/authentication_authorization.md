@@ -4,6 +4,10 @@ sidebar_position: 100
 
 # Authentication and Authorization
 
+import AuthConcept from '../_assets/best_practices/auth_concept.mdx'
+import AuthFeature from '../_assets/best_practices/auth_feature.mdx'
+import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
+
 This topic aims to provide a coherent guide for best practices on developing your own authentication and authorization workflow.
 
 For detailed instructions on each operation involved below, see links in [See Also](#see-also).
@@ -65,28 +69,7 @@ LDAP can be used:
 - As an **authentication** source (to validate usernames and passwords).
 - As a **group information** provider for access control.
 
-### UNIX Groups
-
-Sometimes users mirror LDAP groups locally (on the host OS) for security or isolation reasons, avoiding direct communication with external LDAP servers. These local UNIX groups can be used for authentication or access control enforcement.
-
-### OAuth, OIDC, and JWT
-
-:::tip
-
-**Quick Explanation of Terms**
-
-- **ID Token**: Proof of identity (I am me.)
-- **Access Token**: Proof of permission to access certain resources (I can do certain things.)
-- **OAuth 2.0**: Authorization framework that provides access tokens.
-- **OIDC**: Authentication layer on top of OAuth. Provides ID and Access Tokens.
-- **JWT**: Token format. Used by both OAuth and OIDC.
-
-:::
-
-**Practical Use:**
-
-- **OAuth-based login**: Redirects to an external login page (for example, Google), then back to the cluster. Requires browser access and redirect URL setup in advance.
-- **JWT-based login**: The user passes a token directly to the cluster, which requires a public key or endpoint setup in advance.
+<AuthConcept />
 
 ## Features
 
@@ -102,11 +85,7 @@ From v3.5 onward, StarRocks provides a modular, composable model to support vari
 
 ![Authentication and Authorization](../_assets/best_practices/auth_feature.png)
 
-From the feature's perspective:
-
-1. **Authentication Provider** – Supported protocols: Native user, LDAP, OIDC, and OAuth 2.0.
-2. **Group Provider** – Supported sources: LDAP, Operating System, and File-based Configuration.
-3. **Authorization System** – Supported systems: Native RBAC & IBAC, and Apache Ranger.
+<AuthFeature />
 
 ### Authentication
 
@@ -115,7 +94,7 @@ Comparison of supported authentication modes:
 | Method                 | CREATE USER (Native user)                              | CREATE SECURITY INTEGRATION (Session-based dummy user)       |
 | ---------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
 | Description            | Manually creates users in the cluster. You can associate them with external authentication systems. The user exists explicitly in the cluster. | Defines an external authentication integration. The cluster does not store any user information. You can optionally combine it with a Group Provider to define allowed users. |
-| Login Process          | Users must be pre-created in the cluster. During login, the user is authenticated via StarRocks or via the configured external authentication system (for example, LDAP, JWT). Only pre-created users can log in. | Upon login, StarRocks authenticates the user using external identity systems. If succeeds, it creates a temporary, session-scoped "dummy user" internally. This user is discarded after the session ends. |
+| Login Process          | Users must be pre-created in the cluster. During login, the user is authenticated via StarRocks or via the configured external authentication system (for example, LDAP). Only pre-created users can log in. | Upon login, StarRocks authenticates the user using external identity systems. If succeeds, it creates a temporary, session-scoped "dummy user" internally. This user is discarded after the session ends. |
 | Authorization Process  | Since users exist in the cluster, permissions can be assigned in advance using either the native authorization system or Apache Ranger. | Although users do not persist, you can predefine role-to-group mappings. When a user logs in, the system assigns roles based on their group, enabling RBAC. Apache Ranger can also be used in parallel. |
 | Pros & Cons, Use Cases | <ul><li>**Pros**: Full flexibility—supports both native and external authorization systems.</li><li>**Cons**: Requires manual effort for creating users, which can be cumbersome.</li><li>**Recommended for**: Small user bases or cases where the cluster handles access control.</li></ul> | <ul><li>**Pros**: Easy to set up; only requires external authentication configuration and allowed group definitions.</li><li>**Recommended for**: Ideal for large user bases with role-group mappings.</li></ul> |
 
@@ -128,21 +107,10 @@ This hybrid mode provides both flexibility and control, suitable for different o
 
 #### Option 1: Create Native User with External Authentication System
 
-For example, you can use the following syntax to create a native user with OAuth2.0:
+For example, you can use the following syntax to create a native user with LDAP:
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS 
-'{
-  "auth_server_url": "<auth_server_url>",
-  "token_server_url": "<token_server_url>",
-  "client_id": "<client_id>",
-  "client_secret": "<client_secret>",
-  "redirect_url": "<redirect_url>",
-  "jwks_url": "<jwks_url>",
-  "principal_field": "<principal_field>",
-  "required_issuer": "<required_issuer>",
-  "required_audience": "<required_audience>"
-}';
+CREATE USER <username> IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com';
 ```
 
 Then, you can `GRANT` privileges or roles to the user, or delegate authorization to external systems like Apache Ranger.
@@ -154,16 +122,16 @@ You can also create a security integration to allow access of your external auth
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oauth2",
-    "auth_server_url" = "",
-    "token_server_url" = "",
-    "client_id" = "",
-    "client_secret" = "",
-    "redirect_url" = "",
-    "jwks_url" = "",
-    "principal_field" = "",
-    "required_issuer" = "",
-    "required_audience" = ""
+    "type" = "authentication_ldap_simple",
+    "authentication_ldap_simple_server_host" = "",
+    "authentication_ldap_simple_server_port" = "",
+    "authentication_ldap_simple_bind_base_dn" = "",
+    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_bind_root_dn" = "",
+    "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+    "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+    "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
     "comment" = ""
 );
 ```
@@ -336,15 +304,4 @@ If you prefer to use **StarRocks' built-in authorization system** while still re
 
 ![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
-## See also
-
-- **Authentication**
-  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
-  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
-  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
-  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
-  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
-- [**Group Provider**](../administration/user_privs/group_provider.md)
-- **Authorization**
-  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
-  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)
+<AuthSeeAlso />

@@ -1,4 +1,4 @@
--- name: test_table_sample @sequential
+-- name: test_table_sample @sequential @native
 set pipeline_dop = 1;
 -- result:
 -- !result

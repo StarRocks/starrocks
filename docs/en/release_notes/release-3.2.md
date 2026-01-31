@@ -385,7 +385,7 @@ Release date: February 8, 2024
 
 ### New Features
 
-- [Preview] Supports hybrid row-column storage for tables. It allows better performance for high-concurrency, low-latency point lookups against Primary Key tables and partial data updates. Currently, this feature does not support modification via ALTER TABLE, changing Sort Key, and partial updates in column mode.
+- [Preview] Supports hybrid row-column storage for tables. It allows better performance for high concurrency, low-latency point lookups against Primary Key tables and partial data updates. Currently, this feature does not support modification via ALTER TABLE, changing Sort Key, and partial updates in column mode.
 - Supports backing up and restoring asynchronous materialized views.
 - Broker Load supports loading JSON-type data.
 - Supports query rewrite using asynchronous materialized views created upon views. Queries against a view can be rewritten based on materialized views that are created upon that view.
@@ -462,7 +462,7 @@ Release date: December 21, 2023
 
 #### Query and SQL functions
 
-- Supports the prepared statement. It allows better performance for processing high-concurrency point lookup queries. It also prevents SQL injection effectively.
+- Supports the prepared statement. It allows better performance for processing high concurrency point lookup queries. It also prevents SQL injection effectively.
 - Supports the following Bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/).
 - Supports the Array function [array_unique_agg](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/array-functions/array_unique_agg/).
 
@@ -477,7 +477,7 @@ Release date: December 21, 2023
 ### Improvements
 
 - Upgraded the default GC algorithm in JDK8 to G1. [#37268](https://github.com/StarRocks/starrocks/pull/37268)
-- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/3.2/reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/3.2/sql-reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - The authentication information `aws.s3.access_key` and `aws.s3.access_secret` for [AWS S3 in Broker Load jobs](https://docs.starrocks.io/docs/3.2/loading/s3/) are hidden in audit logs. [#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - The `be_tablets` view in the `information_schema` database provides a new field `INDEX_DISK`, which records the disk usage (measured in bytes) of persistent indexes. [#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)

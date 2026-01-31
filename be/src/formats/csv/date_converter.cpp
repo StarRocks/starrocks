@@ -21,13 +21,13 @@
 
 namespace starrocks::csv {
 
-Status DateConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status DateConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                    const Options& options) const {
     auto date_column = down_cast<const FixedLengthColumn<DateValue>*>(&column);
     return os->write(date_column->immutable_data()[row_num]);
 }
 
-Status DateConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status DateConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                           const Options& options) const {
     RETURN_IF_ERROR(os->write('"'));
     RETURN_IF_ERROR(write_string(os, column, row_num, options));

@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
@@ -72,6 +73,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -120,19 +122,30 @@ public class HeartbeatMgr extends FrontendDaemon {
             return;
         }
 
+        Set<Long> aliveWarehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAliveWarehouseIds();
+        Set<Long> backendsForSuspendedWarehouse = Sets.newHashSet();
+
         List<Future<HeartbeatResponse>> hbResponses = Lists.newArrayList();
 
         long startTime = System.currentTimeMillis();
         // send backend heartbeat
         for (Backend backend : idToBackendRef.values()) {
-            BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend);
+            boolean isWarehouseAvailable = aliveWarehouseIds.contains(backend.getWarehouseId());
+            if (!isWarehouseAvailable) {
+                backendsForSuspendedWarehouse.add(backend.getId());
+            }
+            BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend, isWarehouseAvailable);
             hbResponses.add(executor.submit(handler));
         }
 
         // send compute node heartbeat
         for (ComputeNode computeNode : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdComputeNode()
                 .values()) {
-            BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode);
+            boolean isWarehouseAvailable = aliveWarehouseIds.contains(computeNode.getWarehouseId());
+            if (!isWarehouseAvailable) {
+                backendsForSuspendedWarehouse.add(computeNode.getId());
+            }
+            BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode, isWarehouseAvailable);
             hbResponses.add(executor.submit(handler));
         }
 
@@ -166,7 +179,13 @@ public class HeartbeatMgr extends FrontendDaemon {
                 // the heartbeat rpc's timeout is 5 seconds, so we will not be blocked here too long.
                 HeartbeatResponse response = future.get();
                 if (response.getStatus() != HbStatus.OK) {
-                    LOG.warn("get bad heartbeat response: {}", response);
+                    boolean isBackendForSuspendedWarehouse = response.getType() == HeartbeatResponse.Type.BACKEND &&
+                            backendsForSuspendedWarehouse.contains(((BackendHbResponse) response).getBeId());
+                    if (isBackendForSuspendedWarehouse) {
+                        LOG.debug("get bad heartbeat response: {}", response);
+                    } else {
+                        LOG.warn("get bad heartbeat response: {}", response);
+                    }
                 }
                 isChanged = handleHbResponse(response, false);
 
@@ -255,17 +274,18 @@ public class HeartbeatMgr extends FrontendDaemon {
 
     // backend heartbeat
     public static class BackendHeartbeatHandler implements Callable<HeartbeatResponse> {
-        private ComputeNode computeNode;
+        private final ComputeNode computeNode;
+        private final boolean isWarehouseAvailable;
 
-        public BackendHeartbeatHandler(ComputeNode computeNode) {
+        public BackendHeartbeatHandler(ComputeNode computeNode, boolean isWarehouseAvailable) {
             this.computeNode = computeNode;
+            this.isWarehouseAvailable = isWarehouseAvailable;
         }
 
         @Override
         public HeartbeatResponse call() {
             long computeNodeId = computeNode.getId();
             TNetworkAddress beAddr = new TNetworkAddress(computeNode.getHost(), computeNode.getHeartbeatPort());
-            boolean ok = false;
             try {
                 TMasterInfo copiedMasterInfo = new TMasterInfo(MASTER_INFO.get());
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
@@ -288,7 +308,6 @@ public class HeartbeatMgr extends FrontendDaemon {
                         beAddr,
                         client -> client.heartbeat(copiedMasterInfo));
 
-                ok = true;
                 if (result.getStatus().getStatus_code() == TStatusCode.OK) {
                     TBackendInfo tBackendInfo = result.getBackend_info();
                     int bePort = tBackendInfo.getBe_port();
@@ -331,8 +350,13 @@ public class HeartbeatMgr extends FrontendDaemon {
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
-                LOG.warn("backend heartbeat got exception, addr: {}:{}",
-                        computeNode.getHost(), computeNode.getHeartbeatPort(), e);
+                if (isWarehouseAvailable) {
+                    LOG.warn("backend heartbeat got exception, addr: {}:{}",
+                            computeNode.getHost(), computeNode.getHeartbeatPort(), e);
+                } else {
+                    LOG.debug("backend heartbeat got exception, addr: {}:{}",
+                            computeNode.getHost(), computeNode.getHeartbeatPort(), e);
+                }
                 return new BackendHbResponse(computeNodeId, TStatusCode.UNKNOWN,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             }

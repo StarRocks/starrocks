@@ -83,7 +83,7 @@ TEST_F(DataCacheActionTest, stat_success) {
 
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
-    ASSERT_STREQ("NORMAL", doc["status"].GetString());
+    ASSERT_STREQ("NORMAL", doc["block_cache_status"].GetString());
 }
 
 TEST_F(DataCacheActionTest, app_stat_success) {

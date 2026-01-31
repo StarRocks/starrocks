@@ -1,0 +1,155 @@
+-- name: test_runtime_filter_partial_exceed
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `idx` bigint(20) NULL COMMENT "",
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 select idx, 1, 1 from __row_util;
+-- result:
+-- !result
+insert into t1 select idx, 2, 2 from __row_util where idx < 160000 - 10;
+-- result:
+-- !result
+insert into t1 select idx, 3, 3 from __row_util where idx < 160000 - 10;
+-- result:
+-- !result
+insert into t1 select idx, 4, 4 from __row_util where idx < 160000 - 10;
+-- result:
+-- !result
+insert into t1 select idx, 5, 5 from __row_util where idx < 160000 - 10;
+-- result:
+-- !result
+insert into t1 select idx, 6, 6 from __row_util where idx < 160000 - 10;
+-- result:
+-- !result
+insert into t1 select idx, idx, idx  from __row_util where idx > 4;
+-- result:
+-- !result
+[UC]analyze table t1;
+-- result:
+test_db_b04c71e57dc14ea187423c8853d0f38e.t1	analyze	status	OK
+-- !result
+set pipeline_dop = 100;
+-- result:
+-- !result
+set enable_join_runtime_bitset_filter = false;
+-- result:
+-- !result
+set semi_join_deduplicat_mode = -1;
+-- result:
+-- !result
+set global_runtime_filter_wait_timeout = 10000;
+-- result:
+-- !result
+set runtime_filter_scan_wait_time = 10000;
+-- result:
+-- !result
+set global_runtime_filter_build_max_size = 320001;
+-- result:
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result
+select count(1) from t1 left semi join [shuffle] t1 t2 on t1.c1 = t2.c1 and t2.c2 < 10;
+-- result:
+959950
+-- !result

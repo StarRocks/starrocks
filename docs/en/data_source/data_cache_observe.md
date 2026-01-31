@@ -135,42 +135,84 @@ You can get more detailed metrics on the Data Cache by accessing the following A
 http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat
 ```
 
-The following figure shows the returned metrics.
+The results are as follows:
 
-![img](../_assets/data_cache_observe.png)
+```json
+{
+    "page_cache_mem_quota_bytes": 10679976935,
+    "page_cache_mem_used_bytes": 10663052377,
+    "page_cache_mem_used_rate": 1.0,
+    "page_cache_hit_count": 276890,
+    "page_cache_miss_count": 153126,
+    "page_cache_hit_rate": 0.64,
+    "page_cache_hit_count_last_minute": 11196,
+    "page_cache_miss_count_last_minute": 9982,
+    "page_cache_hit_rate_last_minute": 0.53,
+    "block_cache_status": "NORMAL",
+    "block_cache_disk_quota_bytes": 214748364800,
+    "block_cache_disk_used_bytes": 11371020288,
+    "block_cache_disk_used_rate": 0.05,
+    "block_cache_disk_spaces": "/disk1/sr/be/storage/datacache:107374182400;/disk2/sr/be/storage/datacache:107374182400",
+    "block_cache_meta_used_bytes": 11756727,
+    "block_cache_hit_count": 57707,
+    "block_cache_miss_count": 2556,
+    "block_cache_hit_rate": 0.96,
+    "block_cache_hit_bytes": 15126253744,
+    "block_cache_miss_bytes": 620687633,
+    "block_cache_hit_count_last_minute": 18108,
+    "block_cache_miss_count_last_minute": 2449,
+    "block_cache_hit_bytes_last_minute": 4745613488,
+    "block_cache_miss_bytes_last_minute": 607536783,
+    "block_cache_read_disk_bytes": 15126253744,
+    "block_cache_write_bytes": 11338218093,
+    "block_cache_write_success_count": 43377,
+    "block_cache_write_fail_count": 36394,
+    "block_cache_remove_bytes": 0,
+    "block_cache_remove_success_count": 0,
+    "block_cache_remove_fail_count": 0,
+    "block_cache_current_reading_count": 0,
+    "block_cache_current_writing_count": 0,
+    "block_cache_current_removing_count": 0
+}
+```
 
 ### Metric description
 
-| **Metric**             | **Description**                                              |
-| ---------------------- | ------------------------------------------------------------ |
-| status                 | The status of the Data Cache instance, including:`NORMAL`: The instance runs normally.`ABNORMAL`: Data cannot be read or written into the cache. The issue must be located using logs.`UPDATING`: The instance is being updated, such as the updating state during online scaling. |
-| mem_quota_bytes        | The memory cache capacity configured by users, in bytes.     |
-| mem_used_bytes         | The memory cache space that has been used, in bytes.         |
-| mem_used_rate          | The actual memory cache usage, in percentages.               |
-| disk_quota_bytes       | The disk cache capacity configured by users, in bytes.       |
-| disk_used_bytes        | The disk cache space that has been used, in bytes.           |
-| disk_used_rate         | The actual disk cache usage, in percentages.                 |
-| disk_spaces            | The disk cache information configured by users, including each cache path and the cache size. |
-| meta_used_bytes        | The space used to cache system metadata, in bytes.           |
-| hit_count              | The number of cache hits.                                    |
-| miss_count             | The number of cache misses.                                  |
-| hit_rate               | The cache hit rate.                                          |
-| hit_bytes              | The number of bytes that are hit in the cache.               |
-| miss_bytes             | The number of bytes that are missed in the cache.            |
-| hit_count_last_minute  | The number of cache hits in the last minute.                 |
-| miss_count_last_minute | The number of cache misses in the last minute.               |
-| hit_bytes_last_minute  | The number of types that are hit in the last minute.         |
-| miss_bytes_last_minute | The number of types that are missed in the last minute.      |
-| buffer_item_count      | The current number of Buffer instances in the cache. Buffer instances refer to common data caches, such as when reading part of the raw data from a remote file and caching the data directly in memory or on disks. |
-| buffer_item_bytes      | The number of types used to cache the Buffer instance.       |
-| read_mem_bytes         | The number of bytes read from the memory cache.              |
-| read_disk_bytes        | The number of bytes read from the disk cache.                |
-| write_bytes            | The number of bytes written to the cache.                    |
-| write_success_count    | The number of successful cache writes.                       |
-| write_fail_count       | The number of failed cache writes.                           |
-| remove_bytes           | The number of deleted bytes.                                 |
-| remove_success_count   | The number of successful deletes.                            |
-| remove_fail_count      | The number of failed deletes.                                |
-| current_reading_count  | The number of ongoing cache reads.                           |
-| current_writing_count  | The number of ongoing cache writes.                          |
-| current_removing_count | The number of ongoing cache deletes.                         |
+| **Metric**                         | **Description**                                                                                                                                                                                                                                                        |
+|------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| page_cache_mem_quota_bytes         | Current memory limit of Page Cache.                                                                                                                                                                                                                                    |
+| page_cache_mem_used_bytes	         | Current actual memory used by Page Cache.                                                                                                                                                                                                                              |
+| page_cache_mem_used_rate	          | Current memory usage rate of Page Cache.                                                                                                                                                                                                                               |
+| page_cache_hit_count	              | Number of Page Cache hits.                                                                                                                                                                                                                                             |
+| page_cache_miss_count	             | Number of Page Cache misses.                                                                                                                                                                                                                                           |
+| page_cache_hit_rate	               | Hit rate of Page Cache.                                                                                                                                                                                                                                                |
+| page_cache_hit_count_last_minute	  | Number of Page Cache hits in the last minute.                                                                                                                                                                                                                          |
+| page_cache_miss_count_last_minute  | Number of Page Cache misses in the last minute.                                                                                                                                                                                                                        |
+| page_cache_hit_rate_last_minute	   | Hit rate of Page Cache in the last minute.                                                                                                                                                                                                                             |
+| block_cache_status                 | Status of the Block Cache, including:`NORMAL`: The instance runs normally.`ABNORMAL`: Data cannot be read or written into the cache. The issue must be located using logs.`UPDATING`: The instance is being updated, such as the updating state during online scaling. |
+| block_cache_disk_quota_bytes       | The disk cache capacity of Block Cache configured by users, in bytes.                                                                                                                                                                                                  |
+| block_cache_disk_used_bytes        | The disk cache space that has been used by Block Cache, in bytes.                                                                                                                                                                                                      |
+| block_cache_disk_used_rate         | The actual disk cache usage rate of Block Cache, in percentages.                                                                                                                                                                                                       |
+| block_cache_disk_spaces            | The disk cache information of Block Cache configured by users, including each cache path and the cache size.                                                                                                                                                           |
+| block_cache_meta_used_bytes        | The memory space used to cache Block Cache metadata, in bytes.                                                                                                                                                                                                         |
+| block_cache_hit_count              | Number of Block Cache hits.                                                                                                                                                                                                                                            |
+| block_cache_miss_count             | Number of cache misses.                                                                                                                                                                                                                                                |
+| block_cache_hit_rate               | Hit rate of Block Cache.                                                                                                                                                                                                                                               |
+| block_cache_hit_bytes              | Number of bytes that are hit in the Block Cache.                                                                                                                                                                                                                       |
+| block_cache_miss_bytes             | Number of bytes that are missed in the Block Cache.                                                                                                                                                                                                                    |
+| block_cache_hit_count_last_minute  | Number of Block Cache hits in the last minute.                                                                                                                                                                                                                         |
+| block_cache_miss_count_last_minute | Number of Block Cache misses in the last minute.                                                                                                                                                                                                                       |
+| block_cache_hit_bytes_last_minute  | Number of types hit by Block Cache in the last minute.                                                                                                                                                                                                                 |
+| block_cache_miss_bytes_last_minute | Number of types missed by Block Cache in the last minute.                                                                                                                                                                                                              |
+| block_cache_buffer_item_count      | The current number of Buffer instances in the Block Cache. Buffer instances refer to common data caches, such as when reading part of the raw data from a remote file and caching the data directly in memory or on disks.                                             |
+| block_cache_buffer_item_bytes      | Number of types used to cache the Buffer instance in Block Cache.                                                                                                                                                                                                      |
+| block_cache_read_disk_bytes        | Number of bytes read from Block Cache.                                                                                                                                                                                                                                 |
+| block_cache_write_bytes            | Number of bytes written to Block Cache.                                                                                                                                                                                                                                |
+| block_cache_write_success_count    | Number of successful Block Cache writes.                                                                                                                                                                                                                               |
+| block_cache_write_fail_count       | Number of failed Block Cache writes.                                                                                                                                                                                                                                   |
+| block_cache_remove_bytes           | Number of bytes removed from Block Cache.                                                                                                                                                                                                                              |
+| block_cache_remove_success_count   | Number of successful remove operations from Block Cache.                                                                                                                                                                                                               |
+| block_cache_remove_fail_count      | Number of failed remove operations from Block Cache.                                                                                                                                                                                                                   |
+| block_cache_current_reading_count  | Number of read operations currently being executed in Block Cache.                                                                                                                                                                                                     |
+| block_cache_current_writing_count  | Number of write operations currently being executed in Block Cache.                                                                                                                                                                                                    |
+| block_cache_current_removing_count | Number of remove operations currently being executed in Block Cache.                                                                                                                                                                                                   |

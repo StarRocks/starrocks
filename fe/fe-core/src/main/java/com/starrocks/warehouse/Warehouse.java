@@ -14,6 +14,7 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
@@ -25,6 +26,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.system.ComputeNode;
 
 import java.util.List;
+import java.util.Map;
 
 public abstract class Warehouse implements Writable {
     @SerializedName(value = "name")
@@ -79,4 +81,10 @@ public abstract class Warehouse implements Writable {
     public abstract void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException;
 
     public abstract void replayInternalOpLog(String payload);
+
+    public abstract boolean isAvailable();
+
+    public Map<String, String> getWarehouseSessionVariable() {
+        return Maps.newHashMap();
+    }
 }

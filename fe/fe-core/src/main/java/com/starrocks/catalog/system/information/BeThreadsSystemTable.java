@@ -33,8 +33,8 @@ public class BeThreadsSystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", IntegerType.BIGINT)
-                        .column("GROUP", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("GROUP", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("PTHREAD_ID", IntegerType.BIGINT)
                         .column("TID", IntegerType.BIGINT)
                         .column("IDLE", BooleanType.BOOLEAN)

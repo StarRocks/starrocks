@@ -256,8 +256,8 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
 
     auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
-    RETURN_IF_ERROR(
-            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
+    RETURN_IF_ERROR(RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta,
+                                                 &rowset, nullptr));
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
     }
@@ -753,9 +753,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
 }
 
 Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
-    RETURN_IF_ERROR(rowset->link_files_to(tablet == nullptr ? nullptr : tablet->data_dir()->get_meta(),
-                                          _context.rowset_path_prefix, _context.rowset_id));
+    RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
@@ -1176,17 +1174,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     }
 
     // check global_dict efficacy
-    const auto& seg_global_dict_columns_valid_info = (*segment_writer)->global_dict_columns_valid_info();
-    for (const auto& it : seg_global_dict_columns_valid_info) {
-        if (!it.second) {
-            _global_dict_columns_valid_info[it.first] = false;
-        } else {
-            if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
-                iter == _global_dict_columns_valid_info.end()) {
-                _global_dict_columns_valid_info[it.first] = true;
-            }
-        }
-    }
+    _check_global_dict((*segment_writer).get());
 
     if (seg_info) {
         seg_info->set_data_size(segment_size);
@@ -1214,6 +1202,20 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
 
     (*segment_writer).reset();
     return Status::OK();
+}
+
+void RowsetWriter::_check_global_dict(SegmentWriter* segment_writer) {
+    const auto& seg_global_dict_columns_valid_info = segment_writer->global_dict_columns_valid_info();
+    for (const auto& it : seg_global_dict_columns_valid_info) {
+        if (!it.second) {
+            _global_dict_columns_valid_info[it.first] = false;
+        } else {
+            if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
+                iter == _global_dict_columns_valid_info.end()) {
+                _global_dict_columns_valid_info[it.first] = true;
+            }
+        }
+    }
 }
 
 VerticalRowsetWriter::VerticalRowsetWriter(const RowsetWriterContext& context) : RowsetWriter(context) {}
@@ -1360,17 +1362,7 @@ Status VerticalRowsetWriter::final_flush() {
         }
 
         // check global_dict efficacy
-        const auto& seg_global_dict_columns_valid_info = segment_writer->global_dict_columns_valid_info();
-        for (const auto& it : seg_global_dict_columns_valid_info) {
-            if (!it.second) {
-                _global_dict_columns_valid_info[it.first] = false;
-            } else {
-                if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
-                    iter == _global_dict_columns_valid_info.end()) {
-                    _global_dict_columns_valid_info[it.first] = true;
-                }
-            }
-        }
+        _check_global_dict(segment_writer.get());
 
         segment_writer.reset();
     }

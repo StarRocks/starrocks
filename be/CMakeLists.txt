@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.11.1)
+cmake_minimum_required(VERSION 3.16)
 
 # set CMAKE_C_COMPILER, this must set before project command
 if (DEFINED ENV{CC} AND DEFINED ENV{CXX})
@@ -402,7 +402,6 @@ set(STARROCKS_LINK_LIBS
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
     FileSystem
     Formats
-    Gutil
     IO
     Serde
     Storage
@@ -414,14 +413,17 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    StarRocksGen
     Webserver
     TestUtil
     Tools
     Geo
     Simd
     Cache
+    orc
     ${WL_END_GROUP}
+    Base
+    Gutil
+    StarRocksGen
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
@@ -483,10 +485,10 @@ set(STARROCKS_DEPENDENCIES
     arrow
     arrow_flight
     arrow_flight_sql
+    benchgen
     gRPC::grpc
     gRPC::grpc++
     parquet
-    orc
     cctz
     fmt
     ryu
@@ -557,6 +559,14 @@ if (${WITH_TENANN} STREQUAL "ON")
     )
 endif()
 
+# enable global pch compiling
+add_library(StarRocksPCH INTERFACE)
+target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(StarRocksPCH INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+endif()
+
+
 # Add all external dependencies. They should come after the starrocks libs.
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES} hdfs jvm)
@@ -608,14 +618,16 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
         )
     ELSE()
         ADD_LIBRARY(${LIB_NAME} STATIC ${ARGN})
+        target_link_libraries(${LIB_NAME} PRIVATE StarRocksPCH)
     ENDIF()
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
 
-set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd)
 
-if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
-    # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
+set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp)
+
+if (NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
+    # In other words, turn to dynamic link when ENABLE_MULTI_DYNAMIC_LIBS or MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
     set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
@@ -714,6 +726,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 ENDFUNCTION()
 
 add_subdirectory(${SRC_DIR}/agent)
+add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
@@ -784,6 +797,7 @@ install(FILES
     ${BASE_DIR}/../conf/udf_security.policy
     ${BASE_DIR}/../conf/core-site.xml
     ${BASE_DIR}/../conf/asan_suppressions.conf
+    ${BASE_DIR}/../conf/type_checker_config.xml
     DESTINATION ${OUTPUT_DIR}/conf)
 
 install(DIRECTORY

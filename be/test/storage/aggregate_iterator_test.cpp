@@ -462,9 +462,9 @@ TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(1);
+        auto* c = chunk->get_column_raw_ptr_by_index(1);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -507,9 +507,9 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(1);
+        auto* c = chunk->get_column_raw_ptr_by_index(1);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -550,9 +550,9 @@ TEST_F(AggregateIteratorTest, agg_boolean_key) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(1);
+        auto* c = chunk->get_column_raw_ptr_by_index(1);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -590,9 +590,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -620,9 +620,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -645,9 +645,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -688,9 +688,9 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -716,9 +716,9 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -741,9 +741,9 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -783,9 +783,9 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -811,9 +811,9 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -836,9 +836,9 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(1);
+            auto* c = chunk->get_column_raw_ptr_by_index(1);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -883,9 +883,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -913,9 +913,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -943,9 +943,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -970,9 +970,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -1025,9 +1025,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
             if (!st.ok()) {
                 break;
             }
-            auto& c = chunk->get_column_by_index(2);
+            auto* c = chunk->get_column_raw_ptr_by_index(2);
             // std::vector<int16_t>
-            auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+            auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
             values.insert(values.end(), v.begin(), v.end());
         }
         ASSERT_TRUE(st.is_end_of_file());
@@ -1104,9 +1104,9 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(0);
+        auto* c = chunk->get_column_raw_ptr_by_index(0);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -1148,9 +1148,9 @@ TEST_F(AggregateIteratorTest, max_from_source_masks) {
         if (!st.ok()) {
             break;
         }
-        auto& c = chunk->get_column_by_index(0);
+        auto* c = chunk->get_column_raw_ptr_by_index(0);
         // std::vector<int16_t>
-        auto& v = FixedLengthColumn<int16_t>::dynamic_pointer_cast(c)->get_data();
+        auto& v = down_cast<FixedLengthColumn<int16_t>*>(c)->get_data();
         values.insert(values.end(), v.begin(), v.end());
     }
     ASSERT_TRUE(st.is_end_of_file());

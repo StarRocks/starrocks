@@ -253,7 +253,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
                 ops_with_source = _decompose_to_pipeline<AggregatorFactory,
                                                          SpillableAggregateDistinctBlockingSourceOperatorFactory,
                                                          SpillableAggregateDistinctBlockingSinkOperatorFactory>(
-                        ops_with_sink, context, use_per_bucket_optimize);
+                        ops_with_sink, context, false);
             }
         } else {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateDistinctBlockingSourceOperatorFactory,

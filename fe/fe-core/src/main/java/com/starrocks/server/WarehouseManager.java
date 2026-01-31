@@ -59,6 +59,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
@@ -112,6 +113,15 @@ public class WarehouseManager implements Writable {
     public List<Long> getAllWarehouseIds() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             return new ArrayList<>(idToWh.keySet());
+        }
+    }
+
+    public Set<Long> getAliveWarehouseIds() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return nameToWh.values().stream()
+                    .filter(Warehouse::isAvailable)
+                    .map(Warehouse::getId)
+                    .collect(Collectors.toSet());
         }
     }
 
@@ -327,6 +337,22 @@ public class WarehouseManager implements Writable {
             return nodeId;
         } catch (StarRocksException e) {
             LOG.warn("get alive compute node id to tablet {} fail {}.", tabletId, e.getMessage());
+            return null;
+        }
+    }
+
+    public Map<Long, List<Long>> getAllComputeNodeIdsAssignToTablets(ComputeResource computeResource,
+                                                                    List<Long> tabletIds) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShards(tabletIds, computeResource.getWorkerGroupId());
+        } catch (StarRocksException e) {
+            LOG.warn("get all compute node ids assign to tablets {} fail {}.", tabletIds, e.getMessage());
             return null;
         }
     }

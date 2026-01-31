@@ -1117,15 +1117,14 @@ public class AuthorizationMgrTest {
         oldValue = Config.privilege_max_total_roles_per_user;
         Config.privilege_max_total_roles_per_user = 3;
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_role_inheritance", "%");
-        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to user_test_role_inheritance", ctx), ctx);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
-                manager.getAllPredecessorRoleIdsUnlocked(collection));
+                manager.getAllPredecessorRoleIdsUnlocked(manager.getUserPrivilegeCollectionUnlocked(user)));
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role0 to user_test_role_inheritance", ctx), ctx);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
-                manager.getAllPredecessorRoleIdsUnlocked(collection));
+                manager.getAllPredecessorRoleIdsUnlocked(manager.getUserPrivilegeCollectionUnlocked(user)));
         // exception:
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1134,14 +1133,14 @@ public class AuthorizationMgrTest {
             Assertions.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 5 predecessor roles > 3"));
         }
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
-                manager.getAllPredecessorRoleIdsUnlocked(collection));
+                manager.getAllPredecessorRoleIdsUnlocked(manager.getUserPrivilegeCollectionUnlocked(user)));
         // normal grant
         Config.privilege_max_total_roles_per_user = oldValue;
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role4 to user_test_role_inheritance", ctx), ctx);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(
                         roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
-                manager.getAllPredecessorRoleIdsUnlocked(collection));
+                manager.getAllPredecessorRoleIdsUnlocked(manager.getUserPrivilegeCollectionUnlocked(user)));
 
 
         // grant role with circle: bad case
@@ -1220,7 +1219,6 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("create user user_test_drop_role_inheritance"), ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_drop_role_inheritance", "%");
-        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
 
         // role0 -> role1[user] -> role2
         // role3[user]
@@ -1233,6 +1231,7 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant test_drop_role_3 to user_test_drop_role_inheritance", ctx), ctx);
 
+        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         assertTableSelectOnTest(user, true, true, false, true);
@@ -1240,6 +1239,7 @@ public class AuthorizationMgrTest {
         // role0 -> role1[user] -> role2
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_3;", ctx), ctx);
+        collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         Assertions.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
@@ -1249,6 +1249,7 @@ public class AuthorizationMgrTest {
         // role0 -> role1[user]
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_2;", ctx), ctx);
+        collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         Assertions.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
@@ -1258,6 +1259,7 @@ public class AuthorizationMgrTest {
         // role1[user]
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_0;", ctx), ctx);
+        collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         Assertions.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
@@ -1274,6 +1276,7 @@ public class AuthorizationMgrTest {
         Assertions.assertEquals(role1NumSubs - 1,
                 manager.roleIdToPrivilegeCollection.get(roleIds[1]).getSubRoleIds().size());
 
+        collection = manager.getUserPrivilegeCollectionUnlocked(user);
         Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         assertTableSelectOnTest(user, false, true, false, false);

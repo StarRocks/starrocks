@@ -80,7 +80,7 @@ TEST(OrcColumnReaderTest, TestDateColumn) {
         auto* c0 = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
         orc::RowReader::ReadPosition pos;
         EXPECT_TRUE(rr->next(*batch, &pos));
-        ColumnPtr column = ColumnHelper::create_column(c0Type, true);
+        MutableColumnPtr column = ColumnHelper::create_column(c0Type, true);
         EXPECT_TRUE(orcColumnReader->get_next(c0, column, 0, batchSize).ok());
         EXPECT_EQ(batchSize, column->size());
 

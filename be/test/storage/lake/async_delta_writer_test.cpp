@@ -771,4 +771,122 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_without_input_profile) {
     do_block_merger(false);
 }
 
+// Test that write tasks are rejected after finish task completes
+TEST_F(LakeAsyncDeltaWriterTest, test_write_after_finish) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // First write should succeed
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_OK(st);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    // Finish the writer
+    CountDownLatch finish_latch(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.status();
+        finish_latch.count_down();
+    });
+    finish_latch.wait();
+
+    // Write after finish should fail with InternalError
+    CountDownLatch write_after_finish_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_ERROR(st);
+        ASSERT_TRUE(st.is_internal_error());
+        ASSERT_TRUE(st.message().find("already finished") != std::string::npos);
+        write_after_finish_latch.count_down();
+    });
+    write_after_finish_latch.wait();
+
+    // close
+    delta_writer->close();
+
+    // Verify that only the first write was committed
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(txn_id));
+    ASSERT_EQ(kChunkSize, txnlog->op_write().rowset().num_rows());
+}
+
+// Test that flush tasks succeed (as no-op) after finish task completes
+TEST_F(LakeAsyncDeltaWriterTest, test_flush_after_finish) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write some data
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_OK(st);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    // Flush should succeed before finish
+    CountDownLatch flush_latch(1);
+    delta_writer->flush([&](const Status& st) {
+        ASSERT_OK(st);
+        flush_latch.count_down();
+    });
+    flush_latch.wait();
+
+    // Finish the writer
+    CountDownLatch finish_latch(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.status();
+        finish_latch.count_down();
+    });
+    finish_latch.wait();
+
+    // Flush after finish should still succeed (as a no-op)
+    // This is safe because flush is idempotent and doesn't cause data loss
+    CountDownLatch flush_after_finish_latch(1);
+    delta_writer->flush([&](const Status& st) {
+        ASSERT_OK(st); // Should succeed
+        flush_after_finish_latch.count_down();
+    });
+    flush_after_finish_latch.wait();
+
+    // close
+    delta_writer->close();
+}
+
 } // namespace starrocks::lake

@@ -430,7 +430,7 @@ public class ExplainAnalyzer {
         popIndent(); // metric indent
 
         // 3. Memory Usage
-        appendSummaryLine("QueryPeakMemoryUsage: ", executionProfile.getCounter("QueryPeakMemoryUsage"),
+        appendSummaryLine("QueryPeakMemoryUsage: ", executionProfile.getCounter("QueryPeakMemoryUsagePerNode"),
                 ", QueryAllocatedMemoryUsage: ", executionProfile.getCounter("QueryAllocatedMemoryUsage"));
 
         // 4. Top Cpu Nodes

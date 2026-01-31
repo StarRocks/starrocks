@@ -344,6 +344,12 @@ Flink SQL を使用してデータを読み取る際には、次の点に注意�
        }
    ```
 
+## FAQ
+
+#### Flink Connector でデータをエクスポート中に “Failed to get next from be” というエラーが発生しました。どうすればよいですか？
+
+BE 設定の `scan_context_gc_interval_min`（デフォルト: 5、単位: 分）を大きい値に設定することで、Scan Context がクリーンアップされる時間間隔を長くできます。
+
 ## 次のステップ
 
 Flink が StarRocks からデータを正常に読み取った後、[Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) を使用して読み取りタスクを監視できます。例えば、WebUI の **Metrics** ページで `totalScannedRows` メトリックを表示して、正常に読み取られた行数を取得できます。また、Flink SQL を使用して、読み取ったデータに対してジョインなどの計算を行うこともできます。

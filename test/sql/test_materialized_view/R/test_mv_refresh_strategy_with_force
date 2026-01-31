@@ -1,4 +1,4 @@
--- name: test_mv_refresh_strategy_with_force
+-- name: test_mv_refresh_strategy_with_force @slow
 create database db_${uuid0};
 -- result:
 -- !result
@@ -46,7 +46,7 @@ None
 -- !result
 [UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv1';
 -- result:
-mv-24383
+mv-30251
 -- !result
 [UC]REFRESH_COUNT1=SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
 -- result:

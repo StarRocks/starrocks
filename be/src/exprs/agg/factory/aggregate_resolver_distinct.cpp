@@ -19,11 +19,10 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
-
 struct DistinctDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt>) {
+        if constexpr (lt_is_aggregate<lt> || lt_is_binary<lt>) {
             using DistinctState = DistinctAggregateState<lt, SumResultLT<lt>>;
             using DistinctState2 = DistinctAggregateStateV2<lt, SumResultLT<lt>>;
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState>(
@@ -35,12 +34,35 @@ struct DistinctDispatcher {
                     "multi_distinct_sum", false, AggregateFactory::MakeSumDistinctAggregateFunction<lt>());
             resolver->add_aggregate_mapping<lt, SumResultLT<lt>, DistinctState2>(
                     "multi_distinct_sum2", false, AggregateFactory::MakeSumDistinctAggregateFunctionV2<lt>());
+
+            static constexpr auto count = compute_bits(false, false);
+            resolver->add_window_mapping<lt, TYPE_STRUCT, typename FusedMultiDistinctFunction<lt, count>::State>(
+                    "fused_multi_distinct_count",
+                    AggregateFactory::MakeFusedMultiDistinctAggregateFunction<lt, count>());
+
+            static constexpr auto count_avg = compute_bits(false, true);
+            resolver->add_window_mapping<lt, TYPE_STRUCT, typename FusedMultiDistinctFunction<lt, count_avg>::State>(
+                    "fused_multi_distinct_count_avg",
+                    AggregateFactory::MakeFusedMultiDistinctAggregateFunction<lt, count_avg>());
+
+            static constexpr auto count_sum = compute_bits(true, false);
+            resolver->add_window_mapping<lt, TYPE_STRUCT, typename FusedMultiDistinctFunction<lt, count_sum>::State>(
+                    "fused_multi_distinct_count_sum",
+                    AggregateFactory::MakeFusedMultiDistinctAggregateFunction<lt, count_sum>());
+
+            static constexpr auto count_sum_avg = compute_bits(true, true);
+            resolver->add_window_mapping<lt, TYPE_STRUCT,
+                                         typename FusedMultiDistinctFunction<lt, count_sum_avg>::State>(
+                    "fused_multi_distinct_count_sum_avg",
+                    AggregateFactory::MakeFusedMultiDistinctAggregateFunction<lt, count_sum_avg>());
         }
     }
 };
 
 void AggregateFuncResolver::register_distinct() {
-    for (auto type : aggregate_types()) {
+    auto multi_distinct_types = aggregate_types();
+    multi_distinct_types.push_back(TYPE_VARBINARY);
+    for (auto type : multi_distinct_types) {
         type_dispatch_all(type, DistinctDispatcher(), this);
     }
 }

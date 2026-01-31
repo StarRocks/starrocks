@@ -19,8 +19,8 @@
 namespace starrocks {
 
 struct AvroHelper {
-    avro_schema_t schema = NULL;
-    avro_value_iface_t* iface = NULL;
+    avro_schema_t schema = nullptr;
+    avro_value_iface_t* iface = nullptr;
     avro_value_t avro_val;
     std::string schema_text;
 };

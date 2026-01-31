@@ -195,6 +195,11 @@ public:
         return true;
     }
 
+    bool is_shutdown() const {
+        std::lock_guard<Lock> guard(_lock);
+        return _shutdown;
+    }
+
     // Shutdown the queue, this will wake up all waiting threads.
     void shutdown() {
         std::lock_guard<Lock> guard(_lock);

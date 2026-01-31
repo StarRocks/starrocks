@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -60,8 +61,16 @@ public class LakeTablet extends Tablet {
 
     public long rebuildPindexVersion = 0L;
 
+    public LakeTablet() {
+        super();
+    }
+
     public LakeTablet(long id) {
         super(id);
+    }
+
+    public LakeTablet(long id, TabletRange range) {
+        super(id, range);
     }
 
     public long getShardId() {
@@ -138,7 +147,7 @@ public class LakeTablet extends Tablet {
     public List<Replica> getAllReplicas() {
         List<Replica> replicas = Lists.newArrayList();
         getQueryableReplicas(replicas, null, 0, -1, 0,
-                WarehouseManager.DEFAULT_RESOURCE);
+                WarehouseManager.DEFAULT_RESOURCE, null);
         return replicas;
     }
 
@@ -147,15 +156,18 @@ public class LakeTablet extends Tablet {
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         getQueryableReplicas(allQuerableReplicas, localReplicas, visibleVersion, localBeId,
-                schemaHash, WarehouseManager.DEFAULT_RESOURCE);
+                schemaHash, WarehouseManager.DEFAULT_RESOURCE, null);
     }
 
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash,
-                                     ComputeResource computeResource) {
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, getId());
+                                     ComputeResource computeResource, List<Long> locations) {
+        List<Long> computeNodeIds = locations;
+        if (computeNodeIds == null) { // initial location hint is null, grab the info from warehouse manager.
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            computeNodeIds = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, getId());
+        }
         if (computeNodeIds == null) {
             return;
         }

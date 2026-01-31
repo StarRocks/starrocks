@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
@@ -299,6 +300,7 @@ public class LoadJobTest {
 
     @Test
     public void testProcessTimeout(@Mocked EditLog editLog) {
+        new FakeEditLog();
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "timeoutSecond", 0);
         new Expectations() {
@@ -372,7 +374,7 @@ public class LoadJobTest {
                 minTimes = 0;
                 result = warehouseManager;
 
-                warehouseManager.getWarehouse(anyLong);
+                warehouseManager.getWarehouseAllowNull(anyLong);
                 minTimes = 0;
                 result = warehouse;
 
@@ -402,6 +404,49 @@ public class LoadJobTest {
     }
 
     @Test
+    public void testGetShowInfoMissingWarehouse() throws DdlException {
+        TimeZone tz = TimeZone.getTimeZone(ZoneId.of("Asia/Shanghai"));
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return tz;
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        LoadJob loadJob = new BrokerLoadJob();
+        loadJob.setWarehouseId(1L);
+
+        List<Comparable> showInfo = loadJob.getShowInfo();
+        Assertions.assertEquals("Warehouse id: 1 not exist.", showInfo.get(showInfo.size() - 1));
+
+        TLoadInfo loadInfo = loadJob.toThrift();
+        Assertions.assertEquals("Warehouse id: 1 not exist.", loadInfo.getWarehouse());
+    }
+
+    @Test
     public void testToThrift() {
         LoadJob loadJob = new BrokerLoadJob();
 
@@ -422,7 +467,7 @@ public class LoadJobTest {
                 minTimes = 0;
                 result = warehouseManager;
 
-                warehouseManager.getWarehouse(anyLong);
+                warehouseManager.getWarehouseAllowNull(anyLong);
                 minTimes = 0;
                 result = warehouse;
 

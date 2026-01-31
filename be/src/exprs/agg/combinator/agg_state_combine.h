@@ -57,7 +57,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         _function->convert_to_serialize_format(ctx, srcs, chunk_size, dst);
     }
 
@@ -77,7 +77,7 @@ private:
             _function->get_name() == AggStateUtils::FUNCTION_COUNT_NULLABLE) {
             if (LIKELY(to->is_nullable())) {
                 auto* nullable_column = down_cast<NullableColumn*>(to);
-                _function->serialize_to_column(ctx, state, nullable_column->mutable_data_column());
+                _function->serialize_to_column(ctx, state, nullable_column->data_column_raw_ptr());
                 nullable_column->null_column_data().push_back(0);
             } else {
                 _function->serialize_to_column(ctx, state, to);

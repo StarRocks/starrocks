@@ -31,7 +31,7 @@ public:
     public:
         IColumn() { std::cout << "IColumn constructor" << std::endl; }
         IColumn(const IColumn&) { std::cout << "IColumn copy constructor" << std::endl; }
-        virtual ~IColumn() = default;
+        ~IColumn() override = default;
 
         virtual MutablePtr clone() const = 0;
         virtual int get() const { return -1; };
@@ -42,9 +42,9 @@ public:
         /// If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
         /// Shallow: doesn't do recursive calls; don't do call for itself.
         using ColumnCallback = std::function<void(Ptr&)>;
-        virtual void for_each_subcolumn(ColumnCallback) {}
+        virtual void for_each_subcolumn(const ColumnCallback& callback) {}
 
-        MutablePtr mutate() const&& {
+        virtual MutablePtr mutate() const&& {
             MutablePtr res = try_mutate();
             res->for_each_subcolumn([](Ptr& subcolumn) { subcolumn = std::move(*subcolumn).mutate(); });
             return res;
@@ -101,7 +101,8 @@ public:
         int _data;
     };
     using ConcreteColumnPtr = ConcreteColumn::Ptr;
-    using ConcreteColumnMutablePtr = ConcreteColumn::MutablePtr;
+    using ConcreteWrappedColumnPtr = ConcreteColumn::WrappedPtr;
+    using ConcreteMutableColumnPtr = ConcreteColumn::MutablePtr;
 
     // ConcreteVectorColumn is a column with vector<int> data
     class ConcreteVectorColumn final
@@ -131,7 +132,7 @@ public:
         std::vector<int> _data;
     };
     using ConcreteVectorColumnPtr = ConcreteVectorColumn::Ptr;
-    using ConcreteVectorColumnMutablePtr = ConcreteVectorColumn::MutablePtr;
+    using ConcreteVectorMutableColumnPtr = ConcreteVectorColumn::MutablePtr;
 
     template <typename T>
     class MFixedLengthColumnBase
@@ -172,26 +173,33 @@ public:
         ConcreteColumn2(const ConcreteColumn2& col) {
             std::cout << "ConcreteColumn copy constructor" << std::endl;
             this->_inner = ConcreteColumn::static_pointer_cast(col._inner->clone());
-            this->_null_column = MNullColumn::static_pointer_cast(col._null_column->clone());
+            if (col._null_column) {
+                this->_null_column = MNullColumn::static_pointer_cast(col._null_column->clone());
+            }
         }
 
     public:
         int get() const override { return _inner->get(); }
         void set(int value) override { _inner->set(value); }
 
-        void for_each_subcolumn(ColumnCallback callback) override {
+        void for_each_subcolumn(const ColumnCallback& callback) override {
             ColumnPtr inner;
             callback(inner);
-            _inner = ConcreteColumn::static_pointer_cast(std::move(inner));
+            if (inner) {
+                _inner = ConcreteColumn::static_pointer_cast(std::move(inner));
+            }
 
-            // callback(_null_column);
-            ColumnPtr null;
-            callback(null);
-            _null_column = MNullColumn::static_pointer_cast(std::move(null));
+            if (_null_column) {
+                ColumnPtr null;
+                callback(null);
+                if (null) {
+                    _null_column = MNullColumn::static_pointer_cast(std::move(null));
+                }
+            }
         }
 
     private:
-        ConcreteColumnPtr _inner;
+        ConcreteWrappedColumnPtr _inner;
         MNullColumn::Ptr _null_column;
     };
 
@@ -204,7 +212,7 @@ public:
 TEST_F(CowTest, TestPtr) {
     {
         // mutable ptr can convert to immutable ptr
-        ConcreteColumnPtr x = ConcreteColumn::create(1);
+        auto x = ConcreteColumn::create(1);
         EXPECT_EQ(1, x->get());
         x->set(2);
         EXPECT_EQ(2, x->get());
@@ -213,22 +221,27 @@ TEST_F(CowTest, TestPtr) {
         auto x = ConcreteColumn::create(1);
         EXPECT_EQ(1, x->get());
         EXPECT_EQ(1, x->use_count());
-        ConcreteColumnPtr y = std::move(x);
+        auto y = std::move(x);
         EXPECT_EQ(1, y->get());
         EXPECT_EQ(1, y->use_count());
         EXPECT_EQ(nullptr, x);
     }
     {
-        ColumnPtr x = ConcreteColumn::create(1);
+        auto x = ConcreteColumn::create(1);
         EXPECT_EQ(1, x->get());
         EXPECT_EQ(1, x->use_count());
 
-        // share x
-        ColumnPtr y = x;
+        // share x via ImmutPtr conversion
+        ColumnPtr x_immut = std::move(x);
+        EXPECT_EQ(1, x_immut->get());
+        EXPECT_EQ(1, x_immut->use_count());
+
+        // Now copy to share
+        ColumnPtr y = x_immut;
         EXPECT_EQ(1, y->get());
         EXPECT_EQ(2, y->use_count());
-        EXPECT_EQ(1, x->get());
-        EXPECT_EQ(2, x->use_count());
+        EXPECT_EQ(1, x_immut->get());
+        EXPECT_EQ(2, x_immut->use_count());
     }
 }
 
@@ -255,7 +268,7 @@ TEST_F(CowTest, TestAssumeMutable) {
 }
 
 TEST_F(CowTest, TestColumnMoveFunc1) {
-    MutableColumnPtr x = ConcreteColumn::create(1);
+    auto x = ConcreteColumn::create(1);
     EXPECT_EQ(1, x->get());
 
     MutableColumnPtr y = move_func1(std::move(x));
@@ -315,10 +328,10 @@ TEST_F(CowTest, TestColumnsMove3) {
 }
 
 TEST_F(CowTest, TestColumnPtrStaticPointerCast) {
-    ColumnPtr x = ConcreteColumn::create(1);
+    auto x = ConcreteColumn::create(1);
     EXPECT_EQ(1, x->get());
     {
-        ConcreteColumnPtr x1 = ConcreteColumn::create(x);
+        auto x1 = ConcreteColumn::create(x);
         // x1 is a deep copy of x, which its type is ConcreteColumn
         x1->set(2);
         EXPECT_EQ(2, x1->get());
@@ -331,7 +344,7 @@ TEST_F(CowTest, TestColumnPtrStaticPointerCast) {
 
     {
         // x1 is a shadow copy of x, which its type is ConcreteColumn
-        ConcreteColumnPtr x1 = ConcreteColumn::static_pointer_cast(x);
+        auto x1 = ConcreteColumn::static_pointer_cast(x->as_mutable_ptr());
         x1->set(2);
         EXPECT_EQ(2, x1->get());
         EXPECT_EQ(2, x->get());
@@ -340,7 +353,7 @@ TEST_F(CowTest, TestColumnPtrStaticPointerCast) {
         EXPECT_EQ(2, x->use_count());
     }
     {
-        MutableColumnPtr x2 = x->as_mutable_ptr();
+        auto x2 = x->as_mutable_ptr();
         x2->set(3);
         EXPECT_EQ(3, x2->get());
         EXPECT_EQ(3, x->get());
@@ -351,21 +364,23 @@ TEST_F(CowTest, TestColumnPtrStaticPointerCast) {
     EXPECT_EQ(3, x->get());
     EXPECT_EQ(1, x->use_count());
 
-    // use std::move
+    // as_mutable_ptr creates a shared reference, so both x and x1 point to the same object
     {
-        ConcreteColumnPtr x1 = ConcreteColumn::static_pointer_cast(std::move(x));
+        auto x1 = ConcreteColumn::static_pointer_cast(x->as_mutable_ptr());
         x1->set(2);
         EXPECT_EQ(2, x1->get());
-        EXPECT_EQ(nullptr, x);
-        EXPECT_EQ(1, x1->use_count());
+        EXPECT_EQ(2, x->get()); // x is also modified since it shares the object
+        EXPECT_EQ(2, x1->use_count());
+        EXPECT_EQ(2, x->use_count());
     }
+    EXPECT_EQ(1, x->use_count()); // After x1 goes out of scope
 }
 
 TEST_F(CowTest, TestColumnPtrDynamicPointerCast) {
-    ColumnPtr x = ConcreteColumn::create(1);
+    auto x = ConcreteColumn::create(1);
     EXPECT_EQ(1, x->get());
     {
-        ConcreteColumnPtr x1 = ConcreteColumn::create(x);
+        auto x1 = ConcreteColumn::create(x);
         // x1 is a deep copy of x, which its type is ConcreteColumn
         x1->set(2);
         EXPECT_EQ(2, x1->get());
@@ -378,7 +393,7 @@ TEST_F(CowTest, TestColumnPtrDynamicPointerCast) {
 
     {
         // x1 is a shadow copy of x, which its type is ConcreteColumn
-        ConcreteColumnPtr x1 = ConcreteColumn::dynamic_pointer_cast(x);
+        auto x1 = ConcreteColumn::dynamic_pointer_cast(x->as_mutable_ptr());
         x1->set(2);
         EXPECT_EQ(2, x1->get());
         EXPECT_EQ(2, x->get());
@@ -387,7 +402,7 @@ TEST_F(CowTest, TestColumnPtrDynamicPointerCast) {
         EXPECT_EQ(2, x->use_count());
     }
     {
-        MutableColumnPtr x2 = x->as_mutable_ptr();
+        auto x2 = x->as_mutable_ptr();
         x2->set(3);
         EXPECT_EQ(3, x2->get());
         EXPECT_EQ(3, x->get());
@@ -398,42 +413,44 @@ TEST_F(CowTest, TestColumnPtrDynamicPointerCast) {
     EXPECT_EQ(3, x->get());
     EXPECT_EQ(1, x->use_count());
 
-    // use std::move
+    // as_mutable_ptr creates a shared reference, so both x and x1 point to the same object
     {
-        ConcreteColumnPtr x1 = ConcreteColumn::dynamic_pointer_cast(std::move(x));
+        auto x1 = ConcreteColumn::dynamic_pointer_cast(x->as_mutable_ptr());
         x1->set(2);
         EXPECT_EQ(2, x1->get());
-        EXPECT_EQ(nullptr, x);
-        EXPECT_EQ(1, x1->use_count());
+        EXPECT_EQ(2, x->get()); // x is also modified since it shares the object
+        EXPECT_EQ(2, x1->use_count());
+        EXPECT_EQ(2, x->use_count());
     }
+    EXPECT_EQ(1, x->use_count()); // After x1 goes out of scope
 }
 
 TEST_F(CowTest, TestConcreteColumn2) {
     {
-        ColumnPtr x = ConcreteColumn::create(1);
-        ColumnPtr y = ConcreteColumn2::create(x->as_mutable_ptr());
+        auto x = ConcreteColumn::create(1);
+        auto y = ConcreteColumn2::create(x->as_mutable_ptr());
     }
-    { ColumnPtr y = ConcreteColumn2::create(ConcreteColumn::create(1)); }
+    { auto y = ConcreteColumn2::create(ConcreteColumn::create(1)); }
     {
         auto x = ConcreteColumn::create(1);
-        ColumnPtr y = ConcreteColumn2::create(x->as_mutable_ptr());
-    }
-    {
-        auto x = ConcreteColumn::create(1);
-        ColumnPtr y = ConcreteColumn2::create(std::move(x));
-    }
-    {
-        MutableColumnPtr x = ConcreteColumn::create(1);
-        ColumnPtr y = ConcreteColumn2::create(std::move(x));
+        auto y = ConcreteColumn2::create(x->as_mutable_ptr());
     }
     {
         auto x = ConcreteColumn::create(1);
-        ColumnPtr y = ConcreteColumn2::create(std::move(x));
+        auto y = ConcreteColumn2::create(std::move(x));
+    }
+    {
+        auto x = ConcreteColumn::create(1);
+        auto y = ConcreteColumn2::create(std::move(x));
+    }
+    {
+        auto x = ConcreteColumn::create(1);
+        auto y = ConcreteColumn2::create(std::move(x));
     }
 }
 
 TEST_F(CowTest, TestClone) {
-    ColumnPtr x = ConcreteColumn::create(1);
+    auto x = ConcreteColumn::create(1);
 
     EXPECT_EQ(1, x->get());
     auto cloned = x->clone();
@@ -448,7 +465,7 @@ TEST_F(CowTest, TestClone) {
 }
 
 TEST_F(CowTest, TestMutate) {
-    ColumnPtr x = ConcreteColumn::create(1);
+    auto x = ConcreteColumn::create(1);
 
     {
         auto y1 = IColumn::mutate(x);
@@ -475,7 +492,7 @@ TEST_F(CowTest, TestCow) {
     using IColumnPtr = const IColumn*;
     IColumnPtr x_ptr;
     IColumnPtr y_ptr;
-    ColumnPtr x = ConcreteColumn::create(1);
+    auto x = ConcreteColumn::create(1);
     ColumnPtr y = x;
 
     x_ptr = x.get();
@@ -554,7 +571,7 @@ TEST_F(CowTest, TestCow) {
 }
 
 TEST_F(CowTest, TestColumnMutate1) {
-    ConcreteColumn::MutablePtr x = ConcreteColumn::create(1);
+    auto x = ConcreteColumn::create(1);
     // ensure x is not used again.
     auto y = (std::move(*x)).mutate();
     y->set(2);
@@ -579,7 +596,7 @@ TEST_F(CowTest, TestColumnMutate1) {
 }
 
 TEST_F(CowTest, TestColumnMutate2) {
-    const ConcreteColumn::Ptr x = ConcreteColumn::create(1);
+    const auto x = ConcreteColumn::create(1);
     // ensure x is not used again.
     auto y = (std::move(*x)).mutate();
     y->set(2);
@@ -602,7 +619,7 @@ TEST_F(CowTest, TestColumnMutate2) {
 }
 
 TEST_F(CowTest, TestConcreteVectorColumnMutate1) {
-    ConcreteVectorColumn::MutablePtr x = ConcreteVectorColumn::create({1, 2, 3});
+    auto x = ConcreteVectorColumn::create({1, 2, 3});
     // ensure x is not used again.
     auto y = (std::move(*x)).mutate();
     y->set(0, 2);
@@ -628,7 +645,7 @@ TEST_F(CowTest, TestConcreteVectorColumnMutate1) {
 }
 
 TEST_F(CowTest, TestConcreteVectorColumnMutate2) {
-    const ConcreteVectorColumn::Ptr x = ConcreteVectorColumn::create({1, 2, 3});
+    const auto x = ConcreteVectorColumn::create({1, 2, 3});
     // ensure x is not used again.
     auto y = (std::move(*x)).mutate();
     y->set(0, 2);

@@ -16,12 +16,12 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -71,7 +71,7 @@ public class LimitPruneTabletsRule extends TransformationRule {
                     break;
                 }
                 long version = physicalPartition.getVisibleVersion();
-                MaterializedIndex index = physicalPartition.getIndex(olapScanOperator.getSelectedIndexId());
+                MaterializedIndex index = physicalPartition.getLatestIndex(olapScanOperator.getSelectedIndexMetaId());
 
                 for (Tablet tablet : index.getTablets()) {
                     // Note: the tablet row count metadata in FE maybe delay because of BE tablet row count.

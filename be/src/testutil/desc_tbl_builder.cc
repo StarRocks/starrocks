@@ -56,8 +56,6 @@ TupleDescBuilder& DescriptorTblBuilder::declare_tuple() {
 // item_id of -1 indicates no itemTupleId
 static TSlotDescriptor make_slot_descriptor(int id, int parent_id, const TypeDescriptor& type, int slot_idx,
                                             int byte_offset, int item_id) {
-    int null_byte = slot_idx / 8;
-    int null_bit = slot_idx % 8;
     TSlotDescriptor slot_desc;
     slot_desc.__set_id(id);
     slot_desc.__set_parent(parent_id);
@@ -65,10 +63,9 @@ static TSlotDescriptor make_slot_descriptor(int id, int parent_id, const TypeDes
     // For now no tests depend on the materialized path being populated correctly.
     // slot_desc.__set_materializedPath(vector<int>());
     slot_desc.__set_byteOffset(byte_offset);
-    slot_desc.__set_nullIndicatorByte(null_byte);
-    slot_desc.__set_nullIndicatorBit(null_bit);
     slot_desc.__set_slotIdx(slot_idx);
     slot_desc.__set_isMaterialized(true);
+    slot_desc.__set_isNullable(true);
     // if (item_id != -1) {
     //     slot_desc.__set_itemTupleId(item_id);
     // }

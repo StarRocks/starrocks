@@ -39,7 +39,6 @@
 #include <string_view>
 #include <vector>
 
-#include "column/chunk.h"
 #include "column/column_access_path.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"

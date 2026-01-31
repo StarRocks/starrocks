@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <boost/static_assert.hpp>
+#include <cstddef>
 
 #include "runtime/datetime_value.h"
 
@@ -25,10 +25,10 @@ namespace starrocks {
 // at compile time.  If these asserts fail, the compile will fail.
 class UnusedClass {
 private:
-    BOOST_STATIC_ASSERT(sizeof(Slice) == 16);
-    BOOST_STATIC_ASSERT(offsetof(Slice, size) == 8);
+    static_assert(sizeof(Slice) == 16, "Slice size mismatch");
+    static_assert(offsetof(Slice, size) == 8, "Slice.size offset mismatch");
     // Datetime value
-    BOOST_STATIC_ASSERT(sizeof(DateTimeValue) == 16);
+    static_assert(sizeof(DateTimeValue) == 16, "DateTimeValue size mismatch");
 };
 
 } // namespace starrocks

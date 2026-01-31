@@ -32,8 +32,8 @@ public class BeBvarsSystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", IntegerType.BIGINT, false)
-                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN), false)
-                        .column("VALUE", TypeFactory.createVarchar(NAME_CHAR_LEN), false)
+                        .column("NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN), false)
+                        .column("VALUE", TypeFactory.createVarcharType(NAME_CHAR_LEN), false)
                         .build(), TSchemaTableType.SCH_BE_BVARS);
     }
 }

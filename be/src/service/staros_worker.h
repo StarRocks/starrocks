@@ -149,6 +149,7 @@ extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
 void shutdown_staros_worker();
 void update_staros_starcache();
+void set_starlet_in_shutdown();
 
 } // namespace starrocks
 #endif // USE_STAROS

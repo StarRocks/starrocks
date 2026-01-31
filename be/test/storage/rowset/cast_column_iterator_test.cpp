@@ -104,9 +104,9 @@ TEST_P(CastColumnIteratorWithNumericTypeTest, test) {
     DeferOp defer([&]() { delete cast_iter; });
     auto opts = ColumnIteratorOptions{};
     ASSERT_OK(cast_iter->init(opts));
-    auto column = (GetParam().nullable_target)
-                          ? (ColumnPtr)NullableColumn::create(Int64Column::create(), NullColumn::create())
-                          : (ColumnPtr)Int64Column::create();
+    MutableColumnPtr column = (GetParam().nullable_target) ? (MutableColumnPtr)NullableColumn::create(
+                                                                     Int64Column::create(), NullColumn::create())
+                                                           : (MutableColumnPtr)Int64Column::create();
     auto n = size_t{10};
     ASSERT_OK(cast_iter->next_batch(&n, column.get()));
     ASSERT_EQ(10, n);

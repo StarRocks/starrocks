@@ -454,7 +454,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             return Expressions.ref(slotRef.getColumnName());
         } else if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-            String fn = functionCallExpr.getFnName().getFunction();
+            String fn = functionCallExpr.getFunctionName();
             Expr child = functionCallExpr.getChild(0);
             if (child instanceof SlotRef) {
                 String colName = ((SlotRef) child).getColumnName();

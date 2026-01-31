@@ -22,6 +22,7 @@
 #include "column/array_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "formats/column_evaluator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_posix.h"

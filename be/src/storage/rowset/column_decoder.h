@@ -57,6 +57,8 @@ public:
 
     int32_t dict_convert_size() const { return _code_convert_map.has_value() ? _code_convert_map->size() - 1 : 0; }
 
+    void reserve_col(size_t n, Column* column) { _iter->reserve_col(n, column); }
+
 private:
     Status _encode_string_to_global_id(Column* datas, Column* codes);
 

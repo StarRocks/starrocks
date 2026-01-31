@@ -133,6 +133,8 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+    @AuditField(value = "writeClientTimeMs", ignore_zero = true)
+    public long writeClientTimeMs = -1;
     @AuditField(value = "Warehouse")
     public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     @AuditField(value = "CNGroup")
@@ -160,6 +162,9 @@ public class AuditEvent {
     
     @AuditField(value = "CustomQueryId")
     public String customQueryId = "";
+
+    @AuditField(value = "CustomSessionName")
+    public String customSessionName = "";
 
     @AuditField(value = "TransmittedBytes")
     public long transmittedBytes = -1;
@@ -334,6 +339,11 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setWriteClientTimeMs(long writeClientTimeMs) {
+            auditEvent.writeClientTimeMs = writeClientTimeMs;
+            return this;
+        }
+
         public AuditEventBuilder addReadLocalCnt(long readLocalCnt) {
             auditEvent.readLocalCnt += readLocalCnt;
             return this;
@@ -460,6 +470,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setCustomQueryId(String customQueryId) {
             auditEvent.customQueryId = customQueryId;
+            return this;
+        }
+
+        public AuditEventBuilder setCustomSessionName(String customSessionName) {
+            auditEvent.customSessionName = customSessionName;
             return this;
         }
 

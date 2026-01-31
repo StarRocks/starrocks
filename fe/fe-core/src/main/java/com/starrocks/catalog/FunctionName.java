@@ -14,10 +14,7 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TFunctionName;
 
@@ -94,42 +91,12 @@ public class FunctionName implements Writable {
         return db + "." + fn;
     }
 
-    public void analyze(String defaultDb) {
-        if (fn.length() == 0) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Should order by column");
-        }
-        for (int i = 0; i < fn.length(); ++i) {
-            if (!isValidCharacter(fn.charAt(i))) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Function names must be all alphanumeric or underscore. " +
-                                "Invalid name: " + fn);
-            }
-        }
-        if (Character.isDigit(fn.charAt(0))) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                    "Function cannot start with a digit: " + fn);
-        }
-        if (db == null) {
-            db = defaultDb;
-            if (Strings.isNullOrEmpty(db)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        }
-    }
-
-    private boolean isValidCharacter(char c) {
-        return Character.isLetterOrDigit(c) || c == '_';
-    }
-
     public TFunctionName toThrift() {
         TFunctionName name = new TFunctionName(fn);
         name.setDb_name(db);
         name.setFunction_name(Function.rectifyFunctionName(fn));
         return name;
     }
-
-
-
 
     @Override
     public int hashCode() {

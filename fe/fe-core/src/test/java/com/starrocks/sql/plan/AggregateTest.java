@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -211,7 +212,8 @@ public class AggregateTest extends PlanTestBase {
             int cpuCores = 8;
             int expectedTotalDop = cpuCores / 2;
             {
-                BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(cpuCores);
+                BackendResourceStat.getInstance().setCachedAvgNumCores(cpuCores);
+                BackendResourceStat.getInstance().setCachedAvgNumCores(DEFAULT_WAREHOUSE_ID, cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
                 assertContains(explainString, "2:Project\n" +
@@ -262,7 +264,7 @@ public class AggregateTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setPipelineDop(originPipelineDop);
             connectContext.getSessionVariable().setPipelineDop(originInstanceNum);
-            BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(1);
+            BackendResourceStat.getInstance().setCachedAvgNumCores(1);
         }
     }
 
@@ -2426,7 +2428,7 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(1)\n" +
-                "  |  group by: 1: v1, 5: case, 4: uuid, 6: expr");
+                "  |  group by: 1: v1, 5: case, 4: UUID, 6: expr");
     }
 
     @Test
@@ -3169,6 +3171,12 @@ public class AggregateTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  group by: 4: expr\n" +
                 "  |  limit: 10");
+        assertNotContains(plan, "  4:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 4: expr\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10");
         FeConstants.runningUnitTest = false;
     }
 

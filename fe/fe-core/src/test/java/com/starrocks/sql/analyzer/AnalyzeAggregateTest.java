@@ -422,4 +422,41 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [ta='a', ta='b']) FROM tall");
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [true, true, false]) FROM tall");
     }
+
+    @Test
+    public void testMinNMaxNFunction() {
+        // Test MIN_N with valid parameters
+        analyzeSuccess("select min_n(v1, 3) from t0");
+        analyzeSuccess("select min_n(v1, 1) from t0");
+        analyzeSuccess("select min_n(v1, 10000) from t0");
+        analyzeSuccess("select max_n(v1, 3) from t0");
+        analyzeSuccess("select max_n(v1, 1) from t0");
+        analyzeSuccess("select max_n(v1, 10000) from t0");
+
+        // Test MIN_N/MAX_N with invalid second parameter - missing parameter
+        analyzeFail("select min_n(v1) from t0", "No matching function with signature");
+        analyzeFail("select max_n(v1) from t0", "No matching function with signature");
+
+        // Test MIN_N/MAX_N with invalid second parameter - not constant
+        analyzeFail("select min_n(v1, v2) from t0",
+                "The second parameter of min_n must be a constant positive integer");
+        analyzeFail("select max_n(v1, v2) from t0",
+                "The second parameter of max_n must be a constant positive integer");
+
+        // Test MIN_N/MAX_N with invalid second parameter - zero or negative
+        analyzeFail("select min_n(v1, 0) from t0",
+                "The second parameter of min_n must be a constant positive integer");
+        analyzeFail("select min_n(v1, -1) from t0",
+                "The second parameter of min_n must be a constant positive integer");
+        analyzeFail("select max_n(v1, 0) from t0",
+                "The second parameter of max_n must be a constant positive integer");
+        analyzeFail("select max_n(v1, -1) from t0",
+                "The second parameter of max_n must be a constant positive integer");
+
+        // Test MIN_N/MAX_N with invalid second parameter - exceeds maximum
+        analyzeFail("select min_n(v1, 10001) from t0",
+                "The second parameter of min_n cannot exceed 10000");
+        analyzeFail("select max_n(v1, 10001) from t0",
+                "The second parameter of max_n cannot exceed 10000");
+    }
 }

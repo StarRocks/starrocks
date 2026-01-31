@@ -18,7 +18,11 @@ import dataclasses
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, TypedDict, Union
 
-from sqlalchemy.engine.interfaces import ReflectedColumn
+try:
+    from sqlalchemy.engine.interfaces import ReflectedColumn
+except:
+    class ReflectedColumn:
+        pass
 
 from starrocks.common.params import TableInfoKeyWithPrefix, TableKind
 

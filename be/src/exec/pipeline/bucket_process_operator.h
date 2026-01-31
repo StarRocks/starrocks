@@ -44,7 +44,6 @@ struct BucketProcessContext {
 
     OperatorPtr source;
     OperatorPtr sink;
-    SpillProcessChannelPtr spill_channel;
 
     Status reset_operator_state(RuntimeState* state);
 
@@ -74,6 +73,7 @@ public:
     ~BucketProcessSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
@@ -106,6 +106,7 @@ public:
     ~BucketProcessSourceOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     bool has_output() const override;
     bool is_finished() const override;
     Status set_finished(RuntimeState* state) override;

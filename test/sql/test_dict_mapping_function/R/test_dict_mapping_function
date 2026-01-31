@@ -1,4 +1,4 @@
--- name: test_dict_mapping_streamload
+-- name: test_dict_mapping_streamload @native
 CREATE DATABASE test_dict_mapping_streamload;
 -- result:
 -- !result
@@ -59,7 +59,7 @@ DROP TABLE t_dict_mapping_streamload;
 DROP DATABASE test_dict_mapping_streamload;
 -- result:
 -- !result
--- name: test_dictmapping_multiple_column
+-- name: test_dictmapping_multiple_column @native
 CREATE DATABASE test_dictmapping_multiple_column;
 -- result:
 -- !result
@@ -95,7 +95,7 @@ SELECT dict_mapping("dict", col_1, col_2) FROM t;
 DROP DATABASE test_dictmapping_multiple_column;
 -- result:
 -- !result
--- name: test_dictmapping_null_column
+-- name: test_dictmapping_null_column @native
 CREATE DATABASE test_dictmapping_null_column;
 -- result:
 -- !result
@@ -131,7 +131,7 @@ SELECT dict_mapping("dict", col_1, col_2) FROM t;
 DROP DATABASE test_dictmapping_null_column;
 -- result:
 -- !result
--- name: test_dictmapping_DictQueryOperator_bug
+-- name: test_dictmapping_DictQueryOperator_bug @native
 CREATE DATABASE test_dictmapping_DictQueryOperator_bug;
 -- result:
 -- !result
@@ -192,7 +192,7 @@ insert into fact_tbl_2
 DROP DATABASE test_dictmapping_DictQueryOperator_bug;
 -- result:
 -- !result
--- name: test_dictmapping_add_generated_column_with_dict_mapping
+-- name: test_dictmapping_add_generated_column_with_dict_mapping @native
 CREATE DATABASE test_dictmapping_add_generated_column_with_dict_mapping;
 -- result:
 -- !result
@@ -239,7 +239,7 @@ DROP TABLE t_dictmapping_add_generated_column_with_dict_mapping;
 DROP DATABASE test_dictmapping_add_generated_column_with_dict_mapping;
 -- result:
 -- !result
--- name: test_dictmapping_generated_column_in_create_table
+-- name: test_dictmapping_generated_column_in_create_table @native
 CREATE DATABASE test_dictmapping_generated_column_in_create_table;
 -- result:
 -- !result
@@ -264,7 +264,7 @@ E: (1064, 'Getting analyzing error. Detail message: column:COL_1 does not exist.
 DROP DATABASE test_dictmapping_generated_column_in_create_table;
 -- result:
 -- !result
--- name: test_dictmapping_null_if_not_found
+-- name: test_dictmapping_null_if_not_found @native
 CREATE DATABASE test_dictmapping_null_if_not_found;
 -- result:
 -- !result
@@ -307,7 +307,7 @@ drop table t_dictmapping_null_if_not_found;
 drop database test_dictmapping_null_if_not_found;
 -- result:
 -- !result
--- name: test_dictmapping_multiple_open_crash
+-- name: test_dictmapping_multiple_open_crash @native
 CREATE TABLE `t_dictmapping_multiple_open_crash` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT AUTO_INCREMENT

@@ -27,7 +27,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
-#include "util/compression/stream_compression.h"
+#include "util/compression/stream_decompressor.h"
 namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
@@ -125,7 +125,8 @@ Status HdfsScanner::_build_scanner_context() {
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
-        if (slot->col_name() == ICEBERG_ROW_ID) {
+        if (slot->col_name() == ICEBERG_ROW_ID || slot->col_name() == "_row_source_id" ||
+            slot->col_name() == "_scan_range_id" || slot->col_name() == ICEBERG_ROW_POSITION) {
             ctx.reserved_field_slots.emplace_back(slot);
         } else {
             HdfsScannerContext::ColumnInfo column;
@@ -156,6 +157,7 @@ Status HdfsScanner::_build_scanner_context() {
 
     ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.scan_range = _scanner_params.scan_range;
+    ctx.scan_range_id = _scanner_params.scan_range_id;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
@@ -353,9 +355,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
     // if compression
     // input_stream = DecompressInputStream(input_stream)
     if (options.compression_type != CompressionTypePB::NO_COMPRESSION) {
-        using DecompressorPtr = std::shared_ptr<StreamCompression>;
-        std::unique_ptr<StreamCompression> dec;
-        RETURN_IF_ERROR(StreamCompression::create_decompressor(options.compression_type, &dec));
+        using DecompressorPtr = std::shared_ptr<StreamDecompressor>;
+        ASSIGN_OR_RETURN(auto dec, StreamDecompressor::create_decompressor(options.compression_type));
         auto compressed_input_stream =
                 std::make_shared<io::CompressedInputStream>(input_stream, DecompressorPtr(dec.release()));
         input_stream = std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);

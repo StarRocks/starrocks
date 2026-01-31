@@ -31,11 +31,11 @@ public class SchemataSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CATALOG_NAME", TypeFactory.createVarchar(512))
-                        .column("SCHEMA_NAME", TypeFactory.createVarchar(32))
-                        .column("DEFAULT_CHARACTER_SET_NAME", TypeFactory.createVarchar(32))
-                        .column("DEFAULT_COLLATION_NAME", TypeFactory.createVarchar(32))
-                        .column("SQL_PATH", TypeFactory.createVarchar(512))
+                        .column("CATALOG_NAME", TypeFactory.createVarcharType(512))
+                        .column("SCHEMA_NAME", TypeFactory.createVarcharType(32))
+                        .column("DEFAULT_CHARACTER_SET_NAME", TypeFactory.createVarcharType(32))
+                        .column("DEFAULT_COLLATION_NAME", TypeFactory.createVarcharType(32))
+                        .column("SQL_PATH", TypeFactory.createVarcharType(512))
                         .build(), TSchemaTableType.SCH_SCHEMATA);
     }
 }

@@ -40,3 +40,71 @@ GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;
 ```
 
 这个语句与 3.0 之前版本的 `GRANT select_priv ON db.* TO <user_identity>;` 是等价的。
+
+## 访问 StarRocks Web 控制台 `http://<fe_ip>:<fe_http_port>` 需要哪些权限？
+
+用户必须具有 `cluster_admin` 角色。
+
+## StarRocks v3.0 前后的权限保留机制有何变化？
+
+在 v3.0 之前，用户在表上被授予权限后，即使表被删除并重新创建，权限仍然会保留。从 v3.0 开始，删除并重新创建表后，权限将不再保留。
+
+## 如何在 StarRocks 中查询用户和授予的权限？
+
+您可以通过查询系统视图 `sys.grants_to_users` 或执行 SHOW USERS 获取完整的用户列表，然后使用 `SHOW GRANTS FOR <user_identity>` 单独查询每个用户。
+
+## 查询大量用户和表的权限元数据的系统视图时，对 FE 资源有何影响？
+
+当用户或表的数量非常大时，查询系统视图 `sys.grants_to_users`、`sys.grants_to_roles` 和 `sys.role_edges` 可能需要很长时间。这些视图是实时计算的，会消耗一定比例的 FE 资源。因此，不建议在大规模上频繁运行此类操作。
+
+## 重新创建一个 catalog 会导致权限丢失吗？应如何备份和恢复权限？
+
+会的。重新创建一个 catalog 会导致其相关权限丢失。您应先备份所有用户权限，并在重新创建 catalog 后恢复它们。
+
+## 是否有支持自动权限迁移的工具？
+
+目前没有。用户必须手动使用 SHOW GRANTS 为每个用户备份和恢复权限。
+
+## 使用 KILL 命令是否有限制？可以限制为仅终止用户自己的查询吗？
+
+是的。KILL 命令现在需要 OPERATE 权限，并且用户只能终止自己发起的查询。
+
+## 为什么在重命名或删除表后授予的权限会发生变化？系统能否在添加重命名表的权限时保留旧权限？
+
+对于内表，权限与表 ID 绑定，而不是表名。这确保了数据安全，因为表名可以随意更改。如果权限跟随表名，可能会导致数据泄漏。同样，当表被删除时，其权限也会被移除，因为对象不再存在。
+
+对于外部表，历史版本的行为与内表相同。然而，由于外部表元数据不由 StarRocks 管理，可能会出现延迟或权限丢失。为了解决这个问题，未来版本将对外部表使用基于表名的权限管理，这与预期行为一致。
+
+## 如何备份用户权限？
+
+以下是备份集群中用户权限信息的示例脚本。
+
+```Bash
+#!/bin/bash
+
+# MySQL 连接信息
+HOST=""
+PORT="9030"
+USER="root"
+PASSWORD=""  
+OUTPUT_FILE="user_privileges.txt"
+
+# 清空输出文件
+> $OUTPUT_FILE
+
+# 获取用户列表
+users=$(mysql -h$HOST -P$PORT -u$USER -p$PASSWORD -e "SHOW USERS;" | sed -e '1d' -e '/^+/d')
+
+# 遍历用户并获取权限
+for user in $users; do
+    echo "Privileges for $user:" >> $OUTPUT_FILE
+    mysql -h$HOST -P$PORT -u$USER -p$PASSWORD -e "SHOW GRANTS FOR $user;" >> $OUTPUT_FILE
+    echo "" >> $OUTPUT_FILE
+done
+
+echo "All user privileges have been written to $OUTPUT_FILE"
+```
+
+## 为什么在普通函数上授予 USAGE 时会出现错误“Unexpected input 'IN', the most similar input is {'TO'}.”？在函数上授予权限的正确方法是什么？
+
+普通函数不能在所有数据库中使用 IN 授予权限；它们只能在当前数据库中授予权限。而全局函数是在所有数据库范围内授予的。

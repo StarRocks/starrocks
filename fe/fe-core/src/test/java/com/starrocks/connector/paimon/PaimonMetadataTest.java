@@ -22,7 +22,6 @@ import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.tvr.TvrTableSnapshot;
@@ -45,6 +44,8 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -71,6 +72,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.paimon.CoreOptions;
+import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -83,6 +85,7 @@ import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.partition.Partition;
 import org.apache.paimon.predicate.Predicate;
@@ -130,6 +133,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -171,14 +175,14 @@ public class PaimonMetadataTest {
         writer.writeInt(1, 5555);
         writer.complete();
         List<DataFileMeta> meta1 = new ArrayList<>();
-        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
-        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
+        meta1.add(DataFileMeta.create("file1", 100L, 200L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
+                EMPTY_STATS, EMPTY_STATS, 100L, 200L, 1L, DUMMY_LEVEL, 0L, null, null, null, null, null));
+        meta1.add(DataFileMeta.create("file2", 100L, 300L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
+                EMPTY_STATS, EMPTY_STATS, 100L, 300L, 1L, DUMMY_LEVEL, 0L, null, null, null, null, null));
 
         List<DataFileMeta> meta2 = new ArrayList<>();
-        meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
-                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
+        meta2.add(DataFileMeta.create("file3", 100L, 400L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
+                EMPTY_STATS, EMPTY_STATS, 100L, 400L, 1L, DUMMY_LEVEL, 0L, null, null, null, null, null));
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
                 .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)
@@ -212,6 +216,8 @@ public class PaimonMetadataTest {
                 result = "hdfs://127.0.0.1:10000/paimon";
                 paimonNativeTable.primaryKeys();
                 result = List.of("col2");
+                paimonNativeTable.uuid();
+                result = "fake_uuid";
             }
         };
         com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
@@ -233,7 +239,7 @@ public class PaimonMetadataTest {
         assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        assertEquals("paimon_catalog.null", paimonTable.getUUID());
+        assertEquals("paimon_catalog.db1.tbl1.fake_uuid", paimonTable.getUUID());
     }
 
     @Test
@@ -646,7 +652,8 @@ public class PaimonMetadataTest {
         org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.createView(connectContext,
                         new CreateViewStmt(false, false,
-                                new TableName("catalog", "db", "table"),
+                                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")),
+                                        null, NodePosition.ZERO),
                     Lists.newArrayList(new ColWithComment("k1", "",
                             NodePosition.ZERO)),
                                 "",
@@ -1012,5 +1019,75 @@ public class PaimonMetadataTest {
         catalog.dropTable(identifier, true);
         catalog.dropDatabase("test_db", true, true);
         Files.delete(tmpDir);
+    }
+
+    @Test
+    public void testListPartitionNamesIsolationAcrossTables(@Mocked FileStoreTable mockPaimonTable1,
+                                                            @Mocked FileStoreTable mockPaimonTable2)
+            throws Catalog.TableNotExistException {
+
+        Options options = new Options();
+        options.set(CatalogOptions.CACHE_ENABLED, true);
+        Catalog cachingCatalog = CachingCatalog.tryToCreate(paimonNativeCatalog, options);
+        PaimonMetadata newMetadata = new PaimonMetadata("test_catalog", new HdfsEnvironment(), cachingCatalog,
+                new ConnectorProperties(ConnectorType.PAIMON));
+
+        Identifier tblIdentifier1 = new Identifier("db1", "tbl1");
+        List<String> partitionKeys1 = Lists.newArrayList("year", "month");
+        Identifier tblIdentifier2 = new Identifier("db2", "tbl2");
+        List<String> partitionKeys2 = Lists.newArrayList("year", "month");
+
+        RowType tblRowType1 = RowType.of(new DataType[] {new IntType(true), new IntType(true)}, new String[] {"year", "month"});
+        RowType tblRowType2 = RowType.of(new DataType[] {new IntType(true), new IntType(true)}, new String[] {"year", "month"});
+
+        Map<String, String> spec1 = new LinkedHashMap<>();
+        spec1.put("year", "2020");
+        spec1.put("month", "1");
+        org.apache.paimon.partition.Partition db1PaimonPartition1 =
+                new org.apache.paimon.partition.Partition(spec1, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        Map<String, String> spec2 = new LinkedHashMap<>();
+        spec2.put("year", "2020");
+        spec2.put("month", "1");
+        org.apache.paimon.partition.Partition db2PaimonPartition1 =
+                new org.apache.paimon.partition.Partition(spec2, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        Map<String, String> spec3 = new LinkedHashMap<>();
+        spec3.put("year", "2022");
+        spec3.put("month", "1");
+        org.apache.paimon.partition.Partition db2PaimonPartition2 =
+                new org.apache.paimon.partition.Partition(spec3, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        new Expectations() {
+            {
+                // Table 1
+                paimonNativeCatalog.getTable(tblIdentifier1);
+                result = mockPaimonTable1;
+                paimonNativeCatalog.listPartitions(tblIdentifier1);
+                result = Lists.newArrayList(db1PaimonPartition1);
+                mockPaimonTable1.partitionKeys();
+                result = partitionKeys1;
+                mockPaimonTable1.rowType();
+                result = tblRowType1;
+
+                // Table 2
+                paimonNativeCatalog.getTable(tblIdentifier2);
+                result = mockPaimonTable2;
+                paimonNativeCatalog.listPartitions(tblIdentifier2);
+                result = Lists.newArrayList(db2PaimonPartition1, db2PaimonPartition2);
+                mockPaimonTable2.partitionKeys();
+                result = partitionKeys2;
+                mockPaimonTable2.rowType();
+                result = tblRowType2;
+
+            }
+        };
+
+        List<String> result1 = newMetadata.listPartitionNames("db1", "tbl1", null);
+        List<String> result2 = newMetadata.listPartitionNames("db2", "tbl2", null);
+
+        // Before fix, if the key does not contain "db" and "table", it will return 2. After fix, it will return 3.
+        assertEquals(3, result1.size() + result2.size());
+
     }
 }

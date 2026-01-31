@@ -90,6 +90,8 @@ public:
 
     Status shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) override;
 
+    void set_exchange_hash_function_version(int32_t version) { _exchange_hash_function_version = version; }
+
 private:
     const TPartitionType::type _part_type;
     // Compute per-row partition values.
@@ -99,6 +101,8 @@ private:
     std::vector<uint32_t> _hash_values;
     std::vector<uint32_t> _round_hashes;
     std::unique_ptr<Shuffler> _shuffler;
+    // Hash function version for exchange shuffle: 0=fnv_hash (default), 1=xxh3_hash
+    int32_t _exchange_hash_function_version = 0;
 };
 
 // Random shuffle row-by-row for each chunk of source.
@@ -264,6 +268,8 @@ private:
     LocalExchangeSourceOperatorFactory* _source;
     const std::vector<ExprContext*> _partition_expr_ctxs;
     std::vector<std::string> _transform_exprs;
+    // Hash function version for exchange shuffle: 0=fnv_hash (default), 1=xxh3_hash
+    int32_t _exchange_hash_function_version = 0;
 };
 
 // Exchange the local data for broadcast

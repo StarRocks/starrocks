@@ -36,7 +36,15 @@ Returns a value of the VARCHAR type.
 -- Extract all characters starting from the first character "s".
 MySQL > select substring("starrockscluster", 1);
 +-------------------------------------+
-| substring('starrockscluster', 1) |
+| substring('starrockscluster', 1)    |
++-------------------------------------+
+| starrockscluster                    |
++-------------------------------------+
+
+-- Extract the first 9 characters starting from the first character "s".
+MySQL > select substring("starrockscluster", 1, 9);
++-------------------------------------+
+| substring('starrockscluster', 1, 9) |
 +-------------------------------------+
 | starrocks                           |
 +-------------------------------------+

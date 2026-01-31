@@ -101,6 +101,13 @@ public:
      * @paramType: [JsonColumn]
      * @return: BinaryColumn
      */
+    DEFINE_VECTORIZED_FN(json_pretty);
+
+    /**
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: BinaryColumn
+     */
     DEFINE_VECTORIZED_FN(json_string);
 
     /**
@@ -170,6 +177,13 @@ public:
     DEFINE_VECTORIZED_FN(json_remove);
 
     /**
+     * Inserts or updates data in a JSON document at one or more specified JSON paths
+     * @param JSON, JSONPath, Value, [JSONPath, Value, ...]
+     * @return Modified JSON
+     */
+    DEFINE_VECTORIZED_FN(json_set);
+  
+     /**
      * Determine if a JSON value is a scalar value
      * @param JSON
      * @return true if the JSON value is a scalar (not an object or array), false otherwise

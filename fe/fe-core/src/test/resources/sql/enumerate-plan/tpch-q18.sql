@@ -1,5 +1,5 @@
 [planCount]
-16
+32
 [plan-1]
 TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
     TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
@@ -251,4 +251,283 @@ TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FI
                                     SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
                         EXCHANGE BROADCAST
                             SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+[end]
+[plan-18]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                EXCHANGE SHUFFLE[10]
+                                    INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE BROADCAST
+                                            SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                            EXCHANGE BROADCAST
+                                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                    SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-19]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                    SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                    EXCHANGE SHUFFLE[10]
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                EXCHANGE BROADCAST
+                                    SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                            EXCHANGE BROADCAST
+                                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                    SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-20]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                EXCHANGE SHUFFLE[10]
+                                    INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE BROADCAST
+                                            SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                            EXCHANGE BROADCAST
+                                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                    SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-21]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                    SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                    EXCHANGE SHUFFLE[10]
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                EXCHANGE BROADCAST
+                                    SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                            AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-22]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                EXCHANGE SHUFFLE[10]
+                                    INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE BROADCAST
+                                            SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                            AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-23]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                    SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                    EXCHANGE SHUFFLE[10]
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                EXCHANGE BROADCAST
+                                    SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                            AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-24]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                EXCHANGE SHUFFLE[10]
+                                    INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE BROADCAST
+                                            SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                            AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-25]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                            LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                                INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                    SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                    EXCHANGE SHUFFLE[10]
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                    SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                            EXCHANGE BROADCAST
+                                SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+[end]
+[plan-26]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                            LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                                INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                    SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                    EXCHANGE SHUFFLE[10]
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                    SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                            EXCHANGE BROADCAST
+                                SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+[end]
+[plan-27]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                EXCHANGE SHUFFLE[10]
+                                    LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE SHUFFLE[37]
+                                            AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                            EXCHANGE BROADCAST
+                                SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+[end]
+[plan-28]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                            INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                                SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                                EXCHANGE SHUFFLE[10]
+                                    LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE SHUFFLE[37]
+                                            AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                            EXCHANGE BROADCAST
+                                SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+[end]
+[plan-29]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                            SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                            EXCHANGE SHUFFLE[10]
+                                LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                                    INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE BROADCAST
+                                            SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                                    EXCHANGE SHUFFLE[37]
+                                        AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                            SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-30]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                            SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                            EXCHANGE SHUFFLE[10]
+                                LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                                    INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE BROADCAST
+                                            SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+                                    EXCHANGE SHUFFLE[37]
+                                        AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                            SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+[end]
+[plan-31]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                            SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                            EXCHANGE SHUFFLE[10]
+                                INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                    LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE SHUFFLE[37]
+                                            AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                                    EXCHANGE BROADCAST
+                                        SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
+[end]
+[plan-32]
+TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+    TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{56: sum=sum(56: sum)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+            EXCHANGE SHUFFLE[2, 1, 10, 14, 13]
+                TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
+                    AGGREGATE ([LOCAL] aggregate [{56: sum=sum(24: L_QUANTITY)}] group by [[2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE]] having [null]
+                        INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
+                            SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
+                            EXCHANGE SHUFFLE[10]
+                                INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                    LEFT SEMI JOIN (join-predicate [10: O_ORDERKEY = 37: L_ORDERKEY] post-join-predicate [null])
+                                        SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
+                                        EXCHANGE SHUFFLE[37]
+                                            AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315]
+                                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                                    EXCHANGE BROADCAST
+                                        SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
 [end]

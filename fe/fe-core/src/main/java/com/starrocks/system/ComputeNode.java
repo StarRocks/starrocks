@@ -341,7 +341,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         this.heartbeatPort = heartbeatPort;
     }
 
-    /** Set liveness and adjust the Internal status accordingly
+    /**
+     * Set liveness and adjust the Internal status accordingly
      * |    Status    |  IsAlive |
      * |  CONNECTING  |   false  |
      * |     OK       |   true   |
@@ -459,8 +460,6 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         ));
         groupIdToUsage.set(newGroupIdToUsage);
     }
-
-
 
     @Override
     public int hashCode() {
@@ -613,7 +612,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
-                    BackendResourceStat.getInstance().setNumHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                    BackendResourceStat.getInstance()
+                            .setNumCoresOfBe(warehouseId, hbResponse.getBeId(), hbResponse.getCpuCores());
                 }
             }
 
@@ -623,7 +623,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
-                    BackendResourceStat.getInstance().setMemLimitBytesOfBe(hbResponse.getBeId(), hbResponse.getMemLimitBytes());
+                    BackendResourceStat.getInstance()
+                            .setMemLimitBytesOfBe(warehouseId, hbResponse.getBeId(), hbResponse.getMemLimitBytes());
                 }
             }
 
@@ -770,17 +771,33 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         private final int cpuCoreUsagePermille;
         private final long memUsageBytes;
         private final int numRunningQueries;
+        private final long memLimitBytes;
+        private final String memPool;
+        private final long memPoolMemUsageBytes;
+        private final long memPoolMemLimitBytes;
 
-        private ResourceGroupUsage(ResourceGroup group, int cpuCoreUsagePermille, long memUsageBytes, int numRunningQueries) {
+        private ResourceGroupUsage(ResourceGroup group,
+                                   int cpuCoreUsagePermille,
+                                   long memUsageBytes,
+                                   int numRunningQueries,
+                                   long memLimitBytes,
+                                   String memPool,
+                                   long memPoolMemUsageBytes,
+                                   long memPoolMemLimitBytes) {
             this.group = group;
             this.cpuCoreUsagePermille = cpuCoreUsagePermille;
             this.memUsageBytes = memUsageBytes;
             this.numRunningQueries = numRunningQueries;
+            this.memLimitBytes = memLimitBytes;
+            this.memPool = memPool;
+            this.memPoolMemUsageBytes = memPoolMemUsageBytes;
+            this.memPoolMemLimitBytes = memPoolMemLimitBytes;
         }
 
         private static ResourceGroupUsage fromThrift(TResourceGroupUsage tUsage, ResourceGroup group) {
             return new ResourceGroupUsage(group, tUsage.getCpu_core_used_permille(), tUsage.getMem_used_bytes(),
-                    tUsage.getNum_running_queries());
+                    tUsage.getNum_running_queries(), tUsage.getMem_limit_bytes(), tUsage.getMem_pool(),
+                    tUsage.getMem_pool_mem_used_bytes(), tUsage.getMem_pool_mem_limit_bytes());
         }
 
         public boolean isCpuCoreUsagePermilleEffective() {
@@ -802,5 +819,22 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         public int getNumRunningQueries() {
             return numRunningQueries;
         }
+
+        public long getMemLimitBytes() {
+            return memLimitBytes;
+        }
+
+        public String getMemPool() {
+            return memPool;
+        }
+
+        public long getMemPoolMemUsageBytes() {
+            return memPoolMemUsageBytes;
+        }
+
+        public long getMemPoolMemLimitBytes() {
+            return memPoolMemLimitBytes;
+        }
+
     }
 }

@@ -80,7 +80,7 @@ public class JsonPathRewriteRule extends TransformationRule {
 
     private static final Logger LOG = LogManager.getLogger(JsonPathRewriteRule.class);
     private static final java.util.regex.Pattern JSON_PATH_VALID_PATTERN =
-            java.util.regex.Pattern.compile("^[a-zA-Z0-9_]+$");
+            java.util.regex.Pattern.compile("^[a-zA-Z0-9_-]+$");
     public static final String COLUMN_REF_HINT = "JsonPathExtended";
 
     private static final Set<String> SUPPORTED_JSON_FUNCTIONS = Set.of(
@@ -346,6 +346,16 @@ public class JsonPathRewriteRule extends TransformationRule {
             if (builder.getPredicate() != null) {
                 requiredColumnSet.union(builder.getPredicate().getUsedColumns());
             }
+            
+            if (scanOperator instanceof LogicalOlapScanOperator olapScanOperator &&
+                    MapUtils.isNotEmpty(olapScanOperator.getColRefToColumnMetaMap())) {
+                for (ScalarOperator p : olapScanOperator.getPrunedPartitionPredicates()) {
+                    if (p != null) {
+                        requiredColumnSet.union(p.getUsedColumns());
+                    }
+                }
+            }
+
             if (scanOperator.getProjection() != null) {
                 Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap();
                 for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
@@ -428,8 +438,16 @@ public class JsonPathRewriteRule extends TransformationRule {
             ScalarOperator jsonColumn = call.getArguments().get(0);
             ScalarOperator pathArg = call.getArguments().get(1);
 
-            if (!(pathArg instanceof ConstantOperator) || !(jsonColumn instanceof ColumnRefOperator)) {
+            if (!(pathArg instanceof ConstantOperator) || !(jsonColumn instanceof ColumnRefOperator jsonColumnRef)) {
                 return call;
+            }
+
+            // Check if the JSON column is attached to a table
+            // Lambda arguments are ColumnRefOperators but not attached to tables,
+            // so we should not attempt to rewrite them
+            Pair<Table, Column> tableAndColumn = context.getColumnRefFactory().getTableAndColumn(jsonColumnRef);
+            if (tableAndColumn == null) {
+                return call; // Cannot rewrite if not attached to a table (e.g., lambda arguments)
             }
 
             String path = ((ConstantOperator) pathArg).getVarchar();
@@ -449,14 +467,16 @@ public class JsonPathRewriteRule extends TransformationRule {
         private ScalarOperator createColumnAccessExpression(ColumnRefOperator jsonColumn,
                                                             List<String> fields,
                                                             Type resultType) {
+            // Note: tableAndColumn should not be null here because we check it in rewriteJsonFunction
+            // before calling this method. This check is kept for safety.
             Pair<Table, Column> tableAndColumn = context.getColumnRefFactory().getTableAndColumn(jsonColumn);
-            if (tableAndColumn == null) {
-                return jsonColumn; // Cannot rewrite if not attached to a table
-            }
+            Preconditions.checkState(tableAndColumn != null,
+                    "ColumnRefOperator %s must be attached to a table when creating column access expression",
+                    jsonColumn);
 
-            // Build full path: columnName.field1.field2
+            // Build full path: columnId.field1.field2
             List<String> fullPath = Lists.newArrayList();
-            fullPath.add(tableAndColumn.second.getName());
+            fullPath.add(tableAndColumn.second.getColumnId().getId());
             fullPath.addAll(fields);
 
             ColumnAccessPath accessPath = ColumnAccessPath.createLinearPath(fullPath, resultType);
