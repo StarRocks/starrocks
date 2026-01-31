@@ -29,7 +29,6 @@ set(EXEC_FILES
         ./column/column_cow_test.cpp
         ./common/config_test.cpp
         ./common/process_exit_test.cpp
-        ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
         ./common/cow_test.cpp
@@ -465,6 +464,8 @@ endif()
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif ()
+
+add_subdirectory(base)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)

@@ -48,6 +48,26 @@ BUILD_TYPE=ASAN ./build.sh --be
 ./build.sh --be --enable-shared-data  # For shared-data mode
 ```
 
+### Fast UT Build Tip
+
+Use `run-be-ut.sh` with `--build-target` to compile only a single test binary and speed up iteration, e.g.:
+
+```bash
+CMAKE_BUILD_PREFIX=/path/to/build \
+STARROCKS_THIRDPARTY=/path/to/thirdparty \
+./run-be-ut.sh --build-target base_test --module base_test --without-java-ext --gtest_filter 'StatusTest.*'
+```
+
+### Fast UT Build Tip
+
+Use `run-be-ut.sh` with `--build-target` to compile only a single test binary and speed up iteration, e.g.:
+
+```bash
+CMAKE_BUILD_PREFIX=/path/to/build \
+STARROCKS_THIRDPARTY=/path/to/thirdparty \
+./run-be-ut.sh --build-target base_test --module base_test --without-java-ext --gtest_filter 'StatusTest.*'
+```
+
 ### CMake Options
 
 Key CMake options (see `be/CMakeLists.txt`):
@@ -56,6 +76,20 @@ Key CMake options (see `be/CMakeLists.txt`):
 - `USE_STAROS`: Enable shared-data mode
 - `WITH_GCOV`: Enable code coverage
 - `MAKE_TEST`: Build unit tests
+
+### Unit Test Linking Note
+
+- Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
+  which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
+- When `ENABLE_MULTI_DYNAMIC_LIBS=ON`, shared BE libs are built without `WRAP_LINKER_FLAGS` to avoid
+  undefined `__wrap___cxa_throw` in libs that don’t link `Util`.
+- When `ENABLE_MULTI_DYNAMIC_LIBS=ON`, shared BE libs are built without `WRAP_LINKER_FLAGS` to avoid
+  undefined `__wrap___cxa_throw` in libs that don’t link `Util`.
+
+### Unit Test Linking Note
+
+- Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
+  which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
 
 ## Code Style
 
