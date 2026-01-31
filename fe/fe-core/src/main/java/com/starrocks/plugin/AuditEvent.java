@@ -183,6 +183,9 @@ public class AuditEvent {
     @AuditField(value = "CacheHitRatio", ignore_empty = true)
     public String cacheHitRatio = "";
 
+    @AuditField(value = "ErrorMessage")
+    public String errorMessage = "";
+
     public void calculateCacheHitRatio() {
         if (!isQuery || RunMode.isSharedNothingMode()) {
             return;
@@ -499,6 +502,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
             auditEvent.preparedStmtId = preparedStmtId;
+            return this;
+        }
+
+        public AuditEventBuilder setErrorMsg(String errorMsg) {
+            auditEvent.errorMessage = errorMsg;
             return this;
         }
 
