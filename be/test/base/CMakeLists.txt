@@ -18,6 +18,7 @@ set(BASE_TEST_FILES
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp
+    concurrency/shared_mutex_test.cpp
     container/heap_test.cpp
     container/priority_queue_test.cpp
     crypto/md5_test.cpp

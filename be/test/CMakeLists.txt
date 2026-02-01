@@ -360,7 +360,6 @@ set(EXEC_FILES
         ./util/bthreads/future_test.cpp
         ./util/bthreads/promise_test.cpp
         ./util/bthreads/semaphore_test.cpp
-        ./util/bthreads/shared_mutex_test.cpp
         ./util/bthreads/shared_future_test.cpp
         ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp

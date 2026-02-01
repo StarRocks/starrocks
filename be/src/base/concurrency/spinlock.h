@@ -16,7 +16,7 @@
 // under the License.
 
 #pragma once
-#include "common/logging.h"
+#include "base/logging.h"
 
 namespace starrocks {
 

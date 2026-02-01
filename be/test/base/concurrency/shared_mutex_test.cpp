@@ -17,7 +17,7 @@
 
 #include <shared_mutex>
 
-#include "util/bthreads/bthread_shared_mutex.h"
+#include "base/concurrency/bthread_shared_mutex.h"
 
 namespace starrocks {
 

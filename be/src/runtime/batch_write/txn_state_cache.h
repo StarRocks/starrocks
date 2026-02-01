@@ -21,9 +21,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/bthread_shared_mutex.h"
 #include "common/utils.h"
 #include "testutil/sync_point.h"
-#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/countdown_latch.h"
 #include "util/dynamic_cache.h"
 #include "util/threadpool.h"

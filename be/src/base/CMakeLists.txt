@@ -16,6 +16,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
 ADD_BE_LIB(Base
   concurrency/await.cpp
+  concurrency/spinlock.cpp
   crypto/md5.cpp
   crypto/sha.cpp
   crypto/sm3.cpp
