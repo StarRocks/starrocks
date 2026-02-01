@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common/minidump.h"
+#include "util/minidump.h"
 
 #include <client/linux/handler/exception_handler.h>
 #include <common/linux/linux_libc_support.h>

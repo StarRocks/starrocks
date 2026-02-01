@@ -24,11 +24,11 @@
 #include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
-#include "common/cow.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
 #include "runtime/memory/column_allocator.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
+#include "util/cow.h"
 
 namespace starrocks {
 

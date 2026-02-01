@@ -106,6 +106,10 @@ set(UTIL_FILES
   variant.cpp
 )
 
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    list(APPEND UTIL_FILES minidump.cpp)
+endif()
+
 ADD_BE_LIB(Util
     ${UTIL_FILES}
 )

@@ -21,7 +21,6 @@
 #include <mutex>
 #include <thread>
 
-#include "common/logconfig.h"
 #include "common/logging.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
@@ -35,6 +34,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/logconfig.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/threadpool.h"

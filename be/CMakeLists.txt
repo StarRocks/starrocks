@@ -395,7 +395,6 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
-    Common
     Column
     Connector
     Exec
@@ -421,6 +420,7 @@ set(STARROCKS_LINK_LIBS
     Cache
     orc
     ${WL_END_GROUP}
+    Common
     Base
     Gutil
     StarRocksGen

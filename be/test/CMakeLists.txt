@@ -24,14 +24,9 @@ set(EXEC_FILES
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
-        ./common/cow_test.cpp
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
-        ./common/config_test.cpp
-        ./common/process_exit_test.cpp
-        ./common/tracer_test.cpp
         ./common/uri_test.cpp
-        ./common/cow_test.cpp
         ./connector/benchmark_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
@@ -431,6 +426,7 @@ set(EXEC_FILES
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
+        ./util/cow_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
@@ -447,6 +443,7 @@ if (USE_AVX2)
 endif ()
 
 add_subdirectory(base)
+add_subdirectory(common)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)

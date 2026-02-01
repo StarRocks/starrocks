@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common/prof/heap_prof.h"
+#include "runtime/prof/heap_prof.h"
 
 #include <unistd.h>
 

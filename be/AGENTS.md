@@ -180,6 +180,10 @@ Use `#pragma once` instead of traditional include guards:
 - **Logging**: use `gutil/logging.h` (glog wrapper) instead of `common/logging.h`.
 - **Compiler macros**: use `gutil/compiler_util.h` (do not include `common/compiler_util.h` from gutil).
 
+### common
+- **Allowed deps only**: `be/src/common` may depend on `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
+- **No other BE modules**: do not include headers from `util/*`, `runtime/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, etc.
+
 ## Common Patterns
 
 ### Status and StatusOr
