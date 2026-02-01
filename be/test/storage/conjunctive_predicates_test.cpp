@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "exec/olap_scan_prepare.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
@@ -34,7 +35,6 @@
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

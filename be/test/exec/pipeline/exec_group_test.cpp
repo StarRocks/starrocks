@@ -16,13 +16,13 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {

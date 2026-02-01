@@ -23,6 +23,7 @@
 #endif
 
 #include "agent/master_info.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -31,7 +32,6 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/metadata_util.h"
-#include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"

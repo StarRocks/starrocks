@@ -30,6 +30,7 @@
 #include <thread>
 #include <vector>
 
+#include "base/status.h"
 #include "base/string/slice.h"
 
 #if !defined(BE_TEST)

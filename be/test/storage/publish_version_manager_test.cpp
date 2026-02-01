@@ -20,6 +20,7 @@
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
 #include "base/path/file_util.h"
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
@@ -39,7 +40,6 @@
 #include "storage/txn_manager.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <base/testutil/assert.h>
 #include <benchmark/benchmark.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <testutil/assert.h>
 
 #include <random>
 #include <vector>

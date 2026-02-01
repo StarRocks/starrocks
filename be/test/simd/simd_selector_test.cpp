@@ -14,11 +14,11 @@
 
 #include <limits>
 
+#include "base/testutil/parallel_test.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
 #include "simd/selector.h"
-#include "testutil/parallel_test.h"
 #include "types/logical_type.h"
 #include "util/value_generator.h"
 

@@ -14,6 +14,7 @@
 
 #include "runtime/batch_write/batch_write_mgr.h"
 
+#include "base/testutil/sync_point.h"
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -21,7 +22,6 @@
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
-#include "testutil/sync_point.h"
 #include "util/metrics.h"
 
 namespace starrocks {

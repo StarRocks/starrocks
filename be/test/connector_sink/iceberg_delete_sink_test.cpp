@@ -20,6 +20,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "column/datum_tuple.h"
@@ -35,7 +36,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "util/thrift_util.h"
 

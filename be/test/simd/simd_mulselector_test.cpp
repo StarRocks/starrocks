@@ -15,10 +15,10 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/testutil/parallel_test.h"
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
 #include "simd/mulselector.h"
-#include "testutil/parallel_test.h"
 #include "types/logical_type.h"
 #include "util/value_generator.h"
 

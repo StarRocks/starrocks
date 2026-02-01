@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "base/string/slice.h"
+#include "base/testutil/assert.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "roaring/roaring.hh"
@@ -30,7 +31,6 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

@@ -40,8 +40,8 @@
 #include <sstream>
 #include <type_traits>
 
+#include "base/testutil/sync_point.h"
 #include "phmap.h"
-#include "testutil/sync_point.h"
 namespace phmap {
 
 namespace type_traits_internal {

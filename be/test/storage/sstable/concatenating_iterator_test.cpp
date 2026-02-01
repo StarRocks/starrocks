@@ -21,9 +21,9 @@
 #include <vector>
 
 #include "base/string/slice.h"
+#include "base/testutil/assert.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/iterator.h"
-#include "testutil/assert.h"
 
 namespace starrocks::sstable {
 

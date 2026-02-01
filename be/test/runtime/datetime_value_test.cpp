@@ -39,8 +39,8 @@
 
 #include <string>
 
+#include "base/testutil/assert.h"
 #include "common/logging.h"
-#include "testutil/assert.h"
 #include "util/logging.h"
 #include "util/timezone_utils.h"
 

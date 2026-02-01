@@ -14,9 +14,9 @@
 
 #include "formats/parquet/group_reader.h"
 
+#include <base/testutil/assert.h>
 #include <formats/parquet/scalar_column_reader.h>
 #include <gtest/gtest.h>
-#include <testutil/assert.h>
 
 #include <memory>
 

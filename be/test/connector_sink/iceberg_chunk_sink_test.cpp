@@ -21,6 +21,8 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/integer_util.h"
 #include "connector/connector_chunk_sink.h"
@@ -28,8 +30,6 @@
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "testutil/assert.h"
-#include "testutil/scoped_updater.h"
 
 namespace starrocks::connector {
 namespace {

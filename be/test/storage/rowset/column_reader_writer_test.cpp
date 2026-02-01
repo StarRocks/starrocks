@@ -36,6 +36,7 @@
 
 #include <iostream>
 
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -60,7 +61,6 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
 #include "types/date_value.h"
 
 using std::string;

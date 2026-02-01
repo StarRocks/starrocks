@@ -40,13 +40,13 @@
 #include <string>
 
 #include "base/string/slice.h"
+#include "base/testutil/assert.h"
 #include "cache/mem_cache/page_cache.h"
 #include "column/binary_column.h"
 #include "common/config.h"
 #include "fs/fs_memory.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

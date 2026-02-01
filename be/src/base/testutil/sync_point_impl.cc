@@ -20,7 +20,7 @@
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
 
-#include "testutil/sync_point_impl.h"
+#include "base/testutil/sync_point_impl.h"
 
 #include <sys/types.h>
 #include <unistd.h>

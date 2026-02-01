@@ -17,10 +17,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "gen_cpp/AgentService_types.h"
 #include "runtime/types.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
 
 namespace starrocks::lake {
 

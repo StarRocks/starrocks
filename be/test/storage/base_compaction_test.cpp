@@ -19,6 +19,7 @@
 
 #include <cstddef>
 
+#include "base/testutil/assert.h"
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -32,7 +33,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "testutil/assert.h"
 #include "util/json.h"
 
 namespace starrocks {

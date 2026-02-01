@@ -5,6 +5,7 @@
 #include <string>
 
 #include "base/string/slice.h"
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "formats/parquet/encoding.h"
@@ -12,7 +13,6 @@
 #include "formats/parquet/utils.h"
 #include "runtime/mem_pool.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {

@@ -19,6 +19,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/status.h"
@@ -28,7 +29,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 #include "testutil/desc_tbl_helper.h"
 
 namespace starrocks {

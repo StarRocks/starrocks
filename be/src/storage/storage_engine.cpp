@@ -47,6 +47,7 @@
 
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/testutil/sync_point.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/status.h"
 #include "cumulative_compaction.h"
@@ -76,7 +77,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
-#include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
 #include "util/starrocks_metrics.h"

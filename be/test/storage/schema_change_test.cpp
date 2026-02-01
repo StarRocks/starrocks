@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "base/testutil/assert.h"
 #include "column/datum_convert.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Exprs_types.h"
@@ -28,7 +29,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"

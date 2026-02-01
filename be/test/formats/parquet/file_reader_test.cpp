@@ -20,6 +20,7 @@
 #include <random>
 #include <set>
 
+#include "base/testutil/assert.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
@@ -47,7 +48,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 #include "util/thrift_util.h"

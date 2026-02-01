@@ -17,9 +17,9 @@
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "base/utility/defer_op.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
 #include "util/bthreads/util.h"
 
 namespace starrocks::bthreads {

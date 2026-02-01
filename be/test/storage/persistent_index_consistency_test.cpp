@@ -20,6 +20,8 @@
 #include <random>
 
 #include "base/string/faststring.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -32,9 +34,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 #include "testutil/deterministic_test_utils.h"
-#include "testutil/parallel_test.h"
 #include "util/coding.h"
 #include "util/logging.h"
 

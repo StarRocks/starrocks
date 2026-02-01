@@ -21,9 +21,9 @@
 
 #include <string>
 
+#include "base/testutil/parallel_test.h"
 #include "common/logging.h"
 #include "runtime/datetime_value.h"
-#include "testutil/parallel_test.h"
 #include "util/logging.h"
 
 namespace starrocks {

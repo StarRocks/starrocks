@@ -12,22 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 namespace starrocks {
-
-template <typename T>
-class ScopedUpdater {
-public:
-    ScopedUpdater(T& param, T value) : _param(param), _saved_old_value(param) { param = value; }
-    ~ScopedUpdater() { _param = _saved_old_value; }
-
-private:
-    T& _param;
-    T _saved_old_value;
-};
-
-#define CONCAT(x, y) x##y
-#define CONCAT2(x, y) CONCAT(x, y)
-#define SCOPED_UPDATE(type, param, value) \
-    std::shared_ptr<ScopedUpdater<type>> CONCAT2(_var_updater_, __LINE__)(new ScopedUpdater<type>(param, value))
-
+class Chunk;
+void assert_chunk_equals(const Chunk& chunk1, const Chunk& chunk2);
 } // namespace starrocks

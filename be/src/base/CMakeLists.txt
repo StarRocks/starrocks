@@ -34,6 +34,9 @@ ADD_BE_LIB(Base
   string/utf8_check.cpp
   system/errno.cpp
   template/mustache/mustache.cc
+  testutil/assert.cpp
+  testutil/sync_point.cc
+  testutil/sync_point_impl.cc
   uuid/uuid_generator.cpp
   status.cpp
   statusor.cpp

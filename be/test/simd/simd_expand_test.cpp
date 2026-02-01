@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/testutil/parallel_test.h"
 #include "gtest/gtest.h"
 #include "simd/expand.h"
-#include "testutil/parallel_test.h"
 #include "util/value_generator.h"
 
 namespace starrocks {
