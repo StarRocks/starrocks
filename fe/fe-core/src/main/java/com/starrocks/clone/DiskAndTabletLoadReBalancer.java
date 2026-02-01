@@ -2075,7 +2075,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         public double getDiskUsedPercent(Long key) {
             Pair<Long, Long> cap = diskCap.get(key);
-            if (cap == null) {
+            if (cap == null || cap.first == 0) {
                 return 0;
             }
             return (double) cap.second / cap.first;
