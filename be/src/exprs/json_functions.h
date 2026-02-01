@@ -182,7 +182,7 @@ public:
      * @return Modified JSON
      */
     DEFINE_VECTORIZED_FN(json_set);
-  
+
     /**
      * Determine if a JSON value is a scalar value
      * @param JSON
