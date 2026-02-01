@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <butil/file_util.h>
+#include <butil/files/file_path.h>
+
 #include "base/path/file_util.h"
 #include "cache/datacache.h"
 #include "column/column_helper.h"
