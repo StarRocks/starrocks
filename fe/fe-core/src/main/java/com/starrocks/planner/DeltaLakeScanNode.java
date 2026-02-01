@@ -103,6 +103,18 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanRangeSource.hasMoreOutput();
     }
 
+    @Override
+    public void clear() {
+        try {
+            if (scanRangeSource != null) {
+                scanRangeSource.close();
+            }
+        } catch (Exception e) {
+            LOG.warn("close DeltaLake scanRangeSource failed", e);
+        }
+        scanRangeSource = null;
+    }
+
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
                                      PartitionIdGenerator partitionIdGenerator,
                                      boolean enableIncrementalScanRanges)
