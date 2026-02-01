@@ -1,0 +1,72 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package staros;
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+enum SectionType {
+    SECTION_INVALID_TYPE = 0;
+    SECTION_DONE = 1;
+
+    // for test purpose
+    SECTION_COMPONENT_MANUAL = 2;
+    SECTION_COMPONENT_JSON = 3;
+    SECTION_COMPONENT_PB = 4;
+    SECTION_COMPONENT_COMPOSITE = 5;
+
+    // StarManager Section 101 - 120 [ 102 ~ 119]
+    SECTION_STARMGR_BEGIN = 101;
+    SECTION_STARMGR_SERVICEMGR = 102;
+    SECTION_STARMGR_WORKERMGR = 103;
+    // New StarManager sections added here
+    SECTION_STARMGR_END = 120;
+
+    // WorkerManager Section 121 - 140 [122 ~ 139]
+    SECTION_WORKERMGR_BEGIN = 121;
+    SECTION_WORKERMGR_SWG = 122;
+    SECTION_WORKERMGR_WORKER = 123;
+    // New WorkerManager sections added here
+    SECTION_WORKERMGR_END = 140;
+
+    // ShardManager Section 141 ~ 160 [142 ~ 159]
+    SECTION_SHARDMGR_BEGIN = 141;
+    SECTION_SHARDMGR_META_GROUP = 142;
+    SECTION_SHARDMGR_SHARD_GROUP = 143;
+    SECTION_SHARDMGR_SHARD = 144;
+    // New ShardManager sections added here
+    SECTION_SHARDMGR_END = 159;
+
+    // ServiceManager Section 161 ~ 180 [162 ~ 179]
+    SECTION_SERVICEMGR_BEGIN = 161;
+    SECTION_SERVICEMGR_TEMPLATE = 162;
+    SECTION_SERVICEMGR_SERVICE = 163;
+    SECTION_SERVICEMGR_SHARDMGR = 164;
+    SECTION_SERVICEMGR_FILESTOREMGR = 165;
+    // New ServiceManager sections added here
+    SECTION_SERVICEMGR_END = 179;
+
+    // FileStoreManager Section 181 ~ 200 [182 ~ 199]
+    SECTION_FILESTOREMGR_BEGIN = 181;
+    SECTION_FILESTOREMGR_FILESTORE = 182;
+    // New FileStoreManager sections added here
+    SECTION_FILESTOREMGR_END = 199;
+}
+
+message SectionHeader {
+    SectionType section_type = 1;
+    uint32 version = 2;
+}
