@@ -36,9 +36,9 @@ namespace starrocks::poco {
 
 PocoHttpClient::PocoHttpClient(const Aws::Client::ClientConfiguration& clientConfiguration)
         : timeouts(ConnectionTimeouts(
-                  Poco::Timespan(clientConfiguration.connectTimeoutMs * 1000),     // connection timeout.
-                  Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000), // send timeout.
-                  Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000)  // receive timeout.
+                  Poco::Timespan(clientConfiguration.connectTimeoutMs * 1000), // connection timeout.
+                  Poco::Timespan(clientConfiguration.requestTimeoutMs * 1000), // send timeout.
+                  Poco::Timespan(clientConfiguration.requestTimeoutMs * 1000)  // receive timeout.
                   )) {}
 
 std::shared_ptr<Aws::Http::HttpResponse> PocoHttpClient::MakeRequest(
