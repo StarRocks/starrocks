@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <cstring>
 
 namespace starrocks {
