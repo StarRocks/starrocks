@@ -17,6 +17,7 @@
 #include <optional>
 
 #include "column/column.h"
+#include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_key_constructor.h"
 
 namespace starrocks {
@@ -98,7 +99,9 @@ void BuildKeyConstructorForSerializedFixedSize<LT>::build_key(RuntimeState* stat
     NullColumns null_columns;
     for (size_t i = 0; i < table_items->key_columns.size(); i++) {
         if (table_items->join_keys[i].is_null_safe_equal) {
-            data_columns.emplace_back(table_items->key_columns[i]);
+            // Normalize NaN for float/double to ensure NaN == NaN (Iceberg equality delete semantics)
+            auto col = normalize_float_nan(table_items->key_columns[i], table_items->join_keys[i].type->type);
+            data_columns.emplace_back(col);
         } else if (table_items->key_columns[i]->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[i]);
             data_columns.emplace_back(nullable_column->data_column());
@@ -137,11 +140,13 @@ void ProbeKeyConstructorForSerializedFixedSize<LT>::build_key(const JoinHashTabl
 
     for (size_t i = 0; i < probe_state->key_columns->size(); i++) {
         if (table_items.join_keys[i].is_null_safe_equal) {
-            if ((*probe_state->key_columns)[i]->is_nullable()) {
-                data_columns.emplace_back((*probe_state->key_columns)[i]);
+            // Normalize NaN for float/double to ensure NaN == NaN (Iceberg equality delete semantics)
+            ColumnPtr col = (*probe_state->key_columns)[i];
+            col = normalize_float_nan(col, table_items.join_keys[i].type->type);
+            if (col->is_nullable()) {
+                data_columns.emplace_back(col);
             } else {
-                auto tmp_column = NullableColumn::create((*probe_state->key_columns)[i],
-                                                         NullColumn::create(probe_state->probe_row_count, 0));
+                auto tmp_column = NullableColumn::create(col, NullColumn::create(probe_state->probe_row_count, 0));
                 data_columns.emplace_back(tmp_column);
             }
         } else if ((*probe_state->key_columns)[i]->is_nullable()) {
