@@ -14,6 +14,7 @@
 
 #include "rowset_column_update_state.h"
 
+#include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
@@ -32,7 +33,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/phmap/phmap.h"
 #include "util/stack_util.h"
 #include "util/time.h"
 

@@ -42,8 +42,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "glog/logging.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

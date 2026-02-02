@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/phmap/phmap.h"
+#include "base/phmap/phmap.h"
 
 #include <gtest/gtest.h>
 
 #include "base/testutil/parallel_test.h"
-#include "runtime/mem_pool.h"
 
 namespace starrocks {
 class PhmapTest : public testing::Test {};
@@ -103,8 +102,6 @@ PARALLEL_TEST(PhmapTest, lazy_emplace_fail) {
     using phmap_alloc = CheckedAlloc<int32_t>;
 
     phmap::flat_hash_map<int32_t, uint8_t*, phmap_hash, phmap_equal, phmap_alloc> map;
-    MemPool mem_pool;
-
     size_t i;
     tls_alloc_succ = true;
     try {
@@ -116,9 +113,8 @@ PARALLEL_TEST(PhmapTest, lazy_emplace_fail) {
                 if (!tls_alloc_succ) {
                     throw std::bad_alloc();
                 }
-                uint8_t* ptr = mem_pool.allocate(sizeof(Value));
-                new (ptr) Value(i);
-                ctor(i, ptr);
+                auto* ptr = new Value(i);
+                ctor(i, reinterpret_cast<uint8_t*>(ptr));
             });
         }
     } catch (std::bad_alloc const&) {
@@ -129,7 +125,7 @@ PARALLEL_TEST(PhmapTest, lazy_emplace_fail) {
     auto end = map.end();
     while (iter != end) {
         j++;
-        (*reinterpret_cast<Value*>(iter->second)).~Value();
+        delete reinterpret_cast<Value*>(iter->second);
         iter++;
     }
     ASSERT_EQ(i, j);

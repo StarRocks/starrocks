@@ -20,6 +20,9 @@
 #include <shared_mutex>
 
 #include "base/concurrency/moodycamel/concurrentqueue.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_base.h"
+#include "base/phmap/phmap_utils.h"
 #include "bthread/mutex.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -30,9 +33,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_base.h"
-#include "util/phmap/phmap_utils.h"
 
 namespace starrocks {
 

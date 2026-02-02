@@ -14,6 +14,7 @@
 
 #include "rowset_update_state.h"
 
+#include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
 #include "common/tracer.h"
 #include "fs/key_cache.h"
@@ -29,7 +30,6 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet_schema.h"
-#include "util/phmap/phmap.h"
 #include "util/stack_util.h"
 #include "util/time.h"
 #include "util/trace.h"

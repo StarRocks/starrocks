@@ -14,9 +14,9 @@
 
 #include "exec/join/join_hash_table_descriptor.h"
 
+#include "base/phmap/phmap.h"
 #include "exec/sorting/sort_helper.h"
 #include "util/orlp/pdqsort.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

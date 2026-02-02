@@ -17,11 +17,11 @@
 #include <type_traits>
 
 #include "base/hash/hash_fwd.h"
+#include "base/phmap/phmap_fwd_decl.h"
 #include "common/logging.h"
 #include "exec/agg_hash_fwd.h"
 #include "runtime/memory/allocator.h"
 #include "runtime/memory/roaring_hook.h"
-#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 

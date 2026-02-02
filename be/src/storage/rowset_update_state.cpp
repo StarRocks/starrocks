@@ -14,6 +14,7 @@
 
 #include "rowset_update_state.h"
 
+#include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "common/tracer.h"
@@ -29,7 +30,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
-#include "util/phmap/phmap.h"
 #include "util/stack_util.h"
 #include "util/time.h"
 #include "util/trace.h"

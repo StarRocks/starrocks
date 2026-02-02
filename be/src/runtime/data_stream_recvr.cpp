@@ -40,6 +40,7 @@
 #include <deque>
 #include <utility>
 
+#include "base/phmap/phmap.h"
 #include "base/string/faststring.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
@@ -56,7 +57,6 @@
 #include "util/compression/block_compression.h"
 #include "util/debug_util.h"
 #include "util/logging.h"
-#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

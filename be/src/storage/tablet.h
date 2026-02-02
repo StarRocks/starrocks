@@ -44,6 +44,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "common/statusor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
@@ -57,7 +58,6 @@
 #include "storage/utils.h"
 #include "storage/version_graph.h"
 #include "util/once.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

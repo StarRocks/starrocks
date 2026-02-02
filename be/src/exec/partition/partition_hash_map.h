@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -22,7 +23,6 @@
 #include "column/vectorized_fwd.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

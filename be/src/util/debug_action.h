@@ -17,7 +17,7 @@
 #include <optional>
 
 #include "base/hash/hash.h"
-#include "util/phmap/phmap.h"
+#include "base/phmap/phmap.h"
 
 namespace starrocks {
 class TExecDebugOption;

@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -26,7 +27,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 #include "udf/python/callstub.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

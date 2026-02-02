@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <mutex>
 
+#include "base/phmap/phmap_fwd_decl.h"
 #include "column/column_access_path.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
@@ -26,7 +27,6 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/rowset/rowset.h"
-#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 

@@ -19,6 +19,8 @@
 #include <type_traits>
 
 #include "base/hash/unaligned_access.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_fwd_decl.h"
 #include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -31,8 +33,6 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "util/orlp/pdqsort.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 
