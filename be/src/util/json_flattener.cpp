@@ -199,7 +199,7 @@ using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* r
 using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx);
 static const uint8_t JSON_BASE_TYPE_BITS = 0;   // least flat to JSON type
 static const uint8_t JSON_BIGINT_TYPE_BITS = 7; // bigint compatible type
-static const uint8_t JSON_NULL_TYPE_BITS = 31;  // JSON_NULL_TYPE_BITS, initial value for JsonFlatDesc::type
+// static const uint8_t JSON_NULL_TYPE_BITS = 31;  // JSON_NULL_TYPE_BITS, initial value for JsonFlatDesc::type
 
 // bool will flatting as string, because it's need save string-literal(true/false)
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
