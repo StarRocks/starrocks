@@ -444,7 +444,8 @@ StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc,
         auto col = ColumnHelper::create_column(slot_desc->type(), true, false, column_range.list_values.size(), false);
         for (auto* ctx : ctxs) {
             ASSIGN_OR_RETURN(ColumnPtr v, ctx->root()->evaluate_const(ctx));
-            col->append(*v, 0, 1);
+            auto cv = ColumnHelper::unpack_and_duplicate_const_column(1, v);
+            col->append(*cv, 0, 1);
         }
         Expr::close(ctxs, state);
         return col;
