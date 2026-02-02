@@ -124,13 +124,52 @@ class StarRocksTranslator:
         return re.sub(code_pattern, '', text)
 
     def _chunk_content(self, text: str) -> list[str]:
-        # Split by Level 2 through Level 5 headers for high granularity
+        # Primary strategy: split by Level 2 through Level 5 headers for high granularity.
         chunks = re.split(r'(?m)^(?=#{2,5}\s)', text)
-        return [c for c in chunks if c.strip()]
+        chunks = [c for c in chunks if c.strip()]
+
+        # Fallback Strategy:
+        # If the document has no matching headers (e.g. only H1 or no headers), 
+        # header splitting will produce a single large chunk.
+        # If that single chunk is too large, we fall back to splitting by paragraphs.
+        LARGE_DOC_THRESHOLD = 20000
+        MAX_FALLBACK_CHUNK_SIZE = 4000
+
+        if len(chunks) == 1 and len(text) > LARGE_DOC_THRESHOLD:
+            paragraphs = re.split(r'\n\s*\n', text)
+            fallback_chunks = []
+            current_buffer = ""
+            
+            for p in paragraphs:
+                if not p.strip():
+                    continue
+                
+                # Estimate size if we add this paragraph (plus double newline separator)
+                candidate_len = len(current_buffer) + len(p) + 2
+                
+                if candidate_len > MAX_FALLBACK_CHUNK_SIZE and current_buffer:
+                    # Current buffer is full, flush it and start a new one
+                    fallback_chunks.append(current_buffer)
+                    current_buffer = p
+                else:
+                    # Append to current buffer
+                    if current_buffer:
+                        current_buffer += "\n\n" + p
+                    else:
+                        current_buffer = p
+            
+            if current_buffer.strip():
+                fallback_chunks.append(current_buffer)
+            
+            return [c for c in fallback_chunks if c.strip()]
+
+        return chunks
 
     def validate_mdx(self, original: str, translated: str) -> tuple[bool, str]:
         clean_orig = self._strip_code_blocks(original)
         clean_trans = self._strip_code_blocks(translated)
+        
+        # Pattern to find tags but ignore HTML comments
         tag_pattern = r'<(?!\!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
         
         def get_tag_fingerprints(text):
@@ -206,13 +245,26 @@ class StarRocksTranslator:
                         config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.0),
                         contents=current_human_prompt
                     )
-                    chunk_translated = response.text.strip() if response.text else ""
+                    
+                    if not response.text:
+                        raise RuntimeError("Gemini returned empty response.")
+                        
+                    chunk_translated = response.text.strip()
                     break
                 except Exception as e:
-                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    # Retry on 429, Resource Exhausted, or Empty Response
+                    is_retryable = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "empty response" in str(e).lower()
+                    
+                    if is_retryable and attempt < 4:
                         time.sleep(5 * (2 ** attempt))
                         continue
-                    raise e
+                    
+                    # If fatal or out of retries, fail the whole file
+                    msg = f"Gemini API failed on chunk {i+1}: {str(e)}"
+                    print(f"❌ {msg}")
+                    self.failures.append({"file": base_output_path, "error": msg})
+                    self.has_errors = True
+                    return
 
             if chunk_translated.startswith("```"):
                 lines = chunk_translated.splitlines()
@@ -249,7 +301,6 @@ def main():
         for f in args.files:
             translator.translate_file(f)
 
-    # UPDATED: Report uses 'a' (append) mode to handle multiple language runs in one PR
     report_path = "translation_summary.md"
     report_exists = os.path.exists(report_path)
     
@@ -257,7 +308,6 @@ def main():
         if not report_exists:
             f.write("### 📝 Translation Report\n\n")
         else:
-            # Ensure new language section starts on a new line when appending
             f.write("\n")
         
         f.write(f"#### 🌐 Language: {args.lang.upper()}\n")
@@ -276,4 +326,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
