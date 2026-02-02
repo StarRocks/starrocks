@@ -5255,6 +5255,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.arrowFlightProxyEnabled;
     }
 
+    public void setTopNPushDownAggMode(int mode) {
+        this.topNPushDownAggMode = mode;
+    }
+
     public int getTopNPushDownAggMode() {
         return topNPushDownAggMode;
     }

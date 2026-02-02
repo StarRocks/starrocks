@@ -36,6 +36,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
         connectContext.getSessionVariable().setCboPruneShuffleColumnRate(0);
+        connectContext.getSessionVariable().setTopNPushDownAggMode(0);
     }
 
     @AfterEach
