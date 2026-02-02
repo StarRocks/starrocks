@@ -406,4 +406,49 @@ class WindowSkewTest extends PlanTestBase {
                 getFragmentPlan(sql)
         );
     }
+
+    @Test
+    void testTwoWindowsOneWithSkewHint() throws Exception {
+        // Case 1: Skew hint on the first window function
+        String sql1 = "select p, s, " +
+                "sum(x) over ([skew|p(NULL)] partition by p order by s), " +
+                "avg(x) over (partition by p order by s) " +
+                "from window_skew_table";
+
+        String plan1 = getFragmentPlan(sql1, TExplainLevel.COSTS, "");
+        assertContains(plan1, "UNION");
+        assertContains(plan1, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan1, "Predicates: [6: p, INT, true] IS NOT NULL");
+
+        // Case 2: Skew hint on the second window function
+        String sql2 = "select p, s, " +
+                "sum(x) over (partition by p order by s), " +
+                "avg(x) over ([skew|p(NULL)] partition by p order by s) " +
+                "from window_skew_table";
+
+        String plan2 = getFragmentPlan(sql2, TExplainLevel.COSTS, "");
+
+        assertContains(plan2, "UNION");
+        assertContains(plan2, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan2, "Predicates: [6: p, INT, true] IS NOT NULL");
+    }
+
+    @Test
+    void testMixedWindowPartitionsWithSkewHint() throws Exception {
+        // Three analytical windows:
+        // 1. partition by p (with skew hint)
+        // 2. partition by p (no skew hint)
+        // 3. partition by s (different partition)
+        String sql = "select p, s, " +
+                "sum(x) over ([skew|p(NULL)] partition by p order by s), " +
+                "avg(x) over (partition by p order by s), " +
+                "count(x) over (partition by s order by p) " +
+                "from window_skew_table";
+
+        String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
+        assertContains(plan, "UNION");
+        // Verify that the skew hint on 'p' triggered the split
+        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: [7: p, INT, true] IS NOT NULL");
+    }
 }
