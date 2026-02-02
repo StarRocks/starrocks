@@ -450,4 +450,32 @@ public class PhysicalPartitionTest {
         Assertions.assertTrue(latestIndices.contains(baseIndex2));
         Assertions.assertTrue(latestIndices.contains(rollup2));
     }
+
+    @Test
+    public void testDeleteMaterializedIndexOperations() {
+        long partitionId = 1000L;
+        long parentId = 2000L;
+        long baseIndexId1 = 3001L;
+        long baseIndexId2 = 3002L;
+        long baseMetaId = 3100L;
+        long baseShardGroupId = 100L;
+
+        MaterializedIndex baseIndex1 = new MaterializedIndex(baseIndexId1, baseMetaId, IndexState.NORMAL, baseShardGroupId);
+        PhysicalPartition partition = new PhysicalPartition(partitionId, parentId, baseIndex1);
+
+        MaterializedIndex baseIndex2 = new MaterializedIndex(baseIndexId2, baseMetaId, IndexState.NORMAL, baseShardGroupId);
+        partition.addMaterializedIndex(baseIndex2, true);
+
+        Map<Long, List<Long>> indexMetaIdToIndexIds = Deencapsulation.getField(partition, "indexMetaIdToIndexIds");
+        Assertions.assertTrue(indexMetaIdToIndexIds.containsKey(baseMetaId));
+        Assertions.assertEquals(2, indexMetaIdToIndexIds.get(baseMetaId).size());
+
+        partition.deleteMaterializedIndexByIndexId(baseIndexId1);
+        Assertions.assertTrue(indexMetaIdToIndexIds.containsKey(baseMetaId));
+        Assertions.assertEquals(1, indexMetaIdToIndexIds.get(baseMetaId).size());
+        Assertions.assertEquals(baseIndexId2, (long) indexMetaIdToIndexIds.get(baseMetaId).get(0));
+
+        partition.deleteMaterializedIndexByIndexId(baseIndexId2);
+        Assertions.assertFalse(indexMetaIdToIndexIds.containsKey(baseMetaId));
+    }
 }

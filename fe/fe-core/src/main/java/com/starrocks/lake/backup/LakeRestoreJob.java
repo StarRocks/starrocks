@@ -263,7 +263,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
         for (MaterializedIndex restoredIdx : restorePart.getDefaultPhysicalPartition()
-                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                .getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             TStorageMedium medium = restoreTbl.getPartitionInfo().getDataProperty(restorePart.getId()).getStorageMedium();
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
                     restoredIdx.getId(), medium, true);
