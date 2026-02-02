@@ -48,6 +48,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "base/coding.h"
 #include "base/string/faststring.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
@@ -57,7 +58,6 @@
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
-#include "util/coding.h"
 
 namespace starrocks {
 class Column;

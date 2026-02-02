@@ -37,9 +37,9 @@
 #include <cstdint>
 #include <string>
 
+#include "base/coding.h"
 #include "base/string/faststring.h"
 #include "gen_cpp/segment.pb.h"
-#include "util/coding.h"
 
 namespace starrocks {
 

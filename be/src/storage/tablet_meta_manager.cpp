@@ -45,6 +45,7 @@
 #include <string>
 #include <vector>
 
+#include "base/coding.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
@@ -61,7 +62,6 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
-#include "util/coding.h"
 #include "util/debug_util.h"
 #include "util/failpoint/fail_point.h"
 #include "util/url_coding.h"

@@ -18,6 +18,7 @@
 
 #include "base/bit/bit_stream_utils.h"
 #include "base/bit/bit_util.h"
+#include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "column/column.h"
@@ -28,7 +29,6 @@
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
 #include "types/int256.h"
-#include "util/coding.h"
 #include "util/raw_container.h"
 
 #ifdef __AVX2__

@@ -38,7 +38,7 @@
 #include <cstring>
 
 #include "base/bit/bit_util.h"
-#include "util/coding.h"
+#include "base/coding.h"
 
 namespace starrocks {
 

@@ -7,7 +7,7 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "util/coding.h"
+#include "base/coding.h"
 
 namespace starrocks {
 

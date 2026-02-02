@@ -25,6 +25,7 @@ set(BASE_TEST_FILES
     concurrency/shared_mutex_test.cpp
     container/heap_test.cpp
     container/priority_queue_test.cpp
+    coding_test.cpp
     crypto/md5_test.cpp
     json/easy_json-test.cpp
     path/file_util_test.cpp

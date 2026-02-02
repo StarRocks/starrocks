@@ -37,10 +37,10 @@
 #include <cmath>
 #include <map>
 
+#include "base/coding.h"
 #include "base/simd/multi_version.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
-#include "util/coding.h"
 #include "util/phmap/phmap.h"
 
 using std::map;

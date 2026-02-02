@@ -11,9 +11,9 @@
 
 #include <string>
 
+#include "base/int128_types.h"
 #include "base/string/slice.h"
 #include "gutil/endian.h"
-#include "storage/olap_common.h"
 
 namespace starrocks {
 

@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "base/coding.h"
 #include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
@@ -23,7 +24,6 @@
 #include "gen_cpp/data.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
-#include "util/coding.h"
 
 namespace starrocks {
 

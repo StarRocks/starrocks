@@ -30,7 +30,6 @@ set(UTIL_FILES
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
-  coding.cpp
   cpu_info.cpp
   cpu_usage_info.cpp
   cpu_util.cpp

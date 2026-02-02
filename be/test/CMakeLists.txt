@@ -354,7 +354,6 @@ set(EXEC_FILES
         ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
-        ./util/coding_test.cpp
         ./util/core_local_test.cpp
         ./util/core_local_counter_test.cpp
         ./util/countdown_latch_test.cpp
