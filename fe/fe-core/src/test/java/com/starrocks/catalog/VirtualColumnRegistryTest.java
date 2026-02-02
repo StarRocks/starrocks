@@ -14,97 +14,96 @@
 
 package com.starrocks.catalog;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 public class VirtualColumnRegistryTest {
-    
+
     @Test
     public void testGetDefinition() {
         // Test case-insensitive lookup
         VirtualColumnDefinition def1 = VirtualColumnRegistry.getDefinition("_tablet_id_");
-        assertNotNull(def1);
-        assertEquals("_tablet_id_", def1.getName());
-        
-        // Case insensitive
+        Assertions.assertNotNull(def1);
+        Assertions.assertEquals("_tablet_id_", def1.getName());
+
+        // Case-insensitive
         VirtualColumnDefinition def2 = VirtualColumnRegistry.getDefinition("_TABLET_ID_");
-        assertNotNull(def2);
-        assertEquals(def1, def2);
-        
+        Assertions.assertNotNull(def2);
+        Assertions.assertEquals(def1, def2);
+
         // Non-existent column
         VirtualColumnDefinition def3 = VirtualColumnRegistry.getDefinition("_nonexistent_");
-        assertNull(def3);
+        Assertions.assertNull(def3);
     }
-    
+
     @Test
     public void testGetColumn() {
         // Test getting column instance
         Column col = VirtualColumnRegistry.getColumn("_tablet_id_");
-        assertNotNull(col);
-        assertEquals("_tablet_id_", col.getName());
-        assertTrue(col.isVirtual());
-        
+        Assertions.assertNotNull(col);
+        Assertions.assertEquals("_tablet_id_", col.getName());
+        Assertions.assertTrue(col.isVirtual());
+
         // Test singleton - should return same instance
         Column col2 = VirtualColumnRegistry.getColumn("_tablet_id_");
-        assertSame(col, col2);
-        
+        Assertions.assertSame(col, col2);
+
         // Non-existent column
         Column col3 = VirtualColumnRegistry.getColumn("_nonexistent_");
-        assertNull(col3);
+        Assertions.assertNull(col3);
     }
-    
+
     @Test
     public void testGetAllDefinitions() {
         List<VirtualColumnDefinition> defs = VirtualColumnRegistry.getAllDefinitions();
-        assertNotNull(defs);
-        assertFalse(defs.isEmpty());
-        
+        Assertions.assertNotNull(defs);
+        Assertions.assertFalse(defs.isEmpty());
+
         // Should contain tablet_id
-        assertTrue(defs.stream().anyMatch(d -> d.getName().equals("_tablet_id_")));
+        Assertions.assertTrue(defs.stream().anyMatch(d -> d.getName().equals("_tablet_id_")));
     }
-    
+
     @Test
     public void testGetAllColumns() {
         List<Column> columns = VirtualColumnRegistry.getAllColumns();
-        assertNotNull(columns);
-        assertFalse(columns.isEmpty());
-        
+        Assertions.assertNotNull(columns);
+        Assertions.assertFalse(columns.isEmpty());
+
         // Should contain tablet_id
-        assertTrue(columns.stream().anyMatch(c -> c.getName().equals("_tablet_id_")));
-        
+        Assertions.assertTrue(columns.stream().anyMatch(c -> c.getName().equals("_tablet_id_")));
+
         // All should be virtual
-        assertTrue(columns.stream().allMatch(Column::isVirtual));
+        Assertions.assertTrue(columns.stream().allMatch(Column::isVirtual));
     }
-    
+
     @Test
     public void testIsVirtualColumn() {
-        assertTrue(VirtualColumnRegistry.isVirtualColumn("_tablet_id_"));
-        assertTrue(VirtualColumnRegistry.isVirtualColumn("_TABLET_ID_")); // case insensitive
-        assertFalse(VirtualColumnRegistry.isVirtualColumn("_nonexistent_"));
-        assertFalse(VirtualColumnRegistry.isVirtualColumn("v1"));
+        Assertions.assertTrue(VirtualColumnRegistry.isVirtualColumn("_tablet_id_"));
+        Assertions.assertTrue(VirtualColumnRegistry.isVirtualColumn("_TABLET_ID_")); // case insensitive
+        Assertions.assertFalse(VirtualColumnRegistry.isVirtualColumn("_nonexistent_"));
+        Assertions.assertFalse(VirtualColumnRegistry.isVirtualColumn("v1"));
     }
-    
+
     @Test
     public void testGetCount() {
         int count = VirtualColumnRegistry.getCount();
-        assertTrue(count > 0);
-        
+        Assertions.assertTrue(count > 0);
+
         // Should match getAllColumns size
-        assertEquals(VirtualColumnRegistry.getAllColumns().size(), count);
+        Assertions.assertEquals(VirtualColumnRegistry.getAllColumns().size(), count);
     }
-    
+
     @Test
     public void testVirtualColumnProperties() {
         Column col = VirtualColumnRegistry.getColumn("_tablet_id_");
-        assertNotNull(col);
-        
+        Assertions.assertNotNull(col);
+
         // Virtual columns should be marked as virtual
-        assertTrue(col.isVirtual());
-        
+        Assertions.assertTrue(col.isVirtual());
+
         // Should have correct type
-        assertNotNull(col.getType());
+        Assertions.assertNotNull(col.getType());
     }
 }

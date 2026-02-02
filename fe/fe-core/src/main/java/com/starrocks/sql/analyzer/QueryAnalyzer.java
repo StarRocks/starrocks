@@ -122,7 +122,6 @@ import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
-import static com.starrocks.thrift.PlanNodesConstants.TABLET_ID_COLUMN_NAME;
 
 public class QueryAnalyzer {
     private final ConnectContext session;
