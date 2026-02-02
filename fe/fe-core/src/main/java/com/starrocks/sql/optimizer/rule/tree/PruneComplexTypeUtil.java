@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
 import com.starrocks.catalog.ComplexTypeAccessPath;
@@ -62,6 +63,7 @@ public class PruneComplexTypeUtil {
         // The same ColumnRefOperator may have multiple access paths for complex type
         private final Map<ColumnRefOperator, ComplexTypeAccessGroup> accessGroups;
         private final Map<ColumnRefOperator, ColumnRefOperator> unnestColRefMap;
+        private final List<ColumnRefOperator> scanRefs;
         private boolean enablePruneComplexTypesInUnnest;
         private boolean enablePruneComplexTypes;
 
@@ -69,6 +71,7 @@ public class PruneComplexTypeUtil {
             this.accessGroups = new HashMap<>();
             this.enablePruneComplexTypes = true;
             this.unnestColRefMap = new HashMap<>();
+            this.scanRefs = Lists.newArrayList();
             this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
         }
 
@@ -100,6 +103,14 @@ public class PruneComplexTypeUtil {
             for (ComplexTypeAccessPaths complexTypeAccessPaths : accessGroup) {
                 addAccessPaths(columnRefOperator, concatAccessPaths(curAccessPaths, complexTypeAccessPaths));
             }
+        }
+
+        public void addScan(ColumnRefOperator columnRefOperator) {
+            scanRefs.add(columnRefOperator);
+        }
+
+        public List<ColumnRefOperator> getScanRefs() {
+            return scanRefs;
         }
 
         public void add(ColumnRefOperator outputColumnRefOperator, ScalarOperator scalarOperator) {
