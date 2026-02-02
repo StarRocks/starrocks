@@ -195,7 +195,6 @@ public class ArrowFlightSqlTicketManager {
 
     public ByteString buildFEProxyTicketForBE(TUniqueId queryId, TUniqueId fragmentInstanceId,
                                                ComputeNode worker) {
-        // BE proxy tickets use | as delimiter between host and port, so IPv6 addresses work without brackets
         return ByteString.copyFromUtf8(
                 hexStringFromUniqueId(queryId) + "|"
                         + hexStringFromUniqueId(fragmentInstanceId) + "|"
