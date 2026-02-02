@@ -63,7 +63,8 @@ protected:
         TTupleDescriptorBuilder tuple_builder;
         tuple_builder.add_slot(
                 slot_builder.type(TYPE_VARCHAR).column_name("file_path").is_materialized(true).nullable(false).build());
-        tuple_builder.add_slot(slot_builder.type(TYPE_BIGINT).column_name("pos").is_materialized(true).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_builder.type(TYPE_BIGINT).column_name("pos").is_materialized(true).nullable(false).build());
         tuple_builder.build(&desc_tbl_builder);
         TDescriptorTable t_desc_tbl = desc_tbl_builder.desc_tbl();
         DescriptorTbl* desc_tbl = nullptr;
