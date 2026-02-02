@@ -57,6 +57,8 @@ public:
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
 
+    void cancel(const Status& st);
+
     void close();
 
     [[nodiscard]] int64_t queueing_memtable_num() const { return _writer->queueing_memtable_num(); }
@@ -323,6 +325,10 @@ inline void AsyncDeltaWriterImpl::finish(DeltaWriterFinishMode mode, FinishCallb
     }
 }
 
+inline void AsyncDeltaWriterImpl::cancel(const Status& st) {
+    _writer->cancel(st);
+}
+
 inline void AsyncDeltaWriterImpl::close() {
     std::unique_lock l(_mtx);
     TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:1");
@@ -382,6 +388,10 @@ void AsyncDeltaWriter::flush(Callback cb) {
 void AsyncDeltaWriter::finish(DeltaWriterFinishMode mode, FinishCallback cb) {
     TEST_SYNC_POINT_CALLBACK("AsyncDeltaWriter:enter_finish", this);
     _impl->finish(mode, std::move(cb));
+}
+
+void AsyncDeltaWriter::cancel(const Status& st) {
+    _impl->cancel(st);
 }
 
 void AsyncDeltaWriter::close() {

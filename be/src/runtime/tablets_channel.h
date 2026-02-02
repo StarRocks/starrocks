@@ -63,7 +63,7 @@ public:
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
 
-    virtual void cancel() = 0;
+    virtual void cancel(const std::string& reason) = 0;
 
     virtual void abort() = 0;
 
