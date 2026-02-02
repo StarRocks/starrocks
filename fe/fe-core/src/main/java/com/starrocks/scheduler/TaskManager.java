@@ -465,9 +465,23 @@ public class TaskManager implements MemoryTrackable {
 
     /**
      * Suspend a task, which will stop the task scheduler and kill the running task run.
-     * NOTE: this method is thread safe, no need to task lock again.
+     * NOTE: this method will write edit log.
      */
     public void suspendTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE),
+                wal -> replaySuspendTask(task.getName())
+        );
+    }
+
+    /**
+     * Internal method to suspend a task without writing edit log.
+     * NOTE: this method is thread safe, no need to task lock again.
+     */
+    private void suspendTaskInternal(Task task) {
         if (task == null) {
             return;
         }
@@ -497,9 +511,23 @@ public class TaskManager implements MemoryTrackable {
 
     /**
      * Resume a task, which will restart the task scheduler if the task is periodical.
-     * NOTE: This method is thread safe, no need to task lock again.
+     * NOTE: this method will write edit log.
      */
     public void resumeTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                new AlterTaskInfo(task.getName(), Constants.TaskState.ACTIVE),
+                wal -> replayResumeTask(task.getName())
+        );
+    }
+
+    /**
+     * Internal method to resume a task without writing edit log.
+     * NOTE: This method is thread safe, no need to task lock again.
+     */
+    private void resumeTaskInternal(Task task) {
         if (task == null) {
             return;
         }
@@ -523,9 +551,23 @@ public class TaskManager implements MemoryTrackable {
 
     /**
      * Update task properties for subsequent executions.
-     * NOTE: this method is thread safe, no need to task lock again.
+     * NOTE: this method will write edit log.
      */
     public void updateTaskProperties(Task task, Map<String, String> properties) {
+        if (task == null || properties == null || properties.isEmpty()) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                new AlterTaskInfo(task.getName(), properties),
+                wal -> replayUpdateTaskProperties(task.getName(), properties)
+        );
+    }
+
+    /**
+     * Internal method to update task properties without writing edit log.
+     * NOTE: this method is thread safe, no need to task lock again.
+     */
+    private void updateTaskPropertiesInternal(Task task, Map<String, String> properties) {
         if (task == null || properties == null || properties.isEmpty()) {
             return;
         }
@@ -671,7 +713,46 @@ public class TaskManager implements MemoryTrackable {
 
     public void replayAlterTask(AlterTaskInfo alterTaskInfo) {
         Task currentTask = getTask(alterTaskInfo.getName());
-        changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+        // Handle task type change (existing logic)
+        if (alterTaskInfo.getType() != null) {
+            changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+        }
+        // Handle task state change (suspend/resume)
+        if (alterTaskInfo.getState() != null) {
+            if (alterTaskInfo.getState() == Constants.TaskState.PAUSE) {
+                replaySuspendTask(alterTaskInfo.getName());
+            } else if (alterTaskInfo.getState() == Constants.TaskState.ACTIVE) {
+                replayResumeTask(alterTaskInfo.getName());
+            }
+        }
+        // Handle properties update
+        if (alterTaskInfo.getProperties() != null) {
+            replayUpdateTaskProperties(alterTaskInfo.getName(), alterTaskInfo.getProperties());
+        }
+    }
+
+    /**
+     * Replay suspend task operation.
+     */
+    public void replaySuspendTask(String taskName) {
+        Task task = getTask(taskName);
+        suspendTaskInternal(task);
+    }
+
+    /**
+     * Replay resume task operation.
+     */
+    public void replayResumeTask(String taskName) {
+        Task task = getTask(taskName);
+        resumeTaskInternal(task);
+    }
+
+    /**
+     * Replay update task properties operation.
+     */
+    public void replayUpdateTaskProperties(String taskName, Map<String, String> properties) {
+        Task task = getTask(taskName);
+        updateTaskPropertiesInternal(task, properties);
     }
 
     @VisibleForTesting
