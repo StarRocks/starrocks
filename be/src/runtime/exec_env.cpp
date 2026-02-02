@@ -441,9 +441,9 @@ Status CacheEnv::_init_datacache() {
                 corresponding_starlet_dirs = *s;
             }
         }
+        int idx = 0;
 #endif
 
-        int idx = 0;
         size_t total_quota_bytes = 0;
         for (auto& root_path : _store_paths) {
             // Because we have unified the datacache between datalake and starlet, we also need to unify the
