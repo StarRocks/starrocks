@@ -3425,8 +3425,6 @@ public class StmtExecutor {
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
     }
-<<<<<<< HEAD
-=======
 
     private String resolveImpersonatedUser() {
         String qualifiedUser = ClusterNamespace.getNameFromFullName(context.getQualifiedUser());
@@ -3449,5 +3447,4 @@ public class StmtExecutor {
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
     }
->>>>>>> 79df62f360 ([Enhancement] Add impersonate user for query detail http api (#68674))
 }
