@@ -105,7 +105,8 @@ private:
     size_t _data_size = 0;
     // acquired data size from Dir
     size_t _acquired_data_size = 0;
-    // skip parent path deletion
+    // When true, skip deleting the parent directory in destructor.
+    // The caller (e.g. LoadSpillBlockManager) is responsible for cleaning up the parent path.
     bool _skip_parent_path_deletion = false;
 };
 
@@ -200,9 +201,7 @@ public:
 #endif
     }
 
-    bool try_acquire_sizes(size_t size) override {
-        return _container->try_acquire_sizes(size);
-    }
+    bool try_acquire_sizes(size_t size) override { return _container->try_acquire_sizes(size); }
 
 private:
     FileBlockContainerPtr _container;

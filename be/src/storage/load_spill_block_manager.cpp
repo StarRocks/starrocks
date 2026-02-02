@@ -106,10 +106,13 @@ spill::BlockPtr LoadSpillBlockContainer::get_block(size_t gid, size_t bid) {
 LoadSpillBlockManager::~LoadSpillBlockManager() {
     // release blocks before block manager
     _block_container.reset();
-    auto status = clear_parent_path();
-    if (!status.ok() && !status.is_not_found()) {
-        LOG(WARNING) << "Failed to clear load spill parent path, load_id=" << print_id(_load_id)
-                     << ", error=" << status;
+    // _remote_dir_manager is initialized in init(), skip cleanup if init() was not called or failed
+    if (_remote_dir_manager != nullptr) {
+        auto status = clear_parent_path();
+        if (!status.ok() && !status.is_not_found()) {
+            LOG(WARNING) << "Failed to clear load spill parent path, load_id=" << print_id(_load_id)
+                         << ", error=" << status;
+        }
     }
 }
 
@@ -159,6 +162,8 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     opts.name = "load_spill";
     opts.block_size = block_size;
     opts.force_remote = force_remote;
+    // Defer parent path deletion to LoadSpillBlockManager::~LoadSpillBlockManager(),
+    // so the directory is only removed after all spill files have been cleaned up.
     opts.skip_parent_path_deletion = true;
     return _block_manager->acquire_block(opts);
 }
