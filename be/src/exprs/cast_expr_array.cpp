@@ -145,7 +145,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         if (input->only_null()) {
             return ColumnHelper::create_const_null_column(rows);
         } else {
-            return ConstColumn::create(std::move(*(input->data_column())).mutate(), rows);
+            return ConstColumn::create(std::move(*(input->data_column())).clone(), rows);
         }
     }
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
