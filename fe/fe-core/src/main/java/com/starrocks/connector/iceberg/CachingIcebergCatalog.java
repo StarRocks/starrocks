@@ -54,6 +54,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -73,9 +74,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
+<<<<<<< HEAD
     // Only emit the partition-load INFO line when a refresh exceeds this many partitions, so the log
     // remains useful for diagnosing slow loads on large tables without flooding for normal-sized ones.
     private static final int PARTITION_LOAD_LOG_THRESHOLD = 10000;
+=======
+    private static final int MEMORY_META_SAMPLES = 10;
+    private static final int MEMORY_FILE_SAMPLES = 100;
+    private static final int MEMORY_SNAPSHOT_SIZE = 2048; // approx memory size of one snapshot object without manifests
+    private static final int MEMORY_MANIFEST_SIZE = 1024; // approx memory size of one manifest object in snapshot
+    private static final int MEMORY_DATA_FILE_SIZE = 1536; // approx memory size of one data file in manifest
+    private static final int MEMORY_PARTITION_DATA_SIZE = 768; // approx memory size of one partition data in data file
+>>>>>>> 3899f2a7fe ([BugFix] accurate iceberg data file size estimation  (#68787))
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
@@ -189,7 +199,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.dataFileCache = enableCache ? Caffeine.newBuilder()
                 .executor(executorService)
                 .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+<<<<<<< HEAD
                 .weigher((Weigher<String, Set<DataFile>>) this::weighContentFiles)
+=======
+                .weigher((Weigher<String, Set<DataFile>>) (String key, Set<DataFile> files) -> {
+                    long size = SizeEstimator.estimate(key);
+                    if (!files.isEmpty()) {
+                        size += 1L * estimateDataFileSizeInBytes(files.iterator().next()) * files.size();
+                    }
+                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
+                })
+>>>>>>> 3899f2a7fe ([BugFix] accurate iceberg data file size estimation  (#68787))
                 .maximumWeight(dataFileCacheSize)
                 .removalListener((String key, Set<DataFile> value, RemovalCause cause) -> {
                     LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
@@ -201,7 +221,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.deleteFileCache = enableCache ? Caffeine.newBuilder()
                 .executor(executorService)
                 .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+<<<<<<< HEAD
                 .weigher((Weigher<String, Set<DeleteFile>>) this::weighContentFiles)
+=======
+                .weigher((Weigher<String, Set<DeleteFile>>) (String key, Set<DeleteFile> files) -> {
+                    long size = SizeEstimator.estimate(key);
+                    if (!files.isEmpty()) {
+                        size += 1L * estimateDataFileSizeInBytes(files.iterator().next()) * files.size();
+                    }
+                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
+                })
+>>>>>>> 3899f2a7fe ([BugFix] accurate iceberg data file size estimation  (#68787))
                 .maximumWeight(deleteFileCacheSize)
                 .removalListener((String key, Set<DeleteFile> value, RemovalCause cause) -> {
                     LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
@@ -623,6 +653,67 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static long estimatePartitionDataInBytes(PartitionData pd) {
+        if (pd == null) {
+            return 0L;
+        }
+        long size = MEMORY_PARTITION_DATA_SIZE;
+        size += 64L * pd.size(); // estimate an object as 64Byte in partition data objects
+        return size;
+    }
+    /**
+     * Roughly estimates the payload size (in bytes) of the statistics carried on a content file.
+     */
+    public static long estimateDataFileSizeInBytes(ContentFile<?> file) {
+        if (file == null) {
+            return 0L;
+        }
+
+        long size = MEMORY_DATA_FILE_SIZE;
+
+        size += sizeOfLongMap(file.columnSizes());
+        size += sizeOfLongMap(file.valueCounts());
+        size += sizeOfLongMap(file.nullValueCounts());
+        size += sizeOfLongMap(file.nanValueCounts());
+        size += sizeOfByteBufferMap(file.lowerBounds());
+        size += sizeOfByteBufferMap(file.upperBounds());
+        if (file.keyMetadata() != null) {
+            size += file.keyMetadata().remaining();
+        }
+        if (file.partition() instanceof PartitionData) {
+            size += estimatePartitionDataInBytes((PartitionData) file.partition());
+        }
+        return size;
+    }
+
+    private static long sizeOfLongMap(Map<Integer, Long> map) {
+        if (map == null || map.isEmpty()) {
+            return 0L;
+        }
+
+        return 1L * map.size() * (Integer.BYTES + Long.BYTES);
+    }
+
+    private static long sizeOfByteBufferMap(Map<Integer, ByteBuffer> map) {
+        if (map == null || map.isEmpty()) {
+            return 0L;
+        }
+
+        long size = 0L;
+        for (Map.Entry<Integer, ByteBuffer> entry : map.entrySet()) {
+            size += Integer.BYTES; // key
+            ByteBuffer buffer = entry.getValue();
+            if (buffer != null) {
+                size += buffer.remaining();
+            }
+        }
+        return size;
+    }
+
+    @Override
+>>>>>>> 3899f2a7fe ([BugFix] accurate iceberg data file size estimation  (#68787))
     public Map<String, Long> estimateCount() {
         Map<String, Long> counter = new HashMap<>();
         List<List<String>> partitionNames = getAllCachedPartitionNames();
