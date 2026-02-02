@@ -75,9 +75,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final int MEMORY_MANIFEST_SIZE = 1024; // approx memory size of one manifest object in snapshot
     private static final int MEMORY_DATA_FILE_SIZE = 1536; // approx memory size of one data file in manifest
     private static final int MEMORY_PARTITION_DATA_SIZE = 768; // approx memory size of one partition data in data file
+<<<<<<< HEAD
     // Only emit the partition-load INFO line when a refresh exceeds this many partitions, so the log
     // remains useful for diagnosing slow loads on large tables without flooding for normal-sized ones.
     private static final int PARTITION_LOAD_LOG_THRESHOLD = 10000;
+=======
+    private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
+>>>>>>> 3899f2a7fe ([BugFix] accurate iceberg data file size estimation  (#68787))
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Table> tables;
