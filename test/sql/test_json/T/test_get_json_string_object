@@ -1,0 +1,26 @@
+-- name: test_get_json_string_object
+-- Test case from issue #68789: get_json_string should return object JSON string, not NULL
+DROP TABLE IF EXISTS json_test;
+
+CREATE TABLE json_test (
+    id int,
+    data json
+)
+PROPERTIES
+("flat_json.enable" = "true");
+
+INSERT INTO json_test VALUES (1, '{"key":"aaa"}');
+INSERT INTO json_test VALUES (2, '{"key":2}');
+INSERT INTO json_test VALUES (3, '{"key": {"a1":1}}');
+
+SELECT id, get_json_string(data, '$.key')
+FROM json_test
+ORDER BY id;
+
+-- Test nested object path extraction under flat_json
+SELECT id, get_json_string(data, '$.key.a1')
+FROM json_test
+WHERE id = 3
+ORDER BY id;
+
+DROP TABLE IF EXISTS json_test;
