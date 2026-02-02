@@ -97,7 +97,7 @@ class ArrowFlightSqlAuthenticatorTest {
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
         // Token from valid remote FE, not found in local cache
-        String remoteToken = "10.0.6.7:some-uuid";
+        String remoteToken = "10.0.6.7|some-uuid";
         doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(remoteToken);
 
         try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
@@ -129,7 +129,7 @@ class ArrowFlightSqlAuthenticatorTest {
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
         // Token from unknown FE, not found in local cache
-        String maliciousToken = "malicious.host:some-uuid";
+        String maliciousToken = "malicious.host|some-uuid";
         doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(maliciousToken);
 
         try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);

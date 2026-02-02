@@ -73,7 +73,8 @@ public class ArrowFlightSqlSessionManagerTest {
         GlobalStateMgr mockGlobalState = mock(GlobalStateMgr.class);
         VariableMgr mockVariableMgr = mock(VariableMgr.class);
         SessionVariable mockSessionVariable = mock(SessionVariable.class);
-        com.starrocks.authorization.AuthorizationMgr mockAuthMgr = mock(com.starrocks.authorization.AuthorizationMgr.class);
+        com.starrocks.authorization.AuthorizationMgr mockAuthMgr =
+                mock(com.starrocks.authorization.AuthorizationMgr.class);
 
         mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalState);
         when(mockGlobalState.getVariableMgr()).thenReturn(mockVariableMgr);
@@ -84,6 +85,10 @@ public class ArrowFlightSqlSessionManagerTest {
         } catch (PrivilegeException e) {
             throw new RuntimeException(e);
         }
+
+        NodeMgr mockNodeMgr = mock(NodeMgr.class);
+        when(mockGlobalState.getNodeMgr()).thenReturn(mockNodeMgr);
+        when(mockNodeMgr.getSelfNode()).thenReturn(Pair.create("localhost", 9010));
     }
 
     private void mockAuthentication(MockedStatic<AuthenticationHandler> mockedAuth) {
@@ -231,9 +236,11 @@ public class ArrowFlightSqlSessionManagerTest {
     @Test
     public void testExtractFeHost() {
         assertEquals("fe1.example.com",
-                ArrowFlightSqlSessionManager.extractFeHost("fe1.example.com:123e4567-e89b-12d3-a456-426614174000"));
+                ArrowFlightSqlSessionManager.extractFeHost("fe1.example.com|123e4567-e89b-12d3-a456-426614174000"));
         assertEquals("127.0.0.1",
-                ArrowFlightSqlSessionManager.extractFeHost("127.0.0.1:123e4567-e89b-12d3-a456-426614174000"));
+                ArrowFlightSqlSessionManager.extractFeHost("127.0.0.1|123e4567-e89b-12d3-a456-426614174000"));
+        assertEquals("2001:db8::1",
+                ArrowFlightSqlSessionManager.extractFeHost("2001:db8::1|123e4567-e89b-12d3-a456-426614174000"));
         assertNull(ArrowFlightSqlSessionManager.extractFeHost("123e4567-e89b-12d3-a456-426614174000"));
         assertNull(ArrowFlightSqlSessionManager.extractFeHost("simpletoken"));
         assertNull(ArrowFlightSqlSessionManager.extractFeHost(""));
@@ -247,7 +254,7 @@ public class ArrowFlightSqlSessionManagerTest {
 
             // When proxy is disabled, all tokens are considered local
             assertTrue(sessionManager.isLocalToken("any-token"));
-            assertTrue(sessionManager.isLocalToken("fe1.example.com:some-uuid"));
+            assertTrue(sessionManager.isLocalToken("fe1.example.com|some-uuid"));
         }
     }
 
@@ -264,8 +271,8 @@ public class ArrowFlightSqlSessionManagerTest {
             when(mockGlobalState.getNodeMgr()).thenReturn(mockNodeMgr);
             when(mockNodeMgr.getSelfNode()).thenReturn(Pair.create("127.0.0.1", 9010));
 
-            assertTrue(sessionManager.isLocalToken("127.0.0.1:123e4567-e89b-12d3-a456-426614174000"));
-            assertFalse(sessionManager.isLocalToken("127.0.0.2:123e4567-e89b-12d3-a456-426614174000"));
+            assertTrue(sessionManager.isLocalToken("127.0.0.1|123e4567-e89b-12d3-a456-426614174000"));
+            assertFalse(sessionManager.isLocalToken("127.0.0.2|123e4567-e89b-12d3-a456-426614174000"));
             assertTrue(sessionManager.isLocalToken("simpletoken"));
         }
     }
@@ -338,7 +345,7 @@ public class ArrowFlightSqlSessionManagerTest {
             mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
             String tokenWithProxy = sessionManager.initializeSession("testUser", "127.0.0.1", "testPassword");
             assertNotNull(tokenWithProxy);
-            assertTrue(tokenWithProxy.startsWith("127.0.0.1:"), "Token should include FE host prefix");
+            assertTrue(tokenWithProxy.startsWith("127.0.0.1|"), "Token should include FE host prefix");
             assertTrue(tokenWithProxy.contains(mockUUID.toString()), "Token should contain UUID");
 
             // Test with proxy disabled - token is plain UUID

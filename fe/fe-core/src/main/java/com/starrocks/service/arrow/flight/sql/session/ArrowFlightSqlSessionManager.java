@@ -148,18 +148,19 @@ public class ArrowFlightSqlSessionManager {
 
     /**
      * Extract the FE host from a token.
-     * Token format when proxy enabled: "FE_HOST:UUID"
+     * Token format when proxy enabled: "FE_HOST|UUID"
+     * Uses '|' as delimiter to support IPv6 addresses (which contain ':').
      * Returns null if token doesn't contain host prefix.
      */
     public static String extractFeHost(String token) {
         if (StringUtils.isEmpty(token)) {
             return null;
         }
-        int colonIndex = token.indexOf(':');
-        if (colonIndex <= 0) {
+        int separatorIndex = token.indexOf('|');
+        if (separatorIndex <= 0) {
             return null;  // No host prefix or invalid format
         }
-        return token.substring(0, colonIndex);
+        return token.substring(0, separatorIndex);
     }
 
     /**
@@ -180,13 +181,14 @@ public class ArrowFlightSqlSessionManager {
 
     /**
      * Generate a token. When proxy is enabled, includes FE host prefix.
-     * Format: "FE_HOST:UUID" (proxy enabled) or "UUID" (proxy disabled)
+     * Format: "FE_HOST|UUID" (proxy enabled) or "UUID" (proxy disabled)
+     * Uses '|' as delimiter to support IPv6 addresses (which contain ':').
      */
     private String generateToken() {
         String uuid = UUIDUtil.genUUID().toString();
         if (GlobalVariable.isArrowFlightProxyEnabled()) {
             String selfHost = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first;
-            return selfHost + ":" + uuid;
+            return selfHost + "|" + uuid;
         }
         return uuid;
     }

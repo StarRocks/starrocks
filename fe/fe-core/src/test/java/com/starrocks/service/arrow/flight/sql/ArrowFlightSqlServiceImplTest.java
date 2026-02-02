@@ -123,6 +123,7 @@ public class ArrowFlightSqlServiceImplTest {
         mockCallContext = mock(FlightProducer.CallContext.class);
         when(mockCallContext.peerIdentity()).thenReturn("token123");
         when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(mockContext);
+        when(sessionManager.isLocalToken("token123")).thenReturn(true);
         when(mockContext.getState()).thenReturn(mock(QueryState.class));
         when(mockContext.getResult(anyString())).thenReturn(mock(VectorSchemaRoot.class));
         when(mockContext.getExecutionId()).thenReturn(new com.starrocks.thrift.TUniqueId(1, 1));
@@ -724,7 +725,7 @@ public class ArrowFlightSqlServiceImplTest {
                         mockStatic(ArrowFlightSqlSessionManager.class)) {
             mockedGlobal.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
 
-            String remoteToken = "remote-fe:some-uuid-token";
+            String remoteToken = "remote-fe|some-uuid-token";
             when(mockCallContext.peerIdentity()).thenReturn(remoteToken);
             when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
             mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
@@ -772,7 +773,7 @@ public class ArrowFlightSqlServiceImplTest {
                         mockStatic(ArrowFlightSqlSessionManager.class)) {
             mockedGlobal.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
 
-            String remoteToken = "remote-fe:some-uuid-token";
+            String remoteToken = "remote-fe|some-uuid-token";
             FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
             when(callContext.peerIdentity()).thenReturn(remoteToken);
             when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
@@ -815,7 +816,7 @@ public class ArrowFlightSqlServiceImplTest {
                         mockStatic(ArrowFlightSqlSessionManager.class)) {
             mockedGlobal.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
 
-            String remoteToken = "remote-fe:some-uuid-token";
+            String remoteToken = "remote-fe|some-uuid-token";
             FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
             when(callContext.peerIdentity()).thenReturn(remoteToken);
             when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
@@ -930,7 +931,7 @@ public class ArrowFlightSqlServiceImplTest {
                             Location.forGrpcInsecure("localhost", 1234));
             testService.setProxyEnabled(true);
 
-            String remoteToken = "remote-fe:some-uuid-token";
+            String remoteToken = "remote-fe|some-uuid-token";
             FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
             when(callContext.peerIdentity()).thenReturn(remoteToken);
             when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
@@ -971,7 +972,7 @@ public class ArrowFlightSqlServiceImplTest {
                             Location.forGrpcInsecure("localhost", 1234));
             testService.setProxyEnabled(true);
 
-            String remoteToken = "remote-fe:some-uuid-token";
+            String remoteToken = "remote-fe|some-uuid-token";
             FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
             when(callContext.peerIdentity()).thenReturn(remoteToken);
             when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
@@ -1009,7 +1010,7 @@ public class ArrowFlightSqlServiceImplTest {
                             Location.forGrpcInsecure("localhost", 1234));
             testService.setProxyEnabled(true);
 
-            String remoteToken = "remote-fe:some-uuid-token";
+            String remoteToken = "remote-fe|some-uuid-token";
             FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
             when(callContext.peerIdentity()).thenReturn(remoteToken);
             when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
@@ -1079,7 +1080,7 @@ public class ArrowFlightSqlServiceImplTest {
                             Location.forGrpcInsecure("localhost", 1234));
             testService.setProxyEnabled(true);
 
-            String remoteToken = "remote-fe:some-uuid-token";
+            String remoteToken = "remote-fe|some-uuid-token";
             FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
             when(callContext.peerIdentity()).thenReturn(remoteToken);
             when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);

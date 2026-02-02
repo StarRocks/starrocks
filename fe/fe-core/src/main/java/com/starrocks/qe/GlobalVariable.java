@@ -231,7 +231,7 @@ public final class GlobalVariable {
 
     // Enable Arrow Flight SQL proxy mode.
     @VariableMgr.VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED, flag = VariableMgr.GLOBAL)
-    private static volatile boolean arrowFlightProxyEnabled = false;
+    private static volatile boolean arrowFlightProxyEnabled = true;
 
     @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
     private static int maxUnknownStringMetaLength = 64;
