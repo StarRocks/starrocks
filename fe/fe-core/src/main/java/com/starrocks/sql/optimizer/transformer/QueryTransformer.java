@@ -392,7 +392,7 @@ public class QueryTransformer {
                 if (rewriteOperator.isSkewed()) {
                     windowOperator.setSkewed();
                 }
-                if(rewriteOperator.getSkewColumn() != null) {
+                if (rewriteOperator.getSkewColumn() != null) {
                     windowOperator.setSkewColumn(rewriteOperator.getSkewColumn());
                     windowOperator.setSkewValue(rewriteOperator.getSkewValue());
                 }

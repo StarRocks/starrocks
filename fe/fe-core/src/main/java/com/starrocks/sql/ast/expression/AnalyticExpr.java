@@ -117,7 +117,7 @@ public class AnalyticExpr extends Expr {
 
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
                         AnalyticWindow window, List<String> hints) {
-        this(fnCall, partitionExprs, orderByElements, window, hints, NodePosition.ZERO, null,null);
+        this(fnCall, partitionExprs, orderByElements, window, hints, NodePosition.ZERO, null, null);
     }
 
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,

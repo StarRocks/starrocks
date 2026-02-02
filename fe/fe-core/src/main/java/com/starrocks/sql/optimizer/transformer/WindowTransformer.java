@@ -664,7 +664,7 @@ public class WindowTransformer {
         // hashCode method.
         private boolean isSkewed;
 
-           // Skew hint with explicit column and value: [skew|t.column(value)]
+        // Skew hint with explicit column and value: [skew|t.column(value)]
         private Expr skewColumn;
         private Expr skewValue;
 
@@ -741,6 +741,7 @@ public class WindowTransformer {
         public void setSkewed() {
             isSkewed = true;
         }
+
         public void setSkewColumn(Expr skewColumn) {
             this.skewColumn = skewColumn;
         }
@@ -748,7 +749,6 @@ public class WindowTransformer {
         public void setSkewValue(Expr skewValue) {
             this.skewValue = skewValue;
         }
-
 
         public Expr getSkewColumn() {
             return skewColumn;
