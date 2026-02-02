@@ -525,7 +525,17 @@
                 "administration/Data_recovery",
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
-                "administration/http_interface",
+                {
+                    "type": "category",
+                    "label": "HTTP Interface",
+                    "link": {
+                        "type": "doc",
+                        "id": "administration/http_interface"
+                    },
+                    "items": [
+                        "administration/http_interface/query_detail"
+                    ]
+                },
                 "administration/sql_digest",
         {
             "type": "category",
