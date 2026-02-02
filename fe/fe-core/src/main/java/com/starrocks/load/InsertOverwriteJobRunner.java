@@ -549,7 +549,7 @@ public class InsertOverwriteJobRunner {
 
     private void collectTabletsFromPartition(Partition partition, Set<Tablet> tablets) {
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            for (MaterializedIndex index : subPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+            for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 tablets.addAll(index.getTablets());
             }
         }
@@ -636,7 +636,7 @@ public class InsertOverwriteJobRunner {
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : subPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                         sourceTablets.addAll(index.getTablets());
                     }
                 }

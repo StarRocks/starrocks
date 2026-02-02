@@ -561,7 +561,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (MaterializedIndex index
-                        : partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.ALL)) {
+                        : partition.getDefaultPhysicalPartition().getAllMaterializedIndices(IndexExtState.ALL)) {
                     sourceTablets.addAll(index.getTablets());
                 }
             });
@@ -667,7 +667,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
                         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                                .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             // hash set is able to deduplicate the elements
                             sourceTablets.addAll(index.getTablets());
                         }
@@ -761,7 +761,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
                 for (MaterializedIndex index
-                        : partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.ALL)) {
+                        : partition.getDefaultPhysicalPartition().getAllMaterializedIndices(IndexExtState.ALL)) {
                     sourceTablets.addAll(index.getTablets());
                 }
                 targetTable.dropTempPartition(partition.getName(), true);
