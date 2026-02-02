@@ -375,4 +375,29 @@ public interface ConnectorMetadata {
 
     default void shutdown() {
     }
+
+    /**
+     * Check if the delete can be performed using metadata operations only.
+     * This is connector-specific optimization that allows deleting data by
+     * dropping entire files or partitions without generating position delete files.
+     *
+     * @param table     The table to delete from
+     * @param predicate The delete predicate in ScalarOperator form
+     * @return true if metadata-level delete can be used, false otherwise
+     */
+    default boolean canDeleteUsingMetadata(Table table, ScalarOperator predicate) {
+        return false;
+    }
+
+    /**
+     * Execute metadata-level delete for the given table and predicate.
+     * This method should only be called when canDeleteUsingMetadata returns true.
+     *
+     * @param table     The table to delete from
+     * @param predicate The delete predicate in ScalarOperator form
+     * @param context   The connect context for audit info
+     */
+    default void executeMetadataDelete(Table table, ScalarOperator predicate, ConnectContext context) {
+        throw new UnsupportedOperationException("Metadata delete is not supported by this connector");
+    }
 }
