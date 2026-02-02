@@ -865,3 +865,50 @@ A: Query Error 項目を例にとると、異なるアラートしきい値を�
 
 - **リスクレベル**: 失敗率を 0.05 より大きく設定し、リスクを示します。アラートを開発チームに送信します。
 - **重大度レベル**: 失敗率を 0.20 より大きく設定し、重大度を示します。この時点で、アラート通知は開発チームと運用チームの両方に同時に送信されます。
+
+### Q: テーブルレベルのメトリクス、マテリアライズドビューのメトリクス、ユーザーラベル付きの接続統計など、より詳細なメトリクスを取得するにはどうすればよいですか？
+
+A: デフォルトでは、パフォーマンスへの影響を最小限に抑えるため、`/metrics` エンドポイントは最小限のモードでメトリクスを収集します。詳細なメトリクスを取得するには、リクエストに特定のパラメータを追加し、ADMIN 権限を持つユーザーの Basic Authentication 認証情報を提供する必要があります。
+
+**サポートされているパラメータ:**
+
+- `with_table_metrics=all`: すべてのテーブルレベルのメトリクスを収集します。
+- `with_materialized_view_metrics=all`: すべてのマテリアライズドビューのメトリクスを収集します。
+- `with_user_connections=all`: ユーザーラベルで分類された接続統計を収集します。
+
+**認証要件:**
+
+これらのパラメータは、リクエストに有効な ADMIN ユーザーの Basic Authentication 認証情報が含まれている場合にのみ有効になります。リクエストが匿名であるか、ユーザーに ADMIN 権限がない場合、これらのパラメータは無視され、デフォルトのメトリクスのみが返されます。
+
+**Curl コマンドの例:**
+
+```bash
+curl -u <admin_username>:<admin_password> \
+"http://<fe_host>:<fe_http_port>/metrics?with_table_metrics=all&with_materialized_view_metrics=all&with_user_connections=all"
+```
+
+**Prometheus 設定例:**
+
+Prometheus で詳細なメトリクス収集を有効にするには、`prometheus.yml` で `params` と `basic_auth` を設定します。
+
+```yaml
+scrape_configs:
+  - job_name: 'StarRocks_Detailed_Metrics'
+    metrics_path: '/metrics'
+    params:
+      with_table_metrics: ['all']
+      with_materialized_view_metrics: ['all']
+      with_user_connections: ['all']
+    basic_auth:
+      username: '<admin_username>'
+      password: '<admin_password>'
+    static_configs:
+      - targets: ['<fe_host>:<fe_http_port>']
+```
+
+:::note
+
+すべてのテーブルおよびマテリアライズドビューのメトリクスを収集すると、FE ノードの負荷が増加する可能性があります。大規模な環境では、これらのパラメータを慎重に使用してください。
+
+:::
+
