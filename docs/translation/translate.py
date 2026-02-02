@@ -221,7 +221,7 @@ class StarRocksTranslator:
                 chunk_translated = "\n".join(lines).strip()
             translated_chunks.append(chunk_translated)
 
-        full_text = "\n".join(chunk.strip() for chunk in translated_chunks)
+        full_text = "\n".join(translated_chunks)
         is_valid, val_msg = self.validate_mdx(original_content, full_text)
         
         final_output_path = base_output_path if is_valid else f"{base_output_path}.invalid"
