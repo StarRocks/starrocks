@@ -58,11 +58,12 @@ protected:
         // Create and set up a basic descriptor table for the runtime state
         // Need to ensure tuple with ID 0 exists since context->tuple_desc_id is set to 0
         TDescriptorTableBuilder desc_tbl_builder;
-        // Create a tuple
+        // Create a tuple with file_path and pos columns as NOT NULL (required for Iceberg delete files)
         TSlotDescriptorBuilder slot_builder;
         TTupleDescriptorBuilder tuple_builder;
-        tuple_builder.add_slot(slot_builder.type(TYPE_VARCHAR).column_name("file_path").is_materialized(true).build());
-        tuple_builder.add_slot(slot_builder.type(TYPE_BIGINT).column_name("pos").is_materialized(true).build());
+        tuple_builder.add_slot(
+                slot_builder.type(TYPE_VARCHAR).column_name("file_path").is_materialized(true).nullable(false).build());
+        tuple_builder.add_slot(slot_builder.type(TYPE_BIGINT).column_name("pos").is_materialized(true).nullable(false).build());
         tuple_builder.build(&desc_tbl_builder);
         TDescriptorTable t_desc_tbl = desc_tbl_builder.desc_tbl();
         DescriptorTbl* desc_tbl = nullptr;
