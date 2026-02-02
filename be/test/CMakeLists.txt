@@ -373,7 +373,7 @@ set(EXEC_FILES
         ./util/parse_util_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp
-        ./util/raw_container_test.cpp
+        ./base/raw_container_test.cpp
         ./util/string_parser_test.cpp
         ./util/string_util_test.cpp
         ./util/tdigest_test.cpp

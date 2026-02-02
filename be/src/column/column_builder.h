@@ -17,9 +17,9 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

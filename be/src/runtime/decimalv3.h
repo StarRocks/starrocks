@@ -22,9 +22,9 @@
 #include <string>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
 #include "runtime/integer_overflow_arithmetics.h"
 #include "util/decimal_types.h"
-#include "util/raw_container.h"
 #include "util/string_parser.hpp"
 
 typedef unsigned __int128 uint128_t;

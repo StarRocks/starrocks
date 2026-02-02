@@ -16,8 +16,8 @@
 
 #include <memory>
 
+#include "base/container/raw_container.h"
 #include "gutil/strings/substitute.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

@@ -15,12 +15,12 @@
 #include "storage/binlog_file_reader.h"
 
 #include "base/coding.h"
+#include "base/container/raw_container.h"
 #include "fs/fs.h"
 #include "storage/binlog_file_writer.h"
 #include "storage/binlog_util.h"
 #include "storage/rowset/page_io.h"
 #include "util/crc32c.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

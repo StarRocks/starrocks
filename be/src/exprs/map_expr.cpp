@@ -14,12 +14,12 @@
 
 #include "exprs/map_expr.h"
 
+#include "base/container/raw_container.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

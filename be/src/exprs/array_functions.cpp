@@ -18,6 +18,7 @@
 #include <memory>
 #include <numeric>
 
+#include "base/container/raw_container.h"
 #include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/column_hash.h"
@@ -31,7 +32,6 @@
 #include "common/statusor.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_fwd_decl.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

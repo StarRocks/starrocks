@@ -16,6 +16,7 @@
 
 #include <brpc/controller.h>
 
+#include "base/container/raw_container.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "connector/hive_connector.h"
@@ -27,7 +28,6 @@
 #include "serde/column_array_serde.h"
 #include "storage/range.h"
 #include "util/logging.h"
-#include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

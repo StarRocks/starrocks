@@ -20,6 +20,7 @@
 #include <immintrin.h>
 #endif
 
+#include "base/container/raw_container.h"
 #include "column/bytes.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
@@ -29,7 +30,6 @@
 #include "gutil/strings/substitute.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 template <typename T>

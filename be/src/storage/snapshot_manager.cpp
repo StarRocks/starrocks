@@ -50,6 +50,7 @@
 #ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 #endif
+#include "base/container/raw_container.h"
 #include "base/utility/defer_op.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
@@ -58,7 +59,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/raw_container.h"
 
 using std::map;
 using std::nothrow;

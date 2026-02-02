@@ -19,8 +19,8 @@
 #include <cstdint>
 #include <string>
 
+#include "base/container/raw_container.h"
 #include "common/compiler_util.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 // Date: Julian Date -2000-01-01 ~ 9999-01-01

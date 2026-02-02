@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/container/raw_container.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
@@ -34,7 +35,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "serde/column_array_serde.h"
 #include "serde/protobuf_serde.h"
-#include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

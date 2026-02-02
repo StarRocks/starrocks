@@ -2,6 +2,7 @@
 
 #include "segment_rewriter.h"
 
+#include "base/container/raw_container.h"
 #include "base/string/slice.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
@@ -16,7 +17,6 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "util/filesystem_util.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

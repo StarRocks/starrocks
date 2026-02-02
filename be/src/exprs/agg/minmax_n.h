@@ -18,6 +18,7 @@
 #include <queue>
 #include <vector>
 
+#include "base/container/raw_container.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -26,7 +27,6 @@
 #include "exprs/agg/aggregate_traits.h"
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

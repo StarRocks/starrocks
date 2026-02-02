@@ -17,12 +17,12 @@
 #include <span>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "column/column.h"
 #include "column/container_resource.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
