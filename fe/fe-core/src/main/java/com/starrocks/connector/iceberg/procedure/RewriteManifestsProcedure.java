@@ -71,6 +71,9 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
 
         long manifestTargetSizeBytes = PropertyUtil.propertyAsLong(
                 icebergTable.properties(), MANIFEST_TARGET_SIZE_BYTES, MANIFEST_TARGET_SIZE_BYTES_DEFAULT);
+        if (manifestTargetSizeBytes <= 0) {
+            manifestTargetSizeBytes = MANIFEST_TARGET_SIZE_BYTES_DEFAULT;
+        }
 
         if (manifests.size() == 1 && manifests.get(0).length() < manifestTargetSizeBytes) {
             return;
@@ -78,9 +81,10 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
 
         long totalManifestsSize = manifests.stream().mapToLong(ManifestFile::length).sum();
         // Having too many open manifest writers can potentially cause OOM on the coordinator
-        long targetManifestClusters = Math.min(
+        // Floor to at least 1 to avoid modulo-by-zero when totalManifestsSize is 0 (e.g., manifests report length 0)
+        long targetManifestClusters = Math.max(1, Math.min(
                 ((totalManifestsSize + manifestTargetSizeBytes - 1) / manifestTargetSizeBytes),
-                MAX_MANIFEST_CLUSTERS);
+                MAX_MANIFEST_CLUSTERS));
 
         RewriteManifests rewriteManifests = context.transaction().rewriteManifests();
         Types.StructType structType = icebergTable.spec().partitionType();
