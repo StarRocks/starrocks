@@ -14,10 +14,10 @@
 
 #include "storage/snapshot_meta.h"
 
+#include "base/coding.h"
 #include "fmt/format.h"
 #include "fs/output_stream_wrapper.h"
 #include "gutil/endian.h"
-#include "util/coding.h"
 #include "util/raw_container.h"
 
 namespace starrocks {

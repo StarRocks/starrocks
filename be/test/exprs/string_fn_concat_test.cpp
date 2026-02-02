@@ -20,6 +20,7 @@
 #include "butil/time.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "storage/olap_define.h"
 
 namespace starrocks {
 

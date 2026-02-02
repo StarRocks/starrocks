@@ -6,6 +6,7 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/coding.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
@@ -17,7 +18,6 @@
 #include "storage/sstable/format.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/two_level_iterator.h"
-#include "util/coding.h"
 #include "util/lru_cache.h"
 #include "util/trace.h"
 

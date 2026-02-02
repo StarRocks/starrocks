@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <random>
 
+#include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
@@ -35,7 +36,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "testutil/deterministic_test_utils.h"
-#include "util/coding.h"
 #include "util/logging.h"
 
 DEFINE_bool(debug, false, "debug mode");

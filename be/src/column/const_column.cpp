@@ -16,10 +16,10 @@
 
 #include <utility>
 
+#include "base/coding.h"
 #include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "util/coding.h"
 
 namespace starrocks {
 

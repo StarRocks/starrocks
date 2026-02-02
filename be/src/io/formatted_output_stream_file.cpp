@@ -17,8 +17,8 @@
 #include <algorithm>
 #include <cstring>
 
+#include "base/coding.h"
 #include "fmt/format.h"
-#include "util/coding.h"
 #include "util/compression/compression_headers.h"
 
 namespace starrocks::io {

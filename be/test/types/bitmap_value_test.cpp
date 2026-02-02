@@ -20,10 +20,10 @@
 #include <string>
 #include <thread>
 
+#include "base/coding.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/memory/column_allocator.h"
 #include "types/bitmap_value_detail.h"
-#include "util/coding.h"
 
 namespace starrocks {
 

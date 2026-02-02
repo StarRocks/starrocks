@@ -20,6 +20,7 @@ ADD_BE_LIB(Base
   crypto/md5.cpp
   crypto/sha.cpp
   crypto/sm3.cpp
+  coding.cpp
   gc/gc_helper_smoothstep.cpp
   hash/crc32c_sse_simd.cpp
   hash/murmur_hash3.cpp

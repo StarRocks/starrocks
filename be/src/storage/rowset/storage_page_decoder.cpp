@@ -14,11 +14,11 @@
 
 #include "storage/rowset/storage_page_decoder.h"
 
+#include "base/coding.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/raw_container_checked.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
-#include "util/coding.h"
 #include "util/raw_container.h"
 
 namespace starrocks {

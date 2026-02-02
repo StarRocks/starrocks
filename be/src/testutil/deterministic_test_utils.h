@@ -19,10 +19,10 @@
 #include <cstdlib>
 #include <random>
 
+#include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
-#include "util/coding.h"
 #include "util/logging.h"
 
 namespace starrocks {

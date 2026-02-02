@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/coding.h"
+#include "base/coding.h"
 
 #include <gtest/gtest.h>
 

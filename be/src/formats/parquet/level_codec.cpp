@@ -16,8 +16,8 @@
 
 #include "base/bit/bit_stream_utils.inline.h"
 #include "base/bit/bit_util.h"
+#include "base/coding.h"
 #include "base/string/slice.h"
-#include "util/coding.h"
 
 namespace starrocks::parquet {
 
