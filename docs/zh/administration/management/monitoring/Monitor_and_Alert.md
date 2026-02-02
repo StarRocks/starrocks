@@ -865,3 +865,49 @@ A：以 Query Error 项为例，您可以为其创建两个报警规则，设置
 
 - **风险**：设置失败率大于 0.05 时，提示为风险，报警发送给开发团队。
 - **严重**：设置失败率大于 0.20 时，提示为严重，报警发送给运维团队。此时报警通知将同时发送给开发团队和运维团队。
+
+### Q: 如何获取更详细的监控指标，包括表级别指标、物化视图指标以及带有用户标签的连接统计信息？
+
+A: 默认情况下，`/metrics` 接口以精简模式收集指标，以尽量减少对性能的影响。要获取详细指标，您需要在请求中添加特定参数，并提供具有 ADMIN 权限用户的 Basic Authentication 凭据。
+
+**支持的参数：**
+
+- `with_table_metrics=all`：收集所有表级别指标。
+- `with_materialized_view_metrics=all`：收集所有物化视图指标。
+- `with_user_connections=all`：收集按用户标签分类的连接统计信息。
+
+**认证要求：**
+
+这些参数仅在请求包含有效的 ADMIN 用户 Basic Authentication 凭据时生效。如果请求是匿名的或用户缺乏 ADMIN 权限，这些参数将被忽略，仅返回默认指标。
+
+**Curl 命令示例：**
+
+```bash
+curl -u <admin_username>:<admin_password> \
+"http://<fe_host>:<fe_http_port>/metrics?with_table_metrics=all&with_materialized_view_metrics=all&with_user_connections=all"
+```
+
+**Prometheus 配置示例：**
+
+要在 Prometheus 中启用详细指标收集，请在 `prometheus.yml` 中配置 `params` 和 `basic_auth`：
+
+```yaml
+scrape_configs:
+  - job_name: 'StarRocks_Detailed_Metrics'
+    metrics_path: '/metrics'
+    params:
+      with_table_metrics: ['all']
+      with_materialized_view_metrics: ['all']
+      with_user_connections: ['all']
+    basic_auth:
+      username: '<admin_username>'
+      password: '<admin_password>'
+    static_configs:
+      - targets: ['<fe_host>:<fe_http_port>']
+```
+
+:::note
+
+收集所有表和物化视图指标可能会增加 FE 节点的负载。在大规模环境中，请谨慎使用这些参数。
+
+:::
