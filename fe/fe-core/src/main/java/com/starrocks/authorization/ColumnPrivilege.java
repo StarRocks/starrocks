@@ -146,6 +146,26 @@ public class ColumnPrivilege {
                         }
                     } else {
                         try {
+                            // For SECURITY INVOKER views, check base table privileges (mirrors native path)
+                            View view = (View) table;
+                            if (view.isSecurity()) {
+                                List<TableName> allTables = view.getTableRefs();
+                                for (TableName t : allTables) {
+                                    BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                                            .getBasicTable(context, t.getCatalog(), t.getDb(), t.getTbl());
+                                    if (basicTable.isOlapView()) {
+                                        View subView = (View) basicTable;
+                                        QueryStatement queryStatement = subView.getQueryStatement();
+                                        Analyzer.analyze(queryStatement, context);
+                                        Authorizer.check(queryStatement, context);
+                                    } else if (basicTable.isMaterializedView()) {
+                                        Authorizer.checkMaterializedViewAction(context, t, PrivilegeType.SELECT);
+                                    } else {
+                                        Authorizer.checkTableAction(context, t, PrivilegeType.SELECT);
+                                    }
+                                }
+                            }
+
                             Authorizer.checkViewAction(context, tableName, PrivilegeType.SELECT);
                         } catch (AccessDeniedException e) {
                             AccessDeniedException.reportAccessDenied(
