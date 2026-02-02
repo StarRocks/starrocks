@@ -233,7 +233,7 @@ class StarRocksTranslator:
         
         print(f"🚀 Translating {input_file} ({len(chunks)} chunks)...")
         
-        max_retries = 10  # Increased from 5 to 10 for better resilience
+        max_retries = 10  # Retry count
         
         for i, chunk in enumerate(chunks):
             current_human_prompt = (self.human_template.replace("${target_language}", self.target_lang_full) 
@@ -255,7 +255,7 @@ class StarRocksTranslator:
                     break
                 except Exception as e:
                     error_str = str(e)
-                    # Updated retry logic to include 503 and UNAVAILABLE
+                    # Retry logic includes 503 and UNAVAILABLE
                     is_retryable = (
                         "429" in error_str or 
                         "RESOURCE_EXHAUSTED" in error_str or 
@@ -265,13 +265,11 @@ class StarRocksTranslator:
                     )
                     
                     if is_retryable and attempt < max_retries - 1:
-                        # Exponential backoff with a cap at 60 seconds
                         wait_time = min(5 * (2 ** attempt), 60)
                         print(f"⚠️ API Error ({error_str}) on chunk {i+1}. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
                         time.sleep(wait_time)
                         continue
                     
-                    # If fatal or out of retries, fail the whole file
                     msg = f"Gemini API failed on chunk {i+1}: {str(e)}"
                     print(f"❌ {msg}")
                     self.failures.append({"file": base_output_path, "error": msg})
@@ -285,7 +283,9 @@ class StarRocksTranslator:
                 chunk_translated = "\n".join(lines).strip()
             translated_chunks.append(chunk_translated)
 
-        full_text = "\n".join(chunk.strip() for chunk in translated_chunks)
+        # Copilot Fix: Join with double newlines to ensure clean Markdown section separation
+        full_text = "\n\n".join(chunk.strip() for chunk in translated_chunks)
+        
         is_valid, val_msg = self.validate_mdx(original_content, full_text)
         
         final_output_path = base_output_path if is_valid else f"{base_output_path}.invalid"
