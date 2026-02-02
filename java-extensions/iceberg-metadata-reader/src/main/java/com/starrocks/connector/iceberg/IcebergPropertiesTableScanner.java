@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.jni.connector.ColumnValue;
 
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class IcebergPropertiesTableScanner extends AbstractIcebergMetadataScanner {
@@ -60,7 +61,10 @@ public class IcebergPropertiesTableScanner extends AbstractIcebergMetadataScanne
 
     @Override
     protected void initReader() {
-        reader = table.properties().entrySet().iterator();
+        Map<String, String> allProperties = new LinkedHashMap<>();
+        allProperties.put("location", table.location());
+        allProperties.putAll(table.properties());
+        reader = allProperties.entrySet().iterator();
     }
 
     private Object get(String columnName, String key, String value) {
