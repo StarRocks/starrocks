@@ -324,7 +324,6 @@ jobs:
 
       - name: Run Clang-Format 10
         id: clang_10
-        continue-on-error: true
         run: |
           export CLANG_FORMAT_BINARY=/var/lib/llvm/bin/clang-format
           bash build-support/check-format.sh
