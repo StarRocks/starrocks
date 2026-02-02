@@ -160,7 +160,7 @@ public:
     // 1. All flush tasks are completed, or
     // 2. Memory usage drops below 70% of the limit
     // This prevents memory overflow during high-throughput loading scenarios.
-    void wait_for_flush_token();
+    Status wait_for_flush_token();
 
     Status flush_async();
 
