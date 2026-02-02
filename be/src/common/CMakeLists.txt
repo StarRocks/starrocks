@@ -15,20 +15,12 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
 ADD_BE_LIB(Common
-  daemon.cpp
-  greplog.cpp
-  logconfig.cpp
   configbase.cpp
   config.cpp
   s3_uri.cpp
   tracer.cpp
   process_exit.cpp
-  prof/heap_prof.cpp
 )
-
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    target_sources(Common PRIVATE minidump.cpp)
-endif()
 
 # Generate env_config.h according to env_config.h.in
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/env_config.h.in ${GENSRC_DIR}/common/env_config.h)

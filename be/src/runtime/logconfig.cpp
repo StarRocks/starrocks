@@ -45,12 +45,12 @@
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
-#include "common/logconfig.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/logconfig.h"
 #include "util/logging.h"
 #include "util/stack_util.h"
 

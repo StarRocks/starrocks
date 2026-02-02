@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "common/greplog.h"
+#include "service/greplog.h"
 
 #include <deque>
 #include <filesystem>

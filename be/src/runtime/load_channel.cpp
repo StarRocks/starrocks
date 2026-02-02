@@ -37,9 +37,9 @@
 #include <memory>
 
 #include "base/string/faststring.h"
-#include "common/closure_guard.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
+#include "runtime/closure_guard.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"

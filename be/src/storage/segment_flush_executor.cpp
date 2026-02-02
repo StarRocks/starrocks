@@ -20,10 +20,10 @@
 #include <memory>
 #include <utility>
 
-#include "common/closure_guard.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/closure_guard.h"
 #include "runtime/current_thread.h"
 #include "service/brpc.h"
 #include "storage/delta_writer.h"

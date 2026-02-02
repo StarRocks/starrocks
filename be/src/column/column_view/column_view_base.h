@@ -15,7 +15,8 @@
 #pragma once
 #include <column/column.h>
 #include <column/datum.h>
-#include <common/cow.h>
+
+#include "util/cow.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 #define NOT_SUPPORT()                                                                                         \

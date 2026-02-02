@@ -110,6 +110,8 @@ set(RUNTIME_FILES
     int128_to_double.cpp
     diagnose_daemon.cpp
     load_fail_point.cpp
+    logconfig.cpp
+    prof/heap_prof.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}
