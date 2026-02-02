@@ -58,11 +58,13 @@ protected:
         // Create and set up a basic descriptor table for the runtime state
         // Need to ensure tuple with ID 0 exists since context->tuple_desc_id is set to 0
         TDescriptorTableBuilder desc_tbl_builder;
-        // Create a tuple
+        // Create a tuple with file_path and pos columns as NOT NULL (required for Iceberg delete files)
         TSlotDescriptorBuilder slot_builder;
         TTupleDescriptorBuilder tuple_builder;
-        tuple_builder.add_slot(slot_builder.type(TYPE_VARCHAR).column_name("file_path").is_materialized(true).build());
-        tuple_builder.add_slot(slot_builder.type(TYPE_BIGINT).column_name("pos").is_materialized(true).build());
+        tuple_builder.add_slot(
+                slot_builder.type(TYPE_VARCHAR).column_name("file_path").is_materialized(true).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_builder.type(TYPE_BIGINT).column_name("pos").is_materialized(true).nullable(false).build());
         tuple_builder.build(&desc_tbl_builder);
         TDescriptorTable t_desc_tbl = desc_tbl_builder.desc_tbl();
         DescriptorTbl* desc_tbl = nullptr;
@@ -525,6 +527,32 @@ TEST_F(IcebergDeleteSinkTest, invalid_tuple_descriptor_id) {
     // Should fail because tuple descriptor ID is invalid
     ASSERT_FALSE(result.ok());
     EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Failed to find tuple descriptor"));
+}
+
+// Test that Iceberg delete file has REQUIRED columns for file_path and pos
+TEST_F(IcebergDeleteSinkTest, verify_required_columns_in_parquet) {
+    auto context = create_delete_sink_context();
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    ASSERT_TRUE(result.ok());
+
+    auto sink = std::move(result).value();
+    auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
+    ASSERT_NE(delete_sink, nullptr);
+
+    // Verify that the context has the correct tuple descriptor
+    auto tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(context->tuple_desc_id);
+    ASSERT_NE(tuple_desc, nullptr);
+    ASSERT_EQ(tuple_desc->slots().size(), 2);
+
+    // Verify that file_path and pos columns are not nullable
+    // This is what determines whether Parquet columns will be REQUIRED
+    for (auto& slot : tuple_desc->slots()) {
+        if (slot->col_name() == "file_path" || slot->col_name() == "pos") {
+            EXPECT_FALSE(slot->is_nullable())
+                    << "Column " << slot->col_name() << " should be NOT NULL for Iceberg delete files";
+        }
+    }
 }
 
 } // namespace starrocks::connector
