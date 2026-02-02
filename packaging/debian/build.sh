@@ -52,14 +52,14 @@ for COMP in "fe" "be"; do
     # Copy Configs
     cp -r "$EXTRACT_DIR/$COMP/conf/"* "$STAGING_DIR/etc/starrocks/$COMP/"
 
-    # --- Path Patching (The LSB Magic) ---
+    # Path Patching (LSB)
     echo "Patching $COMP.conf for standard paths..."
     if [ "$COMP" == "fe" ]; then
-        sed -i "s|^#\?meta_dir.*|meta_dir = /var/lib/starrocks/fe/meta|" "$STAGING_DIR/etc/starrocks/fe/fe.conf"
-        sed -i "s|^#\?sys_log_dir.*|sys_log_dir = /var/log/starrocks/fe|" "$STAGING_DIR/etc/starrocks/fe/fe.conf"
+        sed -i '' "s|^#\?meta_dir.*|meta_dir = /var/lib/starrocks/fe/meta|" "$STAGING_DIR/etc/starrocks/fe/fe.conf"
+        sed -i '' "s|^#\?sys_log_dir.*|sys_log_dir = /var/log/starrocks/fe|" "$STAGING_DIR/etc/starrocks/fe/fe.conf"
     else
-        sed -i "s|^#\?storage_root_path.*|storage_root_path = /var/lib/starrocks/be/storage|" "$STAGING_DIR/etc/starrocks/be/be.conf"
-        sed -i "s|^#\?sys_log_dir.*|sys_log_dir = /var/log/starrocks/be|" "$STAGING_DIR/etc/starrocks/be/be.conf"
+        sed -i '' "s|^#\?storage_root_path.*|storage_root_path = /var/lib/starrocks/be/storage|" "$STAGING_DIR/etc/starrocks/be/be.conf"
+        sed -i '' "s|^#\?sys_log_dir.*|sys_log_dir = /var/log/starrocks/be|" "$STAGING_DIR/etc/starrocks/be/be.conf"
     fi
 
     # Inject Metadata
@@ -67,6 +67,11 @@ for COMP in "fe" "be"; do
     echo "" >> "$STAGING_DIR/DEBIAN/control"
     cp "postinst" "$STAGING_DIR/DEBIAN/postinst"
     chmod 755 "$STAGING_DIR/DEBIAN/postinst"
+
+    if [ -f "conffiles.$COMP" ]; then
+        cp "conffiles.$COMP" "$STAGING_DIR/DEBIAN/conffiles"
+        echo "" >> "$STAGING_DIR/DEBIAN/conffiles"
+    fi
 
     # Inject Systemd
     if [ -f "systemd/starrocks-$COMP.service" ]; then

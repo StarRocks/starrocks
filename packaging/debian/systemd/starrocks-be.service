@@ -1,0 +1,17 @@
+[Unit]
+Description=StarRocks Backend (BE)
+After=network.target
+
+[Service]
+Type=simple
+User=starrocks
+Group=starrocks
+Environment="STARROCKS_HOME=/usr/lib/starrocks/be"
+Environment="PID_DIR=/var/run/starrocks"
+ExecStart=/usr/lib/starrocks/be/bin/start_be.sh --conf_dir /etc/starrocks/be --daemonize 0
+Restart=on-failure
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
