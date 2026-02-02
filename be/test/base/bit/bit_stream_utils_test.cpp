@@ -40,11 +40,11 @@
 // Must come before gtest.h.
 #include <gtest/gtest.h>
 
+#include "base/bit/bit_packing_default.h"
+#include "base/bit/bit_stream_utils.h"
+#include "base/bit/bit_stream_utils.inline.h"
+#include "base/bit/bit_util.h"
 #include "base/string/faststring.h"
-#include "util/bit_packing_default.h"
-#include "util/bit_stream_utils.h"
-#include "util/bit_stream_utils.inline.h"
-#include "util/bit_util.h"
 
 using std::string;
 using std::vector;

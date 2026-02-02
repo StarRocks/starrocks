@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/bit_util.h"
+#include "base/bit/bit_util.h"
 
 #include <gtest/gtest.h>
 

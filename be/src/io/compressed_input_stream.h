@@ -16,11 +16,11 @@
 
 #include <utility>
 
+#include "base/bit/bit_util.h"
 #include "base/string/slice.h"
 #include "common/status.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
-#include "util/bit_util.h"
 #include "util/raw_container.h"
 
 namespace starrocks {

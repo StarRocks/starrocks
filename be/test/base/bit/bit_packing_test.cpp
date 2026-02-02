@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 
-#include "util/bit_packing_default.h"
+#include "base/bit/bit_packing_default.h"
 
 namespace starrocks::util::bitpacking_default {
 TEST(BitPacking, UnpackValue) {

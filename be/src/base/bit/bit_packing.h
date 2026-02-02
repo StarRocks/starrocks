@@ -14,9 +14,11 @@
 
 #pragma once
 
-#include "common/config.h"
-#include "util/bit_packing_avx2.h"
-#include "util/bit_packing_default.h"
+#include <cstring>
+#include <utility>
+
+#include "base/bit/bit_packing_avx2.h"
+#include "base/bit/bit_packing_default.h"
 
 namespace starrocks {
 
@@ -33,11 +35,11 @@ public:
         if (PREDICT_FALSE(bit_width > sizeof(OutType) * 8)) {
             return std::make_pair(in, 0);
         }
-        if (config::enable_bit_unpack_simd) {
-            return starrocks::util::bitpacking_avx2::UnpackValues(bit_width, in, in_bytes, num_values, out);
-        } else {
-            return starrocks::util::bitpacking_default::UnpackValues(bit_width, in, in_bytes, num_values, out);
-        }
+#if defined(__AVX2__) && defined(__BMI2__)
+        return starrocks::util::bitpacking_avx2::UnpackValues(bit_width, in, in_bytes, num_values, out);
+#else
+        return starrocks::util::bitpacking_default::UnpackValues(bit_width, in, in_bytes, num_values, out);
+#endif
     }
 };
 

@@ -15,6 +15,10 @@
 set(BASE_TEST_FILES
     cxa_throw_wrap.cpp
     bit/bit_mask_test.cpp
+    bit/bit_packing_simd_test.cpp
+    bit/bit_packing_test.cpp
+    bit/bit_stream_utils_test.cpp
+    bit/bit_util_test.cpp
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp

@@ -21,6 +21,7 @@
 #include <memory>
 #include <numeric>
 
+#include "base/bit/bit_util.h"
 #include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -36,7 +37,6 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/bit_util.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::spill {

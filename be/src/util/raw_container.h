@@ -20,8 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/bit/bit_util.h"
 #include "runtime/memory/column_allocator.h"
-#include "util/bit_util.h"
 
 namespace starrocks::raw {
 
