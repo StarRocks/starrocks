@@ -906,4 +906,8 @@ scrape_configs:
       - targets: ['<fe_host>:<fe_http_port>']
 ```
 
-Note: Collecting all table and materialized view metrics may increase the load on the FE node. Use these parameters with caution in large-scale environments.
+:::note
+
+Collecting all table and materialized view metrics may increase the load on the FE node. Use these parameters with caution in large-scale environments.
+
+:::
