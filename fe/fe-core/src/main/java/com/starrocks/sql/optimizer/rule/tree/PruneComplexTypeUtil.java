@@ -16,11 +16,8 @@ package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-<<<<<<< HEAD
-import com.starrocks.catalog.ArrayType;
-=======
 import com.google.common.collect.Lists;
->>>>>>> b6cc9afee9 ([BugFix] Fix prune projection cols (#68242))
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
 import com.starrocks.catalog.ComplexTypeAccessPath;
 import com.starrocks.catalog.ComplexTypeAccessPathType;
