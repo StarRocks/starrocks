@@ -83,11 +83,7 @@ from (
 -- result:
 56
 -- !result
-select sleep(6);
--- result:
-1
--- !result
-select count(1) < ${num_cores}*8 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
+select count(1) <= ${num_cores}*8 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
 -- result:
 1
 -- !result

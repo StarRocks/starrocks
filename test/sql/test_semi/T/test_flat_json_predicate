@@ -28,25 +28,29 @@ set cbo_json_v2_rewrite = true;
 create view profile_late_materialize as
 select trim(unnest) as line
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
-where unnest like '%LateMaterializeRows%' 
+where unnest like '%LateMaterializeRows%'
+and trim(unnest) not like '- %: 0'
 order by unnest;
 
 create view profile_filter_rows as
 select trim(unnest) as line
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
 where unnest like '%FilterRows%'
+and trim(unnest) not like '- %: 0'
 order by unnest;
 
 create view profile_dict as
 select trim(unnest) as line
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
 where unnest like '%DictDecodeCount%'
+and trim(unnest) not like '- %: 0'
 order by unnest;
 
 create view profile_access_path as
 select trim(unnest) as line
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
 where unnest like '%AccessPath%'
+and trim(unnest) not like '- %: 0'
 order by unnest;
 
 -- integer type: zonemap index
