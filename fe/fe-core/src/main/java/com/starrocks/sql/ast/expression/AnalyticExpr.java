@@ -117,11 +117,11 @@ public class AnalyticExpr extends Expr {
 
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
                         AnalyticWindow window, List<String> hints) {
-        this(fnCall, partitionExprs, orderByElements, window, hints, NodePosition.ZERO);
+        this(fnCall, partitionExprs, orderByElements, window, hints, NodePosition.ZERO, null,null);
     }
 
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
-                        AnalyticWindow window, List<String> hints, NodePosition pos) {
+                        AnalyticWindow window, List<String> hints, NodePosition pos, Expr skewColumn, Expr skewValue) {
         super(pos);
         Preconditions.checkNotNull(fnCall);
         this.fnCall = fnCall;
@@ -144,6 +144,8 @@ public class AnalyticExpr extends Expr {
                     this.isSkewed = true;
                 } else if (HintNode.HINT_SKEW_EXPLICIT.equalsIgnoreCase(hint)) {
                     this.skewHint = hint;
+                    this.skewColumn = skewColumn;
+                    this.skewValue = skewValue;
                 } else {
                     Preconditions.checkState(false, "partition by hint can only be 'sort' or 'hash' or 'skew' or 'skewed'");
                 }
@@ -217,16 +219,8 @@ public class AnalyticExpr extends Expr {
         return skewColumn;
     }
 
-    public void setSkewColumn(Expr skewColumn) {
-        this.skewColumn = skewColumn;
-    }
-
     public Expr getSkewValue() {
         return skewValue;
-    }
-
-    public void setSkewValue(Expr skewValue) {
-        this.skewValue = skewValue;
     }
 
     @Override
