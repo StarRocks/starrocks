@@ -21,6 +21,7 @@
 #include "base/bit/bit_util.h"
 #include "base/coding.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/container/raw_container.h"
 #include "base/hash/xxh3.h"
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
@@ -46,7 +47,6 @@
 #include "util/debug_util.h"
 #include "util/failpoint/fail_point.h"
 #include "util/filesystem_util.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

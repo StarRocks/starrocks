@@ -17,11 +17,11 @@
 #include <fmt/format.h>
 #include <google/protobuf/message.h>
 
+#include "base/container/raw_container.h"
 #include "base/testutil/sync_point.h"
 #include "fs/fs.h"
 #include "storage/olap_define.h"
 #include "storage/utils.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

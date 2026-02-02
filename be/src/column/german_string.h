@@ -21,11 +21,11 @@
 #include <string_view>
 #include <vector>
 
+#include "base/container/raw_container.h"
 #include "base/string/memcmp.h"
 #include "base/string/slice.h"
 #include "runtime/mem_pool.h"
 #include "runtime/memory/column_allocator.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 class Slice;

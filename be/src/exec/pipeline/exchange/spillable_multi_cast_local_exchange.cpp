@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/container/raw_container.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -32,7 +33,6 @@
 #include "fs/fs.h"
 #include "serde/column_array_serde.h"
 #include "serde/protobuf_serde.h"
-#include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

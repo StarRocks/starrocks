@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "agent/master_info.h"
+#include "base/container/raw_container.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
@@ -54,7 +55,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "util/failpoint/fail_point.h"
-#include "util/raw_container.h"
 #include "util/trace.h"
 
 // TODO: Eliminate the explicit dependency on staros worker

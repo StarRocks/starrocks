@@ -24,6 +24,7 @@
 #include <cstring>
 #include <limits>
 
+#include "base/container/raw_container.h"
 #include "base/simd/simd.h"
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
@@ -33,7 +34,6 @@
 #include "gutil/casts.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

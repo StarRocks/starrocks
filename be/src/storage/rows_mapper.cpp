@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "base/coding.h"
+#include "base/container/raw_container.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "lake/filenames.h"
@@ -24,7 +25,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "util/crc32c.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

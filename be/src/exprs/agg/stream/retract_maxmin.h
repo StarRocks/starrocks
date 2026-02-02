@@ -20,13 +20,13 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/stream/stream_detail_state.h"
 #include "gutil/casts.h"
 #include "storage/chunk_helper.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/container/raw_container.h"
 #include "base/testutil/assert.h"
 #include "fs/fs.h"
-#include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

@@ -40,8 +40,8 @@
 #include <iostream>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "runtime/int128_arithmetics_x86_64.h"
-#include "util/raw_container.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
