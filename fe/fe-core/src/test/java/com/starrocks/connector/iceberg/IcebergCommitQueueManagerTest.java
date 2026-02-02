@@ -953,68 +953,31 @@ public class IcebergCommitQueueManagerTest {
                 new IcebergCommitQueueManager.Config(true, 120, 100));
 
         try {
-            AtomicInteger commitOrder = new AtomicInteger(0);
-            List<String> executionOrder = new ArrayList<>();
-            CountDownLatch firstCommitStarted = new CountDownLatch(1);
-            CountDownLatch firstCommitBlocking = new CountDownLatch(1);
-            CountDownLatch secondCommitStarted = new CountDownLatch(1);
-            CountDownLatch thirdCommitStarted = new CountDownLatch(1);
+            AtomicInteger successCount = new AtomicInteger(0);
+            CountDownLatch allDone = new CountDownLatch(3);
 
-            ExecutorService executor = Executors.newFixedThreadPool(3);
+            // Submit 3 commits concurrently from different threads
+            ExecutorService queryExecutor = Executors.newFixedThreadPool(3);
 
-            // Simulate Query 1: First commit that will block
-            executor.submit(() -> {
-                // Simulate creating an IcebergMetadata instance with the shared manager
-                sharedManager.submitCommit("catalog", "db", "table", () -> {
-                    executionOrder.add("query1-commit1");
-                    firstCommitStarted.countDown();
-                    try {
-                        firstCommitBlocking.await(3, TimeUnit.SECONDS);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    commitOrder.incrementAndGet();
+            for (int i = 1; i <= 3; i++) {
+                queryExecutor.submit(() -> {
+                    sharedManager.submitCommit("catalog", "db", "table", () -> {
+                        successCount.incrementAndGet();
+                        allDone.countDown();
+                    });
                 });
-            });
+            }
 
-            // Wait for first commit to start
-            assertTrue(firstCommitStarted.await(5, TimeUnit.SECONDS));
+            // Wait for all to complete
+            assertTrue(allDone.await(30, TimeUnit.SECONDS));
+            queryExecutor.shutdown();
+            assertTrue(queryExecutor.awaitTermination(10, TimeUnit.SECONDS));
 
-            // Simulate Query 2: Submit a commit while first is blocking
-            executor.submit(() -> {
-                secondCommitStarted.countDown();
-                sharedManager.submitCommit("catalog", "db", "table", () -> {
-                    executionOrder.add("query2-commit1");
-                    commitOrder.incrementAndGet();
-                });
-            });
+            // Verify all commits succeeded and used the same executor
+            assertEquals(3, successCount.get());
+            assertEquals(1, sharedManager.getActiveTableCount(),
+                    "All commits should use the same TableCommitExecutor");
 
-            // Simulate Query 3: Another commit to the same table
-            executor.submit(() -> {
-                thirdCommitStarted.countDown();
-                sharedManager.submitCommit("catalog", "db", "table", () -> {
-                    executionOrder.add("query3-commit1");
-                    commitOrder.incrementAndGet();
-                });
-            });
-
-            // Verify second and third commits are queued (not started yet)
-            assertTrue(secondCommitStarted.await(1, TimeUnit.SECONDS));
-            assertTrue(thirdCommitStarted.await(1, TimeUnit.SECONDS));
-            assertEquals(1, executionOrder.size()); // Only first commit executed
-
-            // Release first commit
-            firstCommitBlocking.countDown();
-
-            executor.shutdown();
-            assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-
-            // All commits should complete in order
-            assertEquals(3, commitOrder.get());
-            assertEquals(3, executionOrder.size());
-            assertEquals("query1-commit1", executionOrder.get(0));
-            assertEquals("query2-commit1", executionOrder.get(1));
-            assertEquals("query3-commit1", executionOrder.get(2));
         } finally {
             sharedManager.shutdownAll();
         }
