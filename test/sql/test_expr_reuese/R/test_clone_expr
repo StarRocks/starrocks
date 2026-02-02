@@ -12,7 +12,7 @@ DISTRIBUTED BY HASH(id) BUCKETS 4;
 insert into t1 select generate_series, generate_series, generate_series % 100, "2024-07-24" from table(generate_series(1, 10));
 -- result:
 -- !result
-SELECT t2.dt, unnest, sum(d1), sum(d2) FROM (select * from (SELECT dt, ds_hll_count_distinct(if(province>5 and id>5, age, null), 21) as d1, ds_hll_count_distinct(if(id>5 and province>5, age, null), 21) as d2 FROM test.t1 group by dt) t0, unnest([1, 2, 3]) as unnest) t2 GROUP BY 1, 2 ORDER BY 1, 2 limit 10;
+SELECT t2.dt, unnest, sum(d1), sum(d2) FROM (select * from (SELECT dt, ds_hll_count_distinct(if(province>5 and id>5, age, null), 21) as d1, ds_hll_count_distinct(if(id>5 and province>5, age, null), 21) as d2 FROM t1 group by dt) t0, unnest([1, 2, 3]) as unnest) t2 GROUP BY 1, 2 ORDER BY 1, 2 limit 10;
 -- result:
 2024-07-24	1	5	5
 2024-07-24	2	5	5
@@ -21,7 +21,7 @@ SELECT t2.dt, unnest, sum(d1), sum(d2) FROM (select * from (SELECT dt, ds_hll_co
 insert into t1 select generate_series, generate_series, generate_series % 100, "2024-07-24" from table(generate_series(1, 10));
 -- result:
 -- !result
-SELECT t2.dt, unnest, sum(d1), sum(d2) FROM (select * from (SELECT dt, ds_hll_count_distinct(if(province>5 and id>5, age, null), 21) as d1, ds_hll_count_distinct(if(id>5 and province>5, age, null), 21) as d2 FROM test.t1 group by dt) t0, unnest([1, 2, 3]) as unnest) t2 GROUP BY 1, 2 ORDER BY 1, 2 limit 10;
+SELECT t2.dt, unnest, sum(d1), sum(d2) FROM (select * from (SELECT dt, ds_hll_count_distinct(if(province>5 and id>5, age, null), 21) as d1, ds_hll_count_distinct(if(id>5 and province>5, age, null), 21) as d2 FROM t1 group by dt) t0, unnest([1, 2, 3]) as unnest) t2 GROUP BY 1, 2 ORDER BY 1, 2 limit 10;
 -- result:
 2024-07-24	1	5	5
 2024-07-24	2	5	5
