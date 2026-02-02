@@ -86,8 +86,8 @@ SELECT percentile_cont(v, CAST(0.500 AS DECIMAL64(9,4))) FROM t_percentile_cont_
 -- big data with generate_series(0, 99999) and group by
 DROP TABLE IF EXISTS t_percentile_cont_decimal_big;
 CREATE TABLE t_percentile_cont_decimal_big (
-    v DECIMAL64(9,2),
-    g INT
+    g INT,
+    v DECIMAL64(9,2)
 ) ENGINE=OLAP
 DUPLICATE KEY(`g`)
 DISTRIBUTED BY HASH(`g`) BUCKETS 4
@@ -95,8 +95,8 @@ PROPERTIES (
   "replication_num" = "1"
 );
 INSERT INTO t_percentile_cont_decimal_big
-SELECT CAST(generate_series AS DECIMAL64(9,2)) AS v,
-       generate_series % 2 AS g
+SELECT generate_series % 2 AS g,
+       CAST(generate_series AS DECIMAL64(9,2)) AS v
 FROM TABLE(generate_series(0, 99999));
 SELECT /*+ SET_VAR (new_planner_agg_stage = '2') */ g,
        percentile_cont(v, CAST(0.500 AS DECIMAL64(9,2)))
@@ -140,8 +140,8 @@ SELECT percentile_cont(v, CAST(0.500 AS DECIMAL64(9,4))) FROM t_percentile_cont_
 -- big data with generate_series(0, 99999) and group by
 DROP TABLE IF EXISTS t_percentile_cont_decimal_big;
 CREATE TABLE t_percentile_cont_decimal_big (
-    v DECIMAL64(9,2),
-    g INT
+    g INT,
+    v DECIMAL64(9,2)
 ) ENGINE=OLAP
 DUPLICATE KEY(`g`)
 DISTRIBUTED BY HASH(`g`) BUCKETS 4
@@ -149,8 +149,8 @@ PROPERTIES (
   "replication_num" = "1"
 );
 INSERT INTO t_percentile_cont_decimal_big
-SELECT CAST(generate_series AS DECIMAL64(9,2)) AS v,
-       generate_series % 2 AS g
+SELECT generate_series % 2 AS g,
+       CAST(generate_series AS DECIMAL64(9,2)) AS v
 FROM TABLE(generate_series(0, 99999));
 SELECT /*+ SET_VAR (new_planner_agg_stage = '2') */ g,
        percentile_cont(v, CAST(0.500 AS DECIMAL64(9,2)))
