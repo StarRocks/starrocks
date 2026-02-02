@@ -68,6 +68,7 @@ public class ProjectNode extends PlanNode {
                 key.asInt(), ExprToThrift.treeToThrift(value)));
         if (!slotMap.isEmpty()) {
             String sqlProjectExprs = slotMap.entrySet().stream()
+                    .sorted(Comparator.comparingInt(e -> e.getKey().asInt()))
                     .map(e -> e.getKey() + "->" + explainExpr(e.getValue()))
                     .collect(Collectors.joining(", "));
             msg.project_node.setSql_project_exprs(sqlProjectExprs);
@@ -75,6 +76,7 @@ public class ProjectNode extends PlanNode {
 
         if (!commonSlotMap.isEmpty()) {
             String sqlCommonExprs = commonSlotMap.entrySet().stream()
+                    .sorted(Comparator.comparingInt(e -> e.getKey().asInt()))
                     .map(e -> e.getKey() + "->" + explainExpr(e.getValue()))
                     .collect(Collectors.joining(", "));
             msg.project_node.setSql_common_exprs(sqlCommonExprs);
