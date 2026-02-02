@@ -128,7 +128,7 @@ Status ColumnExprPredicate::evaluate_and(const Column* column, uint8_t* sel, uin
     DCHECK(from == 0);
 
     uint16_t size = to - from;
-    _tmp_select.reserve(size);
+    _tmp_select.resize(size);
     uint8_t* tmp = _tmp_select.data();
     RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
@@ -142,7 +142,7 @@ Status ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint
     DCHECK(from == 0);
 
     uint16_t size = to - from;
-    _tmp_select.reserve(size);
+    _tmp_select.resize(size);
     uint8_t* tmp = _tmp_select.data();
     RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {

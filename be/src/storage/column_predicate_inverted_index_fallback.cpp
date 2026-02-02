@@ -56,7 +56,7 @@ Status InvertedIndexFallbackPredicate::evaluate_and(const Column* column, uint8_
     DCHECK(from == 0);
 
     uint16_t size = to - from;
-    _tmp_select.reserve(size);
+    _tmp_select.resize(size);
     uint8_t* tmp = _tmp_select.data();
     
     RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
@@ -72,7 +72,7 @@ Status InvertedIndexFallbackPredicate::evaluate_or(const Column* column, uint8_t
     DCHECK(from == 0);
 
     uint16_t size = to - from;
-    _tmp_select.reserve(size);
+    _tmp_select.resize(size);
     uint8_t* tmp = _tmp_select.data();
     
     RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
