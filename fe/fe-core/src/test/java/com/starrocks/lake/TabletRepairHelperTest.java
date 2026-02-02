@@ -31,6 +31,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.lake.TabletRepairHelper.PhysicalPartitionInfo;
 import com.starrocks.proto.GetTabletMetadatasRequest;
 import com.starrocks.proto.GetTabletMetadatasResponse;
@@ -57,6 +58,7 @@ import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -85,6 +87,11 @@ public class TabletRepairHelperTest {
     private ComputeNode node;
     private Map<ComputeNode, Set<Long>> nodeToTablets;
     private PhysicalPartitionInfo info;
+
+    @BeforeAll
+    public static void beforeAll() {
+        ExtensionManager.getInstance().loadExtensionsFromClassPath("target/classes");
+    }
 
     @BeforeEach
     public void beforeEach() {
