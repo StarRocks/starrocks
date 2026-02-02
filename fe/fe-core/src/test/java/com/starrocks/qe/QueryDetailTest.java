@@ -151,6 +151,33 @@ public class QueryDetailTest {
     }
 
     @Test
+    public void testImpersonatedUserInQueryDetail() throws Exception {
+        String sql = "SELECT 1";
+        List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable());
+        StatementBase statement = statements.get(0);
+
+        ConnectContext testContext = new ConnectContext();
+        testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setQualifiedUser("user_a");
+        testContext.setCurrentUserIdentity(new UserIdentity("user_b", "%"));
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
+        testContext.setQueryId(UUIDUtil.genUUID());
+        testContext.setStartTime();
+
+        StmtExecutor executor = new StmtExecutor(testContext, statement);
+        testContext.setExecutor(executor);
+        testContext.setThreadLocalInfo();
+
+        executor.addRunningQueryDetail(statement);
+
+        QueryDetail queryDetail = testContext.getQueryDetail();
+        Assertions.assertNotNull(queryDetail);
+        Assertions.assertEquals("user_a", queryDetail.getUser());
+        Assertions.assertEquals("user_b", queryDetail.getImpersonatedUser());
+    }
+
+    @Test
     public void testTaskQuerySource(@Mocked StatementBase mockStmt) throws Exception {
         // Test task query using SqlTaskRunProcessor
         String sql = "SELECT 1";
