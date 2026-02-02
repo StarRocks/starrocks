@@ -22,7 +22,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
@@ -765,5 +769,196 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assertions.assertNotEquals(Constants.TaskState.PAUSE, task.getState());
         Assertions.assertTrue(mv.isActive());
         Config.max_task_consecutive_fail_count = 10;
+    }
+
+    /**
+     * Test that nested MVs with expression-based partitioning can be reactivated
+     * after the base MV goes through an INACTIVE -> ACTIVE cycle.
+     *
+     * This test reproduces the bug reported in GitHub issue #68479:
+     * - MV1 is created with PARTITION BY date_trunc('day', column)
+     * - MV2 is created based on MV1 with the same partition expression
+     * - MV1 goes INACTIVE -> ACTIVE
+     * - MV2 should be able to reactivate, but previously failed with:
+     *   "Materialized view partition column in partition exp must be base table partition column"
+     *
+     * The root cause was:
+     * 1. ColumnIdExpr.convertToColumnNameExpr() mutated the original SlotRef in place
+     * 2. MaterializedViewAnalyzer used the generated column name instead of the original column name
+     */
+    @Test
+    public void testNestedMVReactivationWithExpressionPartition() throws Exception {
+        MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
+        checker.setStop();
+
+        // Create base table with expression-based partition
+        String createBaseTable = "CREATE TABLE t_nested_mv_test (\n" +
+                "    k1 int,\n" +
+                "    event_time datetime,\n" +
+                "    v1 int\n" +
+                ") DUPLICATE KEY(k1)\n" +
+                "PARTITION BY date_trunc('day', event_time)\n" +
+                "PROPERTIES('replication_num'='1');";
+        starRocksAssert.withTable(createBaseTable);
+
+        // Insert some test data
+        executeInsertSql(connectContext, "INSERT INTO t_nested_mv_test VALUES (1, '2025-01-01 10:00:00', 100);");
+        executeInsertSql(connectContext, "INSERT INTO t_nested_mv_test VALUES (2, '2025-01-02 10:00:00', 200);");
+
+        // Create MV1 (base MV) with expression-based partition
+        String createMV1 = "CREATE MATERIALIZED VIEW mv_nested_test_1\n" +
+                "PARTITION BY date_trunc('day', event_time)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 4\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES('replication_num'='1')\n" +
+                "AS SELECT k1, event_time, sum(v1) as total_v1\n" +
+                "FROM t_nested_mv_test\n" +
+                "GROUP BY k1, event_time;";
+        starRocksAssert.withMaterializedView(createMV1);
+
+        MaterializedView mv1 = starRocksAssert.getMv("test", "mv_nested_test_1");
+        Assertions.assertTrue(mv1.isActive());
+
+        // Refresh MV1
+        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW mv_nested_test_1 WITH SYNC MODE;");
+
+        // Create MV2 (nested MV) based on MV1 with the same partition expression
+        String createMV2 = "CREATE MATERIALIZED VIEW mv_nested_test_2\n" +
+                "PARTITION BY date_trunc('day', event_time)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 4\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES('replication_num'='1')\n" +
+                "AS SELECT k1, event_time, total_v1\n" +
+                "FROM mv_nested_test_1;";
+        starRocksAssert.withMaterializedView(createMV2);
+
+        MaterializedView mv2 = starRocksAssert.getMv("test", "mv_nested_test_2");
+        Assertions.assertTrue(mv2.isActive(), "MV2 should be active after creation");
+
+        // Refresh MV2
+        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW mv_nested_test_2 WITH SYNC MODE;");
+
+        // Step 1: Deactivate MV1
+        String alterMvSql = "ALTER MATERIALIZED VIEW mv_nested_test_1 INACTIVE;";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assertions.assertFalse(mv1.isActive(), "MV1 should be inactive after ALTER INACTIVE");
+
+        // MV2 should also become inactive because its base MV is inactive
+        // (This may happen automatically or through the checker)
+        checker.runForTest(true);
+
+        // Step 2: Reactivate MV1
+        alterMvSql = "ALTER MATERIALIZED VIEW mv_nested_test_1 ACTIVE;";
+        stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assertions.assertTrue(mv1.isActive(), "MV1 should be active after ALTER ACTIVE");
+
+        // Step 3: Try to reactivate MV2 - this is the critical test
+        // Before the fix, this would fail with:
+        // "Materialized view partition column in partition exp must be base table partition column"
+        alterMvSql = "ALTER MATERIALIZED VIEW mv_nested_test_2 ACTIVE;";
+        stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+
+        // This should NOT throw an exception
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        Assertions.assertTrue(mv2.isActive(), "MV2 should be active after ALTER ACTIVE (nested MV reactivation)");
+
+        // Cleanup - ensure ConnectContext is set before cleanup operations
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS mv_nested_test_2");
+        starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS mv_nested_test_1");
+        starRocksAssert.ddl("DROP TABLE IF EXISTS t_nested_mv_test");
+        checker.start();
+    }
+
+    /**
+     * Test that ColumnIdExpr.convertToColumnNameExpr() does not mutate the original expression.
+     * This tests the fix for the mutation bug that was part of the root cause.
+     *
+     * BUG REPRODUCTION:
+     * Before the fix, convertToColumnNameExpr() would mutate the original expression's SlotRef.
+     * This means the stored ColumnIdExpr's internal Expr would be permanently changed after
+     * the first call to convertToColumnNameExpr().
+     *
+     * The test verifies that the original expression stored in ColumnIdExpr remains unchanged
+     * after calling convertToColumnNameExpr().
+     */
+    @Test
+    public void testColumnIdExprNoMutation() throws Exception {
+        // Create a simple table with expression partition
+        String createTable = "CREATE TABLE t_column_id_test (\n" +
+                "    k1 int,\n" +
+                "    event_time datetime\n" +
+                ") DUPLICATE KEY(k1)\n" +
+                "PARTITION BY date_trunc('day', event_time)\n" +
+                "PROPERTIES('replication_num'='1');";
+        starRocksAssert.withTable(createTable);
+
+        // Create MV with expression partition
+        String createMV = "CREATE MATERIALIZED VIEW mv_column_id_test\n" +
+                "PARTITION BY date_trunc('day', event_time)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 4\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES('replication_num'='1')\n" +
+                "AS SELECT k1, event_time FROM t_column_id_test;";
+        starRocksAssert.withMaterializedView(createMV);
+
+        MaterializedView mv = starRocksAssert.getMv("test", "mv_column_id_test");
+        Assertions.assertTrue(mv.isActive());
+
+        // Get the partition expression and verify mutation behavior
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (partitionInfo instanceof com.starrocks.catalog.ExpressionRangePartitionInfo) {
+            com.starrocks.catalog.ExpressionRangePartitionInfo exprPartInfo =
+                    (com.starrocks.catalog.ExpressionRangePartitionInfo) partitionInfo;
+
+            // Get the original ColumnIdExpr
+            List<com.starrocks.persist.ColumnIdExpr> columnIdExprs = exprPartInfo.getPartitionColumnIdExprs();
+            Assertions.assertEquals(1, columnIdExprs.size());
+            com.starrocks.persist.ColumnIdExpr columnIdExpr = columnIdExprs.get(0);
+
+            // Get the original expression and record its state BEFORE conversion
+            Expr originalExpr = columnIdExpr.getExpr();
+            List<SlotRef> originalSlots = Lists.newArrayList();
+            originalExpr.collect(SlotRef.class, originalSlots);
+            Assertions.assertFalse(originalSlots.isEmpty(), "Original expr should contain SlotRef");
+
+            // Store the original column name (this is the column ID-based name)
+            String originalColNameBeforeConversion = originalSlots.get(0).getColumnName();
+
+            // Call convertToColumnNameExpr - this is where mutation would occur if the bug exists
+            Expr convertedExpr = columnIdExpr.convertToColumnNameExpr(mv.getIdToColumn());
+
+            // Verify that the converted expression has the correct column name
+            List<SlotRef> convertedSlots = Lists.newArrayList();
+            convertedExpr.collect(SlotRef.class, convertedSlots);
+            Assertions.assertFalse(convertedSlots.isEmpty());
+            String convertedColName = convertedSlots.get(0).getColumnName();
+            Assertions.assertEquals("event_time", convertedColName,
+                    "Converted expression should have proper column name");
+
+            // CRITICAL CHECK: Verify that the ORIGINAL expression was NOT mutated
+            // Get the original expression again and check its state
+            List<SlotRef> originalSlotsAfterConversion = Lists.newArrayList();
+            originalExpr.collect(SlotRef.class, originalSlotsAfterConversion);
+            String originalColNameAfterConversion = originalSlotsAfterConversion.get(0).getColumnName();
+
+            Assertions.assertEquals(originalColNameBeforeConversion, originalColNameAfterConversion,
+                    "BUG DETECTED: Original expression was mutated! " +
+                    "Before conversion: " + originalColNameBeforeConversion +
+                    ", After conversion: " + originalColNameAfterConversion +
+                    ". The fix should clone the expression before modification.");
+
+            // Additional check: converted expression should be a different object
+            Assertions.assertNotSame(originalExpr, convertedExpr,
+                    "Converted expression should be a clone, not the same object as original");
+        }
+
+        // Cleanup - ensure ConnectContext is set before cleanup operations
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS mv_column_id_test");
+        starRocksAssert.ddl("DROP TABLE IF EXISTS t_column_id_test");
     }
 }

@@ -31,6 +31,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Function;
@@ -1300,8 +1301,28 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view related base table partition columns " +
                             "only supports single column");
                 }
-                String partitionColumn = partitionColumns.get(0).getName();
-                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                String partitionColumnName = partitionColumns.get(0).getName();
+
+                // For expression-based partitioning (ExpressionRangePartitionInfo), the partition column
+                // returned by getPartitionColumns() is a generated column like "__generated_partition_column_0".
+                // We need to extract the original column name from the partition expression to properly
+                // validate nested MVs that reference the original column name.
+                // This fixes the issue where nested MVs fail to reactivate after their base MV goes through
+                // an INACTIVE -> ACTIVE cycle.
+                if (rangePartitionInfo instanceof ExpressionRangePartitionInfo &&
+                        !(rangePartitionInfo instanceof ExpressionRangePartitionInfoV2)) {
+                    ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
+                    List<Expr> partitionExprs = exprPartitionInfo.getPartitionExprs(table.getIdToColumn());
+                    if (partitionExprs.size() == 1) {
+                        Expr partitionExpr = partitionExprs.get(0);
+                        SlotRef sourceSlotRef = getSlotRefFromPartitionExpr(partitionExpr);
+                        if (sourceSlotRef != null) {
+                            partitionColumnName = sourceSlotRef.getColumnName();
+                        }
+                    }
+                }
+
+                if (!partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }
@@ -1355,6 +1376,29 @@ public class MaterializedViewAnalyzer {
                         ExprToSql.toSql(partitionByExpr) + " of base table %s is not supported yet", table.getName()),
                         partitionByExpr.getPos());
             }
+        }
+
+        /**
+         * Extract the source SlotRef from a partition expression.
+         * For expression-based partitioning like date_trunc('day', column), this extracts the 'column' SlotRef.
+         *
+         * @param expr the partition expression
+         * @return the source SlotRef, or null if not found
+         */
+        private SlotRef getSlotRefFromPartitionExpr(Expr expr) {
+            if (expr == null) {
+                return null;
+            }
+            if (expr instanceof SlotRef) {
+                return (SlotRef) expr;
+            }
+            // For function calls like date_trunc('day', column), traverse children to find the SlotRef
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            expr.collect(SlotRef.class, slotRefs);
+            if (!slotRefs.isEmpty()) {
+                return slotRefs.get(0);
+            }
+            return null;
         }
 
         private void checkPartitionColumnWithBaseTable(SlotRef slotRef, List<Column> partitionColumns, boolean unPartitioned) {
