@@ -30,6 +30,7 @@ set(RUNTIME_CORE_FILES
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
+    memory/memory_allocator.cpp
 )
 
 ADD_BE_LIB(RuntimeCore
