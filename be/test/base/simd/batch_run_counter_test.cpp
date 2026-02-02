@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "simd/batch_run_counter.h"
+#include "base/simd/batch_run_counter.h"
 
 #include <vector>
 
+#include "base/simd/simd.h"
 #include "gtest/gtest.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

@@ -28,6 +28,7 @@ ADD_BE_LIB(Base
   path/path_builder.cpp
   path/path_util.cpp
   random/random.cc
+  simd/expand.cpp
   stats/ndv_estimator.cpp
   string/faststring.cc
   string/slice.cpp

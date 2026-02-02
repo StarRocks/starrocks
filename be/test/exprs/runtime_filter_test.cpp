@@ -20,9 +20,9 @@
 #include <random>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "exprs/runtime_filter_bank.h"
-#include "simd/simd.h"
 #include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 

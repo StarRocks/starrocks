@@ -16,11 +16,11 @@
 
 #include <variant>
 
+#include "base/simd/simd.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
-#include "simd/simd.h"
 namespace starrocks::pipeline {
 
 Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {

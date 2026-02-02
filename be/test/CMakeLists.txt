@@ -339,11 +339,8 @@ set(EXEC_FILES
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp 
         ./types/variant_value_test.cpp
-        ./simd/batch_run_counter_test.cpp
-        ./simd/simd_test.cpp
-        ./simd/simd_selector_test.cpp
-        ./simd/simd_mulselector_test.cpp
-        ./simd/simd_expand_test.cpp
+        ./column/simd_selector_test.cpp
+        ./column/simd_mulselector_test.cpp
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/base85_test.cpp
@@ -432,11 +429,6 @@ set(EXEC_FILES
         ./util/llm_cache_test.cpp
         ./util/llm_query_service_test.cpp
         )
-
-if (${USE_AVX512})
-    list(APPEND EXEC_FILES ./simd/delta_decode_test.cpp)
-endif()
-
 
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)

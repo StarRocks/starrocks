@@ -28,7 +28,13 @@ void expand_load_simd(int32_t* dst_data, const int32_t* src_data, const uint8_t*
 void expand_load_simd(int64_t* dst_data, const int64_t* src_data, const uint8_t* nulls, size_t count);
 
 template <class DataType>
-void expand_load_branchless(DataType* dst_data, const DataType* src_data, const uint8_t* nulls, size_t count);
+inline void expand_load_branchless(DataType* dst_data, const DataType* src_data, const uint8_t* nulls, size_t count) {
+    size_t cnt = 0;
+    for (size_t i = 0; i < count; ++i) {
+        dst_data[i] = src_data[cnt];
+        cnt += !nulls[i];
+    }
+}
 
 template <class DataType>
 void expand_load(DataType* dst_data, const DataType* src_data, const uint8_t* nulls, size_t count) {

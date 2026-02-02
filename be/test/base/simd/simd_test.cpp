@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "simd/simd.h"
+#include "base/simd/simd.h"
 
 #include "gtest/gtest.h"
 

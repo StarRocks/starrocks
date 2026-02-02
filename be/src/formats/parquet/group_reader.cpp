@@ -22,6 +22,7 @@
 
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/config.h"
@@ -41,7 +42,6 @@
 #include "formats/parquet/schema.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 #include "utils.h"

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <base/simd/gather.h>
 #include <column/column.h>
 #include <column/column_helper.h>
 #include <column/column_view/column_view_base.h>
-#include <simd/gather.h>
 
 namespace starrocks {
 size_t ColumnViewBase::container_memory_usage() const {

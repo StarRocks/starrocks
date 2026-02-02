@@ -18,6 +18,7 @@
 #include <memory>
 #include <numeric>
 
+#include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/column_hash.h"
 #include "column/column_viewer.h"
@@ -28,7 +29,6 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "simd/simd.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/raw_container.h"

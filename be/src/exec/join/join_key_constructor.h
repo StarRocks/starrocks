@@ -22,13 +22,13 @@
 #include <cstdint>
 #include <optional>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_table_descriptor.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

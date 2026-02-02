@@ -16,7 +16,7 @@
 
 #include <util/raw_container.h>
 
-#include "simd/multi_version.h"
+#include "base/simd/multi_version.h"
 
 namespace starrocks {
 

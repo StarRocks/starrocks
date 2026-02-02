@@ -14,11 +14,11 @@
 
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "olap_type_infra.h"
-#include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"

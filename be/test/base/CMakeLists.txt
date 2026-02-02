@@ -27,6 +27,9 @@ set(BASE_TEST_FILES
     path/path_util_test.cpp
     path/path_trie_test.cpp
     simd/byte_stream_split_test.cpp
+    simd/batch_run_counter_test.cpp
+    simd/simd_expand_test.cpp
+    simd/simd_test.cpp
     string/c_string_test.cpp
     string/faststring_test.cpp
     string/memcmp_test.cpp
@@ -36,6 +39,10 @@ set(BASE_TEST_FILES
     uuid/uuid_generator_test.cpp
     status_test.cpp
 )
+
+if (USE_AVX512)
+    list(APPEND BASE_TEST_FILES simd/delta_decode_test.cpp)
+endif()
 
 set(BASE_TEST_LINK_LIBS
     Base

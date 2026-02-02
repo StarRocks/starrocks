@@ -15,10 +15,11 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
+#include "base/simd/simd_utils.h"
 #include "column/type_traits.h"
 #include "glog/logging.h"
-#include "simd/simd_utils.h"
 #include "types/logical_type.h"
 #ifdef __AVX2__
 #include <emmintrin.h>

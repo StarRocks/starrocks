@@ -41,6 +41,7 @@
 
 #include "agent/master_info.h"
 #include "agent/utils.h"
+#include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -61,7 +62,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "simd/simd.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "util/brpc_stub_cache.h"

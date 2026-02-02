@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -28,7 +29,6 @@
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "runtime/types.h"
-#include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/types.h"
 #include "storage/uint24.h"

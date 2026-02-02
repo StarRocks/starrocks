@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
@@ -30,7 +31,6 @@
 #include "gutil/stl_util.h"
 #include "io/shared_buffered_input_stream.h"
 #include "segment_options.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/column_or_predicate.h"
