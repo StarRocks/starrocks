@@ -951,7 +951,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
 
 
-    public static final String ENABLE_PRE_AGG_TOP_N_PUSH_DOWN = "enable_pre_agg_top_n_push_down";
+    public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1945,9 +1945,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
     private boolean arrowFlightProxyEnabled = true;
 
-
-    @VarAttr(name = ENABLE_PRE_AGG_TOP_N_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
-    private boolean enablePreAggTopNPushDown = true;
+    @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
+    private int topNPushDownAggMode = 1;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5256,12 +5255,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.arrowFlightProxyEnabled;
     }
 
-    public void setEnablePreAggTopNPushDown(boolean enablePreAggTopNPushDown) {
-        this.enablePreAggTopNPushDown = enablePreAggTopNPushDown;
-    }
-
-    public boolean isEnablePreAggTopNPushDown() {
-        return enablePreAggTopNPushDown;
+    public int getTopNPushDownAggMode() {
+        return topNPushDownAggMode;
     }
 
     // Serialize to thrift object
