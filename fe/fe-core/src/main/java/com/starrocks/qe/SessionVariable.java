@@ -250,7 +250,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
-    
+
     // Large IN predicate optimization: special fast path for queries with large IN constant lists.
     // When enabled, IN predicates with many constants will be converted to a special streamlined format
     // to avoid high overhead in FE parse/Analyzer/Planner/Deploy phases.
@@ -951,6 +951,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
 
 
+    public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1113,15 +1115,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
     private long sqlMode = 32L;
-    
+
     /**
      * Comma-separated list of optimizer rule types to disable
-     * 
+     *
      * This is used to temporarily disable specific optimizer rules when they cause query errors,
      * allowing queries to complete successfully while the rule bug is being fixed.
-     * 
+     *
      * Supports TF_ (Transformation rules) and GP_ (Group combination rules) rule types.
-     * 
+     *
      * Example:
      *   SET cbo_disabled_rules = 'TF_JOIN_COMMUTATIVITY,GP_PRUNE_COLUMNS';
      */
@@ -1943,6 +1945,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
     private boolean arrowFlightProxyEnabled = true;
 
+    @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
+    private int topNPushDownAggMode = 1;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -3207,11 +3211,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setSqlMode(long sqlMode) {
         this.sqlMode = sqlMode;
     }
-    
+
     public String getCboDisabledRules() {
         return cboDisabledRules;
     }
-    
+
     public void setCboDisabledRules(String rulesStr) {
         this.cboDisabledRules = rulesStr;
     }
@@ -5251,6 +5255,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.arrowFlightProxyEnabled;
     }
 
+    public void setTopNPushDownAggMode(int mode) {
+        this.topNPushDownAggMode = mode;
+    }
+
+    public int getTopNPushDownAggMode() {
+        return topNPushDownAggMode;
+    }
 
     // Serialize to thrift object
     // used for rest api
