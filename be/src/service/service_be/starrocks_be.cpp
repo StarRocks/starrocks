@@ -105,7 +105,9 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         }
 #endif
 
+#ifdef USE_STAROS
         int idx = 0;
+#endif
         size_t total_quota_bytes = 0;
         for (auto& root_path : storage_paths) {
             // Because we have unified the datacache between datalake and starlet, we also need to unify the
