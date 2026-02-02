@@ -114,15 +114,24 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
     }
     SlotId file_path_slot_id = file_path_it->second.slot_ref.slot_id;
 
-    // Get file_path column using slot_id
+    // Find pos column slot_id from the mapping
+    auto pos_it = _column_slot_map.find("_pos");
+    if (pos_it == _column_slot_map.end()) {
+        return Status::InternalError("Could not find _pos column in column_slot_map");
+    }
+    SlotId pos_slot_id = pos_it->second.slot_ref.slot_id;
+
+    // Get file_path and pos columns using slot_id
     ColumnPtr file_path_column = chunk->get_column_by_slot_id(file_path_slot_id);
-    if (file_path_column == nullptr) {
-        return Status::InternalError(
-                fmt::format("Could not find file_path column with slot_id {} in chunk", file_path_slot_id));
+    ColumnPtr pos_column = chunk->get_column_by_slot_id(pos_slot_id);
+    if (file_path_column == nullptr || pos_column == nullptr) {
+        return Status::InternalError(fmt::format("Could not find file_path or pos column in chunk"));
     }
 
-    // Get underlying binary column (handles nullable columns)
-    const BinaryColumn* binary_column = ColumnHelper::get_binary_column(file_path_column.get());
+    // Get underlying data columns (handles nullable columns)
+    BinaryColumn* file_path_data =
+            ColumnHelper::get_binary_column(chunk->get_column_raw_ptr_by_slot_id(file_path_slot_id));
+    Column* pos_data = ColumnHelper::get_data_column(chunk->get_column_raw_ptr_by_slot_id(pos_slot_id));
 
     // Group rows by file_path for file-level delete files
     std::unordered_map<std::string, std::vector<uint32_t>> file_path_to_indices;
@@ -130,7 +139,7 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
         if (file_path_column->is_null(i)) {
             return Status::InternalError("file_path is NULL value");
         }
-        std::string file_path = binary_column->get_slice(i).to_string();
+        std::string file_path = file_path_data->get_slice(i).to_string();
         file_path_to_indices[std::move(file_path)].push_back(i);
     }
 
@@ -143,12 +152,21 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
 
     // Write separate delete files for each file_path
     for (auto& [file_path, indices] : file_path_to_indices) {
-        // Create chunk with only rows for this file_path
-        ChunkPtr file_chunk = chunk->clone_empty_with_slot();
-        file_chunk->append_selective(*chunk, indices.data(), 0, indices.size());
+        // Create chunk with only file_path and pos columns for this file_path
+        ChunkPtr delete_chunk = std::make_shared<Chunk>();
+
+        // Create file_path column with selected rows
+        auto selected_file_path = file_path_data->clone_empty();
+        selected_file_path->append_selective(*file_path_data, indices.data(), 0, indices.size());
+        delete_chunk->append_column(std::move(selected_file_path), file_path_slot_id);
+
+        // Create pos column with selected rows
+        auto selected_pos = pos_data->clone_empty();
+        selected_pos->append_selective(*pos_data, indices.data(), 0, indices.size());
+        delete_chunk->append_column(std::move(selected_pos), pos_slot_id);
 
         // Write using file-level writer for this (partition, file_path)
-        RETURN_IF_ERROR(write_file_level_chunk(partition, partition_field_null_list, file_chunk, file_path));
+        RETURN_IF_ERROR(write_file_level_chunk(partition, partition_field_null_list, delete_chunk, file_path));
     }
 
     return Status::OK();
@@ -243,21 +261,6 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     // pos column (index 1)
     file_column_ids[1].field_id = INT32_MAX - 102;
 
-    // Create Parquet writer factory for delete files
-    auto file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
-            fs, ctx->compression_type, ctx->options, column_names, column_evaluators, file_column_ids, ctx->executor,
-            runtime_state);
-
-    // Initialize sort ordering for position delete files (required by Iceberg spec)
-    // Sort by: file_path ASC, then pos ASC
-    std::shared_ptr<SortOrdering> sort_ordering = std::make_shared<SortOrdering>();
-    sort_ordering->sort_key_idxes = {0, 1};                    // file_path, pos
-    sort_ordering->sort_descs.descs.emplace_back(true, false); // file_path: ASC, nulls last
-    sort_ordering->sort_descs.descs.emplace_back(true, false); // pos: ASC, nulls last
-
-    // Create partition chunk writer factory
-    std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
-
     // Create a custom tuple descriptor with only file_path and pos columns
     // Use DescriptorTbl::create to properly create tuple and slot descriptors
     TSlotDescriptorBuilder slot_builder;
@@ -266,14 +269,14 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     // Add file_path column (VARCHAR)
     tuple_builder.add_slot(slot_builder.id(1)
                                    .type(TYPE_VARCHAR)
-                                   .nullable(true)
+                                   .nullable(false)
                                    .is_materialized(true)
                                    .column_name("file_path")
                                    .build());
 
     // Add pos column (BIGINT)
     tuple_builder.add_slot(
-            slot_builder.id(2).type(TYPE_BIGINT).nullable(true).is_materialized(true).column_name("pos").build());
+            slot_builder.id(2).type(TYPE_BIGINT).nullable(false).is_materialized(true).column_name("pos").build());
 
     // Create descriptor table and tuple
     TDescriptorTableBuilder desc_tbl_builder;
@@ -288,6 +291,28 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     TupleDescriptor* delete_tuple_desc = desc_tbl->get_tuple_descriptor(0);
     DCHECK(delete_tuple_desc != nullptr);
     DCHECK_EQ(delete_tuple_desc->slots().size(), 2);
+
+    // Extract nullable information from delete_tuple_desc
+    std::vector<bool> nullable;
+    nullable.reserve(delete_tuple_desc->slots().size());
+    for (auto& slot : delete_tuple_desc->slots()) {
+        nullable.push_back(slot->is_nullable());
+    }
+
+    // Create Parquet writer factory for delete files
+    auto file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
+            fs, ctx->compression_type, ctx->options, column_names, column_evaluators, file_column_ids, ctx->executor,
+            runtime_state, nullable);
+
+    // Initialize sort ordering for position delete files (required by Iceberg spec)
+    // Sort by: file_path ASC, then pos ASC
+    std::shared_ptr<SortOrdering> sort_ordering = std::make_shared<SortOrdering>();
+    sort_ordering->sort_key_idxes = {0, 1};                    // file_path, pos
+    sort_ordering->sort_descs.descs.emplace_back(true, false); // file_path: ASC, nulls last
+    sort_ordering->sort_descs.descs.emplace_back(true, false); // pos: ASC, nulls last
+
+    // Create partition chunk writer factory
+    std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
 
     auto writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
             {file_writer_factory, location_provider, ctx->max_file_size, ctx->partition_column_names.empty()},
