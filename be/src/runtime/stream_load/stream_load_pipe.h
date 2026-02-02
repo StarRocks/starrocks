@@ -38,10 +38,10 @@
 #include <deque>
 #include <mutex>
 
+#include "base/bit/bit_util.h"
 #include "gen_cpp/Types_types.h"
 #include "io/input_stream.h"
 #include "runtime/message_body_sink.h"
-#include "util/bit_util.h"
 #include "util/byte_buffer.h"
 #include "util/compression/stream_decompressor.h"
 

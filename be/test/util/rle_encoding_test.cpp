@@ -45,8 +45,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/bit/bit_util.h"
 #include "base/string/faststring.h"
-#include "util/bit_util.h"
 #include "util/debug_util.h"
 #include "util/rle_encoding.h"
 

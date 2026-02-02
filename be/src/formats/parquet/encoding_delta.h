@@ -19,13 +19,13 @@
 #include <limits>
 #include <string>
 
+#include "base/bit/bit_stream_utils.h"
 #include "base/simd/delta_decode.h"
 #include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
-#include "util/bit_stream_utils.h"
 
 namespace starrocks::parquet {
 

@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bit/bit_util.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -43,7 +44,6 @@
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
-#include "util/bit_util.h"
 #include "util/decimal_types.h"
 #include "util/int96.h"
 #include "util/timezone_utils.h"

@@ -18,10 +18,10 @@
 #include <random>
 #include <vector>
 
+#include "base/bit/bit_packing.h"
+#include "base/bit/bit_packing_arrow.h"
+#include "base/bit/bit_packing_default.h"
 #include "bench/bit_copy.h"
-#include "util/bit_packing.h"
-#include "util/bit_packing_arrow.h"
-#include "util/bit_packing_default.h"
 
 namespace starrocks {
 

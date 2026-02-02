@@ -40,7 +40,7 @@
 #include <cstdint>
 #include <utility>
 
-#include "util/bit_util.h"
+#include "base/bit/bit_util.h"
 
 namespace starrocks::util::bitpacking_default {
 

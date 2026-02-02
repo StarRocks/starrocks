@@ -36,11 +36,10 @@
 
 #include <endian.h>
 
-#include "common/compiler_util.h"
+#include "base/compiler_util.h"
 #include "gutil/bits.h"
 #include "gutil/endian.h"
 #include "gutil/port.h"
-#include "util/cpu_info.h"
 
 namespace starrocks {
 
@@ -100,11 +99,11 @@ public:
 
     // Returns the number of set bits in x
     static inline int popcount(uint64_t x) {
-        if (LIKELY(CpuInfo::is_supported(CpuInfo::POPCNT))) {
-            return __builtin_popcountl(x);
-        } else {
-            return popcount_no_hw(x);
-        }
+#if defined(__clang__) || defined(__GNUC__)
+        return __builtin_popcountll(x);
+#else
+        return popcount_no_hw(x);
+#endif
     }
 
     static inline int count_one_bits(uint32_t x) {
@@ -274,20 +273,10 @@ public:
     /// Non hw accelerated pop count.
     /// TODO: we don't use this in any perf sensitive code paths currently.  There
     /// might be a much faster way to implement this.
-    static inline int PopcountNoHw(uint64_t x) {
-        int count = 0;
-        for (; x != 0; ++count) x &= x - 1;
-        return count;
-    }
+    static inline int PopcountNoHw(uint64_t x) { return popcount_no_hw(x); }
 
     /// Returns the number of set bits in x
-    static inline int Popcount(uint64_t x) {
-        //if (LIKELY(CpuInfo::is_supported(CpuInfo::POPCNT))) {
-        //  return POPCNT_popcnt_u64(x);
-        //} else {
-        return PopcountNoHw(x);
-        // }
-    }
+    static inline int Popcount(uint64_t x) { return popcount(x); }
 
     // Compute correct population count for various-width signed integers
     template <typename T>

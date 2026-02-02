@@ -18,6 +18,7 @@
 #include <numeric>
 #include <utility>
 
+#include "base/bit/bit_util.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/hash/xxh3.h"
 #include "base/string/faststring.h"
@@ -40,7 +41,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
-#include "util/bit_util.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/debug_util.h"

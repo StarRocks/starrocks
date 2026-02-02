@@ -21,11 +21,11 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/bit/bit_stream_utils.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "common/status.h"
 #include "formats/parquet/types.h"
 #include "gen_cpp/parquet_types.h"
-#include "util/bit_stream_utils.h"
 #include "util/rle_encoding.h"
 #include "util/runtime_profile.h"
 

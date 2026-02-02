@@ -22,8 +22,8 @@
 #include <arrow/util/bpacking_avx2.h>
 #endif
 
-#include "common/logging.h"
-#include "util/bit_packing_default.h"
+#include "base/bit/bit_packing_default.h"
+#include "base/logging.h"
 
 namespace starrocks::util::bitpacking_arrow {
 

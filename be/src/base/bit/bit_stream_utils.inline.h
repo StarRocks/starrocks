@@ -37,10 +37,10 @@
 
 #include <algorithm>
 
+#include "base/bit/bit_packing.h"
+#include "base/bit/bit_stream_utils.h"
 #include "base/utility/alignment.h"
 #include "glog/logging.h"
-#include "util/bit_packing.h"
-#include "util/bit_stream_utils.h"
 
 using starrocks::BitUtil;
 

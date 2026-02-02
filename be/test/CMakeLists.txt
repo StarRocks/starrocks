@@ -345,8 +345,6 @@ set(EXEC_FILES
         ./util/aes_util_test.cpp
         ./util/base85_test.cpp
         ./util/bitmap_test.cpp
-        ./util/bit_stream_utils_test.cpp
-        ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp
         ./util/brpc_stub_cache_test.cpp
         ./util/bthreads/future_test.cpp
@@ -388,8 +386,6 @@ set(EXEC_FILES
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/bit_packing_test.cpp
-        ./util/bit_packing_simd_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp

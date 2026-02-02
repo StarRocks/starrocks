@@ -35,9 +35,9 @@
 
 #include <glog/logging.h>
 
+#include "base/bit/bit_stream_utils.inline.h"
+#include "base/bit/bit_util.h"
 #include "gutil/port.h"
-#include "util/bit_stream_utils.inline.h"
-#include "util/bit_util.h"
 
 namespace starrocks {
 
