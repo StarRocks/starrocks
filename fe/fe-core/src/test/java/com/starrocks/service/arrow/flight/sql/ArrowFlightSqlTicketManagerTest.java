@@ -196,6 +196,33 @@ public class ArrowFlightSqlTicketManagerTest {
     }
 
     @Test
+    public void testBuildTicketsWithProxyToken() {
+        // When proxy is enabled, tokens have format "FE_HOST|UUID"
+        String proxyToken = "fe-host-1|550e8400-e29b-41d4-a716-446655440000";
+
+        ByteString feLocal = ticketManager.buildFELocalTicket(proxyToken, new TUniqueId(5L, 6L));
+        String feLocalStr = feLocal.toStringUtf8();
+        assertEquals("550e8400-e29b-41d4-a716-446655440000|00000000-0000-0005-0000-000000000006", feLocalStr);
+
+        ArrowFlightSqlTicketManager.ParsedTicket parsedFeLocal = ticketManager.parseTicket(feLocalStr);
+        assertEquals(ArrowFlightSqlTicketManager.TicketType.FE_LOCAL, parsedFeLocal.getType());
+        assertEquals("550e8400-e29b-41d4-a716-446655440000", parsedFeLocal.getToken());
+        assertEquals("00000000-0000-0005-0000-000000000006", parsedFeLocal.getQueryId());
+
+        ByteString feProxy = ticketManager.buildFEProxyTicket(proxyToken, new TUniqueId(7L, 8L));
+        String feProxyStr = feProxy.toStringUtf8();
+        assertEquals("550e8400-e29b-41d4-a716-446655440000|00000000-0000-0007-0000-000000000008|localhost:1234",
+                     feProxyStr);
+
+        ArrowFlightSqlTicketManager.ParsedTicket parsedFeProxy = ticketManager.parseTicket(feProxyStr);
+        assertEquals(ArrowFlightSqlTicketManager.TicketType.FE_PROXY, parsedFeProxy.getType());
+        assertEquals("550e8400-e29b-41d4-a716-446655440000", parsedFeProxy.getToken());
+        assertEquals("00000000-0000-0007-0000-000000000008", parsedFeProxy.getQueryId());
+        assertEquals("localhost", parsedFeProxy.getHost());
+        assertEquals(1234, parsedFeProxy.getPort());
+    }
+
+    @Test
     public void testGetFEEndpoint() throws Exception {
         ArrowFlightSqlConnectContext mockCtx = mock(ArrowFlightSqlConnectContext.class);
         when(mockCtx.getArrowFlightSqlToken()).thenReturn("test-token");

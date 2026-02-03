@@ -222,14 +222,18 @@ public class ArrowFlightSqlTicketManager {
     }
 
     public ByteString buildFELocalTicket(String token, TUniqueId queryId) {
-        return ByteString.copyFromUtf8(token + "|" + DebugUtil.printId(queryId));
+        // Extract UUID from token (token may be "host|uuid" or just "uuid")
+        String uuid = extractUuidFromToken(token);
+        return ByteString.copyFromUtf8(uuid + "|" + DebugUtil.printId(queryId));
     }
 
     public ByteString buildFEProxyTicket(String token, TUniqueId queryId) {
+        // Extract UUID from token (token may be "host|uuid" or just "uuid")
+        String uuid = extractUuidFromToken(token);
         String feHost = feEndpoint.getUri().getHost();
         int fePort = feEndpoint.getUri().getPort();
         String hostPort = NetUtils.getHostPortInAccessibleFormat(feHost, fePort);
-        return ByteString.copyFromUtf8(token + "|" + DebugUtil.printId(queryId) + "|" + hostPort);
+        return ByteString.copyFromUtf8(uuid + "|" + DebugUtil.printId(queryId) + "|" + hostPort);
     }
 
     /**
@@ -374,6 +378,24 @@ public class ArrowFlightSqlTicketManager {
     @VisibleForTesting
     protected String getProxyAddress() {
         return GlobalVariable.getArrowFlightProxy();
+    }
+
+    /**
+     * Extracts the UUID portion from a token.
+     * When proxy is enabled, tokens have format "FE_HOST|UUID", otherwise just "UUID".
+     * This method returns just the UUID part to avoid delimiter conflicts in tickets.
+     */
+    private static String extractUuidFromToken(String token) {
+        if (token == null || token.isEmpty()) {
+            return token;
+        }
+        int lastDelimiter = token.lastIndexOf('|');
+        if (lastDelimiter > 0) {
+            // Token contains delimiter, extract UUID after last '|'
+            return token.substring(lastDelimiter + 1);
+        }
+        // Token doesn't contain delimiter, return as-is
+        return token;
     }
 
     private static String hexStringFromUniqueId(TUniqueId id) {

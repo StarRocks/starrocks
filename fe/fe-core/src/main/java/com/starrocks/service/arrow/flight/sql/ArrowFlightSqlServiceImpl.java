@@ -303,13 +303,15 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     @Override
     public void getStreamStatement(FlightSql.TicketStatementQuery ticket, CallContext context, ServerStreamListener listener) {
-        getStreamResult(ticket.getStatementHandle().toStringUtf8(), listener);
+        String token = context.peerIdentity();
+        getStreamResult(ticket.getStatementHandle().toStringUtf8(), token, listener);
     }
 
     @Override
     public void getStreamPreparedStatement(FlightSql.CommandPreparedStatementQuery command, CallContext context,
                                            ServerStreamListener listener) {
-        getStreamResult(command.getPreparedStatementHandle().toStringUtf8(), listener);
+        String token = context.peerIdentity();
+        getStreamResult(command.getPreparedStatementHandle().toStringUtf8(), token, listener);
     }
 
     /**
@@ -525,15 +527,16 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
     }
 
-    private void getStreamResult(String ticket, ServerStreamListener listener) {
-        ArrowFlightSqlTicketManager.ParsedTicket parsedTicket = ticketManager.parseTicket(ticket);
+    private void getStreamResult(String ticketString, String bearerToken, ServerStreamListener listener) {
+        ArrowFlightSqlTicketManager.ParsedTicket parsedTicket = ticketManager.parseTicket(ticketString);
 
         switch (parsedTicket.getType()) {
             case FE_LOCAL:
-                getStreamResultFromFE(parsedTicket.getToken(), parsedTicket.getQueryId(), listener);
+                // Use bearer token from auth header for session lookup
+                getStreamResultFromFE(bearerToken, parsedTicket.getQueryId(), listener);
                 break;
             case FE_PROXY:
-                getStreamResultFromRemoteFE(parsedTicket, listener);
+                getStreamResultFromRemoteFE(parsedTicket, bearerToken, listener);
                 break;
             case BE_PROXY:
                 getStreamResultFromBE(parsedTicket, listener);
@@ -559,15 +562,17 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private void getStreamResultFromRemoteFE(ArrowFlightSqlTicketManager.ParsedTicket ticket,
+                                              String bearerToken,
                                               ServerStreamListener listener) {
         // Check if this is the local FE - if so, handle locally to avoid unnecessary network hop
         if (ticketManager.isLocalFE(ticket)) {
-            getStreamResultFromFE(ticket.getToken(), ticket.getQueryId(), listener);
+            getStreamResultFromFE(bearerToken, ticket.getQueryId(), listener);
             return;
         }
 
-        ByteString ticketHandle = ByteString.copyFromUtf8(ticket.getToken() + "|" + ticket.getQueryId());
-        getStreamResultFromRemoteNode(ticket.getHost(), ticket.getPort(), ticketHandle, ticket.getToken(), "FE", listener);
+        String uuid = extractUuidFromToken(bearerToken);
+        ByteString ticketHandle = ByteString.copyFromUtf8(uuid + "|" + ticket.getQueryId());
+        getStreamResultFromRemoteNode(ticket.getHost(), ticket.getPort(), ticketHandle, bearerToken, "FE", listener);
     }
 
     private void getStreamResultFromRemoteNode(String host, int port,
@@ -928,6 +933,23 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @VisibleForTesting
     protected FlightClient getClientFromCacheForTesting(String key) {
         return this.clientCache.getIfPresent(key);
+    }
+
+    /**
+     * Extracts the UUID portion from a bearer token.
+     * When proxy is enabled, tokens have format "FE_HOST|UUID", otherwise just "UUID".
+     */
+    private static String extractUuidFromToken(String token) {
+        if (token == null || token.isEmpty()) {
+            return token;
+        }
+        int lastDelimiter = token.lastIndexOf('|');
+        if (lastDelimiter > 0) {
+            // Token contains delimiter, extract UUID after last '|'
+            return token.substring(lastDelimiter + 1);
+        }
+        // Token doesn't contain delimiter, return as-is
+        return token;
     }
 
     /**
