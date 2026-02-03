@@ -3932,4 +3932,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_hudi_lib_internal_metadata_table = true;
+
+    @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
+            "avoid stack over flow")
+    public static int compound_predicate_flatten_threshold = 512;
 }

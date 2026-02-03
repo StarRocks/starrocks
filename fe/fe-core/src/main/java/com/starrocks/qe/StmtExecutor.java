@@ -65,6 +65,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -974,6 +975,10 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
+            }
+
+            if (coord != null) {
+                coord.clearExternalResources();
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
@@ -3203,6 +3208,7 @@ public class StmtExecutor {
                     getPreparedStmtId());
             // Set query source from context
             queryDetail.setQuerySource(context.getQuerySource());
+            queryDetail.setImpersonatedUser(resolveImpersonatedUser());
             context.setQueryDetail(queryDetail);
             // copy queryDetail, cause some properties can be changed in future
             QueryDetailQueue.addQueryDetail(queryDetail.copy());
@@ -3276,5 +3282,27 @@ public class StmtExecutor {
                 && !isPreQuerySQL
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+
+    private String resolveImpersonatedUser() {
+        String qualifiedUser = ClusterNamespace.getNameFromFullName(context.getQualifiedUser());
+        String currentUser = context.getCurrentUserIdentity() == null ? null :
+                ClusterNamespace.getNameFromFullName(context.getCurrentUserIdentity().getUser());
+        if (currentUser == null || qualifiedUser == null || currentUser.equals(qualifiedUser)) {
+            return null;
+        }
+        return currentUser;
+    }
+
+    public double getMaxFilterRatio(DmlStmt dmlStmt) {
+        Map<String, String> properties = dmlStmt.getProperties();
+        if (properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            try {
+                return Double.parseDouble(properties.get(LoadStmt.MAX_FILTER_RATIO_PROPERTY));
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+        return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
     }
 }
