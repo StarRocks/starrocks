@@ -1,3 +1,4 @@
+
 [fragment statistics]
 PLAN FRAGMENT 0(F03)
 Output Exprs:32: expr
@@ -30,7 +31,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 07
 
 6:AGGREGATE (update serialize)
-|  aggregate: sum[(if[([22: P_TYPE, VARCHAR, false] LIKE 'PROMO%', [34: multiply, DOUBLE, false], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[(if[([22: P_TYPE, VARCHAR, false] LIKE 'PROMO%', [34: multiply, DOUBLE, false], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[0.0, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
@@ -74,6 +75,7 @@ OutPut Exchange Id: 07
 table: part, rollup: part
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
+tabletList=10314,10316,10318,10320,10322,10324,10326,10328,10330,10332
 actualRows=0, avgRowSize=33.0
 cardinality: 20000000
 probe runtime filters:
@@ -104,6 +106,7 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [11: L_SHIPDATE, DATE, false] >= '1997-02-01', [11: L_SHIPDATE, DATE, false] < '1997-03-01'
 partitionsRatio=1/1, tabletsRatio=20/20
+tabletList=10338,10340,10342,10344,10346,10348,10350,10352,10354,10356 ...
 actualRows=0, avgRowSize=28.0
 cardinality: 7013947
 column statistics:
@@ -112,3 +115,4 @@ column statistics:
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
 * L_SHIPDATE-->[8.547264E8, 8.571456E8, 0.0, 4.0, 2526.0] MCV: [[1997-02-16:261100]] ESTIMATE
 [end]
+
