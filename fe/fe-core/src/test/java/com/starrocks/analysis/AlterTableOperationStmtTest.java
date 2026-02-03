@@ -343,9 +343,11 @@ public class AlterTableOperationStmtTest {
 
         ExpireSnapshotsProcedure expireProc = ExpireSnapshotsProcedure.getInstance();
         Assertions.assertEquals("expire_snapshots", expireProc.getProcedureName());
-        Assertions.assertEquals(1, expireProc.getArguments().size());
+        Assertions.assertEquals(2, expireProc.getArguments().size());
         Assertions.assertEquals("older_than", expireProc.getArguments().get(0).getName());
         Assertions.assertFalse(expireProc.getArguments().get(0).isRequired());
+        Assertions.assertEquals("retain_last", expireProc.getArguments().get(1).getName());
+        Assertions.assertFalse(expireProc.getArguments().get(1).isRequired());
 
         FastForwardProcedure fastForwardProc = FastForwardProcedure.getInstance();
         Assertions.assertEquals("fast_forward", fastForwardProc.getProcedureName());
