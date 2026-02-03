@@ -1,0 +1,309 @@
+-- name: test_flat_json_consistency2
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": 23234982794}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+2	{"level1": {"level2": {"level3": {"4": 23234982794}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": 3.14}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+2	{"level1": {"level2": {"level3": {"4": 3.14}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": "abc"}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+2	{"level1": {"level2": {"level3": {"4": "abc"}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": {"5":"abc"}}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+2	{"level1": {"level2": {"level3": {"4": {"5": "abc"}}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+["nulls(TINYINT), level1.level2.level3.4.5(VARCHAR), remain(JSON)"]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": {}}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+2	{"level1": {"level2": {"level3": {"4": {}}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": null}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+2	{"level1": {"level2": {"level3": {"4": null}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}'),
+(2, NULL);
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+2	None
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": 23234982794}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": 23234982794}}}}
+2	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": 3.14}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": 3.14}}}}
+2	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": "abc"}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": "abc"}}}}
+2	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": {"5": "abc"}}}}}
+2	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+["nulls(TINYINT), level1.level2.level3.4.5(VARCHAR), remain(JSON)"]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": {}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": {}}}}}
+2	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, '{"level1": {"level2": {"level3": {"4": null}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	{"level1": {"level2": {"level3": {"4": null}}}}
+2	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
+drop table if exists test_json;
+-- result:
+-- !result
+create table test_json (c1 int, c2 json)
+distributed by random buckets 1
+properties("flat_json.enable"="true");
+-- result:
+-- !result
+insert into test_json values
+(1, NULL),
+(2, '{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}');
+-- result:
+-- !result
+select * from test_json order by c1;
+-- result:
+1	None
+2	{"level1": {"level2": {"level3": {"4": ["abc", 100, 200]}}}}
+-- !result
+select flat_json_meta(c2) from test_json [_META_];
+-- result:
+[]
+-- !result
