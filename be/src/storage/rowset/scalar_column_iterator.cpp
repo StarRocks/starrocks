@@ -471,7 +471,7 @@ bool ScalarColumnIterator::has_ngram_bloom_filter_index() const {
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                            SparseRange<>* row_ranges) {
+                                                            SparseRange<>* row_ranges, bool is_conjunction) {
     RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
 
     bool support_original_bloom_filter = false;
@@ -496,9 +496,9 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     opts.stats = _opts.stats;
     // filter data using bloom filter or ngram bloom filter
     if (support_original_bloom_filter) {
-        RETURN_IF_ERROR(_reader->original_bloom_filter(predicates, row_ranges, opts));
+        RETURN_IF_ERROR(_reader->original_bloom_filter(predicates, is_conjunction, row_ranges, opts));
     } else {
-        RETURN_IF_ERROR(_reader->ngram_bloom_filter(predicates, row_ranges, opts));
+        RETURN_IF_ERROR(_reader->ngram_bloom_filter(predicates, is_conjunction, row_ranges, opts));
     }
     return Status::OK();
 }
