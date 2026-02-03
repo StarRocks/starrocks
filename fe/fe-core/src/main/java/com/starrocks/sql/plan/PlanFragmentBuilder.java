@@ -962,7 +962,7 @@ public class PlanFragmentBuilder {
             currentExecGroup.add(scanNode);
 
             // set slot
-            ColumnRefSet partitionRefs = new ColumnRefSet();
+            List<ColumnRefOperator> partitionRefs = Lists.newArrayList();
             List<Column> partitionCols = referenceTable.getPartitionColumns();
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
@@ -977,7 +977,7 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
 
                 if (partitionCols.contains(entry.getValue())) {
-                    partitionRefs.union(entry.getKey());
+                    partitionRefs.add(entry.getKey());
                 }
             }
 
@@ -989,13 +989,15 @@ public class PlanFragmentBuilder {
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
 
+            partitionCols = Lists.newArrayList();
             for (ScalarOperator predicate : predicates) {
                 Expr p = ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext);
                 scanNode.getConjuncts().add(p);
 
-                ColumnRefSet useRefs = predicate.getUsedColumns();
-                if (partitionRefs.containsAll(useRefs) && useRefs.size() == 1) {
+                List<ColumnRefOperator> useRefs = predicate.getColumnRefs();
+                if (useRefs.size() == 1 && partitionRefs.contains(useRefs.get(0))) {
                     scanNode.getPartitionConjuncts().add(p);
+                    partitionCols.add(node.getColRefToColumnMetaMap().get(useRefs.get(0)));
                 }
             }
 
@@ -1035,7 +1037,7 @@ public class PlanFragmentBuilder {
                     final Partition partition = referenceTable.getPartition(partitionId);
                     List<TKeyRange> partitionRange = List.of();
                     if (!scanNode.getPartitionConjuncts().isEmpty()) {
-                        partitionRange = computePartitionRange(referenceTable, partition,
+                        partitionRange = computePartitionRange(referenceTable, partition, partitionCols,
                                  context.getConnectContext().getSessionVariable());
                     }
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -1093,12 +1095,14 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
-        private List<TKeyRange> computePartitionRange(OlapTable table, Partition partition, SessionVariable session) {
+        private List<TKeyRange> computePartitionRange(OlapTable table, Partition partition,
+                                                      List<Column> partitionCols, SessionVariable session) {
             PartitionInfo partitionInfo = table.getPartitionInfo();
-            if (!partition.hasData() || !(partitionInfo.isRangePartition() || partitionInfo.isListPartition())) {
+            if (partitionCols.isEmpty() || !partition.hasData() || !(partitionInfo.isRangePartition()
+                    || partitionInfo.isListPartition())) {
                 return List.of();
             }
-            List<Column> partitionCols = partitionInfo.getPartitionColumns(table.getIdToColumn());
+            Preconditions.checkState(partitionInfo.getPartitionColumns(table.getIdToColumn()).containsAll(partitionCols));
 
             long partitionValues = 1;
             List<TKeyRange> result = Lists.newArrayList();
@@ -1110,7 +1114,6 @@ public class PlanFragmentBuilder {
                     return List.of();
                 }
 
-                Preconditions.checkState(partitionCols.size() == keyRange.upperEndpoint().getKeys().size());
                 for (int i = 0; i < partitionCols.size(); i++) {
                     TKeyRange kr;
                     if (partitionCols.get(i).getType().isDate()) {
