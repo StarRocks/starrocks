@@ -70,6 +70,23 @@ public:
     OP op = OP_INCLUDE; // merge flat json use, to mark the path is need
     FlatJsonHashMap<std::string_view, std::unique_ptr<JsonFlatPath>> children;
 
+<<<<<<< HEAD
+=======
+    // derived stats
+    // json compatible type
+    uint8_t json_type = 31; // JSON_NULL_TYPE_BITS
+    // column path hit count, some json may be null or none, so hit use to record the actual value
+    // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
+    uint32_t hits = 0;
+    // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
+    uint64_t max_uint = 0;
+    // same key may appear many times in json, so we need avoid duplicate compute hits
+    uint32_t last_row = -1;
+    uint32_t multi_times = 0;
+    uint32_t base_type_count = 0; // for count the base type, e.g: int, double, string
+    uint32_t object_count = 0;    // for count the object type
+
+>>>>>>> 8095476144 ([BugFix] Fix JSON flatten array and object conflict on identical paths (#68804))
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;
     JsonFlatPath(const JsonFlatPath& rhs) = default;
@@ -102,7 +119,7 @@ public:
     static std::pair<std::string_view, std::string_view> split_path(const std::string_view& path);
 };
 
-// to deriver json flanttern path
+// to deriver json flatten path
 class JsonPathDeriver {
 public:
     JsonPathDeriver() = default;
@@ -110,7 +127,7 @@ public:
 
     ~JsonPathDeriver() = default;
 
-    // dervie paths
+    // derive paths
     void derived(const std::vector<const Column*>& json_datas);
 
     void derived(const std::vector<const ColumnReader*>& json_readers);
