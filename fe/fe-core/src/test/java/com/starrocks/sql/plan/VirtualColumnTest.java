@@ -14,6 +14,9 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -23,6 +26,17 @@ import org.junit.jupiter.api.Test;
  */
 public class VirtualColumnTest extends PlanTestBase {
     
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        Config.enable_virtual_columns = true;
+    }
+
+    @AfterAll
+    public static void afterClass() {
+        Config.enable_virtual_columns = false;
+    }
+
     @Test
     public void testTabletIdVirtualColumn() throws Exception {
         // Test that _tablet_id_ is recognized in SELECT clause

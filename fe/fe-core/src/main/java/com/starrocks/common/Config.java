@@ -3866,6 +3866,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
 
+    @ConfField(mutable = true, comment = "Whether enable virtual columns like _tablet_id_")
+    public static boolean enable_virtual_columns = true;
+
     @ConfField(mutable = true)
     public static long max_bucket_number_per_partition = 1024;
 

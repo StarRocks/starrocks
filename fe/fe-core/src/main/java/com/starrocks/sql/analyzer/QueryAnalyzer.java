@@ -38,6 +38,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -894,7 +895,7 @@ public class QueryAnalyzer {
         private List<Column> getVirtualColumns(Table table) {
             List<Column> columns = new ArrayList<>();
             // Add _tablet_id_ virtual column for OLAP tables
-            if (table.isNativeTableOrMaterializedView()) {
+            if (table.isNativeTableOrMaterializedView() && Config.enable_virtual_columns) {
                 OlapTable olapTable = (OlapTable) table;
                 columns.addAll(olapTable.getVirtualColumns());
             }

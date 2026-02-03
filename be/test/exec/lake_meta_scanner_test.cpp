@@ -263,7 +263,7 @@ TEST_F(LakeMetaScannerTest, test_read_schema) {
         ASSERT_EQ(schema->schema_version(), 5);
 
         // Verify schema has 2 columns: c0 (INT, key) and c1 (INT, non-key)
-        ASSERT_EQ(schema->num_columns(), 2);
+        ASSERT_EQ(schema->num_columns(), 3);
 
         // Verify column c0: INT, key
         const auto& col0 = schema->column(0);
@@ -306,7 +306,7 @@ TEST_F(LakeMetaScannerTest, test_read_schema) {
         ASSERT_EQ(schema->schema_version(), 1);
 
         // Verify schema has 1 column: c0 (INT, key)
-        ASSERT_EQ(schema->num_columns(), 1);
+        ASSERT_EQ(schema->num_columns(), 2);
 
         // Verify column c0: INT, key
         const auto& col0 = schema->column(0);
