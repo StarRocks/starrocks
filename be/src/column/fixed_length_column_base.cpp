@@ -14,6 +14,7 @@
 
 #include "column/fixed_length_column_base.h"
 
+#include "base/int256.h"
 #include "base/simd/gather.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
@@ -23,7 +24,6 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "storage/decimal12.h"
-#include "types/int256.h"
 #include "types/large_int_value.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"

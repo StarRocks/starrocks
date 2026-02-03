@@ -36,13 +36,13 @@
 
 #include <ostream>
 
+#include "base/decimal_types.h"
 #include "base/string/slice.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "storage/types.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
-#include "util/decimal_types.h"
 
 namespace starrocks {
 

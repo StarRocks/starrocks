@@ -20,6 +20,7 @@
 #include <butil/time.h> // NOLINT
 
 #include "agent/agent_server.h"
+#include "base/concurrency/countdown_latch.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
@@ -46,7 +47,6 @@
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "util/brpc_stub_cache.h"
-#include "util/countdown_latch.h"
 #include "util/thread.h"
 #include "util/threadpool.h"
 #include "util/trace.h"

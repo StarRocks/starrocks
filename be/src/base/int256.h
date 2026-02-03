@@ -20,7 +20,7 @@
 #include <string>
 #include <type_traits>
 
-#include "common/compiler_util.h"
+#include "base/compiler_util.h"
 
 namespace starrocks {
 

@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include <base/decimal_types.h>
 #include <runtime/int128_arithmetics_x86_64.h>
-#include <util/decimal_types.h>
 
 namespace starrocks {
 typedef __int128 int128_t;

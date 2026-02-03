@@ -43,10 +43,10 @@
 #include <string>
 #include <type_traits>
 
+#include "base/decimal_types.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "types/logical_type.h"
-#include "util/decimal_types.h"
 
 namespace starrocks {
 

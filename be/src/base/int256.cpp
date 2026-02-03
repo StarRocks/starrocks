@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "types/int256.h"
-
-#include <glog/logging.h>
+#include "base/int256.h"
 
 #include <algorithm>
 #include <cmath>

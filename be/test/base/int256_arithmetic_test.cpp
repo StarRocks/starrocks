@@ -19,8 +19,7 @@
 #include <random>
 #include <vector>
 
-#include "types/int256.h"
-#include "types/large_int_value.h"
+#include "base/int256.h"
 
 namespace starrocks {
 
