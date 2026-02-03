@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/monotime.h"
+#include "base/time/monotime.h"
 
 #include <gtest/gtest.h>
 #include <sys/time.h>
@@ -26,7 +26,7 @@
 #include <ostream>
 #include <string>
 
-#include "common/logging.h"
+#include "base/logging.h"
 
 namespace starrocks {
 

@@ -35,6 +35,7 @@ ADD_BE_LIB(Base
   string/slice.cpp
   string/utf8_check.cpp
   system/errno.cpp
+  time/monotime.cpp
   time/time.cpp
   time/timezone_utils.cpp
   template/mustache/mustache.cc

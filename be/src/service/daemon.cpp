@@ -50,6 +50,7 @@
 
 #include <csignal>
 
+#include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
 #include "fs/encrypt_file.h"
@@ -68,7 +69,6 @@
 #include "util/mem_info.h"
 #include "util/memory_lock.h"
 #include "util/misc.h"
-#include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"

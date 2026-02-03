@@ -42,7 +42,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
-#include "util/monotime.h"
+#include "base/time/monotime.h"
 
 namespace starrocks {
 

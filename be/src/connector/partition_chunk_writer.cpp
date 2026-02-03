@@ -14,6 +14,7 @@
 
 #include "connector/partition_chunk_writer.h"
 
+#include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "column/chunk.h"
 #include "common/status.h"
@@ -28,7 +29,6 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/types.h"
-#include "util/monotime.h"
 
 namespace starrocks::connector {
 

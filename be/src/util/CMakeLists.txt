@@ -74,7 +74,6 @@ set(UTIL_FILES
   string_util.cpp
   thrift_rpc_helper.cpp
   frame_of_reference_coding.cpp
-  monotime.cpp
   thread.cpp
   threadpool.cpp
   trace.cpp
