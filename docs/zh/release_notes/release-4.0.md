@@ -23,6 +23,56 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.5
+
+发布日期：2026 年 2 月 3 日
+
+### 功能优化
+
+- 将 Paimon 版本升级至 1.3.1。[#67098](https://github.com/StarRocks/starrocks/pull/67098)
+- 恢复 DP 统计信息估算中缺失的优化，减少冗余计算。[#67852](https://github.com/StarRocks/starrocks/pull/67852)
+- 改进 DP Join 重排序中的剪枝逻辑，更早跳过代价高昂的候选执行计划。[#67828](https://github.com/StarRocks/starrocks/pull/67828)
+- 优化 JoinReorderDP 的分区枚举逻辑，减少对象分配，并新增原子数量上限（≤ 62）。[#67643](https://github.com/StarRocks/starrocks/pull/67643)
+- 优化 DP Join 重排序的剪枝逻辑，并在 BitSet 中增加检查以减少流式操作的开销。[#67644](https://github.com/StarRocks/starrocks/pull/67644)
+- 在 DP 统计信息估算过程中跳过谓词列的统计信息收集，以降低 CPU 开销。[#67663](https://github.com/StarRocks/starrocks/pull/67663)
+- 优化相关 Join 的行数估算，避免重复构建 `Statistics` 对象。[#67773](https://github.com/StarRocks/starrocks/pull/67773)
+- 减少 `Statistics.getUsedColumns` 中的内存分配。[#67786](https://github.com/StarRocks/starrocks/pull/67786)
+- 当仅更新行数时，避免冗余复制 `Statistics` 映射。[#67777](https://github.com/StarRocks/starrocks/pull/67777)
+- 当查询中不存在聚合时，跳过聚合下推逻辑以减少开销。[#67603](https://github.com/StarRocks/starrocks/pull/67603)
+- 改进窗口函数中的 COUNT DISTINCT，新增对融合多 DISTINCT 聚合的支持，并优化 CTE 生成。[#67453](https://github.com/StarRocks/starrocks/pull/67453)
+- Trino 方言中支持 `map_agg` 函数。[#66673](https://github.com/StarRocks/starrocks/pull/66673)
+- 在物理规划阶段支持批量获取 LakeTablet 位置信息，以减少共享数据集群中的 RPC 调用。[#67325](https://github.com/StarRocks/starrocks/pull/67325)
+- 在存算一体（shared-nothing）集群中为 Publish Version 事务新增线程池，以提升并发能力。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
+- 优化 LocalMetastore 的锁粒度，将数据库级锁替换为表级锁。[#67658](https://github.com/StarRocks/starrocks/pull/67658)
+- 重构 MergeCommitTask 的生命周期管理，并新增任务取消支持。[#67425](https://github.com/StarRocks/starrocks/pull/67425)
+- 支持为自动化集群快照配置执行间隔。[#67525](https://github.com/StarRocks/starrocks/pull/67525)
+- 在 MemTrackerManager 中自动清理未使用的 `mem_pool` 条目。[#67347](https://github.com/StarRocks/starrocks/pull/67347)
+- 在仓库空闲检查中忽略 `information_schema` 查询。[#67958](https://github.com/StarRocks/starrocks/pull/67958)
+- 支持根据数据分布动态为 Iceberg 表写入启用全局 Shuffle。[#67442](https://github.com/StarRocks/starrocks/pull/67442)
+- 为 Connector Sink 模块新增 Profile 指标。[#67761](https://github.com/StarRocks/starrocks/pull/67761)
+- 改进 Profile 中加载（load）溢写指标的采集和展示，区分本地 I/O 与远端 I/O。[#67527](https://github.com/StarRocks/starrocks/pull/67527)
+- 将 Async-Profiler 的日志级别调整为 Error，避免重复打印警告日志。[#67297](https://github.com/StarRocks/starrocks/pull/67297)
+- 在 BE 关闭时通知 Starlet 向 StarMgr 上报 SHUTDOWN 状态。[#67461](https://github.com/StarRocks/starrocks/pull/67461)
+
+### 问题修复
+
+已修复以下问题：
+
+- 不支持包含连字符（`-`）的合法简单路径。[#67988](https://github.com/StarRocks/starrocks/pull/67988)
+- 当聚合下推发生在包含 JSON 类型的分组键上时出现运行时错误。[#68142](https://github.com/StarRocks/starrocks/pull/68142)
+- JSON 路径重写规则错误地裁剪了分区谓词中引用的分区列。[#67986](https://github.com/StarRocks/starrocks/pull/67986)
+- 使用统计信息重写简单聚合时出现类型不匹配问题。[#67829](https://github.com/StarRocks/starrocks/pull/67829)
+- 分区 Join 中可能存在堆缓冲区溢出风险。[#67435](https://github.com/StarRocks/starrocks/pull/67435)
+- 在下推复杂表达式时引入了重复的 `slot_ids`。[#67477](https://github.com/StarRocks/starrocks/pull/67477)
+- 由于缺少前置条件检查，ExecutionDAG 中的 Fragment 连接可能出现除零错误。[#67918](https://github.com/StarRocks/starrocks/pull/67918)
+- 在单 BE 场景下，Fragment 并行准备可能导致潜在问题。[#67798](https://github.com/StarRocks/starrocks/pull/67798)
+- RawValuesSourceOperator 缺少 `set_finished` 方法，导致算子异常终止。[#67609](https://github.com/StarRocks/starrocks/pull/67609)
+- 列聚合器中不支持 DECIMAL256 类型（精度 > 38）导致 BE 崩溃。[#68134](https://github.com/StarRocks/starrocks/pull/68134)
+- 共享数据集群在 DELETE 操作中未通过请求携带 `schema_key`，导致不支持 Fast Schema Evolution v2。[#67456](https://github.com/StarRocks/starrocks/pull/67456)
+- 共享数据集群在同步物化视图和传统 Schema 变更中不支持 Fast Schema Evolution v2。[#67443](https://github.com/StarRocks/starrocks/pull/67443)
+- 在 FE 降级且禁用文件打包时，Vacuum 可能误删文件。[#67849](https://github.com/StarRocks/starrocks/pull/67849)
+- MySQLReadListener 中优雅退出处理不正确。[#67917](https://github.com/StarRocks/starrocks/pull/67917)
+
 ## 4.0.4
 
 发布日期： 2026 年 1 月 16 日
