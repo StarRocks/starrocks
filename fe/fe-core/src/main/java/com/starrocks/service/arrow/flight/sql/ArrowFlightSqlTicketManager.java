@@ -121,6 +121,11 @@ public class ArrowFlightSqlTicketManager {
     /**
      * Parses a ticket string and returns the parsed ticket data.
      *
+     * Ticket formats:
+     * - FE_LOCAL (2 parts):  token|queryId
+     * - FE_PROXY (3 parts):  token|queryId|feHost:fePort
+     * - BE_PROXY (4 parts):  queryId|fragmentInstanceId|beHost|bePort
+     *
      * @param ticket the ticket string to parse
      * @return parsed ticket data
      * @throws org.apache.arrow.flight.FlightRuntimeException if the ticket format is invalid
@@ -130,6 +135,7 @@ public class ArrowFlightSqlTicketManager {
 
         switch (ticketParts.length) {
             case 2:
+                // FE_LOCAL: token|queryId
                 return ParsedTicket.feLocal(ticketParts[0], ticketParts[1]);
             case 3:
                 return parseFEProxyTicket(ticketParts);
@@ -142,6 +148,12 @@ public class ArrowFlightSqlTicketManager {
         }
     }
 
+    /**
+     * Parses FE proxy ticket format: token|queryId|feHost:fePort
+     * ticketParts[0] = token
+     * ticketParts[1] = queryId
+     * ticketParts[2] = feHost:fePort (or [ipv6]:fePort)
+     */
     private ParsedTicket parseFEProxyTicket(String[] ticketParts) {
         String[] hostPort;
         try {
@@ -162,6 +174,13 @@ public class ArrowFlightSqlTicketManager {
         return ParsedTicket.feProxy(ticketParts[0], ticketParts[1], hostPort[0], port);
     }
 
+    /**
+     * Parses BE proxy ticket format: queryId|fragmentInstanceId|beHost|bePort
+     * ticketParts[0] = queryId
+     * ticketParts[1] = fragmentInstanceId
+     * ticketParts[2] = beHost
+     * ticketParts[3] = bePort
+     */
     private ParsedTicket parseBEProxyTicket(String[] ticketParts) {
         int port;
         try {

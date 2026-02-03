@@ -183,8 +183,17 @@ public class ArrowFlightSqlServiceImplTest {
         doNothing().when(mockContext).kill(anyBoolean(), anyString());
         doNothing().when(sessionManager).closeSession(anyString());
         FlightSqlProducer.StreamListener<CloseSessionResult> listener = mock(FlightSqlProducer.StreamListener.class);
+
         service.closeSession(new CloseSessionRequest(), mockCallContext, listener);
+
         verify(sessionManager).closeSession("token123");
+
+        ArgumentCaptor<CloseSessionResult> resultCaptor = ArgumentCaptor.forClass(CloseSessionResult.class);
+        verify(listener).onNext(resultCaptor.capture());
+        verify(listener).onCompleted();
+
+        CloseSessionResult result = resultCaptor.getValue();
+        assertEquals(CloseSessionResult.Status.CLOSED, result.getStatus());
     }
 
     @Test

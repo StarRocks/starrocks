@@ -155,6 +155,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
         ctx.kill(true, "Close Arrow Flight SQL session via RPC request");
         sessionManager.closeSession(ctx.getArrowFlightSqlToken());
+
+        CloseSessionResult result = new CloseSessionResult(CloseSessionResult.Status.CLOSED);
+        listener.onNext(result);
         listener.onCompleted();
     }
 
