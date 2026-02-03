@@ -502,6 +502,9 @@ Status OlapScanNode::_prune_scan_ranges(const std::vector<TScanRangeParams>& sca
 
         bool is_pruned = false;
         for (const auto& partition_column_range : olap_range.partition_column_ranges) {
+            if (!column_name_to_id.contains(partition_column_range.column_name)) {
+                continue;
+            }
             auto* slot = column_name_to_id[partition_column_range.column_name];
             DCHECK(slot != nullptr) << "Failed to find slot for partition column: "
                                     << partition_column_range.column_name;
