@@ -74,6 +74,7 @@ class TabletColumn {
         std::string default_value;
         std::vector<TabletColumn> sub_columns;
         bool has_default_value = false;
+        bool is_virtual_column = false;
     };
 
 public:
@@ -167,6 +168,13 @@ public:
         ExtraFields* ext = _get_or_alloc_extra_fields();
         ext->has_default_value = true;
         ext->default_value = std::move(value);
+    }
+
+    bool is_virtual_column() const { return _extra_fields && _extra_fields->is_virtual_column; }
+
+    void set_is_virtual_column(bool is_virtual) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->is_virtual_column = is_virtual;
     }
 
     bool has_agg_state_desc() const { return _agg_state_desc != nullptr; }
@@ -305,7 +313,6 @@ public:
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
-    size_t field_index(std::string_view field_name, std::string_view extra_column_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }

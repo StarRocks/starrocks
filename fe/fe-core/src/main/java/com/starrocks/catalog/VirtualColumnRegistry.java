@@ -46,7 +46,7 @@ public class VirtualColumnRegistry {
     private static final List<VirtualColumnDefinition> VIRTUAL_COLUMNS = ImmutableList.of(
             new VirtualColumnDefinition(
                     TABLET_ID_COLUMN_NAME,
-                    IntegerType.BIGINT,
+                    IntegerType.INT,
                     "Tablet ID of the data block containing this row"
             )
             // Future virtual columns - uncomment to enable:
