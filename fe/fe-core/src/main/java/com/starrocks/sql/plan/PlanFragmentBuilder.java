@@ -997,6 +997,7 @@ public class PlanFragmentBuilder {
                 List<ColumnRefOperator> useRefs = predicate.getColumnRefs();
                 if (useRefs.size() == 1 && partitionRefs.contains(useRefs.get(0))) {
                     scanNode.getPartitionConjuncts().add(p);
+
                     partitionCols.add(node.getColRefToColumnMetaMap().get(useRefs.get(0)));
                 }
             }
