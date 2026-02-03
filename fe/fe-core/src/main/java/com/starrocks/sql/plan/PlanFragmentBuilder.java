@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.RowPositionDescriptor;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -962,7 +963,7 @@ public class PlanFragmentBuilder {
 
             // set slot
             List<ColumnRefOperator> partitionRefs = Lists.newArrayList();
-            List<Column> partitionCols = referenceTable.getPartitionColumns();
+            Collection<Column> partitionCols = referenceTable.getPartitionColumns();
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
@@ -988,7 +989,7 @@ public class PlanFragmentBuilder {
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
 
-            partitionCols = Lists.newArrayList();
+            partitionCols = Sets.newHashSet();
             for (ScalarOperator predicate : predicates) {
                 Expr p = ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext);
                 scanNode.getConjuncts().add(p);
@@ -1095,13 +1096,15 @@ public class PlanFragmentBuilder {
         }
 
         private List<TKeyRange> computePartitionRange(OlapTable table, Partition partition,
-                                                      List<Column> partitionCols, SessionVariable session) {
+                                                      Collection<Column> usedPartitionCols, SessionVariable session) {
             PartitionInfo partitionInfo = table.getPartitionInfo();
-            if (partitionCols.isEmpty() || !partition.hasData() || !(partitionInfo.isRangePartition()
+            if (usedPartitionCols.isEmpty() || !partition.hasData() || !(partitionInfo.isRangePartition()
                     || partitionInfo.isListPartition())) {
                 return List.of();
             }
-            Preconditions.checkState(partitionInfo.getPartitionColumns(table.getIdToColumn()).containsAll(partitionCols));
+
+            List<Column> partitionCols = partitionInfo.getPartitionColumns(table.getIdToColumn());
+            Preconditions.checkState(partitionCols.containsAll(usedPartitionCols));
 
             long partitionValues = 1;
             List<TKeyRange> result = Lists.newArrayList();
@@ -1114,6 +1117,10 @@ public class PlanFragmentBuilder {
                 }
 
                 for (int i = 0; i < partitionCols.size(); i++) {
+                    if (!usedPartitionCols.contains(partitionCols.get(i))) {
+                        continue;
+                    }
+
                     TKeyRange kr;
                     if (partitionCols.get(i).getType().isDate()) {
                         LiteralExpr lowerExpr = keyRange.lowerEndpoint().getKeys().get(i);
@@ -1149,6 +1156,9 @@ public class PlanFragmentBuilder {
                     Preconditions.checkState(partitionCols.size() == 1);
                     List<LiteralExpr> partitionValuesList = listInfo.getLiteralExprValues().get(partition.getId());
                     for (Column partitionCol : partitionCols) {
+                        if (!usedPartitionCols.contains(partitionCol)) {
+                            continue;
+                        }
                         TKeyRange kr = new TKeyRange();
                         kr.setColumn_type(TypeSerializer.toThrift(partitionCol.getType().getPrimitiveType()));
                         kr.setColumn_name(partitionCol.getName());
@@ -1164,6 +1174,9 @@ public class PlanFragmentBuilder {
                 } else if (listInfo.getMultiLiteralExprValues().containsKey(partition.getId())) {
                     List<List<LiteralExpr>> partitionValuesList = listInfo.getMultiLiteralExprValues().get(partition.getId());
                     for (int i = 0; i < partitionCols.size(); i++) {
+                        if (!usedPartitionCols.contains(partitionCols.get(i))) {
+                            continue;
+                        }
                         TKeyRange kr = new TKeyRange();
                         kr.setColumn_type(TypeSerializer.toThrift(partitionCols.get(i).getType().getPrimitiveType()));
                         kr.setColumn_name(partitionCols.get(i).getName());
