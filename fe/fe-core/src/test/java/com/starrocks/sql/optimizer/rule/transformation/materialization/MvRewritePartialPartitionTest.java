@@ -1326,9 +1326,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
-<<<<<<< HEAD
     */
-=======
 
     @Test
     public void testMVPartitionRefreshRewrite3() throws Exception {
@@ -1395,5 +1393,4 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         starRocksAssert.dropTable("test_sub_table");
         starRocksAssert.dropMaterializedView("test_sub_mv");
     }
->>>>>>> cdba23409d9... [BugFix] should only use base table's mv in AggregateJoinPushDownRule (#68571)
 }
