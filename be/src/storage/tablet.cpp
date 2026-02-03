@@ -43,6 +43,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -67,7 +68,6 @@
 #include "util/failpoint/fail_point.h"
 #include "util/ratelimit.h"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 

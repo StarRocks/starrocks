@@ -31,11 +31,11 @@
 #include <sstream>
 #include <string>
 
+#include "base/time/time.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "util/thrift_server.h"
-#include "util/time.h"
 
 namespace starrocks {
 

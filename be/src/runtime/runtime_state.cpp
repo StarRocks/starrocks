@@ -50,6 +50,7 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
@@ -59,7 +60,6 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/pretty_printer.h"
-#include "util/timezone_utils.h"
 #include "util/uid_util.h"
 
 #ifdef STARROCKS_JIT_ENABLE

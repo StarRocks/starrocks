@@ -17,13 +17,13 @@
 #include <thread>
 
 #include "base/hash/unaligned_access.h"
+#include "base/time/time.h"
 #include "bthread/timer_thread.h"
 #include "butil/resource_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
-#include "util/time.h"
 
 namespace starrocks {
 

@@ -52,6 +52,7 @@
 #include <vector>
 
 #include "agent/status.h"
+#include "base/time/time.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -66,7 +67,6 @@
 #include "util/countdown_latch.h"
 #include "util/lru_cache.h"
 #include "util/threadpool.h"
-#include "util/time.h"
 
 namespace starrocks {
 

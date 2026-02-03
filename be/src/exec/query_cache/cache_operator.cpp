@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "base/time/time.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -26,7 +27,6 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/time.h"
 
 namespace starrocks::query_cache {
 enum PerLaneBufferState {

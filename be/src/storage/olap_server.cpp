@@ -42,6 +42,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "base/time/time.h"
 #include "cache/datacache.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -60,7 +61,6 @@
 #include "storage/update_manager.h"
 #include "tablet_meta_manager.h"
 #include "util/thread.h"
-#include "util/time.h"
 
 using std::string;
 

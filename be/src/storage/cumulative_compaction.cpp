@@ -14,10 +14,10 @@
 
 #include "storage/cumulative_compaction.h"
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 #include "util/trace.h"
 
 namespace starrocks {

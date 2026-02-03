@@ -35,15 +35,14 @@
 
 #pragma once
 
-#include <re2/re2.h>
-
+#include <string>
 #include <string_view>
 
 #include "cctz/time_zone.h"
-#include "types/date_value.h"
-#include "util/timezone_hsscan.h"
 
 namespace starrocks {
+
+class TimezoneHsScan;
 
 class TimezoneUtils {
 public:

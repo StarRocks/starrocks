@@ -17,8 +17,10 @@
 #include <hs/hs.h>
 
 #include <cstring>
+#include <sstream>
+#include <string>
 
-#include "common/status.h"
+#include "base/status.h"
 
 // find time zone with hyper scan.
 namespace starrocks {

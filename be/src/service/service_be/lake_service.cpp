@@ -21,6 +21,7 @@
 
 #include "agent/agent_server.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -48,7 +49,6 @@
 #include "util/countdown_latch.h"
 #include "util/thread.h"
 #include "util/threadpool.h"
-#include "util/time.h"
 #include "util/trace.h"
 
 namespace starrocks {

@@ -34,14 +34,13 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <util/time.h>
-
 #include <condition_variable>
 #include <deque>
 #include <utility>
 
 #include "base/phmap/phmap.h"
 #include "base/string/faststring.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "exec/pipeline/query_context.h"

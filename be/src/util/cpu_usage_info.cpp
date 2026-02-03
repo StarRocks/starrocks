@@ -19,9 +19,9 @@
 #include <cstdio>
 #include <thread>
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "util/cpu_info.h"
-#include "util/time.h"
 
 namespace starrocks {
 

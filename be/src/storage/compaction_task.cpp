@@ -16,6 +16,7 @@
 
 #include <sstream>
 
+#include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
@@ -24,7 +25,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 #include "util/trace.h"
 
 namespace starrocks {

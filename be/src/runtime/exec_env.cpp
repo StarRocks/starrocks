@@ -40,6 +40,7 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "base/time/time.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
@@ -103,7 +104,6 @@
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"

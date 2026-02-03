@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/time.h"
+#include "base/time/time.h"
 
 #include <chrono>
 #include <cmath>
@@ -24,7 +24,7 @@
 #include <sstream>
 #include <thread>
 
-#include "common/logging.h"
+#include "base/logging.h"
 
 using namespace starrocks;
 using namespace std;
