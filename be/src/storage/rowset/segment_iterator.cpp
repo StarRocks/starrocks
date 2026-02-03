@@ -1278,7 +1278,6 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             }
             if (f->is_virtual()) {
                 RETURN_IF_ERROR(_init_virtual_column_iterator(cid, f->name()));
-                continue;
             } else {
                 RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
             }

@@ -81,8 +81,6 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
                                ? tdesc.isNullable
                                : (tdesc.__isset.nullIndicatorBit ? tdesc.nullIndicatorBit != -1 : true)),
           _is_virtual(tdesc.__isset.is_virtual_column ? tdesc.is_virtual_column : false) {}
-{
-}
 
 SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
         : _id(pdesc.id()),
@@ -110,11 +108,8 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_col_name(_col_name);
     pslot->set_slot_idx(_slot_idx);
     pslot->set_is_materialized(_is_materialized);
-<<<<<<< HEAD
     pslot->set_is_nullable(_is_nullable);
-=======
     pslot->set_is_virtual(_is_virtual);
->>>>>>> 425a6f65ffa (update 2)
 }
 
 std::string SlotDescriptor::debug_string() const {
