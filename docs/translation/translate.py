@@ -32,10 +32,9 @@ LANG_MAP = {
 }
 
 class StarRocksTranslator:
-    def __init__(self, target_lang: str, dry_run: bool = False):
+    def __init__(self, target_lang: str):
         self.target_lang = target_lang
         self.target_lang_full = LANG_MAP.get(target_lang, target_lang)
-        self.dry_run = dry_run
         
         self.has_errors = False
         self.successes = [] 
@@ -124,6 +123,7 @@ class StarRocksTranslator:
         return re.sub(code_pattern, '', text)
 
     def _chunk_content(self, text: str) -> list[str]:
+        # 1. Mask code blocks to prevent splitting inside them
         code_pattern = r'(```[\s\S]*?```)'
         code_blocks = []
         
@@ -134,9 +134,11 @@ class StarRocksTranslator:
             
         masked_text = re.sub(code_pattern, replace_code, text)
 
+        # 2. Primary strategy: split by Level 2 through Level 5 headers
         chunks = re.split(r'(?m)^(?=#{2,5}\s)', masked_text)
         chunks = [c for c in chunks if c.strip()]
 
+        # 3. Fallback Strategy for large docs
         LARGE_DOC_THRESHOLD = 20000
         MAX_FALLBACK_CHUNK_SIZE = 4000
 
@@ -164,6 +166,7 @@ class StarRocksTranslator:
             
             chunks = [c for c in fallback_chunks if c.strip()]
 
+        # 4. Restore code blocks
         final_chunks = []
         for chunk in chunks:
             def restore_code(match):
@@ -181,6 +184,7 @@ class StarRocksTranslator:
         
         tag_pattern = r'<(?!\!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
         
+        # Whitelist tags that are common non-XML technical outputs
         IGNORED_TAGS = {"none", "unset", "nil", "generated", "br"}
 
         def get_tag_fingerprints(text):
@@ -223,44 +227,49 @@ class StarRocksTranslator:
 
     def _clean_model_output(self, chunk_translated: str) -> str:
         """
-        Robustly cleans model output.
-        1. Extract <chunk_to_translate>.
-        2. Aggressively strip Markdown code block wrappers.
-        3. Forcefully remove trailing fence if header was stripped (handles trailing filler).
-        4. Parity check.
+        Robustly cleans model output using Fence Parity Check.
+        Ensures valid code block structure is preserved.
         """
+        # 1. Extract content from XML tags if present
         match = re.search(r'<chunk_to_translate>(.*?)</chunk_to_translate>', chunk_translated, re.DOTALL)
         if match:
             chunk_translated = match.group(1).strip()
         
         chunk_translated = re.sub(r'</?chunk_to_translate>', '', chunk_translated).strip()
 
-        # 2. Aggressive Wrapper Stripping
-        # Case insensitive match for ```markdown or ```md at start
-        wrapper_pattern = r'(?i)^.*?```(markdown|md)\s*\n'
-        
-        if re.search(wrapper_pattern, chunk_translated, re.DOTALL):
-            # If we found a wrapper header, we MUST remove the corresponding footer.
-            # We assume the footer is the LAST ``` in the text.
-            
-            # First, strip the header
-            chunk_translated = re.sub(wrapper_pattern, '', chunk_translated, count=1)
-            
-            # Now find the last occurrence of ``` and strip it (plus anything after it)
-            # We use rrfind logic via regex substitution
-            # Matches: the last ``` followed by any text until end of string
-            chunk_translated = re.sub(r'```[^`]*$', '', chunk_translated, count=1)
-            
-            chunk_translated = chunk_translated.strip()
+        # 2. Safe Unwrap: Detect outer wrapper
+        lines = chunk_translated.splitlines()
+        if not lines: return ""
 
-        # 4. FENCE PARITY CHECK (Final Safety Net)
+        start_idx = -1
+        first_line = lines[0].strip()
+        
+        # Only target markdown wrappers
+        if first_line.startswith("```markdown") or first_line.startswith("```md"):
+            start_idx = 0
+        elif len(lines) > 1 and (lines[1].strip().startswith("```markdown") or lines[1].strip().startswith("```md")):
+             start_idx = 1
+
+        if start_idx != -1:
+            # Assume last ``` is the footer and strip everything after
+            # Use Python slicing to grab everything after header
+            chunk_translated = "\n".join(lines[start_idx+1:]).strip()
+            # Regex to remove the last ``` and trailing filler
+            chunk_translated = re.sub(r'```[^`]*$', '', chunk_translated, count=1).strip()
+
+        # 3. FENCE PARITY CHECK
         fence_count = len(re.findall(r'(?m)^\s*```', chunk_translated))
+        
         if fence_count % 2 != 0:
+            # ODD -> We are missing a closing fence. Restore it.
             chunk_translated += "\n```"
                 
         return chunk_translated
 
     def _final_clean(self, text: str) -> str:
+        """
+        Global cleanup to remove any lingering wrapper lines that slipped through.
+        """
         lines = text.splitlines()
         cleaned_lines = []
         for line in lines:
@@ -273,17 +282,35 @@ class StarRocksTranslator:
         if not os.path.exists(input_file):
             return
         
-        source_lang = "en"
-        if "docs/zh/" in input_file: source_lang = "zh"
-        elif "docs/ja/" in input_file: source_lang = "ja"
+        # Determine source language safely from Absolute Path
+        abs_input = os.path.abspath(input_file)
+        
+        source_lang = "en" # default
+        if "/docs/zh/" in abs_input: source_lang = "zh"
+        elif "/docs/ja/" in abs_input: source_lang = "ja"
+        elif "/docs/en/" in abs_input: source_lang = "en"
+        
         source_lang_full = LANG_MAP.get(source_lang, source_lang)
 
-        abs_input = os.path.abspath(input_file)
+        # Build output path by replacing the source dir with target dir
+        if f"/docs/{source_lang}/" not in abs_input:
+             print(f"❌ Error: Could not determine output path. Input path '{abs_input}' does not contain '/docs/{source_lang}/'")
+             return
+
         base_output_path = abs_input.replace(f"/docs/{source_lang}/", f"/docs/{self.target_lang}/")
         
+        # SAFETY CHECK: Don't overwrite the input file
+        if base_output_path == abs_input:
+             print(f"❌ Error: Output path is identical to input path. Stopping to prevent overwrite. (Input: {abs_input})")
+             return
+
         os.makedirs(os.path.dirname(base_output_path), exist_ok=True)
 
-        no_wrapper_instruction = "\nIMPORTANT: Return ONLY the translated content inside the XML tags. DO NOT wrap the output in markdown code blocks like ```markdown."
+        no_wrapper_instruction = (
+            "\nIMPORTANT: Return ONLY the translated content inside the XML tags. "
+            "DO NOT wrap the output in markdown code blocks. "
+            "Preserve all XML/React tags (like <Tag />) exactly as they are."
+        )
         
         system_instruction = (self.system_template
                               .replace("${source_lang}", source_lang_full)
