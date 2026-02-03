@@ -15,6 +15,8 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -24,8 +26,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -39,9 +39,9 @@ public class MergeTwoProjectRuleTest {
     @Test
     public void testMergeAndLimit() {
         // Bottom project: {b -> a, c -> 5}
-        ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
-        ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
-        ColumnRefOperator c = new ColumnRefOperator(3, IntegerType.INT, "c", true);
+        ColumnRefOperator a = new ColumnRefOperator(1, ScalarType.createType(PrimitiveType.INT), "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, ScalarType.createType(PrimitiveType.INT), "b", true);
+        ColumnRefOperator c = new ColumnRefOperator(3, ScalarType.createType(PrimitiveType.INT), "c", true);
 
         Map<ColumnRefOperator, ScalarOperator> bottomMap = Maps.newHashMap();
         bottomMap.put(b, a);
@@ -49,8 +49,8 @@ public class MergeTwoProjectRuleTest {
         LogicalProjectOperator bottomProject = new LogicalProjectOperator(bottomMap, 20);
 
         // Top project: {x -> b, y -> c}
-        ColumnRefOperator x = new ColumnRefOperator(4, IntegerType.INT, "x", true);
-        ColumnRefOperator y = new ColumnRefOperator(5, IntegerType.INT, "y", true);
+        ColumnRefOperator x = new ColumnRefOperator(4, ScalarType.createType(PrimitiveType.INT), "x", true);
+        ColumnRefOperator y = new ColumnRefOperator(5, ScalarType.createType(PrimitiveType.INT), "y", true);
         Map<ColumnRefOperator, ScalarOperator> topMap = Maps.newHashMap();
         topMap.put(x, b);
         topMap.put(y, c);
@@ -83,14 +83,14 @@ public class MergeTwoProjectRuleTest {
     @Test
     public void testUnlimitedAndLimit() {
         // Bottom project has unlimited (-1), top has 7 -> result should be 7
-        ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
-        ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+        ColumnRefOperator a = new ColumnRefOperator(1, ScalarType.createType(PrimitiveType.INT), "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, ScalarType.createType(PrimitiveType.INT), "b", true);
 
         Map<ColumnRefOperator, ScalarOperator> bottomMap = Maps.newHashMap();
         bottomMap.put(b, a);
         LogicalProjectOperator bottomProject = new LogicalProjectOperator(bottomMap, -1);
 
-        ColumnRefOperator x = new ColumnRefOperator(3, IntegerType.INT, "x", true);
+        ColumnRefOperator x = new ColumnRefOperator(3, ScalarType.createType(PrimitiveType.INT), "x", true);
         Map<ColumnRefOperator, ScalarOperator> topMap = Maps.newHashMap();
         topMap.put(x, b);
         LogicalProjectOperator topProject = new LogicalProjectOperator(topMap, 7);
@@ -108,21 +108,21 @@ public class MergeTwoProjectRuleTest {
     @Test
     public void testPreserveAssertTrue() {
         // Bottom project contains an ASSERT_TRUE() call; it should be preserved in the result
-        ColumnRefOperator a = new ColumnRefOperator(1, BooleanType.BOOLEAN, "a", true);
-        ColumnRefOperator b = new ColumnRefOperator(2, BooleanType.BOOLEAN, "b", true);
+        ColumnRefOperator a = new ColumnRefOperator(1, ScalarType.createType(PrimitiveType.BOOLEAN), "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, ScalarType.createType(PrimitiveType.BOOLEAN), "b", true);
 
         Map<ColumnRefOperator, ScalarOperator> bottomMap = Maps.newHashMap();
         // Construct a CallOperator with fnName = FunctionSet.ASSERT_TRUE, return type BOOLEAN, and one arg
         CallOperator assertTrue = new CallOperator(
                 com.starrocks.catalog.FunctionSet.ASSERT_TRUE,
-                BooleanType.BOOLEAN,
+                ScalarType.createType(PrimitiveType.BOOLEAN),
                 java.util.List.of(a)
         );
         bottomMap.put(b, assertTrue);
         LogicalProjectOperator bottomProject = new LogicalProjectOperator(bottomMap, -1);
 
         // Top project just references b -> should not remove the ASSERT_TRUE entry for b
-        ColumnRefOperator x = new ColumnRefOperator(3, BooleanType.BOOLEAN, "x", true);
+        ColumnRefOperator x = new ColumnRefOperator(3, ScalarType.createType(PrimitiveType.BOOLEAN), "x", true);
         Map<ColumnRefOperator, ScalarOperator> topMap = Maps.newHashMap();
         topMap.put(x, b);
         LogicalProjectOperator topProject = new LogicalProjectOperator(topMap, -1);
