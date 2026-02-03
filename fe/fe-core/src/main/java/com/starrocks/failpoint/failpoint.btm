@@ -21,3 +21,12 @@ HELPER com.starrocks.failpoint.FailPointHelper
 IF shouldTrigger("bdb_write_jitter")
 DO sleep(10000);
 ENDRULE
+
+# Thrift server accept exception
+RULE thrift_server_accept_exception
+CLASS org.apache.thrift.transport.TServerSocket
+METHOD accept()
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("thrift_server_accept_exception")
+DO throw new OutOfMemoryError("failpoint triggered");
+ENDRULE
