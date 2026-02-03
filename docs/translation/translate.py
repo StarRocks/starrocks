@@ -124,19 +124,24 @@ class StarRocksTranslator:
         return re.sub(code_pattern, '', text)
 
     def _chunk_content(self, text: str) -> list[str]:
-        # Primary strategy: split by Level 2 through Level 5 headers for high granularity.
-        chunks = re.split(r'(?m)^(?=#{2,5}\s)', text)
+        code_pattern = r'(```[\s\S]*?```)'
+        code_blocks = []
+        
+        def replace_code(match):
+            placeholder = f"__CODE_BLOCK_{len(code_blocks)}__"
+            code_blocks.append(match.group(0))
+            return placeholder
+            
+        masked_text = re.sub(code_pattern, replace_code, text)
+
+        chunks = re.split(r'(?m)^(?=#{2,5}\s)', masked_text)
         chunks = [c for c in chunks if c.strip()]
 
-        # Fallback Strategy:
-        # If the document has no matching headers (e.g. only H1 or no headers), 
-        # header splitting will produce a single large chunk.
-        # If that single chunk is too large, we fall back to splitting by paragraphs.
         LARGE_DOC_THRESHOLD = 20000
         MAX_FALLBACK_CHUNK_SIZE = 4000
 
         if len(chunks) == 1 and len(text) > LARGE_DOC_THRESHOLD:
-            paragraphs = re.split(r'\n\s*\n', text)
+            paragraphs = re.split(r'\n\s*\n', masked_text)
             fallback_chunks = []
             current_buffer = ""
             
@@ -144,15 +149,11 @@ class StarRocksTranslator:
                 if not p.strip():
                     continue
                 
-                # Estimate size if we add this paragraph (plus double newline separator)
                 candidate_len = len(current_buffer) + len(p) + 2
-                
                 if candidate_len > MAX_FALLBACK_CHUNK_SIZE and current_buffer:
-                    # Current buffer is full, flush it and start a new one
                     fallback_chunks.append(current_buffer)
                     current_buffer = p
                 else:
-                    # Append to current buffer
                     if current_buffer:
                         current_buffer += "\n\n" + p
                     else:
@@ -161,22 +162,36 @@ class StarRocksTranslator:
             if current_buffer.strip():
                 fallback_chunks.append(current_buffer)
             
-            return [c for c in fallback_chunks if c.strip()]
+            chunks = [c for c in fallback_chunks if c.strip()]
 
-        return chunks
+        final_chunks = []
+        for chunk in chunks:
+            def restore_code(match):
+                idx = int(match.group(1))
+                return code_blocks[idx]
+            
+            restored_chunk = re.sub(r'__CODE_BLOCK_(\d+)__', restore_code, chunk)
+            final_chunks.append(restored_chunk)
+
+        return final_chunks
 
     def validate_mdx(self, original: str, translated: str) -> tuple[bool, str]:
         clean_orig = self._strip_code_blocks(original)
         clean_trans = self._strip_code_blocks(translated)
         
-        # Pattern to find tags but ignore HTML comments
         tag_pattern = r'<(?!\!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
         
+        IGNORED_TAGS = {"none", "unset", "nil", "generated", "br"}
+
         def get_tag_fingerprints(text):
             fingerprints = []
             for match in re.finditer(tag_pattern, text):
                 full_tag = match.group(0)
                 tag_name = match.group(1)
+                
+                if tag_name.lower() in IGNORED_TAGS:
+                    continue
+
                 if full_tag.startswith("</"):
                     type_prefix = "CLOSE"
                 elif full_tag.endswith("/>"):
@@ -206,6 +221,54 @@ class StarRocksTranslator:
                 error_msg.append(f"   - {status} {abs(diff)}x: {readable_tag}")
         return False, "\n".join(error_msg)
 
+    def _clean_model_output(self, chunk_translated: str) -> str:
+        """
+        Robustly cleans model output.
+        1. Extract <chunk_to_translate>.
+        2. Aggressively strip Markdown code block wrappers.
+        3. Forcefully remove trailing fence if header was stripped (handles trailing filler).
+        4. Parity check.
+        """
+        match = re.search(r'<chunk_to_translate>(.*?)</chunk_to_translate>', chunk_translated, re.DOTALL)
+        if match:
+            chunk_translated = match.group(1).strip()
+        
+        chunk_translated = re.sub(r'</?chunk_to_translate>', '', chunk_translated).strip()
+
+        # 2. Aggressive Wrapper Stripping
+        # Case insensitive match for ```markdown or ```md at start
+        wrapper_pattern = r'(?i)^.*?```(markdown|md)\s*\n'
+        
+        if re.search(wrapper_pattern, chunk_translated, re.DOTALL):
+            # If we found a wrapper header, we MUST remove the corresponding footer.
+            # We assume the footer is the LAST ``` in the text.
+            
+            # First, strip the header
+            chunk_translated = re.sub(wrapper_pattern, '', chunk_translated, count=1)
+            
+            # Now find the last occurrence of ``` and strip it (plus anything after it)
+            # We use rrfind logic via regex substitution
+            # Matches: the last ``` followed by any text until end of string
+            chunk_translated = re.sub(r'```[^`]*$', '', chunk_translated, count=1)
+            
+            chunk_translated = chunk_translated.strip()
+
+        # 4. FENCE PARITY CHECK (Final Safety Net)
+        fence_count = len(re.findall(r'(?m)^\s*```', chunk_translated))
+        if fence_count % 2 != 0:
+            chunk_translated += "\n```"
+                
+        return chunk_translated
+
+    def _final_clean(self, text: str) -> str:
+        lines = text.splitlines()
+        cleaned_lines = []
+        for line in lines:
+            if line.strip() in ["```markdown", "```md"]:
+                continue
+            cleaned_lines.append(line)
+        return "\n".join(cleaned_lines)
+
     def translate_file(self, input_file: str):
         if not os.path.exists(input_file):
             return
@@ -220,11 +283,14 @@ class StarRocksTranslator:
         
         os.makedirs(os.path.dirname(base_output_path), exist_ok=True)
 
+        no_wrapper_instruction = "\nIMPORTANT: Return ONLY the translated content inside the XML tags. DO NOT wrap the output in markdown code blocks like ```markdown."
+        
         system_instruction = (self.system_template
                               .replace("${source_lang}", source_lang_full)
                               .replace("${target_lang}", self.target_lang_full)
                               .replace("${dictionary}", self.dictionary_str)
-                              .replace("${never_translate}", self.never_translate_str))
+                              .replace("${never_translate}", self.never_translate_str)
+                              + no_wrapper_instruction)
         
         original_content = self._read_file(input_file)
         content_to_process = self.normalize_content(original_content)
@@ -233,11 +299,12 @@ class StarRocksTranslator:
         
         print(f"🚀 Translating {input_file} ({len(chunks)} chunks)...")
         
-        max_retries = 10  # Retry count
+        max_retries = 10
         
         for i, chunk in enumerate(chunks):
+            anchored_chunk = f"<chunk_to_translate>\n{chunk}\n</chunk_to_translate>"
             current_human_prompt = (self.human_template.replace("${target_language}", self.target_lang_full) 
-                                    + f"\n\n### CONTENT TO TRANSLATE ###\n\n{chunk}")
+                                    + f"\n\n### CONTENT TO TRANSLATE ###\n\n{anchored_chunk}")
             
             chunk_translated = ""
             for attempt in range(max_retries):
@@ -255,7 +322,6 @@ class StarRocksTranslator:
                     break
                 except Exception as e:
                     error_str = str(e)
-                    # Retry logic includes 503 and UNAVAILABLE
                     is_retryable = (
                         "429" in error_str or 
                         "RESOURCE_EXHAUSTED" in error_str or 
@@ -276,16 +342,12 @@ class StarRocksTranslator:
                     self.has_errors = True
                     return
 
-            if chunk_translated.startswith("```"):
-                lines = chunk_translated.splitlines()
-                if lines[0].startswith("```"): lines = lines[1:]
-                if lines and lines[-1].startswith("```"): lines = lines[:-1]
-                chunk_translated = "\n".join(lines).strip()
+            chunk_translated = self._clean_model_output(chunk_translated)
             translated_chunks.append(chunk_translated)
 
-        # Copilot Fix: Join with double newlines to ensure clean Markdown section separation
         full_text = "\n\n".join(chunk.strip() for chunk in translated_chunks)
-        
+        full_text = self._final_clean(full_text)
+
         is_valid, val_msg = self.validate_mdx(original_content, full_text)
         
         final_output_path = base_output_path if is_valid else f"{base_output_path}.invalid"
@@ -293,6 +355,7 @@ class StarRocksTranslator:
 
         if not is_valid:
             print(f"❌ Validation FAILED for {input_file}")
+            print(val_msg)
             self.failures.append({"file": rel_path, "error": val_msg})
             self.has_errors = True
         else:
