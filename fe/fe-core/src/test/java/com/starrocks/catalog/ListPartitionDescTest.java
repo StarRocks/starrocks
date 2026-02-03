@@ -309,7 +309,7 @@ public class ListPartitionDescTest {
 
         Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
         Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionInfo.getTabletType(10001L));
-        Assertions.assertEquals(true, partitionInfo.getIsInMemory(10001L));
+        Assertions.assertEquals(false, partitionInfo.getIsInMemory(10001L));
         Assertions.assertEquals(false, partitionInfo.isMultiColumnPartition());
     }
 
@@ -326,7 +326,7 @@ public class ListPartitionDescTest {
 
         Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
         Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionInfo.getTabletType(10001L));
-        Assertions.assertEquals(true, partitionInfo.getIsInMemory(10001L));
+        Assertions.assertEquals(false, partitionInfo.getIsInMemory(10001L));
         Assertions.assertEquals(true, partitionInfo.isMultiColumnPartition());
     }
 

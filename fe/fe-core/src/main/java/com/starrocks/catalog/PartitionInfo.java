@@ -73,9 +73,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     @SerializedName(value = "isMultiColumnPartition")
     protected boolean isMultiColumnPartition = false;
 
-    @SerializedName(value = "idToInMemory")
-    protected Map<Long, Boolean> idToInMemory;
-
     // partition id -> tablet type
     // Note: currently it's only used for testing, it may change/add more meta field later,
     // so we defer adding meta serialization until memory engine feature is more complete.
@@ -90,7 +87,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     public PartitionInfo() {
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
-        this.idToInMemory = new HashMap<>();
         this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
     }
@@ -99,7 +95,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         this.type = type;
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
-        this.idToInMemory = new HashMap<>();
         this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
     }
@@ -171,11 +166,10 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     }
 
     public boolean getIsInMemory(long partitionId) {
-        return idToInMemory.get(partitionId);
+        return false;
     }
 
     public void setIsInMemory(long partitionId, boolean isInMemory) {
-        idToInMemory.put(partitionId, isInMemory);
     }
 
     public TTabletType getTabletType(long partitionId) {
@@ -203,7 +197,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     public void dropPartition(long partitionId) {
         idToDataProperty.remove(partitionId);
         idToReplicationNum.remove(partitionId);
-        idToInMemory.remove(partitionId);
         idToStorageCacheInfo.remove(partitionId);
     }
 
@@ -215,7 +208,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
                              boolean isInMemory) {
         idToDataProperty.put(partitionId, dataProperty);
         idToReplicationNum.put(partitionId, replicationNum);
-        idToInMemory.put(partitionId, isInMemory);
     }
 
     public void addPartition(long partitionId, DataProperty dataProperty,
@@ -292,7 +284,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
                     .append(DataProperty.DATA_PROPERTY_HDD.equals(entry.getValue()));
             buff.append(" data_property: ").append(entry.getValue().toString());
             buff.append(" replica number: ").append(idToReplicationNum.get(entry.getKey()));
-            buff.append(" in memory: ").append(idToInMemory.get(entry.getKey()));
         }
 
         return buff.toString();
@@ -312,7 +303,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
             p.idToDataProperty = new HashMap<>(this.idToDataProperty);
             p.idToReplicationNum = new HashMap<>(this.idToReplicationNum);
             p.isMultiColumnPartition = this.isMultiColumnPartition;
-            p.idToInMemory = new HashMap<>(this.idToInMemory);
             p.idToTabletType = new HashMap<>(this.idToTabletType);
             p.idToStorageCacheInfo = new HashMap<>(this.idToStorageCacheInfo);
             return p;
@@ -324,13 +314,11 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
         Map<Long, DataProperty> oldIdToDataProperty = this.idToDataProperty;
         Map<Long, Short> oldIdToReplicationNum = this.idToReplicationNum;
-        Map<Long, Boolean> oldIdToInMemory = this.idToInMemory;
         Map<Long, TTabletType> oldIdToTabletType = this.idToTabletType;
         Map<Long, DataCacheInfo> oldIdToStorageCacheInfo = this.idToStorageCacheInfo;
 
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
-        this.idToInMemory = new HashMap<>();
         this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
 
@@ -345,10 +333,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
             Short replicationNum = oldIdToReplicationNum.get(oldId);
             if (replicationNum != null) {
                 this.idToReplicationNum.put(newId, replicationNum);
-            }
-            Boolean inMemory = oldIdToInMemory.get(oldId);
-            if (inMemory != null) {
-                this.idToInMemory.put(newId, inMemory);
             }
             TTabletType tabletType = oldIdToTabletType.get(oldId);
             if (tabletType != null) {
