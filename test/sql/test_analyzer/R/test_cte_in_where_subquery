@@ -1,0 +1,116 @@
+-- name: test_cte_in_where_subquery
+CREATE TABLE IF NOT EXISTS t_cte_0 (
+    v1 bigint NULL,
+    v2 bigint NULL,
+    v3 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(v1, v2, v3)
+DISTRIBUTED BY HASH(v1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE IF NOT EXISTS t_cte_1 (
+    v4 bigint NULL,
+    v5 bigint NULL,
+    v6 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(v4, v5, v6)
+DISTRIBUTED BY HASH(v4) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_cte_0 VALUES (1, 2, 3), (2, 3, 4), (3, 4, 5);
+-- result:
+-- !result
+INSERT INTO t_cte_1 VALUES (1, 10, 100), (2, 20, 200), (4, 40, 400);
+-- result:
+-- !result
+WITH a1 AS (SELECT v1 FROM t_cte_0)
+SELECT v1 FROM t_cte_0 WHERE v1 IN (SELECT v1 FROM a1) ORDER BY ALL;
+-- result:
+1
+2
+3
+-- !result
+WITH a1 AS (SELECT v1 AS cust_no FROM t_cte_0)
+SELECT v1 FROM t_cte_0 WHERE v1 IN (SELECT cust_no FROM a1) ORDER BY ALL;
+-- result:
+1
+2
+3
+-- !result
+WITH a1 AS (SELECT v1, v2 FROM t_cte_0)
+SELECT * FROM t_cte_0 WHERE v1 IN (SELECT v1 FROM a1) ORDER BY ALL;
+-- result:
+1	2	3
+2	3	4
+3	4	5
+-- !result
+WITH a1 AS (SELECT v1 FROM t_cte_0), 
+     a2 AS (SELECT v2 FROM t_cte_0)
+SELECT v1 FROM t_cte_0 
+WHERE v1 IN (SELECT v1 FROM a1) AND v2 IN (SELECT v2 FROM a2) ORDER BY ALL;
+-- result:
+1
+2
+3
+-- !result
+WITH a1 AS (SELECT v1 FROM t_cte_0)
+SELECT t_cte_0.v1 FROM t_cte_0 
+JOIN t_cte_1 ON t_cte_0.v1 = t_cte_1.v4 
+AND t_cte_0.v1 IN (SELECT v1 FROM a1) ORDER BY ALL;
+-- result:
+1
+2
+-- !result
+WITH a1 AS (SELECT t_cte_0.v1 AS cust_no FROM t_cte_0 JOIN t_cte_1 ON t_cte_0.v1 = t_cte_1.v4)
+SELECT t_cte_0.v1 FROM t_cte_0 
+JOIN t_cte_1 ON t_cte_0.v1 = t_cte_1.v4 
+AND t_cte_0.v1 IN (SELECT cust_no FROM a1) ORDER BY ALL;
+-- result:
+1
+2
+-- !result
+WITH a1 AS (SELECT v1 FROM t_cte_0)
+SELECT v1 FROM t_cte_0 
+WHERE EXISTS (SELECT 1 FROM a1 WHERE a1.v1 = t_cte_0.v1) ORDER BY ALL;
+-- result:
+1
+2
+3
+-- !result
+WITH a1 AS (SELECT v1, v2 FROM t_cte_0)
+SELECT t_cte_0.v1 FROM t_cte_0 
+JOIN t_cte_1 ON t_cte_0.v1 = t_cte_1.v4 
+AND EXISTS (SELECT 1 FROM a1 WHERE a1.v1 = t_cte_0.v1) ORDER BY ALL;
+-- result:
+1
+2
+-- !result
+WITH a1 AS (SELECT MAX(v1) AS max_v1 FROM t_cte_0)
+SELECT v1 FROM t_cte_0 WHERE v1 = (SELECT max_v1 FROM a1) ORDER BY ALL;
+-- result:
+3
+-- !result
+WITH a1 AS (SELECT v1 FROM t_cte_0)
+SELECT v1 FROM t_cte_0 
+WHERE v1 IN (SELECT v1 FROM (SELECT v1 FROM a1) t) ORDER BY ALL;
+-- result:
+1
+2
+3
+-- !result
+WITH a1 AS (SELECT v1 FROM t_cte_0), 
+     a2 AS (SELECT v1 FROM t_cte_0 WHERE v1 > 1)
+SELECT v1 FROM t_cte_0 
+WHERE v1 IN (SELECT v1 FROM a1 WHERE v1 IN (SELECT v1 FROM a2)) ORDER BY ALL;
+-- result:
+2
+3
+-- !result
+DROP TABLE IF EXISTS t_cte_0;
+-- result:
+-- !result
+DROP TABLE IF EXISTS t_cte_1;
+-- result:
+-- !result

@@ -1001,8 +1001,10 @@ public class QueryAnalyzer {
                  * To ensure the OnPredicate in semi/anti is correct, the relation needs to be re-assembled here
                  * with left child and right child relationFields
                  */
-                analyzeExpression(joinEqual, new AnalyzeState(), new Scope(RelationId.of(join),
-                        leftScope.getRelationFields().joinWith(rightScope.getRelationFields())));
+                Scope joinScope = new Scope(RelationId.of(join),
+                        leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
+                joinScope.setParent(parentScope);
+                analyzeExpression(joinEqual, new AnalyzeState(), joinScope);
 
                 AnalyzerUtils.verifyNoAggregateFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoWindowFunctions(joinEqual, "JOIN");
@@ -1067,6 +1069,7 @@ public class QueryAnalyzer {
                 RelationFields joinedFields = leftScope.getRelationFields().joinWith(rightScope.getRelationFields());
                 scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join, leftScope, rightScope));
             }
+            scope.setParent(parentScope);
             join.setScope(scope);
 
             GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
