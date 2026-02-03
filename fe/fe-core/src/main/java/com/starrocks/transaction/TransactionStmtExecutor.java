@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
@@ -119,6 +120,12 @@ public class TransactionStmtExecutor {
         String label;
         if (stmtLabel != null && !stmtLabel.isEmpty()) {
             FeNameFormat.checkLabel(stmtLabel);
+            // Check if label is already used in any database, align with INSERT statement behavior
+            try {
+                globalTransactionMgr.checkLabelUsedInAnyDatabase(stmtLabel);
+            } catch (LabelAlreadyUsedException e) {
+                throw new SemanticException(e.getMessage());
+            }
             label = stmtLabel;
         } else if (labelOverride != null && !labelOverride.isEmpty()) {
             label = labelOverride;
