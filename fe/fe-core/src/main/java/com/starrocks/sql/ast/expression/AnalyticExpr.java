@@ -142,7 +142,7 @@ public class AnalyticExpr extends Expr {
                 } else if (HintNode.HINT_ANALYTIC_SKEW.equalsIgnoreCase(hint)) {
                     this.skewHint = hint;
                     this.isSkewed = true;
-                } else if (HintNode.HINT_SKEW_EXPLICIT.equalsIgnoreCase(hint)) {
+                } else if (HintNode.HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(hint)) {
                     this.skewHint = hint;
                     this.skewColumn = skewColumn;
                     this.skewValue = skewValue;
