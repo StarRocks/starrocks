@@ -112,7 +112,7 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
 
     jmethodID constructor = env->GetMethodID(
             scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIIIJJ)V");
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIIIJJI)V");
     jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     LOCAL_REF_GUARD_ENV(env, driver_class_name);
     jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
@@ -156,9 +156,14 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
         keepalive_time_ms = 30000; // default 30 seconds
     }
 
+    // statement query timeout in seconds - use query_timeout if set, otherwise 300 seconds (5 minutes)
+    int statement_query_timeout_sec =
+            state->query_options().__isset.query_timeout ? state->query_options().query_timeout : 300;
+
     auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
                                    statement_fetch_size, connection_pool_size, minimum_idle_connections,
-                                   idle_timeout_ms, connection_timeout_ms, max_lifetime_ms, keepalive_time_ms);
+                                   idle_timeout_ms, connection_timeout_ms, max_lifetime_ms, keepalive_time_ms,
+                                   statement_query_timeout_sec);
     _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
     LOCAL_REF_GUARD_ENV(env, scan_ctx);
     CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")

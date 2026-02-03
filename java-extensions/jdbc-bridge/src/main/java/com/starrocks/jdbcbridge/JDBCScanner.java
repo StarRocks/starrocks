@@ -90,6 +90,10 @@ public class JDBCScanner {
         connection.setAutoCommit(false);
         statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY,
                 ResultSet.CONCUR_READ_ONLY);
+        int queryTimeoutSec = scanContext.getStatementQueryTimeoutSec();
+        if (queryTimeoutSec > 0) {
+            statement.setQueryTimeout(queryTimeoutSec);
+        }
         if (scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("mysql")) {
             statement.setFetchSize(Integer.MIN_VALUE);
         } else {
