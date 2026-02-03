@@ -36,6 +36,7 @@
 
 #include <ostream>
 
+#include "base/string/slice.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "storage/types.h"
