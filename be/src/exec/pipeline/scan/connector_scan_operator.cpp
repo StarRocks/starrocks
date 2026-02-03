@@ -657,8 +657,9 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 
     if (_enable_adaptive_io_tasks) {
-        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
-        mem_tracker->release(_request_mem_tracker_bytes);
+        if (_connector_scan_mem_tracker != nullptr) {
+            _connector_scan_mem_tracker->release(_request_mem_tracker_bytes);
+        }
 
         ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
         limiter->update_running_chunk_source_count(-1);
@@ -713,7 +714,8 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
     if (scan_op->enable_adaptive_io_tasks()) {
         ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+        _connector_scan_mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+        MemTracker* mem_tracker = _connector_scan_mem_tracker.get();
 
         [[maybe_unused]] auto build_debug_string = [&](const std::string& action) {
             std::stringstream ss;

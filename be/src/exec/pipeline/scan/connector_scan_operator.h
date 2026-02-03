@@ -182,6 +182,7 @@ private:
     int64_t _request_mem_tracker_bytes = 0;
     int64_t _mem_alloc_failed_count = 0;
     bool _enable_adaptive_io_tasks = true;
+    std::shared_ptr<MemTracker> _connector_scan_mem_tracker = nullptr;
 };
 
 } // namespace pipeline

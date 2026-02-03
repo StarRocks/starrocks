@@ -177,7 +177,7 @@ public:
                           RuntimeState* state = nullptr, int connector_scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     const std::shared_ptr<MemTracker>& mem_tracker() const { return _mem_tracker; }
-    MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
+    std::shared_ptr<MemTracker> connector_scan_mem_tracker() { return _connector_scan_mem_tracker; }
 
     Status init_spill_manager(const TQueryOptions& query_options);
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
