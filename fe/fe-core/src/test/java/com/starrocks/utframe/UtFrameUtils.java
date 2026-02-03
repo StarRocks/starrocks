@@ -363,6 +363,7 @@ public class UtFrameUtils {
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
         Config.alter_scheduler_interval_millisecond = 100;
+        Config.enable_virtual_columns = false;
 
         try {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
