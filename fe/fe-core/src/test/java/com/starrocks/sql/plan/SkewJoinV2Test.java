@@ -146,16 +146,16 @@ public class SkewJoinV2Test extends PlanTestBase {
     public void testSkewJoinV2WithRightSideHint1() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t1.v4(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getVerboseExplain(sql);
-        assertCContains(sqlPlan, "  Input Partition: RANDOM\n" +
+        assertCContains(sqlPlan, "Input Partition: RANDOM\n" +
                 "  SplitCastDataSink:\n" +
                 "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
-                "  OutPut Exchange Id: 03\n" +
+                "  OutPut Exchange Id: 02\n" +
                 "  Split expr: ([1: v1, BIGINT, true] NOT IN (1, 2)) OR ([1: v1, BIGINT, true] IS NULL)\n" +
                 "  OutPut Partition: UNPARTITIONED\n" +
                 "  OutPut Exchange Id: 07\n" +
                 "  Split expr: [1: v1, BIGINT, true] IN (1, 2)\n" +
                 "\n" +
-                "  1:OlapScanNode\n" +
+                "  0:OlapScanNode\n" +
                 "     table: t0, rollup: t0");
     }
 
@@ -326,6 +326,15 @@ public class SkewJoinV2Test extends PlanTestBase {
                 "  2:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on");
+        assertCContains(sqlPlan, "|----9:EXCHANGE\n" +
+                "  |    |       distribution type: BROADCAST\n" +
+                "  |    |       cardinality: 1\n" +
+                "  |    |    \n" +
+                "  |    8:EXCHANGE\n" +
+                "  |       distribution type: ROUND_ROBIN\n" +
+                "  |       cardinality: 1\n" +
+                "  |       probe runtime filters:\n" +
+                "  |       - filter_id = 1, probe_expr = (7: abs)");
     }
 
     @Test
@@ -335,27 +344,34 @@ public class SkewJoinV2Test extends PlanTestBase {
         // if on predicate's input is not column from table, then split expr should use Project's output column like "7: abs"
         PlanTestBase.assertContains(sqlPlan, "Input Partition: RANDOM\n" +
                 "  SplitCastDataSink:\n" +
-                "  OutPut Partition: HASH_PARTITIONED: 8: abs\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 7: abs\n" +
                 "  OutPut Exchange Id: 05\n" +
-                "  Split expr: ([8: abs, LARGEINT, true] NOT IN (abs[(1); args: BIGINT; result: LARGEINT; args nullable: false;" +
-                " result nullable: true], abs[(2); args: BIGINT; result: LARGEINT; args nullable: false; result nullable: " +
-                "true])) OR ([8: abs, LARGEINT, true] IS NULL)\n" +
+                "  Split expr: ([7: abs, LARGEINT, true] NOT IN (abs[(1); args: BIGINT; result: LARGEINT; args nullable: " +
+                "false; result nullable: true], abs[(2); args: BIGINT; result: LARGEINT; args nullable: false; result " +
+                "nullable: true])) OR ([7: abs, LARGEINT, true] IS NULL)\n" +
+                "  OutPut Partition: RANDOM\n" +
+                "  OutPut Exchange Id: 08\n" +
+                "  Split expr: [7: abs, LARGEINT, true] IN (abs[(1); args: BIGINT; result: LARGEINT; args nullable: false; " +
+                "result nullable: true], abs[(2); args: BIGINT; result: LARGEINT; args nullable: false; result nullable: " +
+                "true])");
+        PlanTestBase.assertContains(sqlPlan, "SplitCastDataSink:\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 8: abs\n" +
+                "  OutPut Exchange Id: 04\n" +
+                "  Split expr: ([8: abs, LARGEINT, true] NOT IN (abs[(1); args: BIGINT; result: LARGEINT; args nullable: " +
+                "false; result nullable: true], abs[(2); args: BIGINT; result: LARGEINT; args nullable: false; result " +
+                "nullable: true])) OR ([8: abs, LARGEINT, true] IS NULL)\n" +
                 "  OutPut Partition: UNPARTITIONED\n" +
                 "  OutPut Exchange Id: 09\n" +
                 "  Split expr: [8: abs, LARGEINT, true] IN (abs[(1); args: BIGINT; result: LARGEINT; args nullable: false; " +
                 "result nullable: true], abs[(2); args: BIGINT; result: LARGEINT; args nullable: false; result nullable: " +
                 "true])");
-        PlanTestBase.assertContains(sqlPlan, "Input Partition: RANDOM\n" +
-                "  SplitCastDataSink:\n" +
-                "  OutPut Partition: HASH_PARTITIONED: 7: abs\n" +
-                "  OutPut Exchange Id: 04\n" +
-                "  Split expr: ([7: abs, LARGEINT, true] NOT IN (abs[(1); args: BIGINT; result: LARGEINT; args nullable: " +
-                "false; result nullable: true], abs[(2); args: BIGINT; result: LARGEINT; args nullable: false; result nullable:" +
-                " true])) OR ([7: abs, LARGEINT, true] IS NULL)\n" +
-                "  OutPut Partition: RANDOM\n" +
-                "  OutPut Exchange Id: 08\n" +
-                "  Split expr: [7: abs, LARGEINT, true] IN (abs[(1); args: BIGINT; result: LARGEINT; args nullable: false; " +
-                "result nullable: true], abs[(2); args: BIGINT; result: LARGEINT; args nullable: false; result nullable: true])");
+        assertCContains(sqlPlan, "|----9:EXCHANGE\n" +
+                "  |    |       distribution type: BROADCAST\n" +
+                "  |    |       cardinality: 1\n" +
+                "  |    |    \n" +
+                "  |    8:EXCHANGE\n" +
+                "  |       distribution type: ROUND_ROBIN\n" +
+                "  |       cardinality: 1");
     }
 
     @Test
@@ -480,20 +496,29 @@ public class SkewJoinV2Test extends PlanTestBase {
             try {
                 String sql = "select v2, v5 from t0 join[shuffle] t1 on v1 = v4";
                 String plan = getVerboseExplain(sql);
-                assertCContains(plan, "SplitCastDataSink:\n" +
+                assertCContains(plan, "Input Partition: RANDOM\n" +
+                        "  SplitCastDataSink:\n" +
                         "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
-                        "  OutPut Exchange Id: 02\n" +
+                        "  OutPut Exchange Id: 03\n" +
                         "  Split expr: ([4: v4, BIGINT, true] NOT IN (1, 2)) OR ([4: v4, BIGINT, true] IS NULL)\n" +
                         "  OutPut Partition: RANDOM\n" +
                         "  OutPut Exchange Id: 06\n" +
                         "  Split expr: [4: v4, BIGINT, true] IN (1, 2)");
-                assertCContains(plan, "SplitCastDataSink:\n" +
+                assertCContains(plan, "Input Partition: RANDOM\n" +
+                        "  SplitCastDataSink:\n" +
                         "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
-                        "  OutPut Exchange Id: 03\n" +
+                        "  OutPut Exchange Id: 02\n" +
                         "  Split expr: ([1: v1, BIGINT, true] NOT IN (1, 2)) OR ([1: v1, BIGINT, true] IS NULL)\n" +
                         "  OutPut Partition: UNPARTITIONED\n" +
                         "  OutPut Exchange Id: 07\n" +
                         "  Split expr: [1: v1, BIGINT, true] IN (1, 2)");
+                assertCContains(plan, "|----7:EXCHANGE\n" +
+                        "  |    |       distribution type: BROADCAST\n" +
+                        "  |    |       cardinality: 20000000\n" +
+                        "  |    |    \n" +
+                        "  |    6:EXCHANGE\n" +
+                        "  |       distribution type: ROUND_ROBIN\n" +
+                        "  |       cardinality: 20000000");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -558,13 +583,15 @@ public class SkewJoinV2Test extends PlanTestBase {
                         "  OutPut Partition: RANDOM\n" +
                         "  OutPut Exchange Id: 06\n" +
                         "  Split expr: [1: v1, BIGINT, true] IS NULL");
-                assertCContains(plan, "SplitCastDataSink:\n" +
-                        "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
-                        "  OutPut Exchange Id: 03\n" +
-                        "  Split expr: [4: v4, BIGINT, true] IS NOT NULL\n" +
-                        "  OutPut Partition: UNPARTITIONED\n" +
-                        "  OutPut Exchange Id: 07\n" +
-                        "  Split expr: [4: v4, BIGINT, true] IS NULL");
+                assertCContains(plan, "|----7:Project\n" +
+                        "  |    |  output columns:\n" +
+                        "  |    |  2 <-> [2: v2, BIGINT, true]\n" +
+                        "  |    |  5 <-> NULL\n" +
+                        "  |    |  cardinality: 28000000000\n" +
+                        "  |    |  \n" +
+                        "  |    6:EXCHANGE\n" +
+                        "  |       distribution type: ROUND_ROBIN\n" +
+                        "  |       cardinality: 20000000");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -583,20 +610,22 @@ public class SkewJoinV2Test extends PlanTestBase {
             try {
                 String sql = "select v2, v5 from t0 left join[shuffle] t1 on v1 = v4";
                 String plan = getVerboseExplain(sql);
-                assertCContains(plan, "SplitCastDataSink:\n" +
-                        "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
-                        "  OutPut Exchange Id: 02\n" +
-                        "  Split expr: ([1: v1, BIGINT, true] NOT IN (1, 2)) AND ([1: v1, BIGINT, true] IS NOT NULL)\n" +
-                        "  OutPut Partition: RANDOM\n" +
-                        "  OutPut Exchange Id: 06\n" +
-                        "  Split expr: ([1: v1, BIGINT, true] IN (1, 2)) OR ([1: v1, BIGINT, true] IS NULL)");
-                assertCContains(plan, "SplitCastDataSink:\n" +
+                assertCContains(plan, "Input Partition: RANDOM\n" +
+                        "  SplitCastDataSink:\n" +
                         "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
                         "  OutPut Exchange Id: 03\n" +
                         "  Split expr: ([4: v4, BIGINT, true] NOT IN (1, 2)) AND ([4: v4, BIGINT, true] IS NOT NULL)\n" +
                         "  OutPut Partition: UNPARTITIONED\n" +
                         "  OutPut Exchange Id: 07\n" +
                         "  Split expr: ([4: v4, BIGINT, true] IN (1, 2)) OR ([4: v4, BIGINT, true] IS NULL)");
+                assertCContains(plan, "Input Partition: RANDOM\n" +
+                        "  SplitCastDataSink:\n" +
+                        "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
+                        "  OutPut Exchange Id: 02\n" +
+                        "  Split expr: ([1: v1, BIGINT, true] NOT IN (1, 2)) AND ([1: v1, BIGINT, true] IS NOT NULL)\n" +
+                        "  OutPut Partition: RANDOM\n" +
+                        "  OutPut Exchange Id: 06\n" +
+                        "  Split expr: ([1: v1, BIGINT, true] IN (1, 2)) OR ([1: v1, BIGINT, true] IS NULL)");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
