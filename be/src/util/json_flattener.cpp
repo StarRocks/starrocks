@@ -198,7 +198,7 @@ using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* r
 using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx);
 static const uint8_t JSON_BASE_TYPE_BITS = 0;   // least flat to JSON type
 static const uint8_t JSON_BIGINT_TYPE_BITS = 7; // bigint compatible type
-static const uint8_t JSON_NULL_TYPE_BITS = 31;  // JSON_NULL_TYPE_BITS, initial value for JsonFlatDesc::type
+// static const uint8_t JSON_NULL_TYPE_BITS = 31;  // JSON_NULL_TYPE_BITS, initial value for JsonFlatDesc::type
 
 // bool will flatting as string, because it's need save string-literal(true/false)
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
@@ -409,7 +409,7 @@ void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     _total_rows = res.value();
 
     _path_root = std::make_shared<JsonFlatPath>();
-    // init path by flat json
+    // init path by flat JSON
     _derived_on_flat_json(json_datas);
 
     // extract common keys, type
@@ -599,19 +599,18 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         child->last_row = mark_row;
 
         if (v.isObject()) {
-            // Accumulate remain status: if node is ever empty in any row, mark as remain
-            child->remain |= v.isEmptyObject();
-            // If this node was previously visited as primitive (desc->type != JSON_BASE_TYPE_BITS and != initial value),
-            // but now we see an object, this indicates a type mismatch.
-            // Mark the parent node as remain to preserve the actual data structure.
-            if (child->json_type != flat_json::JSON_BASE_TYPE_BITS &&
-                child->json_type != flat_json::JSON_NULL_TYPE_BITS) {
+            // If we have seen any non-object value on the same key before, keep parent as remain.
+            // This covers array<->object and primitive<->object conflicts and preserves the original structure.
+            if (child->hits > child->object_count + 1) {
                 root->remain = true;
             }
+            child->object_count++;
+            // Accumulate remain status: if node is ever empty in any row, mark as remain
+            child->remain |= v.isEmptyObject();
             child->json_type = flat_json::JSON_BASE_TYPE_BITS;
             _visit_json_paths(v, child, mark_row);
-        } else {
-            // If this node has children (was previously visited as object), but now we see a primitive,
+        } else { // NOTE that array is also treated as primitive here.
+            // If this node was previously visited as object, but now we see a primitive,
             // this indicates a type mismatch: path tree expects object but actual data has primitive.
             // Mark the parent node as remain to preserve the actual data structure.
             if (!child->children.empty()) {
