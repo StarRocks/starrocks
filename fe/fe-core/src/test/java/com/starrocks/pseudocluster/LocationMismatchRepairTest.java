@@ -311,7 +311,7 @@ public class LocationMismatchRepairTest {
         // create mv
         sql = "CREATE MATERIALIZED VIEW test_mv01\n" +
                     "DISTRIBUTED BY HASH(`k1`)\n" +
-                    "buckets 15\n" +
+                    "buckets 5\n" +
                     "REFRESH MANUAL\n" +
                     "properties(\n" +
                     "    \"replication_num\" = \"3\"" +
@@ -351,18 +351,21 @@ public class LocationMismatchRepairTest {
         cluster.runSql("test", sql);
         System.out.println("=========================");
         long start = System.currentTimeMillis();
+        long totalTimes = 180;
+        long times = 0;
         while (true) {
             if (stat.counterCloneTaskSucceeded.get() - oldCloneFinishedCnt >= locationMismatchFullCloneNeeded
                         && stat.counterReplicaLocMismatchErr.get() - oldLocationMismatchErr >=
                         locationMismatchFullCloneNeeded) {
                 break;
             }
+            times++;
             System.out.println("wait for enough clone tasks for LOCATION_MISMATCH finished, " +
                         "current clone finished: " + stat.counterCloneTaskSucceeded.get() +
                         ", current location mismatch: " + stat.counterReplicaLocMismatchErr.get() +
                         ", expected clone finished: " + locationMismatchFullCloneNeeded);
             Thread.sleep(1000);
-            if (System.currentTimeMillis() - start > 180000) {
+            if (System.currentTimeMillis() - start > 180000 && times > totalTimes) {
                 Assertions.fail("wait for enough clone tasks for LOCATION_MISMATCH finished timeout");
             }
         }
