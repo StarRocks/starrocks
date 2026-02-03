@@ -47,6 +47,7 @@ import java.util.Set;
 
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_ARRAY_FUNCTIONS;
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_STRUCT_FUNCTIONS;
+import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeUtil.getDictifiedType;
 
 /*
  * DecodeContext is used to store the information needed for decoding
@@ -490,20 +491,6 @@ class DecodeContext {
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void ignore) {
             return stringRefToDictRefMap.getOrDefault(variable, variable);
-        }
-
-        private static Type getDictifiedType(Type type) {
-            if (type == null) {
-                return null;
-            }
-            Preconditions.checkState(!type.isStructType());
-            if (type.isStringType()) {
-                return IntegerType.INT;
-            }
-            if (type.isStringArrayType()) {
-                return new ArrayType(IntegerType.INT);
-            }
-            return type;
         }
 
         AggregateFunction buildAggregateFunction(AggregateFunction fn, List<ScalarOperator> newChildren,
