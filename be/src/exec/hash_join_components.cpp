@@ -22,13 +22,13 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
+#include "common/system/cpu_info.h"
 #include "exec/hash_joiner.h"
 #include "exec/join/join_hash_table.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "util/cpu_info.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

@@ -42,6 +42,7 @@ set(BASE_TEST_FILES
     string/c_string_test.cpp
     string/faststring_test.cpp
     string/memcmp_test.cpp
+    string/string_parser_test.cpp
     string/slice_test.cpp
     string/utf8_check_test.cpp
     time/monotime_test.cpp

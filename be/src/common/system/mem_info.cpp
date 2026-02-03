@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/mem_info.h"
+#include "common/system/mem_info.h"
 
 #ifdef __linux__
 #include <linux/magic.h>
@@ -48,15 +48,17 @@
 #endif
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
+#include <system_error>
 
 #include "base/path/file_util.h"
+#include "base/string/string_parser.hpp"
 #include "base/system/errno.h"
-#include "fs/fs_util.h"
+#include "common/pretty_printer.h"
 #include "gutil/strings/split.h"
-#include "util/pretty_printer.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -138,7 +140,8 @@ std::string MemInfo::debug_string() {
 
 void MemInfo::set_memlimit_if_container() {
     // check if application is in docker container or not via /.dockerenv file
-    bool running_in_docker = fs::path_exist("/.dockerenv");
+    std::error_code ec;
+    bool running_in_docker = std::filesystem::exists("/.dockerenv", ec);
     if (!running_in_docker) {
         return;
     }

@@ -22,6 +22,9 @@
 #include "cache/datacache.h"
 #include "column/column_helper.h"
 #include "common/config.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
@@ -35,10 +38,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
 
 namespace starrocks {
 

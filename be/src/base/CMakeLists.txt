@@ -33,6 +33,7 @@ ADD_BE_LIB(Base
   simd/expand.cpp
   stats/ndv_estimator.cpp
   string/faststring.cc
+  string/string_parser.cpp
   string/slice.cpp
   string/utf8_check.cpp
   system/errno.cpp

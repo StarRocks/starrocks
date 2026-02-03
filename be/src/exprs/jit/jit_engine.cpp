@@ -62,10 +62,10 @@
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "common/system/mem_info.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "util/mem_info.h"
 
 namespace starrocks {
 

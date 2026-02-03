@@ -40,13 +40,13 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <string>
 #include <type_traits>
 
+#include "base/compiler_util.h"
 #include "base/decimal_types.h"
-#include "common/compiler_util.h"
-#include "common/status.h"
-#include "types/logical_type.h"
+#include "base/status.h"
 
 namespace starrocks {
 

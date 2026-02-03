@@ -28,8 +28,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "formats/parquet/encoding.h"
-#include "util/cpu_info.h"
 #include "util/rle_encoding.h"
 
 namespace starrocks::parquet {

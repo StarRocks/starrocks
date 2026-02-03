@@ -18,6 +18,7 @@
 #include <event2/http.h>
 #include <json2pb/pb_to_json.h>
 
+#include "base/string/string_parser.hpp"
 #include "fs/fs.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
@@ -29,7 +30,6 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks::lake {
 

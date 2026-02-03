@@ -22,8 +22,8 @@
 #include "cache/cache_options.h"
 #include "cache/disk_cache/local_disk_cache_engine.h"
 #include "common/status.h"
+#include "common/system/disk_info.h"
 #include "fs/fs.h"
-#include "util/disk_info.h"
 
 namespace starrocks {
 

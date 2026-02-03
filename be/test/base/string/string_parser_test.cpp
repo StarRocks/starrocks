@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/string_parser.hpp"
+#include "base/string/string_parser.hpp"
 
 #include <gtest/gtest.h>
 
@@ -41,8 +41,6 @@
 #include <cstdio>
 #include <random>
 #include <string>
-
-#include "util/logging.h"
 
 namespace starrocks {
 

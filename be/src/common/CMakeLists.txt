@@ -17,6 +17,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 ADD_BE_LIB(Common
   configbase.cpp
   config.cpp
+  system/disk_info.cpp
+  system/cpu_info.cpp
+  system/cpu_info_debug.cpp
+  system/mem_info.cpp
   s3_uri.cpp
   tracer.cpp
   process_exit.cpp

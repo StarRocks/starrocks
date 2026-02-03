@@ -15,6 +15,7 @@
 #include "exprs/bitmap_functions.h"
 
 #include "base/phmap/phmap.h"
+#include "base/string/string_parser.hpp"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -27,7 +28,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

@@ -20,6 +20,7 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "base/string/string_parser.hpp"
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column.h"
 #include "column/column_access_path.h"
@@ -50,7 +51,6 @@
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/runtime_profile.h"
-#include "util/string_parser.hpp"
 #include "util/table_metrics.h"
 
 namespace starrocks::pipeline {

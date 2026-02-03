@@ -39,6 +39,7 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/process_exit.h"
+#include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "util/minidump.h"
 #include "util/system_metrics.h"
@@ -48,12 +49,20 @@
 #endif
 #include <fmt/ranges.h>
 
+#include <cerrno>
 #include <csignal>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
 
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "fs/encrypt_file.h"
+#include "fs/fs_util.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/time_types.h"
@@ -62,11 +71,8 @@
 #include "service/mem_hook.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
-#include "util/cpu_info.h"
 #include "util/debug_util.h"
-#include "util/disk_info.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
 #include "util/memory_lock.h"
 #include "util/misc.h"
 #include "util/network_util.h"
@@ -78,6 +84,81 @@ namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
 
 std::string dump_memory_tracker();
+
+static bool is_known_disk_device_name(const std::string& dev) {
+    for (int i = 0; i < DiskInfo::num_disks(); ++i) {
+        if (DiskInfo::device_name(i) == dev) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static Status get_disk_devices(const std::vector<std::string>& paths, std::set<std::string>* devices) {
+    std::vector<std::string> real_paths;
+    real_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        std::string real_path;
+        Status st = fs::canonicalize(path, &real_path);
+        if (!st.ok()) {
+            WARN_IF_ERROR(st, "canonicalize path " + path + " failed, skip disk monitoring of this path");
+            continue;
+        }
+        real_paths.emplace_back(std::move(real_path));
+    }
+
+    FILE* fp = fopen("/proc/mounts", "r");
+    if (fp == nullptr) {
+        std::stringstream ss;
+        char buf[64];
+        ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    Status status;
+    char* line_ptr = nullptr;
+    size_t line_buf_size = 0;
+    for (const auto& path : real_paths) {
+        size_t max_mount_size = 0;
+        std::string match_dev;
+        rewind(fp);
+        while (getline(&line_ptr, &line_buf_size, fp) > 0) {
+            char dev_path[4096];
+            char mount_path[4096];
+            int num = sscanf(line_ptr, "%4095s %4095s", dev_path, mount_path);
+            if (num < 2) {
+                continue;
+            }
+            size_t mount_size = strlen(mount_path);
+            if (mount_size < max_mount_size || path.size() < mount_size ||
+                strncmp(path.c_str(), mount_path, mount_size) != 0) {
+                continue;
+            }
+            std::string dev = std::filesystem::path(dev_path).filename().string();
+            if (is_known_disk_device_name(dev)) {
+                max_mount_size = mount_size;
+                match_dev = std::move(dev);
+            }
+        }
+        if (ferror(fp) != 0) {
+            std::stringstream ss;
+            char buf[64];
+            ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
+            LOG(WARNING) << ss.str();
+            status = Status::InternalError(ss.str());
+            break;
+        }
+        if (max_mount_size > 0) {
+            devices->emplace(match_dev);
+        }
+    }
+    if (line_ptr != nullptr) {
+        free(line_ptr);
+    }
+    fclose(fp);
+    return status;
+}
 
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
@@ -254,7 +335,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
         paths.emplace_back(store_path.path);
     }
     if (init_system_metrics) {
-        auto st = DiskInfo::get_disk_devices(paths, &disk_devices);
+        auto st = get_disk_devices(paths, &disk_devices);
         if (!st.ok()) {
             LOG(WARNING) << "get disk devices failed, status=" << st.message();
             return;

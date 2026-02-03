@@ -20,7 +20,7 @@
 
 #include "base/hash/murmur_hash3.h"
 #include "base/hash/xxh3.h"
-#include "util/cpu_info.h"
+#include "common/system/cpu_info.h"
 
 namespace starrocks {
 

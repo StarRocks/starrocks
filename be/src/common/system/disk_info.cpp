@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/disk_info.h"
+#include "common/system/disk_info.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -34,7 +34,6 @@
 #include <fstream>
 #include <iostream>
 
-#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 
 namespace starrocks {
@@ -155,68 +154,6 @@ std::string DiskInfo::debug_string() {
 
     stream << std::endl;
     return stream.str();
-}
-
-Status DiskInfo::get_disk_devices(const std::vector<std::string>& paths, std::set<std::string>* devices) {
-    std::vector<std::string> real_paths;
-    for (auto& path : paths) {
-        std::string p;
-        WARN_IF_ERROR(fs::canonicalize(path, &p),
-                      "canonicalize path " + path + " failed, skip disk monitoring of this path");
-        real_paths.emplace_back(std::move(p));
-    }
-
-    FILE* fp = fopen("/proc/mounts", "r");
-    if (fp == nullptr) {
-        std::stringstream ss;
-        char buf[64];
-        ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
-
-    Status status;
-    char* line_ptr = nullptr;
-    size_t line_buf_size = 0;
-    for (auto& path : real_paths) {
-        size_t max_mount_size = 0;
-        std::string match_dev;
-        rewind(fp);
-        while (getline(&line_ptr, &line_buf_size, fp) > 0) {
-            char dev_path[4096];
-            char mount_path[4096];
-            int num = sscanf(line_ptr, "%4095s %4095s", dev_path, mount_path);
-            if (num < 2) {
-                continue;
-            }
-            size_t mount_size = strlen(mount_path);
-            if (mount_size < max_mount_size || path.size() < mount_size ||
-                strncmp(path.c_str(), mount_path, mount_size) != 0) {
-                continue;
-            }
-            std::string dev(basename(dev_path));
-            if (_s_disk_name_to_disk_id.find(dev) != std::end(_s_disk_name_to_disk_id)) {
-                max_mount_size = mount_size;
-                match_dev = dev;
-            }
-        }
-        if (ferror(fp) != 0) {
-            std::stringstream ss;
-            char buf[64];
-            ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
-            LOG(WARNING) << ss.str();
-            status = Status::InternalError(ss.str());
-            break;
-        }
-        if (max_mount_size > 0) {
-            devices->emplace(match_dev);
-        }
-    }
-    if (line_ptr != nullptr) {
-        free(line_ptr);
-    }
-    fclose(fp);
-    return status;
 }
 
 } // namespace starrocks

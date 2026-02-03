@@ -36,12 +36,11 @@
 
 #include <cstdint>
 #include <map>
-#include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "common/logging.h"
-#include "common/status.h"
 
 namespace starrocks {
 
@@ -95,9 +94,6 @@ public:
     }
 
     static std::string debug_string();
-
-    // get disk devices of given path
-    static Status get_disk_devices(const std::vector<std::string>& paths, std::set<std::string>* devices);
 
 private:
     static bool _s_initialized;
