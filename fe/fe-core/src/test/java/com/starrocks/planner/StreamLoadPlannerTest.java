@@ -45,6 +45,7 @@ import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
@@ -125,7 +126,7 @@ public class StreamLoadPlannerTest {
         request.setLoad_dop(2);
         request.setPayload_compression_type("LZ4_FRAME");
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
-        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        StreamLoadPlanner planner = new StreamLoadPlanner(new ConnectContext(), db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
         Assertions.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
     }
@@ -167,7 +168,7 @@ public class StreamLoadPlannerTest {
         request.setPartial_update(true);
         request.setColumns("c1");
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
-        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        StreamLoadPlanner planner = new StreamLoadPlanner(new ConnectContext(), db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
     }
 
