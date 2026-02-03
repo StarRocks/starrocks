@@ -498,7 +498,6 @@ public class GlobalStateMgr {
 
     private LockManager lockManager;
 
-    private final ResourceUsageMonitor resourceUsageMonitor = ExtensionManager.getComponent(ResourceUsageMonitor.class);
     private final BaseSlotManager slotManager = ExtensionManager.getComponent(BaseSlotManager.class);
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
@@ -2842,7 +2841,7 @@ public class GlobalStateMgr {
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
-        return resourceUsageMonitor;
+        return slotManager.getResourceUsageMonitor();
     }
 
     public DictionaryMgr getDictionaryMgr() {
