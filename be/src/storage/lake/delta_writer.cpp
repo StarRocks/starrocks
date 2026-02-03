@@ -160,7 +160,9 @@ public:
     // 1. All flush tasks are completed, or
     // 2. Memory usage drops below 70% of the limit
     // This prevents memory overflow during high-throughput loading scenarios.
-    Status wait_for_flush_token();
+    // @param tracker: The memory tracker to check for memory pressure. This should be
+    //                 the tracker that triggered the flush (either _mem_tracker or its parent).
+    Status wait_for_flush_token(MemTracker* tracker);
 
     Status flush_async();
 
@@ -531,7 +533,9 @@ inline Status DeltaWriterImpl::flush() {
 // This approach balances between:
 // 1. Allowing the write thread to continue early when memory is available
 // 2. Preventing OOM by waiting when memory pressure is high
-Status DeltaWriterImpl::wait_for_flush_token() {
+// @param tracker: The memory tracker to check for memory pressure. This should be
+//                 the tracker that triggered the flush (either _mem_tracker or its parent).
+Status DeltaWriterImpl::wait_for_flush_token(MemTracker* tracker) {
     if (_flush_token == nullptr) {
         // This will happen when flush is invoked before any write.
         return Status::OK();
@@ -539,7 +543,7 @@ Status DeltaWriterImpl::wait_for_flush_token() {
     bool wait_finish = false;
     do {
         ASSIGN_OR_RETURN(wait_finish, _flush_token->wait_for(1000 /* ms */));
-    } while (_mem_tracker->limit_exceeded_by_ratio(70) && !wait_finish);
+    } while (tracker != nullptr && tracker->limit_exceeded_by_ratio(70) && !wait_finish);
     return Status::OK();
 }
 
@@ -614,12 +618,12 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         RETURN_IF_ERROR(flush_async());
-        RETURN_IF_ERROR(wait_for_flush_token());
+        RETURN_IF_ERROR(wait_for_flush_token(_mem_tracker));
         ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         RETURN_IF_ERROR(flush_async());
-        RETURN_IF_ERROR(wait_for_flush_token());
+        RETURN_IF_ERROR(wait_for_flush_token(_mem_tracker->parent()));
         ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
     } else if (full) {
         // Memtable is full but memory is sufficient - just submit for async flush
