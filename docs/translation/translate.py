@@ -229,8 +229,8 @@ class StarRocksTranslator:
         base_output_path = abs_input.replace(f"/docs/{source_lang}/", f"/docs/{self.target_lang}/")
         
         if base_output_path == abs_input:
-             print(f"❌ Error: Output path identical to input. Aborting. (Input: {abs_input})")
-             return
+            print(f"❌ Error: Output path identical to input. Aborting. (Input: {abs_input})")
+            return
 
         os.makedirs(os.path.dirname(base_output_path), exist_ok=True)
 
