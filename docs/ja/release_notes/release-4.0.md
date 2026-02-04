@@ -24,6 +24,56 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.5
+
+リリース日：2026年2月3日
+
+### 改善点
+
+- Paimon のバージョンを 1.3.1 に更新しました。[#67098](https://github.com/StarRocks/starrocks/pull/67098)
+- DP 統計情報推定における欠落していた最適化を復元し、冗長な計算を削減しました。[#67852](https://github.com/StarRocks/starrocks/pull/67852)
+- DP Join 並べ替えにおけるプルーニングを改善し、高コストな候補プランを早期にスキップできるようにしました。[#67828](https://github.com/StarRocks/starrocks/pull/67828)
+- JoinReorderDP のパーティション列挙を最適化し、オブジェクト割り当てを削減するとともに、アトム数の上限（≤ 62）を追加しました。[#67643](https://github.com/StarRocks/starrocks/pull/67643)
+- DP Join 並べ替えのプルーニングを最適化し、BitSet にチェックを追加してストリーム処理のオーバーヘッドを削減しました。[#67644](https://github.com/StarRocks/starrocks/pull/67644)
+- DP 統計情報推定時に述語列の統計情報収集をスキップし、CPU オーバーヘッドを削減しました。[#67663](https://github.com/StarRocks/starrocks/pull/67663)
+- 相関 Join の行数推定を最適化し、`Statistics` オブジェクトの再生成を回避しました。[#67773](https://github.com/StarRocks/starrocks/pull/67773)
+- `Statistics.getUsedColumns` におけるメモリ割り当てを削減しました。[#67786](https://github.com/StarRocks/starrocks/pull/67786)
+- 行数のみを更新する場合に、`Statistics` マップの不要なコピーを回避しました。[#67777](https://github.com/StarRocks/starrocks/pull/67777)
+- クエリに集約が存在しない場合、集約プッシュダウン処理をスキップしてオーバーヘッドを削減しました。[#67603](https://github.com/StarRocks/starrocks/pull/67603)
+- ウィンドウ関数における COUNT DISTINCT を改善し、複数 DISTINCT 集約の融合に対応するとともに、CTE 生成を最適化しました。[#67453](https://github.com/StarRocks/starrocks/pull/67453)
+- Trino 方言で `map_agg` 関数をサポートしました。[#66673](https://github.com/StarRocks/starrocks/pull/66673)
+- 物理プランニング時に LakeTablet のロケーション情報をバッチ取得できるようにし、共有データクラスタでの RPC 呼び出しを削減しました。[#67325](https://github.com/StarRocks/starrocks/pull/67325)
+- shared-nothing クラスタにおいて Publish Version トランザクション用のスレッドプールを追加し、並行性を向上させました。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
+- LocalMetastore のロック粒度を最適化し、データベースレベルのロックをテーブルレベルのロックに置き換えました。[#67658](https://github.com/StarRocks/starrocks/pull/67658)
+- MergeCommitTask のライフサイクル管理をリファクタリングし、タスクキャンセルをサポートしました。[#67425](https://github.com/StarRocks/starrocks/pull/67425)
+- 自動クラスタスナップショットに対して実行間隔の設定をサポートしました。[#67525](https://github.com/StarRocks/starrocks/pull/67525)
+- MemTrackerManager において、未使用の `mem_pool` エントリを自動的にクリーンアップするようにしました。[#67347](https://github.com/StarRocks/starrocks/pull/67347)
+- ウェアハウスのアイドルチェック時に `information_schema` クエリを無視するようにしました。[#67958](https://github.com/StarRocks/starrocks/pull/67958)
+- データ分布に応じて、Iceberg テーブルの書き込み時にグローバルシャッフルを動的に有効化できるようにしました。[#67442](https://github.com/StarRocks/starrocks/pull/67442)
+- Connector Sink モジュール向けに Profile メトリクスを追加しました。[#67761](https://github.com/StarRocks/starrocks/pull/67761)
+- Profile におけるロードスピルメトリクスの収集および表示を改善し、ローカル I/O とリモート I/O を区別しました。[#67527](https://github.com/StarRocks/starrocks/pull/67527)
+- Async-Profiler のログレベルを Error に変更し、警告ログの繰り返し出力を防止しました。[#67297](https://github.com/StarRocks/starrocks/pull/67297)
+- BE シャットダウン時に Starlet へ通知し、StarMgr に SHUTDOWN ステータスを報告するようにしました。[#67461](https://github.com/StarRocks/starrocks/pull/67461)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- ハイフン（`-`）を含む正当なシンプルパスがサポートされていませんでした。[#67988](https://github.com/StarRocks/starrocks/pull/67988)
+- JSON 型を含むグループキーに対して集約プッシュダウンが行われた場合に実行時エラーが発生する問題。[#68142](https://github.com/StarRocks/starrocks/pull/68142)
+- JSON パス書き換えルールにより、パーティション述語で参照されているパーティション列が誤ってプルーニングされる問題。[#67986](https://github.com/StarRocks/starrocks/pull/67986)
+- 統計情報を用いたシンプル集約の書き換え時に型不一致が発生する問題。[#67829](https://github.com/StarRocks/starrocks/pull/67829)
+- パーティション Join におけるヒープバッファオーバーフローの潜在的な問題。[#67435](https://github.com/StarRocks/starrocks/pull/67435)
+- 重い式をプッシュダウンする際に `slot_ids` が重複して生成される問題。[#67477](https://github.com/StarRocks/starrocks/pull/67477)
+- 前提条件チェック不足により、ExecutionDAG の Fragment 接続でゼロ除算が発生する問題。[#67918](https://github.com/StarRocks/starrocks/pull/67918)
+- 単一 BE 環境での Fragment 並列準備に起因する潜在的な問題。[#67798](https://github.com/StarRocks/starrocks/pull/67798)
+- RawValuesSourceOperator に `set_finished` メソッドが存在せず、オペレーターが正しく終了しない問題。[#67609](https://github.com/StarRocks/starrocks/pull/67609)
+- 列アグリゲータで DECIMAL256 型（精度 > 38）がサポートされておらず、BE がクラッシュする問題。[#68134](https://github.com/StarRocks/starrocks/pull/68134)
+- DELETE 操作時にリクエストへ `schema_key` を含めていなかったため、共有データクラスタで Fast Schema Evolution v2 がサポートされていなかった問題。[#67456](https://github.com/StarRocks/starrocks/pull/67456)
+- 同期マテリアライズドビューおよび従来のスキーマ変更において、共有データクラスタで Fast Schema Evolution v2 がサポートされていなかった問題。[#67443](https://github.com/StarRocks/starrocks/pull/67443)
+- FE のダウングレード時にファイルバンドルが無効化されている場合、Vacuum が誤ってファイルを削除する可能性がある問題。[#67849](https://github.com/StarRocks/starrocks/pull/67849)
+- MySQLReadListener における正常終了処理が正しくない問題。[#67917](https://github.com/StarRocks/starrocks/pull/67917)
+
 ## 4.0.4
 
 リリース日：2026年1月16日
