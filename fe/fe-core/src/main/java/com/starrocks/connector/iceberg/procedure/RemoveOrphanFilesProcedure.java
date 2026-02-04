@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static com.starrocks.connector.iceberg.IcebergUtil.fileName;
@@ -102,6 +103,9 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
         if (table.currentSnapshot() == null) {
             return;
         }
+        if (table.location() == null || table.location().isEmpty()) {
+            throw new StarRocksConnectorException("table location is empty");
+        }
 
         String location;
         ConstantOperator locationArg = args.get(LOCATION);
@@ -150,7 +154,6 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
     /**
      * Validates that the given location is non-empty and is the table root or a subdirectory of it
-     * (path boundary check to avoid accepting sibling paths like table2 when table root is table).
      * Returns the normalized path (no trailing slash) for use in scanning.
      */
     private static String validateAndResolveScanLocation(String location, String tableLocation) {
@@ -158,16 +161,28 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
             throw new StarRocksConnectorException("invalid argument value for %s, expected non-empty string",
                     LOCATION);
         }
-        String tableRoot = normalizePath(tableLocation);
-        String locationNorm = normalizePath(location);
-        if (!locationNorm.equals(tableRoot) && !locationNorm.startsWith(tableRoot + "/")) {
-            throw new StarRocksConnectorException("invalid argument value for %s, location must be a subdirectory of " +
-                    "table location %s, got %s", LOCATION, tableLocation, location);
+
+        if (tableLocation.equals(location)) {
+            return location;
         }
-        return locationNorm;
+
+        URI tableUri = new Path(tableLocation).toUri().normalize();
+        URI locationUri = new Path(location).toUri().normalize();
+        String tablePath = stripTrailingSlash(tableUri.getPath());
+        String locationPath = stripTrailingSlash(locationUri.getPath());
+
+        if (!Objects.equals(tableUri.getScheme(), locationUri.getScheme()) ||
+            !Objects.equals(tableUri.getAuthority(), locationUri.getAuthority()) ||
+            !locationPath.startsWith(tablePath + Path.SEPARATOR)) {
+            throw new StarRocksConnectorException(
+                    "invalid argument value for %s, location must be under table location %s, got %s",
+                    LOCATION, tableLocation, location);
+        }
+
+        return locationPath;
     }
 
-    private static String normalizePath(String path) {
+    private static String stripTrailingSlash(String path) {
         if (path == null || path.isEmpty()) {
             return path;
         }
