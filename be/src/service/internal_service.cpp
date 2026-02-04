@@ -830,7 +830,7 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
             return;
         }
         pipeline::DriverExecutor* driver_executor = fragment_ctx->workgroup()->executors()->driver_executor();
-        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
+        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false);
     }
 }
 
