@@ -177,7 +177,7 @@ class StarRocksTranslator:
         clean_orig = strip_inline_code(original)
         clean_trans = strip_inline_code(translated)
         
-        tag_pattern = r'<(?!\!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
+        tag_pattern = r'<(?!!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
         IGNORED_TAGS = {"none", "unset", "nil", "generated", "br"}
 
         def get_fingerprints(txt):
