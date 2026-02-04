@@ -122,6 +122,10 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _back_pressure_throttle_time_upper_bound = tnode.olap_scan_node.back_pressure_throttle_time_upper_bound;
     }
 
+    if (tnode.olap_scan_node.__isset.topn_filter_on_sort_key) {
+        _topn_filter_on_sort_key = tnode.olap_scan_node.topn_filter_on_sort_key;
+    }
+
     _estimate_scan_and_output_row_bytes();
 
     return Status::OK();

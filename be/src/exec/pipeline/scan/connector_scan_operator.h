@@ -165,6 +165,8 @@ protected:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
     Status _report_split_source_morsel_finished_once();
+    bool _should_skip_chunk_accumulate() const;
+    void _update_topn_rf_update_ctx();
 
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 
@@ -187,6 +189,9 @@ private:
     int64_t _request_mem_tracker_bytes = 0;
     int64_t _mem_alloc_failed_count = 0;
     bool _enable_adaptive_io_tasks = true;
+    TopnRuntimeFilterUpdateContext* _topn_rf_update_ctx = nullptr;
+    int64_t _prev_raw_rows_read = 0;
+    int64_t _prev_runtime_filtered = 0;
 };
 
 } // namespace pipeline

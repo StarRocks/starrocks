@@ -317,8 +317,9 @@ void TabletScanner::_update_realtime_counter(Chunk* chunk) {
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     _reader->mutable_stats()->compressed_bytes_read = 0;
 
-    COUNTER_UPDATE(_parent->_raw_rows_counter, _reader->stats().raw_rows_read);
-    _raw_rows_read += _reader->stats().raw_rows_read;
+    int64_t raw_rows_read = _reader->stats().raw_rows_read;
+    COUNTER_UPDATE(_parent->_raw_rows_counter, raw_rows_read);
+    _raw_rows_read += raw_rows_read;
     _reader->mutable_stats()->raw_rows_read = 0;
     _num_rows_read += num_rows;
 }
