@@ -8,19 +8,15 @@ import collections
 from google import genai
 from google.genai import types
 
-# Initialize Gemini client with explicit error handling
+# Initialize Gemini client
 if "GEMINI_API_KEY" not in os.environ:
-    raise RuntimeError(
-        "GEMINI_API_KEY environment variable is not set. "
-        "Please set GEMINI_API_KEY to your Gemini API key before running this script."
-    )
+    raise RuntimeError("GEMINI_API_KEY not set.")
 
 try:
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 except Exception as e:
     raise RuntimeError("Failed to initialize Gemini client.") from e
 
-# Use gemini-2.0-flash for stability and speed
 MODEL_NAME = "gemini-2.0-flash" 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_BASE_PATH = os.path.join(SCRIPT_DIR, "configs")
@@ -70,8 +66,7 @@ class StarRocksTranslator:
         return ", ".join(sorted(expanded))
 
     def _load_yaml_as_list(self, path: str) -> list:
-        if not os.path.exists(path):
-            return []
+        if not os.path.exists(path): return []
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
             return data if isinstance(data, list) else []
@@ -80,12 +75,10 @@ class StarRocksTranslator:
         if not os.path.exists(path):
             print(f"::warning::Template file not found: {path}")
             return ""
-        with open(path, 'r', encoding='utf-8') as f:
-            return f.read()
+        with open(path, 'r', encoding='utf-8') as f: return f.read()
 
     def _load_yaml_as_dict(self, path: str) -> dict:
-        if not os.path.exists(path):
-            return {}
+        if not os.path.exists(path): return {}
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 data = yaml.safe_load(f)
@@ -94,10 +87,17 @@ class StarRocksTranslator:
             print(f"::error::Failed to parse synonyms YAML: {e}")
             return {}
     
+    def _load_dict_as_string(self, path: str) -> str:
+        if not os.path.exists(path): return ""
+        with open(path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+            return "\n".join([f"{k}: {v}" for k, v in data.items()]) if data else ""
+
     def normalize_content(self, text: str) -> str:
-        if not self.synonyms:
-            return text
-        code_pattern = r'(```[\s\S]*?```|`[^`\n]+`)'
+        if not self.synonyms: return text
+        
+        # Protect code blocks from synonym replacement
+        code_pattern = r'(`[^`\n]+`)'
         parts = re.split(code_pattern, text)
         processed_parts = []
         for part in parts:
@@ -110,273 +110,204 @@ class StarRocksTranslator:
                     temp_text = pattern.sub(good, temp_text)
                 processed_parts.append(temp_text)
         return "".join(processed_parts)
-    
-    def _load_dict_as_string(self, path: str) -> str:
-        if not os.path.exists(path):
-            return ""
-        with open(path, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
-            return "\n".join([f"{k}: {v}" for k, v in data.items()]) if data else ""
 
-    def _strip_code_blocks(self, text: str) -> str:
-        code_pattern = r'(```[\s\S]*?```|`[^`\n]+`)'
-        return re.sub(code_pattern, '', text)
-
-    def _chunk_content(self, text: str) -> list[str]:
-        # 1. Mask code blocks to prevent splitting inside them
-        code_pattern = r'(```[\s\S]*?```)'
-        code_blocks = []
+    def _parse_document_structure(self, text: str) -> list[dict]:
+        """
+        Parses document into chunks. 
+        Code blocks (```...```) and HTML comments () are 'SKIP' chunks.
+        Headers trigger new 'TRANS' chunks.
+        """
+        chunks = []
+        # 1. Code Block (greedy match)
+        # 2. HTML Comment (constructed safely to avoid chat UI bugs)
+        # 3. Header start (matches ^ followed by ##.. and rest of line)
+        pattern = r'(```[\s\S]*?```|' + r'<' + r'!--[\s\S]*?--' + r'>|^[ \t]*#{2,5}\s.*)'
         
-        def replace_code(match):
-            placeholder = f"__CODE_BLOCK_{len(code_blocks)}__"
-            code_blocks.append(match.group(0))
-            return placeholder
-            
-        masked_text = re.sub(code_pattern, replace_code, text)
-
-        # 2. Primary strategy: split by Level 2 through Level 5 headers
-        chunks = re.split(r'(?m)^(?=#{2,5}\s)', masked_text)
-        chunks = [c for c in chunks if c.strip()]
-
-        # 3. Fallback Strategy for large docs
-        LARGE_DOC_THRESHOLD = 20000
-        MAX_FALLBACK_CHUNK_SIZE = 4000
-
-        if len(chunks) == 1 and len(text) > LARGE_DOC_THRESHOLD:
-            paragraphs = re.split(r'\n\s*\n', masked_text)
-            fallback_chunks = []
-            current_buffer = ""
-            
-            for p in paragraphs:
-                if not p.strip():
-                    continue
-                
-                candidate_len = len(current_buffer) + len(p) + 2
-                if candidate_len > MAX_FALLBACK_CHUNK_SIZE and current_buffer:
-                    fallback_chunks.append(current_buffer)
-                    current_buffer = p
-                else:
-                    if current_buffer:
-                        current_buffer += "\n\n" + p
-                    else:
-                        current_buffer = p
-            
-            if current_buffer.strip():
-                fallback_chunks.append(current_buffer)
-            
-            chunks = [c for c in fallback_chunks if c.strip()]
-
-        # 4. Restore code blocks
-        final_chunks = []
-        for chunk in chunks:
-            def restore_code(match):
-                idx = int(match.group(1))
-                return code_blocks[idx]
-            
-            restored_chunk = re.sub(r'__CODE_BLOCK_(\d+)__', restore_code, chunk)
-            final_chunks.append(restored_chunk)
-
-        return final_chunks
-
-    def validate_mdx(self, original: str, translated: str) -> tuple[bool, str]:
-        clean_orig = self._strip_code_blocks(original)
-        clean_trans = self._strip_code_blocks(translated)
+        # Pass re.MULTILINE so '^' matches start of lines
+        parts = re.split(pattern, text, flags=re.MULTILINE)
         
-        tag_pattern = r'<(?!\!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
+        current_trans_buffer = ""
         
-        # Whitelist tags that are common non-XML technical outputs
-        IGNORED_TAGS = {"none", "unset", "nil", "generated", "br"}
+        def flush_buffer():
+            nonlocal current_trans_buffer
+            if current_trans_buffer:
+                chunks.append({'type': 'TRANS', 'content': current_trans_buffer})
+                current_trans_buffer = ""
 
-        def get_tag_fingerprints(text):
-            fingerprints = []
-            for match in re.finditer(tag_pattern, text):
-                full_tag = match.group(0)
-                tag_name = match.group(1)
-                
-                if tag_name.lower() in IGNORED_TAGS:
-                    continue
-
-                if full_tag.startswith("</"):
-                    type_prefix = "CLOSE"
-                elif full_tag.endswith("/>"):
-                    type_prefix = "SELF"
-                else:
-                    type_prefix = "OPEN"
-                fingerprints.append(f"{type_prefix}:{tag_name}")
-            return fingerprints
-
-        orig_fingerprints = get_tag_fingerprints(clean_orig)
-        trans_fingerprints = get_tag_fingerprints(clean_trans)
-        
-        if collections.Counter(orig_fingerprints) == collections.Counter(trans_fingerprints):
-            return True, ""
+        for part in parts:
+            if not part: continue
             
-        error_msg = [f"❌ TAG MISMATCH DETAILS:"]
-        orig_counts = collections.Counter(orig_fingerprints)
-        trans_counts = collections.Counter(trans_fingerprints)
-        all_tags = set(orig_counts.keys()) | set(trans_counts.keys())
+            # Identify the type of this part
+            is_code = part.startswith("```")
+            is_comment = part.startswith("<" + "!--")
+            # Use re.match with MULTILINE to correctly check for headers
+            is_header = re.match(r'^[ \t]*#{2,5}\s', part)
+            
+            if is_code or is_comment:
+                flush_buffer()
+                chunks.append({'type': 'SKIP', 'content': part})
+            elif is_header:
+                flush_buffer()
+                current_trans_buffer = part
+            else:
+                current_trans_buffer += part
         
-        for tag in all_tags:
-            diff = trans_counts[tag] - orig_counts[tag]
-            if diff != 0:
-                status = "EXTRA" if diff > 0 else "MISSING"
-                readable_tag = tag.replace("OPEN:", "<").replace("CLOSE:", "</").replace("SELF:", "<.../>")
-                if "OPEN" in tag or "CLOSE" in tag: readable_tag += ">"
-                error_msg.append(f"   - {status} {abs(diff)}x: {readable_tag}")
-        return False, "\n".join(error_msg)
+        flush_buffer()
+        return chunks
 
     def _clean_model_output(self, chunk_translated: str) -> str:
-        """
-        Robustly cleans model output using Fence Parity Check.
-        Ensures valid code block structure is preserved.
-        """
-        # 1. Extract content from XML tags if present
         match = re.search(r'<chunk_to_translate>(.*?)</chunk_to_translate>', chunk_translated, re.DOTALL)
-        if match:
-            chunk_translated = match.group(1).strip()
-        
+        if match: chunk_translated = match.group(1).strip()
         chunk_translated = re.sub(r'</?chunk_to_translate>', '', chunk_translated).strip()
 
-        # 2. Safe Unwrap: Detect outer wrapper
         lines = chunk_translated.splitlines()
         if not lines: return ""
-
-        start_idx = -1
-        first_line = lines[0].strip()
         
-        # Only target markdown wrappers
-        if first_line.startswith("```markdown") or first_line.startswith("```md"):
-            start_idx = 0
-        elif len(lines) > 1 and (lines[1].strip().startswith("```markdown") or lines[1].strip().startswith("```md")):
-             start_idx = 1
+        # Remove markdown fences if the LLM wrapped the whole response
+        if lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+            
+        return "\n".join(lines).strip()
 
-        if start_idx != -1:
-            # Assume last ``` is the footer and strip everything after
-            # Use Python slicing to grab everything after header
-            chunk_translated = "\n".join(lines[start_idx+1:]).strip()
-            # Regex to remove the last ``` and trailing filler
-            chunk_translated = re.sub(r'```[^`]*$', '', chunk_translated, count=1).strip()
-
-        # 3. FENCE PARITY CHECK
-        fence_count = len(re.findall(r'(?m)^\s*```', chunk_translated))
+    def validate_mdx(self, original: str, translated: str) -> tuple[bool, str]:
+        def strip_inline_code(t): return re.sub(r'(`[^`\n]+`)', '', t)
         
-        if fence_count % 2 != 0:
-            # ODD -> We are missing a closing fence. Restore it.
-            chunk_translated += "\n```"
-                
-        return chunk_translated
+        clean_orig = strip_inline_code(original)
+        clean_trans = strip_inline_code(translated)
+        
+        tag_pattern = r'<(?!\!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
+        IGNORED_TAGS = {"none", "unset", "nil", "generated", "br"}
 
-    def _final_clean(self, text: str) -> str:
-        """
-        Global cleanup to remove any lingering wrapper lines that slipped through.
-        """
-        lines = text.splitlines()
-        cleaned_lines = []
-        for line in lines:
-            if line.strip() in ["```markdown", "```md"]:
-                continue
-            cleaned_lines.append(line)
-        return "\n".join(cleaned_lines)
+        def get_fingerprints(txt):
+            fps = []
+            for match in re.finditer(tag_pattern, txt):
+                full = match.group(0)
+                name = match.group(1)
+                if name.lower() in IGNORED_TAGS: continue
+                type_p = "CLOSE" if full.startswith("</") else "SELF" if full.endswith("/>") else "OPEN"
+                fps.append(f"{type_p}:{name}")
+            return fps
+
+        orig_fps = get_fingerprints(clean_orig)
+        trans_fps = get_fingerprints(clean_trans)
+        
+        orig_counts = collections.Counter(orig_fps)
+        trans_counts = collections.Counter(trans_fps)
+        
+        valid_tags = set(orig_counts.keys())
+        
+        error_msg = [f"❌ TAG MISMATCH DETAILS:"]
+        has_error = False
+
+        for tag in valid_tags:
+            diff = trans_counts[tag] - orig_counts[tag]
+            if diff < 0:
+                has_error = True
+                error_msg.append(f"   - MISSING {abs(diff)}x: {tag}")
+
+        for tag in trans_counts.keys():
+            if tag in valid_tags and (trans_counts[tag] - orig_counts[tag]) > 0:
+                has_error = True
+                error_msg.append(f"   - EXTRA {trans_counts[tag] - orig_counts[tag]}x: {tag}")
+            
+        if not has_error: return True, ""
+        return False, "\n".join(error_msg)
 
     def translate_file(self, input_file: str):
-        if not os.path.exists(input_file):
-            return
-        
-        # Determine source language safely from Absolute Path
+        if not os.path.exists(input_file): return
         abs_input = os.path.abspath(input_file)
         
-        source_lang = "en" # default
+        source_lang = "en"
         if "/docs/zh/" in abs_input: source_lang = "zh"
         elif "/docs/ja/" in abs_input: source_lang = "ja"
         elif "/docs/en/" in abs_input: source_lang = "en"
         
         source_lang_full = LANG_MAP.get(source_lang, source_lang)
-
-        # Build output path by replacing the source dir with target dir
-        if f"/docs/{source_lang}/" not in abs_input:
-             print(f"❌ Error: Could not determine output path. Input path '{abs_input}' does not contain '/docs/{source_lang}/'")
-             return
-
         base_output_path = abs_input.replace(f"/docs/{source_lang}/", f"/docs/{self.target_lang}/")
         
-        # SAFETY CHECK: Don't overwrite the input file
         if base_output_path == abs_input:
-             print(f"❌ Error: Output path is identical to input path. Stopping to prevent overwrite. (Input: {abs_input})")
+             print(f"❌ Error: Output path identical to input. Aborting. (Input: {abs_input})")
              return
 
         os.makedirs(os.path.dirname(base_output_path), exist_ok=True)
 
-        no_wrapper_instruction = (
-            "\nIMPORTANT: Return ONLY the translated content inside the XML tags. "
-            "DO NOT wrap the output in markdown code blocks. "
-            "Preserve all XML/React tags (like <Tag />) exactly as they are."
-        )
+        original_content = self._read_file(input_file)
+        chunks = self._parse_document_structure(original_content)
+        
+        trans_chunks_count = sum(1 for c in chunks if c['type'] == 'TRANS')
+        print(f"🚀 Processing {input_file}: {len(chunks)} segments ({trans_chunks_count} to translate)...")
+        
+        final_segments = []
+        translated_count = 0
         
         system_instruction = (self.system_template
                               .replace("${source_lang}", source_lang_full)
                               .replace("${target_lang}", self.target_lang_full)
                               .replace("${dictionary}", self.dictionary_str)
                               .replace("${never_translate}", self.never_translate_str)
-                              + no_wrapper_instruction)
-        
-        original_content = self._read_file(input_file)
-        content_to_process = self.normalize_content(original_content)
-        chunks = self._chunk_content(content_to_process)
-        translated_chunks = []
-        
-        print(f"🚀 Translating {input_file} ({len(chunks)} chunks)...")
-        
-        max_retries = 10
-        
+                              + "\nIMPORTANT: Return ONLY the translated content. Do not wrap in markdown code blocks.")
+
         for i, chunk in enumerate(chunks):
-            anchored_chunk = f"<chunk_to_translate>\n{chunk}\n</chunk_to_translate>"
-            current_human_prompt = (self.human_template.replace("${target_language}", self.target_lang_full) 
+            if chunk['type'] == 'SKIP':
+                final_segments.append(chunk['content'])
+                continue
+            
+            translated_count += 1
+            if trans_chunks_count > 0:
+                percent = int((translated_count / trans_chunks_count) * 100)
+            else:
+                percent = 100
+                
+            sys.stdout.write(f"\r[{translated_count}/{trans_chunks_count}] {percent}% ...")
+            sys.stdout.flush()
+
+            content_to_translate = self.normalize_content(chunk['content'])
+            
+            if not content_to_translate.strip():
+                final_segments.append(content_to_translate)
+                continue
+
+            anchored_chunk = f"<chunk_to_translate>\n{content_to_translate}\n</chunk_to_translate>"
+            human_prompt = (self.human_template.replace("${target_language}", self.target_lang_full) 
                                     + f"\n\n### CONTENT TO TRANSLATE ###\n\n{anchored_chunk}")
             
-            chunk_translated = ""
+            chunk_result = ""
+            max_retries = 10
             for attempt in range(max_retries):
                 try:
                     response = client.models.generate_content(
                         model=MODEL_NAME,
                         config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.0),
-                        contents=current_human_prompt
+                        contents=human_prompt
                     )
-                    
-                    if not response.text:
-                        raise RuntimeError("Gemini returned empty response.")
-                        
-                    chunk_translated = response.text.strip()
+                    if not response.text: raise RuntimeError("Empty response")
+                    chunk_result = response.text.strip()
                     break
                 except Exception as e:
                     error_str = str(e)
-                    is_retryable = (
-                        "429" in error_str or 
-                        "RESOURCE_EXHAUSTED" in error_str or 
-                        "503" in error_str or 
-                        "UNAVAILABLE" in error_str or 
-                        "empty response" in error_str.lower()
-                    )
-                    
+                    is_retryable = ("429" in error_str or "503" in error_str or "500" in error_str or "INTERNAL" in error_str or "RESOURCE_EXHAUSTED" in error_str)
                     if is_retryable and attempt < max_retries - 1:
-                        wait_time = min(5 * (2 ** attempt), 60)
-                        print(f"⚠️ API Error ({error_str}) on chunk {i+1}. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
-                        time.sleep(wait_time)
+                        wait = min(5 * (2 ** attempt), 60)
+                        sys.stdout.write("\033[K") 
+                        print(f"\n⚠️ API Error on chunk {i+1}: {error_str}. Retrying in {wait}s...")
+                        time.sleep(wait)
                         continue
-                    
-                    msg = f"Gemini API failed on chunk {i+1}: {str(e)}"
-                    print(f"❌ {msg}")
-                    self.failures.append({"file": base_output_path, "error": msg})
+                    print(f"\n❌ Failed chunk {i+1}: {str(e)}")
+                    self.failures.append({"file": base_output_path, "error": str(e)})
                     self.has_errors = True
                     return
 
-            chunk_translated = self._clean_model_output(chunk_translated)
-            translated_chunks.append(chunk_translated)
+            cleaned_chunk = self._clean_model_output(chunk_result)
+            final_segments.append(cleaned_chunk)
 
-        full_text = "\n\n".join(chunk.strip() for chunk in translated_chunks)
-        full_text = self._final_clean(full_text)
-
-        is_valid, val_msg = self.validate_mdx(original_content, full_text)
+        print(f"\n✨ Translation complete!")
         
+        # FIX: Join with double newlines to ensure code blocks and headers don't merge with adjacent text
+        full_text = "\n\n".join(final_segments)
+        
+        is_valid, val_msg = self.validate_mdx(original_content, full_text)
         final_output_path = base_output_path if is_valid else f"{base_output_path}.invalid"
         rel_path = os.path.relpath(final_output_path, os.getcwd())
 
@@ -404,24 +335,17 @@ def main():
             translator.translate_file(f)
 
     report_path = "translation_summary.md"
-    report_exists = os.path.exists(report_path)
-    
     with open(report_path, "a", encoding="utf-8") as f:
-        if not report_exists:
+        if not os.path.exists(report_path) or os.stat(report_path).st_size == 0:
             f.write("### 📝 Translation Report\n\n")
-        else:
-            f.write("\n")
-        
         f.write(f"#### 🌐 Language: {args.lang.upper()}\n")
         if translator.successes:
             f.write("✅ **Successfully Translated:**\n")
             for s in translator.successes: f.write(f"- `{s}`\n")
-        
         if translator.failures:
-            f.write("\n❌ **Failures (Action Required):**\n")
+            f.write("\n❌ **Failures:**\n")
             for fail in translator.failures:
                 f.write(f"**File:** `{fail['file']}`\n```text\n{fail['error']}\n```\n\n")
-        
         f.write("\n---\n")
 
     if translator.has_errors: sys.exit(1)
