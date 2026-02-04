@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "runtime/exec_env.h"
 #include "storage/base_compaction.h"
 #include "storage/chunk_helper.h"
@@ -27,7 +28,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

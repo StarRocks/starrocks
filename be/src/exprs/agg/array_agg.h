@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -25,7 +26,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>>

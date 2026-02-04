@@ -14,12 +14,12 @@
 
 #include "storage/lake/compaction_scheduler.h"
 
+#include "base/utility/scoped_cleanup.h"
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
 #include "testutil/assert.h"
 #include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
-#include "util/scoped_cleanup.h"
 
 namespace starrocks::lake {
 

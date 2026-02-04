@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -42,7 +43,6 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/protobuf_file.h"
 #include "storage/tablet_schema.h"
-#include "util/defer_op.h"
 
 namespace starrocks::lake {
 

@@ -16,6 +16,8 @@
 
 #include <cstring>
 
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -27,9 +29,7 @@
 #include "util/bit_stream_utils.h"
 #include "util/bit_util.h"
 #include "util/coding.h"
-#include "util/faststring.h"
 #include "util/raw_container.h"
-#include "util/slice.h"
 
 #ifdef __AVX2__
 #include <immintrin.h>

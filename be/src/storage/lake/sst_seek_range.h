@@ -16,9 +16,9 @@
 
 #include <string>
 
+#include "base/string/slice.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/sstable/comparator.h"
-#include "util/slice.h"
 
 namespace starrocks::lake {
 

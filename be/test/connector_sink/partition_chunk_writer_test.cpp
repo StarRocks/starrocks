@@ -20,6 +20,7 @@
 
 #include <future>
 
+#include "base/concurrency/await.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -31,7 +32,6 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
 #include "testutil/assert.h"
-#include "util/await.h"
 
 namespace starrocks::connector {
 namespace {

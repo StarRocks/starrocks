@@ -19,6 +19,8 @@
 #include <limits>
 #include <utility>
 
+#include "base/container/fixed_hash_map.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/hash_set.h"
@@ -31,9 +33,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
-#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
-#include "util/fixed_hash_map.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {

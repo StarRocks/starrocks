@@ -43,8 +43,8 @@
 
 #include <memory>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "gen_cpp/StarrocksExternalService_types.h"
-#include "util/blocking_queue.hpp"
 
 namespace starrocks {
 

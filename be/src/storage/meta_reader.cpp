@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -31,7 +32,6 @@
 #include "storage/rowset/rowset.h"
 #include "storage/utils.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

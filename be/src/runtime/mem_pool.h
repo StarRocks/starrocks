@@ -40,11 +40,11 @@
 #include <string>
 #include <vector>
 
+#include "base/string/posion.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "runtime/memory/mem_chunk.h"
 #include "util/bit_util.h"
-#include "util/posion.h"
 
 namespace starrocks {
 

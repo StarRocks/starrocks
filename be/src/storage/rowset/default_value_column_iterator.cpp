@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <variant>
 
+#include "base/utility/mem_util.hpp"
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_access_path.h"
@@ -50,7 +51,6 @@
 #include "types/struct_type_info.h"
 #include "util/json.h"
 #include "util/json_converter.h"
-#include "util/mem_util.hpp"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 

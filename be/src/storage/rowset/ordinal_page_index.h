@@ -38,6 +38,7 @@
 #include <memory>
 #include <string>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
@@ -47,7 +48,6 @@
 #include "storage/rowset/page_pointer.h"
 #include "util/coding.h"
 #include "util/once.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

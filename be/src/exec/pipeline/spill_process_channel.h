@@ -26,12 +26,12 @@
 #endif
 #endif
 
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/spill/spiller.h"
 #include "runtime/runtime_state.h"
-#include "util/blocking_queue.hpp"
-#include "util/defer_op.h"
 
 namespace starrocks {
 class SpillProcessChannel;

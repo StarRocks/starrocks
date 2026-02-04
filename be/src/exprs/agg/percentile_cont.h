@@ -18,6 +18,8 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/object_column.h"
@@ -31,8 +33,6 @@
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_fwd_decl.h"
-#include "util/slice.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

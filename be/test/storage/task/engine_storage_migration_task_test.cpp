@@ -14,9 +14,11 @@
 
 #include "storage/task/engine_storage_migration_task.h"
 
+#include <butil/file_util.h>
+#include <butil/files/file_path.h>
 #include <gtest/gtest.h>
 
-#include "butil/file_util.h"
+#include "base/path/file_util.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"

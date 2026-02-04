@@ -20,6 +20,7 @@
 
 #include <thread>
 
+#include "base/random/random.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/statusor.h"
@@ -27,7 +28,6 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/random.h"
 #include "util/time.h"
 
 namespace starrocks {

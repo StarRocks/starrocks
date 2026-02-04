@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "common/ownership.h"
 #include "common/statusor.h"
 #include "io/input_stream.h"
 #include "io/writable.h"
-#include "util/slice.h"
 
 namespace starrocks::io {
 

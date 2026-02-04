@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -38,7 +39,6 @@
 #include "runtime/memory/memory_resource.h"
 #include "thrift/protocol/TJSONProtocol.h"
 #include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

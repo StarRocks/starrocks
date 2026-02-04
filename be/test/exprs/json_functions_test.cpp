@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "butil/time.h"
 #include "column/column.h"
 #include "column/const_column.h"
@@ -38,7 +39,6 @@
 #include "gutil/strings/strip.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 #include "util/json.h"
 #include "util/json_flattener.h"
 

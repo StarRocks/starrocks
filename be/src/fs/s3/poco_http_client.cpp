@@ -27,10 +27,10 @@
 #include <istream>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "fs/s3/poco_common.h"
 #include "io/s3_zero_copy_iostream.h"
-#include "util/defer_op.h"
 
 namespace starrocks::poco {
 

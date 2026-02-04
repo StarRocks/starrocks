@@ -16,9 +16,9 @@
 
 #include <vector>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/chunk.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
-#include "util/blocking_queue.hpp"
 
 namespace starrocks::pipeline {
 

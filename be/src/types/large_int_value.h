@@ -44,8 +44,8 @@
 #include <sstream>
 #include <string>
 
+#include "base/utility/integer_util.h"
 #include "util/hash_util.hpp"
-#include "util/integer_util.h"
 
 namespace starrocks {
 

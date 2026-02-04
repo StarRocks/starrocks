@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/concurrency/race_detect.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/query_context.h"
@@ -28,7 +29,6 @@
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "util/failpoint/fail_point.h"
-#include "util/race_detect.h"
 
 DEFINE_FAIL_POINT(spill_always_streaming);
 DEFINE_FAIL_POINT(spill_always_selection_streaming);

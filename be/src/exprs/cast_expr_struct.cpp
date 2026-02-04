@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -26,7 +27,6 @@
 #include "jsonpath.h"
 #include "runtime/memory/memory_resource.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks {

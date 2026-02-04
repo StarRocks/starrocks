@@ -36,6 +36,7 @@
 
 #include <memory>
 
+#include "base/string/faststring.h"
 #include "common/closure_guard.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
@@ -46,7 +47,6 @@
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
-#include "util/faststring.h"
 #include "util/lru_cache.h"
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"

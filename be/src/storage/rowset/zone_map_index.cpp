@@ -36,6 +36,7 @@
 
 #include <bthread/sys_futex.h>
 
+#include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/config.h"
@@ -50,7 +51,6 @@
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

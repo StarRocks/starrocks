@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -31,7 +32,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
-#include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 

@@ -33,8 +33,8 @@
 // under the License.
 #pragma once
 
+#include "base/string/faststring.h"
 #include "util/bit_util.h"
-#include "util/faststring.h"
 
 using starrocks::BitUtil;
 

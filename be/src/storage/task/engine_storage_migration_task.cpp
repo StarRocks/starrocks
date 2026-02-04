@@ -36,12 +36,12 @@
 
 #include <fmt/format.h>
 
+#include "base/utility/defer_op.h"
 #include "runtime/exec_env.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

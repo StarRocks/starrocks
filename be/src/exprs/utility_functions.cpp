@@ -30,6 +30,7 @@
 #include <limits>
 #include <random>
 
+#include "base/uuid/uuid_generator.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -50,7 +51,6 @@
 #include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 

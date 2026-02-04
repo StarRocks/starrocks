@@ -19,7 +19,7 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
-#include "butil/file_util.h"
+#include "base/path/file_util.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"

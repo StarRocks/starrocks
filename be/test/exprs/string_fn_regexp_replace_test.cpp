@@ -20,12 +20,12 @@
 #include <random>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "bench/bench_util.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/string_functions.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

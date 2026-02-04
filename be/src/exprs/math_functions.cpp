@@ -23,12 +23,12 @@
 #include <cmath>
 #include <random>
 
+#include "base/hash/murmur_hash3.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
-#include "util/murmur_hash3.h"
 
 namespace starrocks {
 

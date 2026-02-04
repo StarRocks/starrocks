@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "base/crypto/md5.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "fmt/core.h"
@@ -47,7 +48,6 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
-#include "util/md5.h"
 
 int main(int argc, char* argv[]);
 

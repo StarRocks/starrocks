@@ -37,6 +37,7 @@
 #include <string>
 #include <thread>
 
+#include "base/string/utf8.h"
 #include "column/column_viewer.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
@@ -48,7 +49,6 @@
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 

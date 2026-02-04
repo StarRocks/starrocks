@@ -16,11 +16,11 @@
 
 #include <cstdint>
 
+#include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "runtime/memory/counting_allocator.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

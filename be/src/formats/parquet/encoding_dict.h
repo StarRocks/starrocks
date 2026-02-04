@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -30,7 +31,6 @@
 #include "util/coding.h"
 #include "util/cpu_info.h"
 #include "util/rle_encoding.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 

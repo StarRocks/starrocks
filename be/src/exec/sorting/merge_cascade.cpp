@@ -16,6 +16,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/string/array_view.hpp"
 #include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -24,7 +25,6 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
-#include "util/array_view.hpp"
 
 namespace starrocks {
 

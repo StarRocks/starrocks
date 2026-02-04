@@ -20,7 +20,7 @@
 #include <set>
 #include <sstream>
 
-#include "util/md5.h"
+#include "base/crypto/md5.h"
 
 namespace starrocks::fs {
 

@@ -17,13 +17,13 @@
 
 #include <utility>
 
+#include "base/string/slice.h"
 #include "column/column_helper.h"
 #include "exprs/array_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

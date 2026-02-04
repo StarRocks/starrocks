@@ -37,8 +37,8 @@
 
 #include <algorithm>
 
+#include "base/utility/alignment.h"
 #include "glog/logging.h"
-#include "util/alignment.h"
 #include "util/bit_packing.h"
 #include "util/bit_stream_utils.h"
 

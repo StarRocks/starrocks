@@ -20,12 +20,12 @@
 #include <utility>
 #include <vector>
 
+#include "base/string/c_string.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
-#include "util/c_string.h"
 
 namespace starrocks {
 

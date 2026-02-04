@@ -22,9 +22,9 @@
 #ifndef __APPLE__
 #include "runtime/mysql_table_writer.h"
 #endif
+#include "base/utility/defer_op.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
-#include "util/defer_op.h"
 #include "util/spinlock.h"
 
 namespace starrocks::pipeline {

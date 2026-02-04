@@ -16,6 +16,8 @@
 
 #include <utility>
 
+#include "base/hash/unaligned_access.h"
+#include "base/utility/pred_guard.h"
 #include "column/chunk.h"
 #include "column/datum_convert.h"
 #include "column/decimalv3_column.h"
@@ -34,9 +36,7 @@
 #include "types/timestamp_value.h"
 #include "util/json.h"
 #include "util/percentile_value.h"
-#include "util/pred_guard.h"
 #include "util/stack_util.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

@@ -7,13 +7,13 @@
 #include <string>
 #include <type_traits>
 
+#include "base/string/slice.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
 #include "simdjson.h"
-#include "util/slice.h"
 
 namespace arangodb::velocypack {
 class Slice;

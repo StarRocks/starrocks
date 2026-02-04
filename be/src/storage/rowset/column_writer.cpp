@@ -45,6 +45,7 @@
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
+#include "base/string/faststring.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -61,7 +62,6 @@
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
-#include "util/faststring.h"
 #include "util/rle_encoding.h"
 
 namespace starrocks {

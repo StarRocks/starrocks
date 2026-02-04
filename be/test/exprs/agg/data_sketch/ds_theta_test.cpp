@@ -19,6 +19,8 @@
 #include <cmath>
 #include <memory>
 
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/fixed_length_column.h"
@@ -30,9 +32,7 @@
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 #include "types/bitmap_value.h"
-#include "util/slice.h"
 #include "util/thrift_util.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

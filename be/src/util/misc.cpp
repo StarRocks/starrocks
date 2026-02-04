@@ -14,7 +14,7 @@
 
 #include "util/misc.h"
 
-#include "util/await.h"
+#include "base/concurrency/await.h"
 
 namespace starrocks {
 

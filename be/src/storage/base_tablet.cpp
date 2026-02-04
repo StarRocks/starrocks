@@ -36,8 +36,8 @@
 
 #include <fmt/format.h>
 
+#include "base/path/path_util.h"
 #include "storage/data_dir.h"
-#include "util/path_util.h"
 
 namespace starrocks {
 

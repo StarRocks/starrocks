@@ -4,10 +4,10 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "storage/del_vector.h"
 #include "storage/sstable/sstable_predicate_fwd.h"
-#include "util/slice.h"
 
 namespace starrocks::sstable {
 

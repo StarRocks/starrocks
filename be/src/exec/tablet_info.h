@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/random/random.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/object_pool.h"
@@ -28,7 +29,6 @@
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
 #include "storage/tablet_schema.h"
-#include "util/random.h"
 
 namespace starrocks {
 

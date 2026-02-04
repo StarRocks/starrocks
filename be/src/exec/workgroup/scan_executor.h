@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "base/concurrency/limit_setter.h"
 #include "exec/pipeline/pipeline_metrics.h"
-#include "util/limit_setter.h"
 #include "util/threadpool.h"
 #include "work_group.h"
 

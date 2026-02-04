@@ -17,12 +17,12 @@
 #include <atomic>
 #include <vector>
 
+#include "base/concurrency/race_detect.h"
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 class SourceOperator;

@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
@@ -28,7 +29,6 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment_writer.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 using fs::delete_file;

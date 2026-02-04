@@ -40,6 +40,10 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/hash/xxh3.h"
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
 #include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
@@ -48,12 +52,8 @@
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/faststring.h"
 #include "util/phmap/btree.h"
 #include "util/phmap/phmap.h"
-#include "util/slice.h"
-#include "util/utf8.h"
-#include "util/xxh3.h"
 
 namespace starrocks {
 

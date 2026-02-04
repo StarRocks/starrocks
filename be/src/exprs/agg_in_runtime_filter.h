@@ -18,6 +18,8 @@
 #include <optional>
 #include <stdexcept>
 
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/nullable_column.h"
@@ -26,8 +28,6 @@
 #include "exprs/runtime_filter.h"
 #include "gutil/port.h"
 #include "runtime/mem_pool.h"
-#include "util/slice.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

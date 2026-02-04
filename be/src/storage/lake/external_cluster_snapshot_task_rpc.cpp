@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "agent/finish_task.h"
+#include "base/utility/defer_op.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "gen_cpp/AgentService_types.h"
@@ -33,7 +34,6 @@
 #include "storage/lake/external_cluster_snapshot_task_helper.h"
 #include "storage/lake/tablet_manager.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
 
 namespace starrocks::lake {
 

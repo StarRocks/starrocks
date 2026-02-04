@@ -43,6 +43,8 @@
 #include <memory>
 #include <ostream>
 
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "gutil/port.h"
@@ -56,8 +58,6 @@
 #include "storage/types.h"
 #include "types/date_value.hpp"
 #include "util/coding.h"
-#include "util/faststring.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

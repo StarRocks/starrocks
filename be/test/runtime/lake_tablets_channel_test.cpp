@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -43,7 +44,6 @@
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
 #include "util/bthreads/util.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 #include "util/uid_util.h"
 

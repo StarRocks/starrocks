@@ -16,9 +16,9 @@
 
 #include <cstdint>
 
+#include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
 #include "storage/compaction_task_factory.h"
-#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 #include "util/trace.h"

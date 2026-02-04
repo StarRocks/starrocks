@@ -17,6 +17,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/concurrency/limit_setter.h"
+#include "base/utility/factory_method.h"
 #include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -26,8 +28,6 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state.h"
-#include "util/factory_method.h"
-#include "util/limit_setter.h"
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {

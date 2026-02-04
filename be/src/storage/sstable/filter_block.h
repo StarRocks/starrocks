@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "util/slice.h"
+#include "base/string/slice.h"
 
 namespace starrocks::sstable {
 

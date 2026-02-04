@@ -47,6 +47,7 @@
 #include <string>
 #include <utility>
 
+#include "base/string/slice.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
@@ -54,7 +55,6 @@
 #include "util/coding.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_fwd_decl.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "base/string/slice.h"
 #include "common/overloaded.h"
 #include "runtime/decimalv2_value.h"
 #include "storage/decimal12.h"
@@ -25,7 +26,6 @@
 #include "types/int256.h"
 #include "types/timestamp_value.h"
 #include "util/int96.h"
-#include "util/slice.h"
 
 namespace starrocks {
 class MemPool;

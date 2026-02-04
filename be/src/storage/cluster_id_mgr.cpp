@@ -21,10 +21,10 @@
 #include <fstream>
 #include <utility>
 
+#include "base/system/errno.h"
+#include "base/utility/defer_op.h"
 #include "common/version.h"
 #include "gutil/strings/substitute.h"
-#include "util/defer_op.h"
-#include "util/errno.h"
 
 namespace starrocks {
 

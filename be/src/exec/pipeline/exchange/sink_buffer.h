@@ -22,11 +22,11 @@
 #include <queue>
 #include <unordered_set>
 
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
 #include "util/disposable_closure.h"
 #include "util/internal_service_recoverable_stub.h"
 #include "util/phmap/phmap.h"

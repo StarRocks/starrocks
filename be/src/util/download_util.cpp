@@ -16,12 +16,12 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
+#include "base/crypto/md5.h"
+#include "base/utility/defer_op.h"
+#include "base/uuid/uuid_generator.h"
 #include "fmt/format.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
-#include "util/defer_op.h"
-#include "util/md5.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 

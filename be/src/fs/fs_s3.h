@@ -17,9 +17,9 @@
 #include <aws/core/Aws.h>
 #include <aws/core/client/ClientConfiguration.h>
 
+#include "base/random/random.h"
 #include "fs/credential/cloud_configuration.h"
 #include "fs/fs.h"
-#include "util/random.h"
 
 namespace Aws::S3 {
 class S3Client;

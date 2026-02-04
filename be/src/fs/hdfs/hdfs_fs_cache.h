@@ -23,9 +23,9 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/random/random.h"
 #include "common/status.h"
 #include "fs/hdfs/fs_hdfs.h"
-#include "util/random.h"
 
 namespace starrocks {
 

@@ -34,7 +34,7 @@
 
 #include "runtime/stream_load/stream_load_pipe.h"
 
-#include "util/alignment.h"
+#include "base/utility/alignment.h"
 #include "util/compression/compression_utils.h"
 
 namespace starrocks {

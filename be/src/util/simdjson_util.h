@@ -15,9 +15,9 @@
 #pragma once
 
 // for DCHECK
+#include "base/string/faststring.h"
 #include "common/logging.h"
 #include "simdjson.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 

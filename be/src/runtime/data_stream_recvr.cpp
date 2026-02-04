@@ -40,6 +40,8 @@
 #include <deque>
 #include <utility>
 
+#include "base/string/faststring.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
@@ -53,8 +55,6 @@
 #include "runtime/sorted_chunks_merger.h"
 #include "util/compression/block_compression.h"
 #include "util/debug_util.h"
-#include "util/defer_op.h"
-#include "util/faststring.h"
 #include "util/logging.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"

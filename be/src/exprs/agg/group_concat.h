@@ -16,6 +16,7 @@
 
 #include <cmath>
 
+#include "base/string/utf8.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -26,7 +27,6 @@
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 template <LogicalType LT, typename = guard::Guard>

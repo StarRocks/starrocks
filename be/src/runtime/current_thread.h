@@ -24,11 +24,11 @@
 #include <unistd.h>
 #endif
 
+#include "base/utility/defer_op.h"
 #include "fmt/format.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
-#include "util/defer_op.h"
 #include "util/uid_util.h"
 
 #define SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, check)                             \

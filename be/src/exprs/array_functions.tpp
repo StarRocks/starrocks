@@ -14,6 +14,7 @@
 #include <chrono>
 #include <memory>
 
+#include "base/bit/bit_mask.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_hash.h"
@@ -28,7 +29,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/bit_mask.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 

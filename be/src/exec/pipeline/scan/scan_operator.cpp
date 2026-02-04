@@ -16,6 +16,7 @@
 
 #include <util/time.h>
 
+#include "base/concurrency/race_detect.h"
 #include "column/chunk.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -30,7 +31,6 @@
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
 #include "util/failpoint/fail_point.h"
-#include "util/race_detect.h"
 #include "util/runtime_profile.h"
 #include "util/time_guard.h"
 

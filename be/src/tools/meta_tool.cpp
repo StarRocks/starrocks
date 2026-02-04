@@ -40,6 +40,7 @@
 #include <set>
 #include <string>
 
+#include "base/path/path_util.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "fs/fs.h"
@@ -75,7 +76,6 @@
 #include "storage/zone_map_detail.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "util/path_util.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;

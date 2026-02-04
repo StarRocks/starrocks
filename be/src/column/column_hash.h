@@ -31,10 +31,10 @@
 #include <xmmintrin.h>
 #endif
 
+#include "base/hash/hash.h"
+#include "base/string/slice.h"
 #include "column/type_traits.h"
 #include "types/logical_type.h"
-#include "util/hash.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

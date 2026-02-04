@@ -24,8 +24,8 @@
 #include <string>
 #include <vector>
 
+#include "base/json/easy_json.h"
 #include "http/http_handler.h"
-#include "util/easy_json.h"
 
 namespace starrocks {
 

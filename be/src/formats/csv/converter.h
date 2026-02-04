@@ -22,6 +22,7 @@
 #include <memory>
 #include <type_traits>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "io/formatted_output_stream.h"
 #include "runtime/decimalv2_value.h"
@@ -29,7 +30,6 @@
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
 #include "util/raw_container.h"
-#include "util/slice.h"
 
 namespace starrocks {
 struct TypeDescriptor;

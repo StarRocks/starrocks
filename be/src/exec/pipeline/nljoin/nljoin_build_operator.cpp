@@ -14,9 +14,9 @@
 
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "exec/pipeline/operator.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

@@ -42,6 +42,7 @@
 #include <sstream>
 
 #include "agent/master_info.h"
+#include "base/concurrency/stopwatch.hpp"
 #include "common/object_pool.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -62,7 +63,6 @@
 #include "util/misc.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
 #include "util/thread.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"

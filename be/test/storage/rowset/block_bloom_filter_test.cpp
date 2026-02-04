@@ -36,8 +36,8 @@
 
 #include <memory>
 
+#include "base/string/slice.h"
 #include "util/bloom_filter.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

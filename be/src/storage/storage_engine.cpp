@@ -46,6 +46,8 @@
 #include <set>
 
 #include "agent/master_info.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/utility/scoped_cleanup.h"
 #include "common/status.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
@@ -77,9 +79,7 @@
 #include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
-#include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"

@@ -23,6 +23,7 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
+#include "base/utility/defer_op.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/BackendService.h"
@@ -44,7 +45,6 @@
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 

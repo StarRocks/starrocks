@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/arrow_to_starrocks_converter.h"
@@ -29,7 +30,6 @@
 #include "exec/parquet_reader.h"
 #include "runtime/mem_pool.h"
 #include "util/runtime_profile.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

@@ -18,13 +18,13 @@
 #include <memory>
 #include <variant>
 
+#include "base/concurrency/race_detect.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 

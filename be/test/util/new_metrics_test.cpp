@@ -20,10 +20,10 @@
 #include <iostream>
 #include <thread>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/config.h"
 #include "util/logging.h"
 #include "util/metrics.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 

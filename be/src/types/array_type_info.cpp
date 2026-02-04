@@ -14,9 +14,9 @@
 
 #include "types/array_type_info.h"
 
+#include "base/utility/mem_util.hpp"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/mem_util.hpp"
 
 namespace starrocks {
 

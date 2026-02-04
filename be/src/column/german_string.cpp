@@ -14,11 +14,11 @@
 
 #include "column/german_string.h"
 
+#include "base/string/slice.h"
 #include "gutil/strings/fastmem.h"
 #include "util/hash_util.hpp"
 #include "util/misc.h"
 #include "util/raw_container.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

@@ -13,9 +13,9 @@
 // limitations under the License.
 
 #pragma once
+#include "base/string/faststring.h"
 #include "column/datum.h"
 #include "types/logical_type.h"
-#include "util/faststring.h"
 namespace starrocks {
 typedef void (*PackFunc)(faststring*, const Datum&);
 StatusOr<PackFunc> get_pack(LogicalType lt);

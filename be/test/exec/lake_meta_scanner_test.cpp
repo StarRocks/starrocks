@@ -20,6 +20,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "exec/lake_meta_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -43,7 +44,6 @@
 #include "storage/tablet_schema.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

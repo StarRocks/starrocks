@@ -41,6 +41,7 @@
 #include <ctime>
 #include <memory>
 
+#include "base/path/path_util.h"
 #include "common/config.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/fs.h"
@@ -62,7 +63,6 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/path_util.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

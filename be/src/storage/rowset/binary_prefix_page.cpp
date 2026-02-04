@@ -39,13 +39,13 @@
 #include <cstring>
 #include <map>
 
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "util/coding.h"
-#include "util/faststring.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

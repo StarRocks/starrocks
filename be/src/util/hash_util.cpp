@@ -18,9 +18,9 @@
 #include <nmmintrin.h>
 #endif
 
+#include "base/hash/murmur_hash3.h"
+#include "base/hash/xxh3.h"
 #include "util/cpu_info.h"
-#include "util/murmur_hash3.h"
-#include "util/xxh3.h"
 
 namespace starrocks {
 

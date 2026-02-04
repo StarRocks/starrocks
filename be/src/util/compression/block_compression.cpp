@@ -41,12 +41,12 @@
 #endif
 #include <zlib.h>
 
+#include "base/string/faststring.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 #include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/compression/compression_headers.h"
-#include "util/faststring.h"
 namespace orc {
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
 } // namespace orc

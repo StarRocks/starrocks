@@ -45,9 +45,9 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/string/faststring.h"
 #include "util/bit_util.h"
 #include "util/debug_util.h"
-#include "util/faststring.h"
 #include "util/rle_encoding.h"
 
 using std::string;

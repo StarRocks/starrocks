@@ -47,12 +47,12 @@
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
 #endif
+#include "base/string/slice.h" // for OwnedSlice
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
 #include "util/bitmap.h"                 // for BitmapChange
-#include "util/slice.h"                  // for OwnedSlice
 
 namespace starrocks {
 

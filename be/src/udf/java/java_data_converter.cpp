@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -33,7 +34,6 @@
 #include "types/logical_type.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/type_traits.h"
-#include "util/defer_op.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
     M(TYPE_BOOLEAN)                \

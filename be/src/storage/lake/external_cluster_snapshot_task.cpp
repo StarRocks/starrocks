@@ -26,6 +26,7 @@
 
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
+#include "base/utility/defer_op.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "fs/fs_util.h"
@@ -45,7 +46,6 @@
 #include "storage/protobuf_file.h"
 #include "util/brpc_stub_cache.h"
 #include "util/countdown_latch.h"
-#include "util/defer_op.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::lake {

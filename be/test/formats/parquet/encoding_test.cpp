@@ -19,12 +19,12 @@
 #include <limits>
 #include <random>
 
+#include "base/simd/byte_stream_split.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "formats/parquet/types.h"
-#include "util/byte_stream_split.h"
 
 namespace starrocks::parquet {
 class ParquetEncodingTest : public testing::Test {

@@ -18,11 +18,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/io_error.h"
 #include "io_profiler.h"
-#include "util/stopwatch.hpp"
 
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"

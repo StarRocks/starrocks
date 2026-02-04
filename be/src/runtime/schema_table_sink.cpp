@@ -18,6 +18,7 @@
 #include <sstream>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "common/configbase.h"
@@ -27,7 +28,6 @@
 #include "http/action/update_config_action.h"
 #include "runtime/runtime_state.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
 #include "util/ref_count_closure.h"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"

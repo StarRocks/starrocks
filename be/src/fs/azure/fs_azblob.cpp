@@ -19,6 +19,7 @@
 #include <azure/identity.hpp>
 #include <azure/storage/blobs.hpp>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "fs/azure/azblob_uri.h"
 #include "fs/azure/utils.h"
 #include "fs/credential/cloud_configuration_factory.h"
@@ -26,7 +27,6 @@
 #include "fs/output_stream_adapter.h"
 #include "io/io_profiler.h"
 #include "io/output_stream.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 

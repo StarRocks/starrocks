@@ -18,6 +18,7 @@
 #include <atomic>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -46,7 +47,6 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
