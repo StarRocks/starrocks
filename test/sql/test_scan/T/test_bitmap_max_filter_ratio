@@ -1,7 +1,5 @@
 -- name: test_bitmap_max_filter_ratio @sequential
 
-use db_${uuid0};
-
 set enable_profile = true;
 set enable_async_profile = false;
 
