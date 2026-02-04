@@ -106,12 +106,21 @@ public class DeltaLakeTable extends Table {
     }
 
     @Override
+    public long getCreateTime() {
+        return createTime;
+    }
+
+    @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
             return String.join(".", catalogName, dbName, tableName, Long.toString(createTime));
         } else {
             return Long.toString(id);
         }
+    }
+
+    public void clearMetadata() {
+        this.deltaSnapshot = null;
     }
 
     @Override

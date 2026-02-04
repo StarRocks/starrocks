@@ -149,6 +149,15 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
     }
 
+    @Override
+    public void close() {
+        try {
+            remoteFileInfoSource.close();
+        } catch (Exception e) {
+            LOG.warn("close Delta RemoteFileInfoSource failed", e);
+        }
+    }
+
     public int selectedPartitionCount() {
         return partitionKeys.size();
     }
