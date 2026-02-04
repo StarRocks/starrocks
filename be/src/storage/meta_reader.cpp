@@ -31,6 +31,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 #include "storage/utils.h"
+#include "storage/virtual_column_utils.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -179,6 +180,7 @@ Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params, cons
         return Status::InvalidArgument("tablet schema is nullptr");
     }
     _params = params;
+    _tablet_id = options.tablet_id;
     if (options.dcg_loader != nullptr) {
         if (options.is_primary_keys) {
             TabletSegmentId tsid;
@@ -286,7 +288,14 @@ Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
     }
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
-        RETURN_IF_ERROR(_collect(_params->fields[i], _params->cids[i], (*dsts)[i], _params->field_type[i]));
+        auto tablet_column = _params->tablet_schema->column(_params->cids[i]);
+        auto field_name = _params->fields[i];
+        auto field_type = _params->field_type[i];
+        if (tablet_column.is_virtual_column()) {
+            RETURN_IF_ERROR(_collect_virtual(field_name, tablet_column.name(), (*dsts)[i], field_type));
+        } else {
+            RETURN_IF_ERROR(_collect(field_name, _params->cids[i], (*dsts)[i], field_type));
+        }
     }
     return Status::OK();
 }
@@ -310,6 +319,22 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_column_compressed_size(cid, column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
+}
+
+Status SegmentMetaCollecter::_collect_virtual(const std::string& name, const std::string_view col_name, Column* column,
+                                              LogicalType type) {
+    VirtualColumnFactory::Options options;
+    options.tablet_id = _tablet_id;
+    options.segment_id = _segment->id();
+    options.num_rows = _segment->num_rows();
+    if (name == META_MAX) {
+        return VirtualColumnFactory::append_to_column(options, col_name, column);
+    } else if (name == META_MIN) {
+        return VirtualColumnFactory::append_to_column(options, col_name, column);
+    } else if (name == META_COUNT_ROWS) {
+        return _collect_rows(column, type);
+    }
+    return Status::NotSupported("Not Support Collect Virtual Meta: " + name);
 }
 
 std::string append_read_name(const ColumnReader* col_reader) {

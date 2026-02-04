@@ -38,6 +38,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -784,6 +785,15 @@ public class QueryAnalyzer {
                     columns.put(field, column);
                     fields.add(field);
                 }
+                
+                // Add virtual columns for sync MV queries as well
+                for (Column column : getVirtualColumns(table)) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+                }
             } else {
                 List<Column> fullSchema = table.getFullSchema();
                 Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
@@ -831,6 +841,16 @@ public class QueryAnalyzer {
                         fields.add(field);
                     }
                 }
+
+                // Add virtual columns for OLAP tables
+                for (Column column : getVirtualColumns(table)) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    // Virtual columns are not visible in SELECT * but can be explicitly referenced
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+                }
             }
 
             node.setColumns(columns.build());
@@ -869,6 +889,16 @@ public class QueryAnalyzer {
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, IntegerType.BIGINT));
+            return columns;
+        }
+
+        private List<Column> getVirtualColumns(Table table) {
+            List<Column> columns = new ArrayList<>();
+            // Add _tablet_id_ virtual column for OLAP tables
+            if (table.isNativeTableOrMaterializedView() && Config.enable_virtual_columns) {
+                OlapTable olapTable = (OlapTable) table;
+                columns.addAll(olapTable.getVirtualColumns());
+            }
             return columns;
         }
 

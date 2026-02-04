@@ -63,7 +63,8 @@ SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
           _slot_size(_type.get_slot_size()),
           _is_materialized(false),
           _is_output_column(false),
-          _is_nullable(true) {}
+          _is_nullable(true),
+          _is_virtual(false) {}
 
 SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
         : _id(tdesc.id),
@@ -78,7 +79,8 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
           _is_output_column(tdesc.__isset.isOutputColumn ? tdesc.isOutputColumn : true),
           _is_nullable(tdesc.__isset.isNullable
                                ? tdesc.isNullable
-                               : (tdesc.__isset.nullIndicatorBit ? tdesc.nullIndicatorBit != -1 : true)) {}
+                               : (tdesc.__isset.nullIndicatorBit ? tdesc.nullIndicatorBit != -1 : true)),
+          _is_virtual(tdesc.__isset.is_virtual_column ? tdesc.is_virtual_column : false) {}
 
 SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
         : _id(pdesc.id()),
@@ -90,7 +92,8 @@ SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
           _slot_size(_type.get_slot_size()),
           _is_materialized(pdesc.is_materialized()),
           _is_output_column(true),
-          _is_nullable(pdesc.has_is_nullable() ? pdesc.is_nullable() : pdesc.null_indicator_bit() != -1) {}
+          _is_nullable(pdesc.has_is_nullable() ? pdesc.is_nullable() : pdesc.null_indicator_bit() != -1),
+          _is_virtual(pdesc.is_virtual()) {}
 
 void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_id(_id);
@@ -106,6 +109,7 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_slot_idx(_slot_idx);
     pslot->set_is_materialized(_is_materialized);
     pslot->set_is_nullable(_is_nullable);
+    pslot->set_is_virtual(_is_virtual);
 }
 
 std::string SlotDescriptor::debug_string() const {

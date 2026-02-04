@@ -504,6 +504,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return fullSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst().orElse(null);
     }
 
+    /**
+     * Get all virtual columns for this table. Virtual columns are not persisted 
+     * but are available during query execution.
+     * Default implementation returns empty list. Subclasses can override to provide virtual columns.
+     * @return List of virtual columns
+     */
+    public List<Column> getVirtualColumns() {
+        return new ArrayList<>();
+    }
+
     public boolean containColumn(String columnName) {
         return nameToColumn.containsKey(columnName);
     }

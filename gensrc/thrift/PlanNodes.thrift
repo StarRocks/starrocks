@@ -1345,6 +1345,12 @@ const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
 const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
 const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
 
+// virtual column names
+const string TABLET_ID_COLUMN_NAME = "_tablet_id_";
+// Future virtual columns (not yet implemented in BE):
+// const string SEGMENT_ID_COLUMN_NAME = "_segment_id_";
+// const string ROW_ID_COLUMN_NAME = "_row_id_";
+
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
 }

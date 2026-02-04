@@ -69,6 +69,7 @@ struct TSlotDescriptor {
   // for example, the physical name of a column in a parquet file.
   // used in delta lake column mapping name mode
   14: optional string col_physical_name
+  15: optional bool is_virtual_column = false
 }
 
 struct TTupleDescriptor {

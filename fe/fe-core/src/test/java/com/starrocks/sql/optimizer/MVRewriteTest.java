@@ -75,6 +75,7 @@ public class MVRewriteTest extends StarRocksTestBase {
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
+        Config.enable_virtual_columns = false;
         Config.alter_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();

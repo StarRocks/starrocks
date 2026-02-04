@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.TpchSQL;
@@ -52,6 +53,7 @@ public class TrinoTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        Config.enable_virtual_columns = false;
         FeConstants.enablePruneEmptyOutputScan = false;
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);

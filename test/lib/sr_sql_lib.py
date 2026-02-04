@@ -2403,7 +2403,23 @@ class StarrocksSQLApiLib(object):
             if str(res["result"]).find("Decode") > 0:
                 return ""
             time.sleep(1)
-
+    
+    def wait_plan_contains(self, query, *expects):
+        """
+        wait plan contains 
+        """
+        timeout = 60
+        interval = 1
+        for _ in range(timeout):
+            res = self.execute_sql("explain " + query, True)
+            print (res)
+            plan_string = "\n".join(" ".join(map(str, item)) for item in res["result"])
+            if all(expect in plan_string for expect in expects):
+                return
+            time.sleep(interval)
+        
+        tools.assert_true(False, "acquire dictionary timeout for 60s")
+        
     def try_collect_dict_N_times(self, column_name, table_name, N):
         """
         try to collect dictionary for N times

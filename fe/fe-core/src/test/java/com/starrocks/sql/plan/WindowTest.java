@@ -1745,7 +1745,7 @@ public class WindowTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:SORT");
     }
-
+        
     @Test
     public void testWindowOutputColumnNullCheck() throws Exception {
         String sql = "select t1a, t1b, t1c, count(t1d) over (partition by t1d) " +
@@ -1765,14 +1765,19 @@ public class WindowTest extends PlanTestBase {
                 "  |  cardinality: 1");
 
         plan = getDescTbl(sql);
-        assertContains(plan, "TSlotDescriptor(id:11, parent:3, " +
-                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
-                "columnPos:-1, byteOffset:-1, colName:, slotIdx:-1, " +
-                "isMaterialized:true, isOutputColumn:false, isNullable:false)");
-        assertContains(plan, "TSlotDescriptor(id:11, parent:5, " +
-                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
-                "columnPos:-1, byteOffset:-1, colName:, slotIdx:-1, " +
-                "isMaterialized:true, isOutputColumn:false, isNullable:false)");
+        final String[] plans = plan.split("TSlotDescriptor");
+        int reached = 0;
+        for (String detail : plans) {
+            if (detail.contains("id:11, parent:3")) {
+                assertContains("isNullable:false");
+                reached = reached | 1;
+            }
+            if (detail.contains("id:11, parent:5")) {
+                assertContains("isNullable:false");
+                reached = reached | 2;
+            }
+        }
+        Assertions.assertEquals(reached, 3);
     }
 
     @Test

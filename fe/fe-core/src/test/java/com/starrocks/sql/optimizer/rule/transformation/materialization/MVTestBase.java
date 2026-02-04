@@ -144,6 +144,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.enable_virtual_columns = false;
 
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
         PseudoCluster.getOrCreateWithRandomPort(true, 1);

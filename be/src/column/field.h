@@ -90,7 +90,8 @@ public:
               _length(rhs._length),
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags),
-              _uid(rhs._uid) {}
+              _uid(rhs._uid),
+              _is_virtual(rhs._is_virtual) {}
 
     Field(Field&& rhs) noexcept
             : _id(rhs._id),
@@ -102,7 +103,8 @@ public:
               _length(rhs._length),
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags),
-              _uid(rhs._uid) {
+              _uid(rhs._uid),
+              _is_virtual(rhs._is_virtual) {
         rhs._sub_fields = nullptr;
     }
 
@@ -119,6 +121,7 @@ public:
             _flags = rhs._flags;
             _sub_fields = rhs._sub_fields ? new std::vector<Field>(*rhs._sub_fields) : nullptr;
             _uid = rhs._uid;
+            _is_virtual = rhs._is_virtual;
         }
         return *this;
     }
@@ -134,6 +137,7 @@ public:
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
             _uid = rhs._uid;
+            _is_virtual = rhs._is_virtual;
             std::swap(_sub_fields, rhs._sub_fields);
         }
         return *this;
@@ -161,6 +165,9 @@ public:
 
     int32_t length() const { return _length; }
     void set_length(int32_t l) { _length = l; }
+
+    bool is_virtual() const { return _is_virtual; }
+    void set_is_virtual(bool is_virtual) { _is_virtual = is_virtual; }
 
     uint8_t short_key_length() const { return _short_key_length; }
     void set_short_key_length(uint8_t n) { _short_key_length = n; }
@@ -221,6 +228,7 @@ private:
     uint8_t _short_key_length;
     uint8_t _flags;
     ColumnUID _uid = -1;
+    bool _is_virtual = false;
 };
 
 inline bool Field::is_nullable() const {

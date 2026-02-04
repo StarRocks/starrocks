@@ -27,6 +27,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/rowset.h"
+#include "storage/virtual_column_utils.h"
 
 namespace starrocks {
 
@@ -76,6 +77,7 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
         tablet_schema = tmp_schema;
     }
 
+    ASSIGN_OR_RETURN(tablet_schema, extend_schema_by_virtual_columns(tablet_schema));
     RETURN_IF_ERROR(_build_collect_context(tablet_schema, read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(tablet, read_params));
 

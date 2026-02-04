@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,6 +51,7 @@ public class UseMaterializedViewTest {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+        Config.enable_virtual_columns = false;
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);

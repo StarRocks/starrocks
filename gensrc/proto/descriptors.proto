@@ -54,6 +54,7 @@ message PSlotDescriptor {
     repeated string global_dict_words = 11; 
     optional int64 global_dict_version = 12;
     optional bool is_nullable = 13; // replace null_indicator_bit & null_indicator_byte
+    optional bool is_virtual = 14;
 };
 
 message PTupleDescriptor {

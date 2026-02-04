@@ -77,6 +77,7 @@ public:
     bool is_materialized() const { return _is_materialized; }
     bool is_output_column() const { return _is_output_column; }
     bool is_nullable() const { return _is_nullable; }
+    bool is_virtual() const { return _is_virtual; }
 
     int slot_size() const { return _slot_size; }
 
@@ -116,6 +117,8 @@ private:
     const bool _is_output_column;
 
     const bool _is_nullable;
+
+    const bool _is_virtual;
 
     SlotDescriptor(const PSlotDescriptor& pdesc);
 };

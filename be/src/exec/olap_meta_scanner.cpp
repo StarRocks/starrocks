@@ -21,6 +21,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/virtual_column_utils.h"
 
 namespace starrocks {
 
@@ -101,6 +102,8 @@ Status OlapMetaScanner::_init_meta_reader_params() {
         }
         _reader_params.tablet_schema = tmp_schema;
     }
+
+    ASSIGN_OR_RETURN(_reader_params.tablet_schema, extend_schema_by_virtual_columns(_reader_params.tablet_schema));
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
     VLOG(2) << "init_meta_reader schema: " << _reader_params.tablet_schema->debug_string();

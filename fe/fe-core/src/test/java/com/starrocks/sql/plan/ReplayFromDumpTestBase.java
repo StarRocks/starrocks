@@ -60,6 +60,7 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
         Config.show_execution_groups = false;
+        Config.enable_virtual_columns = false;
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
