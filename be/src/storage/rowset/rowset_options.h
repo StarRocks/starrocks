@@ -27,6 +27,7 @@
 #include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
+#include "storage/topn_runtime_filter_update_context.h"
 
 namespace starrocks {
 class Conditions;
@@ -100,6 +101,8 @@ public:
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
+    bool topn_filter_on_sort_key = false;
+    TopnRuntimeFilterUpdateContext* topn_rf_update_ctx = nullptr;
 };
 
 } // namespace starrocks

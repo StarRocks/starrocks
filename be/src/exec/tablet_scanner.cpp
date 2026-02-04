@@ -148,6 +148,12 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.use_page_cache = _runtime_state->use_page_cache();
     _params.enable_predicate_col_late_materialize =
             _runtime_state->query_options().enable_predicate_col_late_materialize;
+    _params.topn_filter_on_sort_key = _parent->topn_filter_on_sort_key();
+    if (_params.topn_filter_on_sort_key) {
+        _topn_rf_update_ctx = std::make_unique<TopnRuntimeFilterUpdateContext>(
+                _parent->topn_runtime_filter_update_mode());
+        _params.topn_rf_update_ctx = _topn_rf_update_ctx.get();
+    }
     auto parser = _pool.add(new OlapPredicateParser(_tablet_schema));
 
     ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
@@ -312,10 +318,17 @@ void TabletScanner::_update_realtime_counter(Chunk* chunk) {
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     _reader->mutable_stats()->compressed_bytes_read = 0;
 
-    COUNTER_UPDATE(_parent->_raw_rows_counter, _reader->stats().raw_rows_read);
-    _raw_rows_read += _reader->stats().raw_rows_read;
+    int64_t raw_rows_read = _reader->stats().raw_rows_read;
+    COUNTER_UPDATE(_parent->_raw_rows_counter, raw_rows_read);
+    _raw_rows_read += raw_rows_read;
     _reader->mutable_stats()->raw_rows_read = 0;
     _num_rows_read += num_rows;
+    if (_topn_rf_update_ctx != nullptr && num_rows > 0) {
+        const int64_t runtime_filtered = _reader->stats().runtime_stats_filtered;
+        _topn_rf_update_ctx->update_stats(raw_rows_read, runtime_filtered - _prev_runtime_filtered);
+        _prev_runtime_filtered = runtime_filtered;
+        _topn_rf_update_ctx->on_chunk_output();
+    }
 }
 
 void TabletScanner::update_counter() {

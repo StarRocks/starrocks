@@ -102,6 +102,8 @@ public:
     bool output_chunk_by_bucket() const override { return _output_chunk_by_bucket; }
     bool is_asc_hint() const override { return _output_asc_hint; }
     std::optional<bool> partition_order_hint() const override { return _partition_order_hint; }
+    bool topn_filter_on_sort_key() const override { return _topn_filter_on_sort_key; }
+    int topn_runtime_filter_update_mode() const override { return _topn_runtime_filter_update_mode; }
 
     const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
 
@@ -180,6 +182,8 @@ private:
     size_t _estimated_scan_row_bytes = 0;
     size_t _estimated_output_row_bytes = 0;
     bool _start = false;
+    bool _topn_filter_on_sort_key = false;
+    int _topn_runtime_filter_update_mode = 1;
 
     mutable SpinLock _status_mutex;
     Status _status;

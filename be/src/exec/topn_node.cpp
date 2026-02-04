@@ -94,6 +94,9 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
             auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
             RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
             _build_runtime_filters.emplace_back(rf_desc);
+            if (rf_desc->type() == TRuntimeFilterBuildType::TOPN_FILTER) {
+                _enable_chunk_acc_after_topn = true;
+            }
         }
     }
 
@@ -439,6 +442,10 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     if (!is_per_pipeline && !is_partition_topn && !is_rank_topn_type && limit() != -1) {
         operators_source_with_sort.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if (_enable_chunk_acc_after_topn) {
+        ExecNode::may_add_chunk_accumulate_operator(operators_source_with_sort, context, id());
     }
 
     return operators_source_with_sort;

@@ -1041,6 +1041,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // 0 for disable, 1 for too many data; 2 for force
     public static final String TOPN_FILTER_BACK_PRESSURE_MODE = "topn_filter_back_pressure_mode";
+    public static final String TOPN_RUNTIME_FILTER_UPDATE_MODE = "topn_runtime_filter_update_mode";
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
 
@@ -2099,6 +2100,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_MODE)
     private int topnFilterBackPressureMode = 0;
+    @VarAttr(name = TOPN_RUNTIME_FILTER_UPDATE_MODE)
+    private String topnRuntimeFilterUpdateMode = SessionVariableConstants.AUTO;
     @VarAttr(name = BACK_PRESSURE_MAX_ROUNDS)
     private int backPressureMaxRounds = 3;
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
@@ -5744,6 +5747,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setTopnFilterBackPressureMode(int value) {
         this.topnFilterBackPressureMode = value;
+    }
+
+    public int getTopnRuntimeFilterUpdateMode() {
+        if (topnRuntimeFilterUpdateMode == null) {
+            return 1;
+        }
+        String mode = topnRuntimeFilterUpdateMode.toLowerCase();
+        if (SessionVariableConstants.OFF.equals(mode)) {
+            return 0;
+        }
+        if (SessionVariableConstants.FORCE.equals(mode)) {
+            return 2;
+        }
+        return 1;
     }
 
     public int getBackPressureMaxRounds() {

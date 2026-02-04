@@ -50,6 +50,7 @@ public:
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
+    int64_t runtime_stats_filtered() const override { return _runtime_stats_filtered; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
         _reader->get_split_tasks(split_tasks);
@@ -119,6 +120,7 @@ private:
     // The following are profile meatures
     int64_t _num_rows_read = 0;
     int64_t _raw_rows_read = 0;
+    int64_t _runtime_stats_filtered = 0;
     int64_t _bytes_read = 0;
     int64_t _cpu_time_spent_ns = 0;
 

@@ -32,6 +32,7 @@ namespace starrocks {
 class ExprContext;
 class ConnectorScanNode;
 class RuntimeFilterProbeCollector;
+class TopnRuntimeFilterUpdateContext;
 
 namespace connector {
 
@@ -56,6 +57,8 @@ public:
     virtual int64_t num_bytes_read() const = 0;
     // CPU time of this data source
     virtual int64_t cpu_time_spent() const = 0;
+    // rows filtered by runtime zone map filter
+    virtual int64_t runtime_stats_filtered() const { return 0; }
     // IO time of this data source
     virtual int64_t io_time_spent() const { return 0; }
     virtual bool can_estimate_mem_usage() const { return false; }
@@ -75,6 +78,7 @@ public:
     void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
+    void set_topn_rf_update_ctx(TopnRuntimeFilterUpdateContext* ctx) { _topn_rf_update_ctx = ctx; }
     virtual Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
     // Called frequently, don't do heavy work
@@ -100,6 +104,7 @@ protected:
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
+    TopnRuntimeFilterUpdateContext* _topn_rf_update_ctx = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
         ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));

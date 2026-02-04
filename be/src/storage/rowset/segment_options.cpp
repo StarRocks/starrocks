@@ -69,6 +69,8 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->rowid_range_option = rowid_range_option;
     dst->short_key_ranges = short_key_ranges;
     dst->is_first_split_of_segment = is_first_split_of_segment;
+    dst->topn_filter_on_sort_key = topn_filter_on_sort_key;
+    dst->topn_rf_update_ctx = topn_rf_update_ctx;
     if (tablet_range.has_value()) {
         dst->tablet_range = SeekRange();
         tablet_range->convert_to(&dst->tablet_range.value(), new_types);

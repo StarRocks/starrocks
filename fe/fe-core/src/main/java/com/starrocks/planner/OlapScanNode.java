@@ -179,6 +179,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private boolean withoutColocateRequirement = false;
     private boolean outputAscHint = true;
     private boolean sortKeyAscHint = true;
+    private boolean topnFilterOnSortKey = false;
+    private int topnRuntimeFilterUpdateMode = 1;
     private Optional<Boolean> partitionKeyAscHint = Optional.empty();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
@@ -998,6 +1000,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     }
 
     private void assignOrderByHints(List<String> keyColumnNames) {
+        topnFilterOnSortKey = false;
         // assign order by hint
         for (RuntimeFilterDescription probeRuntimeFilter : probeRuntimeFilters) {
             if (RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER.equals(
@@ -1009,6 +1012,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     String columnName = desc.getSlot(cid.asInt()).getColumn().getName();
                     if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(columnName)) {
                         sortKeyAscHint = outputAscHint;
+                        topnFilterOnSortKey = true;
+                        if (ConnectContext.get() != null) {
+                            topnRuntimeFilterUpdateMode =
+                                    ConnectContext.get().getSessionVariable().getTopnRuntimeFilterUpdateMode();
+                        }
                     }
                     // check partition column
                     PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -1120,6 +1128,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+            if (topnFilterOnSortKey) {
+                msg.lake_scan_node.setTopn_filter_on_sort_key(true);
+                msg.lake_scan_node.setTopn_runtime_filter_update_mode(topnRuntimeFilterUpdateMode);
+            }
             msg.lake_scan_node.setSchema_key(getSchemaKey());
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
@@ -1164,6 +1176,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
 
             msg.olap_scan_node.setOutput_asc_hint(sortKeyAscHint);
+            if (topnFilterOnSortKey) {
+                msg.olap_scan_node.setTopn_filter_on_sort_key(true);
+                msg.olap_scan_node.setTopn_runtime_filter_update_mode(topnRuntimeFilterUpdateMode);
+            }
             partitionKeyAscHint.ifPresent(aBoolean -> msg.olap_scan_node.setPartition_order_hint(aBoolean));
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(ExprToThrift.treesToThrift(bucketExprs));

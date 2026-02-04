@@ -93,6 +93,11 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
     _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
 
+    if (_scan_node->topn_filter_on_sort_key()) {
+        _topn_rf_update_ctx = std::make_unique<TopnRuntimeFilterUpdateContext>(
+                _scan_node->topn_runtime_filter_update_mode());
+    }
+
     if (_scan_node->is_enable_topn_filter_back_pressure()) {
         if (auto* runtime_filters = runtime_bloom_filters(); runtime_filters != nullptr) {
             auto has_topn_filters =

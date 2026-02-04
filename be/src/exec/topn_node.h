@@ -73,6 +73,7 @@ private:
     // True if the _limit comes from DEFAULT_ORDER_BY_LIMIT and option
     // ABORT_ON_DEFAULT_LIMIT_EXCEEDED is set.
     bool _abort_on_default_limit_exceeded = false;
+    bool _enable_chunk_acc_after_topn = false;
 
     std::unique_ptr<ChunksSorter> _chunks_sorter;
 

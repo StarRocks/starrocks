@@ -35,6 +35,7 @@ namespace starrocks {
 
 class SlotDescriptor;
 class TableMetrics;
+class TopnRuntimeFilterUpdateContext;
 
 namespace pipeline {
 
@@ -72,6 +73,7 @@ private:
     Status _extend_schema_by_access_paths();
     void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
                                           const ColumnAccessPath* path);
+    void _update_topn_rf_update_ctx();
 
 private:
     TabletReaderParams _params{};
@@ -107,6 +109,9 @@ private:
     std::vector<SlotDescriptor*> _query_slots;
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
+    TopnRuntimeFilterUpdateContext* _topn_rf_update_ctx = nullptr;
+    int64_t _prev_raw_rows_read = 0;
+    int64_t _prev_runtime_filtered = 0;
 
     bool _use_vector_index = false;
     bool _use_ivfpq = false;

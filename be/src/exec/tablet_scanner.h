@@ -29,6 +29,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
+#include "storage/topn_runtime_filter_update_context.h"
 
 namespace starrocks {
 
@@ -101,6 +102,8 @@ private:
     bool _update_num_scan_range = false;
 
     TabletReaderParams _params;
+    std::unique_ptr<TopnRuntimeFilterUpdateContext> _topn_rf_update_ctx;
+    int64_t _prev_runtime_filtered = 0;
     std::shared_ptr<TabletReader> _reader;
 
     TabletSharedPtr _tablet;

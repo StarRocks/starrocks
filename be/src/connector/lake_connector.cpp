@@ -324,6 +324,10 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
     }
+    if (thrift_lake_scan_node.__isset.topn_filter_on_sort_key) {
+        _params.topn_filter_on_sort_key = thrift_lake_scan_node.topn_filter_on_sort_key;
+    }
+    _params.topn_rf_update_ctx = _topn_rf_update_ctx;
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
     _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
@@ -856,6 +860,7 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _num_rows_read += chunk->num_rows();
     auto& stats = _reader->stats();
     _raw_rows_read = stats.raw_rows_read;
+    _runtime_stats_filtered = stats.runtime_stats_filtered;
     _bytes_read = stats.bytes_read;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
