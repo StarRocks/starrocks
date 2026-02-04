@@ -1777,7 +1777,7 @@ public class WindowTest extends PlanTestBase {
                 reached = reached | 2;
             }
         }
-        assertEquals(reached, 3);
+        Assertions.assertEquals(reached, 3);
     }
 
     @Test
