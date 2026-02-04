@@ -24,4 +24,9 @@ public class QueryTracker implements MemoryTrackable {
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("QueryDetail", QueryDetailQueue.getTotalQueriesCount());
     }
+
+    @Override
+    public long estimateSize() {
+        return QueryDetailQueue.estimateSize();
+    }
 }
