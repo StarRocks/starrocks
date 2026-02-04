@@ -14,6 +14,7 @@
 
 #include "storage/virtual_column_utils.h"
 
+#include <memory>
 #include <utility>
 
 #include "column/column.h"
@@ -111,6 +112,15 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaC
 
 StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaCSPtr& schema) {
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*schema);
+    // copy extended info from original schema
+    for (size_t i = 0; i < schema->num_columns(); ++i) {
+        const TabletColumn& col = schema->column(i);
+        const TabletColumn& dst_col = tmp_schema->column(i);
+        if (col.extended_info() != nullptr) {
+            const_cast<TabletColumn&>(dst_col).set_extended_info(
+                    std::make_unique<ExtendedColumnInfo>(*col.extended_info()));
+        }
+    }
     for (const auto& vc : VIRTUAL_COLUMNS) {
         TabletColumn tc;
         tc.set_name(vc.name);
