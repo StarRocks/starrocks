@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/spinlock.h"
+#include "base/concurrency/spinlock.h"
 
 namespace starrocks {
 

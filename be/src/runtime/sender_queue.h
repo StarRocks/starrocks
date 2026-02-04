@@ -17,11 +17,11 @@
 #include <condition_variable>
 #include <utility>
 
+#include "base/concurrency/moodycamel/concurrentqueue.h"
+#include "base/concurrency/spinlock.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
 #include "serde/protobuf_serde.h"
-#include "util/moodycamel/concurrentqueue.h"
-#include "util/spinlock.h"
 
 namespace google::protobuf {
 class Closure;

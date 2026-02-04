@@ -49,11 +49,11 @@
 #include <string>
 #include <utility>
 
+#include "base/concurrency/spinlock.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "util/core_local.h"
 #include "util/phmap/phmap.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 

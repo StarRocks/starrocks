@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/source_operator.h"
@@ -24,7 +25,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "util/runtime_profile.h"
-#include "util/spinlock.h"
 
 namespace starrocks::pipeline {
 

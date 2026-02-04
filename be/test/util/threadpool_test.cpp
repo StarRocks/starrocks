@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "base/concurrency/await.h"
+#include "base/concurrency/spinlock.h"
 #include "base/random/random.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/logging.h"
@@ -50,7 +51,6 @@
 #include "util/countdown_latch.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
-#include "util/spinlock.h"
 
 using std::atomic;
 using std::shared_ptr;

@@ -38,13 +38,13 @@
 #include <mutex>
 #include <vector>
 
+#include "base/concurrency/spinlock.h"
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
 #include "util/network_util.h"
-#include "util/spinlock.h"
 
 #ifndef __APPLE__
 #include "util/lake_service_recoverable_stub.h"

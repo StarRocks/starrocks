@@ -17,7 +17,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "util/bthreads/bthread_shared_mutex.h"
+#include "base/concurrency/bthread_shared_mutex.h"
 #include "util/metrics.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_base.h"

@@ -41,10 +41,10 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
 #include "util/metrics.h"
 #include "util/runtime_profile.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 

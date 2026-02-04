@@ -14,6 +14,29 @@
 
 set(BASE_TEST_FILES
     cxa_throw_wrap.cpp
+<<<<<<< HEAD
+=======
+    bit/bit_mask_test.cpp
+    concurrency/await_test.cpp
+    concurrency/blocking_queue_test.cpp
+    concurrency/concurrent_limiter_test.cpp
+    concurrency/shared_mutex_test.cpp
+    container/heap_test.cpp
+    container/priority_queue_test.cpp
+    crypto/md5_test.cpp
+    json/easy_json-test.cpp
+    path/file_util_test.cpp
+    path/path_util_test.cpp
+    path/path_trie_test.cpp
+    simd/byte_stream_split_test.cpp
+    string/c_string_test.cpp
+    string/faststring_test.cpp
+    string/memcmp_test.cpp
+    string/slice_test.cpp
+    string/utf8_check_test.cpp
+    utility/scoped_cleanup_test.cpp
+    uuid/uuid_generator_test.cpp
+>>>>>>> 4c55a55f3f9... [Refactor] Move more to base (#68767)
     status_test.cpp
 )
 

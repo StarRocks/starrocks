@@ -66,7 +66,6 @@ set(UTIL_FILES
   url_parser.cpp
   url_coding.cpp
   mysql_row_buffer.cpp
-  spinlock.cc
   filesystem_util.cc
   time.cpp
 # coding_util.cpp

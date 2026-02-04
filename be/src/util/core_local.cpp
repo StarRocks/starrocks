@@ -37,8 +37,8 @@
 #include <cstdlib>
 #include <vector>
 
+#include "base/concurrency/spinlock.h"
 #include "common/logging.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 
