@@ -32,9 +32,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/decimal12.h"
+#include "base/types/decimal12.h"
 
-#include "storage/utils.h"
+#include <cstdio>
+#include <cstring>
+
+#include "base/compiler_util.h"
+
+namespace {
+constexpr int32_t kPowerTable[] = {1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000};
+} // namespace
 
 namespace starrocks {
 
@@ -72,7 +79,7 @@ Status decimal12_t::from_string(const std::string& str) {
 
         int32_t frac_len = (nullptr != sepr) ? MAX_FRAC_DIGITS_NUM - strlen(sepr + 1) : MAX_FRAC_DIGITS_NUM;
         frac_len = frac_len > 0 ? frac_len : 0;
-        fraction *= g_power_table[frac_len];
+        fraction *= kPowerTable[frac_len];
     }
 
     if (sign != nullptr) {

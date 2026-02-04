@@ -21,11 +21,9 @@
 #include <type_traits>
 
 #include "base/compiler_util.h"
+#include "base/types/int128.h"
 
 namespace starrocks {
-
-typedef __int128 int128_t;
-typedef unsigned __int128 uint128_t;
 
 /**
 *

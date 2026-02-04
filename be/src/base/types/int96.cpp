@@ -12,11 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "base/types/int96.h"
+
+#include <sstream>
+
+#include "base/types/int128.h"
 
 namespace starrocks {
 
-using int128_t = __int128;
-using uint128_t = unsigned __int128;
+std::string int96_t::to_string() const {
+    std::stringstream os;
+    __int128 val128 = ((__int128)hi << 64) + lo;
+    starrocks::operator<<(os, val128);
+    return os.str();
+}
+
+std::ostream& operator<<(std::ostream& os, const int96_t& val) {
+    __int128 val128 = ((__int128)val.hi << 64) + val.lo;
+    starrocks::operator<<(os, val128);
+    return os;
+}
 
 } // namespace starrocks

@@ -28,6 +28,7 @@
 #include "base/bit/bit_util.h"
 #include "base/decimal_types.h"
 #include "base/time/timezone_utils.h"
+#include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -46,7 +47,6 @@
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
-#include "util/int96.h"
 
 namespace starrocks::parquet {
 

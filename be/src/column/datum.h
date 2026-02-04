@@ -18,14 +18,14 @@
 #include <type_traits>
 #include <variant>
 
-#include "base/int256.h"
 #include "base/string/slice.h"
+#include "base/types/decimal12.h"
+#include "base/types/int256.h"
+#include "base/types/int96.h"
+#include "base/types/uint24.h"
 #include "common/overloaded.h"
 #include "runtime/decimalv2_value.h"
-#include "storage/decimal12.h"
-#include "storage/uint24.h"
 #include "types/timestamp_value.h"
-#include "util/int96.h"
 
 namespace starrocks {
 class MemPool;

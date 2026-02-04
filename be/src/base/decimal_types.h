@@ -18,7 +18,7 @@
 #include <limits>
 #include <type_traits>
 
-#include "base/int256.h"
+#include "base/types/int256.h"
 
 namespace starrocks {
 

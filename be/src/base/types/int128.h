@@ -12,23 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/int96.h"
+#pragma once
 
-#include "types/large_int_value.h"
+#include <ostream>
+#include <string>
+
+#include "base/utility/integer_util.h"
 
 namespace starrocks {
 
-std::string int96_t::to_string() const {
-    std::stringstream os;
-    __int128 val128 = ((__int128)hi << 64) + lo;
-    starrocks::operator<<(os, val128);
-    return os.str();
-}
+using int128_t = __int128;
+using uint128_t = unsigned __int128;
 
-std::ostream& operator<<(std::ostream& os, const int96_t& val) {
-    __int128 val128 = ((__int128)val.hi << 64) + val.lo;
-    starrocks::operator<<(os, val128);
-    return os;
+class LargeIntValue {
+public:
+    static std::string to_string(__int128 value) { return integer_to_string<__int128>(value); }
+};
+
+inline std::ostream& operator<<(std::ostream& os, __int128 const& value) {
+    return os << LargeIntValue::to_string(value);
 }
 
 } // namespace starrocks

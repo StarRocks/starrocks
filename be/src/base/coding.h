@@ -11,8 +11,8 @@
 
 #include <string>
 
-#include "base/int128_types.h"
 #include "base/string/slice.h"
+#include "base/types/int128.h"
 #include "gutil/endian.h"
 
 namespace starrocks {

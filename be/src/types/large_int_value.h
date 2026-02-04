@@ -34,30 +34,15 @@
 
 #pragma once
 
-#include <fmt/compile.h>
-#include <fmt/format.h>
+#include <cstddef>
+#include <istream>
 
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <iostream>
-#include <sstream>
-#include <string>
-
-#include "base/utility/integer_util.h"
-#include "util/hash_util.hpp"
+#include "base/types/int128.h"
 
 namespace starrocks {
 
-class LargeIntValue {
-public:
-    static std::string to_string(__int128 value) { return integer_to_string<__int128>(value); }
-};
-
-std::ostream& operator<<(std::ostream& os, __int128 const& value);
-
 std::istream& operator>>(std::istream& is, __int128& value);
 
-std::size_t hash_value(LargeIntValue const& value);
+std::size_t hash_value(__int128 const& value);
 
 } // namespace starrocks

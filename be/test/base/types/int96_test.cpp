@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/int96.h"
+#include "base/types/int96.h"
 
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <sstream>
 
 namespace starrocks {
 class Int96Test : public testing::Test {

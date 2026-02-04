@@ -37,6 +37,7 @@
 #include <iostream>
 
 #include "base/testutil/assert.h"
+#include "base/types/decimal12.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -49,7 +50,6 @@
 #include "runtime/mem_pool.h"
 #include "storage/aggregate_type.h"
 #include "storage/chunk_helper.h"
-#include "storage/decimal12.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"

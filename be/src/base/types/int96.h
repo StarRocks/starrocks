@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <iterator>
 #include <ostream>
+#include <string>
 
 #include "base/string/memcmp.h"
 

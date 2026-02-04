@@ -22,7 +22,6 @@ add_subdirectory(rowset)
 set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
-    decimal12.cpp
     decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp

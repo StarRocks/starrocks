@@ -18,11 +18,11 @@
 #include <vector>
 
 #include "base/hash/hash_util.hpp"
+#include "base/types/decimal12.h"
+#include "base/types/int96.h"
+#include "base/types/uint24.h"
 #include "boost/container_hash/hash.hpp"
 #include "gen_cpp/Types_types.h"
-#include "storage/decimal12.h"
-#include "storage/uint24.h"
-#include "util/int96.h"
 
 namespace std {
 

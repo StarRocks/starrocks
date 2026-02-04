@@ -18,9 +18,9 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "base/int256.h"
+#include "base/types/int256.h"
+#include "base/types/uint24.h"
 #include "column/vectorized_fwd.h"
-#include "storage/uint24.h"
 
 #ifdef __SSE4_2__
 #include <nmmintrin.h>

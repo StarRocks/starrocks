@@ -20,12 +20,9 @@
 #include <string>
 
 #include "base/string/string_parser.hpp"
+#include "util/hash_util.hpp"
 
 namespace starrocks {
-
-std::ostream& operator<<(std::ostream& os, __int128 const& value) {
-    return os << LargeIntValue::to_string(value);
-}
 
 std::istream& operator>>(std::istream& is, __int128& value) {
     std::string str;
