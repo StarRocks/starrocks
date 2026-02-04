@@ -21,8 +21,10 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -44,9 +46,11 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -135,6 +139,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.VarcharType.VARCHAR;
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
@@ -142,6 +147,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PaimonMetadataTest {
     @Mocked
@@ -258,6 +264,8 @@ public class PaimonMetadataTest {
             {
                 paimonNativeCatalog.getTable(identifier);
                 result = new Catalog.TableNotExistException(identifier);
+                paimonNativeCatalog.getView(identifier);
+                result = new Catalog.ViewNotExistException(identifier);
             }
         };
         org.junit.jupiter.api.Assertions.assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
@@ -645,21 +653,6 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testCreatePaimonView() {
-        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.createView(connectContext,
-                        new CreateViewStmt(false, false,
-                                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")),
-                                        null, NodePosition.ZERO),
-                    Lists.newArrayList(new ColWithComment("k1", "",
-                            NodePosition.ZERO)),
-                                "",
-                                false,
-                                null,
-                                NodePosition.ZERO)));
-    }
-
-    @Test
     public void testGetTableStatistics() {
         String stats = "{\n" +
                 "  \"snapshotId\" : 2,\n" +
@@ -1017,4 +1010,125 @@ public class PaimonMetadataTest {
         catalog.dropDatabase("test_db", true, true);
         Files.delete(tmpDir);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testListPartitionNamesIsolationAcrossTables(@Mocked FileStoreTable mockPaimonTable1,
+                                                            @Mocked FileStoreTable mockPaimonTable2)
+            throws Catalog.TableNotExistException {
+
+        Options options = new Options();
+        options.set(CatalogOptions.CACHE_ENABLED, true);
+        Catalog cachingCatalog = CachingCatalog.tryToCreate(paimonNativeCatalog, options);
+        PaimonMetadata newMetadata = new PaimonMetadata("test_catalog", new HdfsEnvironment(), cachingCatalog,
+                new ConnectorProperties(ConnectorType.PAIMON));
+
+        Identifier tblIdentifier1 = new Identifier("db1", "tbl1");
+        List<String> partitionKeys1 = Lists.newArrayList("year", "month");
+        Identifier tblIdentifier2 = new Identifier("db2", "tbl2");
+        List<String> partitionKeys2 = Lists.newArrayList("year", "month");
+
+        RowType tblRowType1 = RowType.of(new DataType[] {new IntType(true), new IntType(true)}, new String[] {"year", "month"});
+        RowType tblRowType2 = RowType.of(new DataType[] {new IntType(true), new IntType(true)}, new String[] {"year", "month"});
+
+        Map<String, String> spec1 = new LinkedHashMap<>();
+        spec1.put("year", "2020");
+        spec1.put("month", "1");
+        org.apache.paimon.partition.Partition db1PaimonPartition1 =
+                new org.apache.paimon.partition.Partition(spec1, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        Map<String, String> spec2 = new LinkedHashMap<>();
+        spec2.put("year", "2020");
+        spec2.put("month", "1");
+        org.apache.paimon.partition.Partition db2PaimonPartition1 =
+                new org.apache.paimon.partition.Partition(spec2, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        Map<String, String> spec3 = new LinkedHashMap<>();
+        spec3.put("year", "2022");
+        spec3.put("month", "1");
+        org.apache.paimon.partition.Partition db2PaimonPartition2 =
+                new org.apache.paimon.partition.Partition(spec3, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        new Expectations() {
+            {
+                // Table 1
+                paimonNativeCatalog.getTable(tblIdentifier1);
+                result = mockPaimonTable1;
+                paimonNativeCatalog.listPartitions(tblIdentifier1);
+                result = Lists.newArrayList(db1PaimonPartition1);
+                mockPaimonTable1.partitionKeys();
+                result = partitionKeys1;
+                mockPaimonTable1.rowType();
+                result = tblRowType1;
+
+                // Table 2
+                paimonNativeCatalog.getTable(tblIdentifier2);
+                result = mockPaimonTable2;
+                paimonNativeCatalog.listPartitions(tblIdentifier2);
+                result = Lists.newArrayList(db2PaimonPartition1, db2PaimonPartition2);
+                mockPaimonTable2.partitionKeys();
+                result = partitionKeys2;
+                mockPaimonTable2.rowType();
+                result = tblRowType2;
+
+            }
+        };
+
+        List<String> result1 = newMetadata.listPartitionNames("db1", "tbl1", null);
+        List<String> result2 = newMetadata.listPartitionNames("db2", "tbl2", null);
+
+        // Before fix, if the key does not contain "db" and "table", it will return 2. After fix, it will return 3.
+        assertEquals(3, result1.size() + result2.size());
+
+    }
+
+    @Test
+    public void testView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
+        //test createview
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView((org.apache.paimon.catalog.Identifier) any);
+                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+            }
+        };
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableRef(QualifiedName.of(
+                        Lists.newArrayList("paimon_catalog", "db", "test_view")), null, NodePosition.ZERO),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO);
+        stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
+        metadata.createView(connectContext, stmt);
+
+        //test getview
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView((Identifier) any);
+                result = paimonView;
+                paimonView.query();
+                result = "select * from table";
+            }
+        };
+        PaimonView view = (PaimonView) metadata.getView("db", "test_view");
+        assertEquals(PAIMON_VIEW, view.getType());
+        assertEquals("test_view", view.getName());
+        assertEquals("select * from table", view.getInlineViewDef());
+        assertThrows(StarRocksPlannerException.class, view::getQueryStatement);
+
+        //test drop normal
+        DropTableStmt dropStmt = new DropTableStmt(true, new TableRef(QualifiedName.of(
+                Lists.newArrayList("paimon_catalog", "db", "test_view")), null, NodePosition.ZERO),
+                true, true);
+        metadata.dropTable(connectContext, dropStmt);
+
+        //test drop not exist
+        new Expectations() {
+            {
+                paimonNativeCatalog.dropView((Identifier) any, true);
+                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+            }
+        };
+        org.junit.jupiter.api.Assertions.assertThrows(DdlException.class, () -> metadata.dropTable(connectContext, dropStmt));
+    }
+>>>>>>> 4d87d0db91 ([Enhancement] Support Paimon view (#56058))
 }
