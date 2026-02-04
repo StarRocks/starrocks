@@ -23,6 +23,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.memory.MemoryStat;
 import com.starrocks.memory.MemoryUsageTracker;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 
 import java.util.Map;
 
@@ -39,6 +40,12 @@ public class MemoryUsageAction extends RestBaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
+        if (!"127.0.0.1".equals(request.getHostString())) {
+            response.appendContent("only allow access from 127.0.0.1");
+            writeResponse(request, response, HttpResponseStatus.FORBIDDEN);
+            return;
+        }
+
         Map<String, Object> result = Maps.newLinkedHashMap();
 
         result.put("jvm", MemoryUsageTracker.getJVMMemoryMap());
