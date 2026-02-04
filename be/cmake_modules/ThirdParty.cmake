@@ -12,6 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME ON)
+
+# Compile generated source if necessary
+message(STATUS "build gensrc if necessary")
+execute_process(COMMAND make -C ${BASE_DIR}/../gensrc/
+                RESULT_VARIABLE MAKE_GENSRC_RESULT)
+if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
+    message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
+endif()
+
+#
+set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
+configure_file(${SRC_DIR}/common/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
+set(BUILD_VERSION_CPP ${GENSRC_DIR}/gen_cpp/version.cpp)
+set_source_files_properties(${BUILD_VERSION_CPP} PROPERTIES GENERATED TRUE)
+add_library(build_version OBJECT ${BUILD_VERSION_CC} ${BUILD_VERSION_CPP})
+target_include_directories(build_version PRIVATE ${SRC_DIR}/common)
+
+# Add common cmake prefix path and link library path
+list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/cmake)
+list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/cmake)
+link_directories(${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64)
+
 # Set Boost
 set(Boost_DEBUG FALSE)
 set(Boost_USE_MULTITHREADED ON)

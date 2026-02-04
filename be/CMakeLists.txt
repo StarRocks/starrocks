@@ -131,25 +131,6 @@ FUNCTION(FINALIZE_BE_LIBS)
     MESSAGE(STATUS "ALL BE LIBS (SORTED): ${ALL_BE_LIBS}") 
 ENDFUNCTION()
 
-# Compile generated source if necessary
-message(STATUS "build gensrc if necessary")
-execute_process(COMMAND make -C ${BASE_DIR}/../gensrc/
-                RESULT_VARIABLE MAKE_GENSRC_RESULT)
-if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
-    message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
-endif()
-
-#
-set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
-configure_file(${SRC_DIR}/common/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
-add_library(build_version OBJECT ${BUILD_VERSION_CC})
-target_include_directories(build_version PRIVATE ${SRC_DIR}/common)
-
-# Add common cmake prefix path and link library path
-list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/cmake)
-list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/cmake)
-link_directories(${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64)
-
 include(cmake_modules/ThirdParty.cmake)
 
 
@@ -413,8 +394,6 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    Gutil
-    Base
     ${WL_START_GROUP}
     Agent
     Common
@@ -435,7 +414,6 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    StarRocksGen
     Webserver
     TestUtil
     Tools
@@ -443,6 +421,9 @@ set(STARROCKS_LINK_LIBS
     Simd
     Cache
     ${WL_END_GROUP}
+    Base
+    Gutil
+    StarRocksGen
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
