@@ -25,9 +25,9 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
-#include "testutil/assert.h"
 #include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
 

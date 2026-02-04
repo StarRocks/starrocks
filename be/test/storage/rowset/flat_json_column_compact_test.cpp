@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
@@ -37,7 +38,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/json_flattener.h"

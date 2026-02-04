@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
@@ -27,7 +28,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

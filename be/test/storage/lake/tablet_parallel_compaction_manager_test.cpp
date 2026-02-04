@@ -19,11 +19,11 @@
 #include <filesystem>
 #include <future>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 #include "util/threadpool.h"
 
 namespace starrocks::lake {

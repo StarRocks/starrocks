@@ -17,9 +17,9 @@
 #include <google/protobuf/descriptor.pb.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 class HdfsScannerJsonReaderTest : public testing::Test {

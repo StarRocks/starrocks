@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
-#include "testutil/assert.h"
 namespace starrocks {
 
 class BundleFileTest : public ::testing::Test {

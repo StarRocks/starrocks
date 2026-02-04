@@ -21,11 +21,11 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/hive_chunk_sink.h"
 #include "formats/utils.h"
-#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
 namespace {

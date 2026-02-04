@@ -20,6 +20,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "exec/avro_test.h"
@@ -29,7 +30,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 #ifdef __cplusplus
 extern "C" {

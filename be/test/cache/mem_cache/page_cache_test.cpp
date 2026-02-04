@@ -36,8 +36,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "cache/mem_cache/lrucache_engine.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

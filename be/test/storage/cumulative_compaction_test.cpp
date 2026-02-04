@@ -19,6 +19,7 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -35,7 +36,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

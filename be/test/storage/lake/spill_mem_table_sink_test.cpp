@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -34,7 +35,6 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 

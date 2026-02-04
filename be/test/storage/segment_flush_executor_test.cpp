@@ -19,6 +19,7 @@
 
 #include <utility>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
@@ -35,7 +36,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "testutil/assert.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

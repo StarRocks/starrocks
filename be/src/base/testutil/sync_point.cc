@@ -20,11 +20,11 @@
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
 
-#include "testutil/sync_point.h"
+#include "base/testutil/sync_point.h"
 
 #include <fcntl.h>
 
-#include "testutil/sync_point_impl.h"
+#include "base/testutil/sync_point_impl.h"
 
 std::vector<std::string> starrocks_kill_exclude_prefixes;
 

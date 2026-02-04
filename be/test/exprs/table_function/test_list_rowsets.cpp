@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/testutil/assert.h"
 #include "exprs/table_function/list_rowsets.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

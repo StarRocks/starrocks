@@ -16,13 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/parallel_test.h"
 #include "column/chunk.h"
 #include "column/chunk_extra_data.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "runtime/types.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks::serde {
 

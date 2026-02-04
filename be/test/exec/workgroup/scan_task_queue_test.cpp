@@ -23,12 +23,12 @@
 #include <mutex>
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks::workgroup {
 

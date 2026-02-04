@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "fs/fs.h"
-#include "testutil/assert.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 

@@ -21,8 +21,8 @@
 #include <future>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 

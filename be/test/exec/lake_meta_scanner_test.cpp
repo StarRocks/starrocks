@@ -20,6 +20,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "exec/lake_meta_scan_node.h"
@@ -42,8 +44,6 @@
 #include "storage/lake_meta_reader.h"
 #include "storage/meta_reader.h"
 #include "storage/tablet_schema.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 

@@ -18,6 +18,7 @@
 
 #include <iostream>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
@@ -27,7 +28,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

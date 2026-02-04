@@ -21,6 +21,7 @@
 #include <map>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
@@ -34,7 +35,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::formats {

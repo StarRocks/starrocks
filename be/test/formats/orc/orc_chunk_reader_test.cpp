@@ -14,8 +14,8 @@
 
 #include "formats/orc/orc_chunk_reader.h"
 
+#include <base/testutil/assert.h>
 #include <gtest/gtest.h>
-#include <testutil/assert.h>
 
 #include <ctime>
 #include <filesystem>

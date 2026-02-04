@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_helper.h"
@@ -31,7 +32,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

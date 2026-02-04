@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 class PageHandleTest : public testing::Test {

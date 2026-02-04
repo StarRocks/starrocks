@@ -17,12 +17,12 @@
 #include <memory>
 #include <shared_mutex>
 
+#include "base/testutil/sync_point.h"
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/sync_point.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {

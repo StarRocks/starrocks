@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 class RecordPredicateHelperTest : public ::testing::Test {

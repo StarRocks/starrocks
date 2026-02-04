@@ -19,9 +19,9 @@
 #include <memory>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "storage/column_aggregate_func.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

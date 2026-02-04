@@ -17,8 +17,8 @@
 
 #include "util/brpc_stub_cache.h"
 
+#include <base/testutil/assert.h>
 #include <gtest/gtest.h>
-#include <testutil/assert.h>
 
 #include "runtime/exec_env.h"
 #include "util/failpoint/fail_point.h"

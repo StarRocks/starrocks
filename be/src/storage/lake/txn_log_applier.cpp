@@ -18,6 +18,7 @@
 
 #include <climits>
 
+#include "base/testutil/sync_point.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
@@ -27,7 +28,6 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
-#include "testutil/sync_point.h"
 #include "util/dynamic_cache.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/trace.h"

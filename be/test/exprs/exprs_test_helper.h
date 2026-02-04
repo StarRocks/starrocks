@@ -16,13 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "exprs/array_expr.h"
 #include "exprs/jit/jit_expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 class ExprsTestHelper {

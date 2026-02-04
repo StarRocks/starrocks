@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "base/string/slice.h"
+#include "base/testutil/assert.h"
 #include "column/column.h"
 #include "column/const_column.h"
 #include "column/json_column.h"
@@ -42,7 +43,6 @@
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/strip.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/compression/block_compression.h"
 #include "util/json.h"

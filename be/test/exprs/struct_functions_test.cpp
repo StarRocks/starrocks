@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/parallel_test.h"
 #include "column/column_helper.h"
 #include "column/struct_column.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks {
 

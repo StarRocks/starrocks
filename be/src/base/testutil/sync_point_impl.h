@@ -20,6 +20,8 @@
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
 
+#pragma once
+
 #include <assert.h>
 
 #include <atomic>
@@ -32,9 +34,7 @@
 #include <unordered_set>
 
 #include "base/random/random.h"
-#include "testutil/sync_point.h"
-
-#pragma once
+#include "base/testutil/sync_point.h"
 
 #if defined(BE_TEST)
 namespace starrocks {

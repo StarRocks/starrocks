@@ -21,6 +21,7 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
 #include "base/utility/integer_util.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/partition_chunk_writer.h"
@@ -28,7 +29,6 @@
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
-#include "testutil/assert.h"
 
 namespace starrocks::connector {
 namespace {

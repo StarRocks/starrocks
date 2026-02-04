@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
 #include "storage/binlog_test_base.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

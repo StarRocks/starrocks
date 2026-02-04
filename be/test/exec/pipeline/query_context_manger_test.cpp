@@ -15,10 +15,10 @@
 #include <chrono>
 #include <random>
 
+#include "base/testutil/assert.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
 

@@ -16,11 +16,11 @@
 
 #include <cstdlib>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/persistent_index.h"
 #include "storage/rowset/rowset_writer.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

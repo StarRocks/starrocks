@@ -16,12 +16,12 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks::pipeline {

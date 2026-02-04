@@ -18,14 +18,14 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
-#include "testutil/sync_point.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 

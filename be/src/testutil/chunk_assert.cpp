@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "testutil/assert.h"
+#include "testutil/chunk_assert.h"
 
 #include "column/chunk.h"
 #include "column/column.h"
+#include "gutil/logging.h"
 
 namespace starrocks {
 

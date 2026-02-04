@@ -29,6 +29,7 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "base/string/slice.h"
 #include "base/system/errno.h"
+#include "base/testutil/sync_point.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "fs/encrypt_file.h"
@@ -41,7 +42,6 @@
 #include "gutil/strings/util.h"
 #include "io/fd_input_stream.h"
 #include "io/io_profiler.h"
-#include "testutil/sync_point.h"
 
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"

@@ -19,7 +19,7 @@
 
 #include <thread>
 
-#include "testutil/assert.h"
+#include "base/testutil/assert.h"
 #include "util/bthreads/util.h"
 
 namespace starrocks::bthreads {

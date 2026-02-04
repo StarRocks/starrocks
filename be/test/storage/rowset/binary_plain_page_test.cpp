@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -50,7 +51,6 @@
 #include "storage/range.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

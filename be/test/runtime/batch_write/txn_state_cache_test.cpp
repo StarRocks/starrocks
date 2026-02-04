@@ -15,7 +15,7 @@
 #include "runtime/batch_write/txn_state_cache.h"
 
 #include "base/concurrency/await.h"
-#include "testutil/assert.h"
+#include "base/testutil/assert.h"
 
 namespace starrocks {
 

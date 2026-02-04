@@ -14,11 +14,11 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/table_function_factory.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 #include "testutil/function_utils.h"
 
 namespace starrocks {

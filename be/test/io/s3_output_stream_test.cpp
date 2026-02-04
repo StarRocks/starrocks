@@ -24,12 +24,12 @@
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs_s3.h"
 #include "io/direct_s3_output_stream.h"
 #include "io/s3_input_stream.h"
-#include "testutil/assert.h"
 
 namespace starrocks::io {
 

@@ -14,12 +14,12 @@
 
 #include "storage/rows_mapper.h"
 
+#include "base/testutil/assert.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/data_dir.h"
 #include "storage/lake/filenames.h"
 #include "storage/storage_engine.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

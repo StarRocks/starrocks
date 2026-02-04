@@ -18,13 +18,13 @@
 #include <memory>
 #include <random>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
 #include "types/large_int_value.h"
 
 namespace starrocks {

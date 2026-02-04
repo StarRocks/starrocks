@@ -38,13 +38,13 @@
 #include <cstring>
 #include <memory>
 
+#include "base/testutil/sync_point.h"
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/utils.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 

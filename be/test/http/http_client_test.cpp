@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "boost/algorithm/string.hpp"
 #include "common/config.h"
 #include "common/logging.h"
@@ -26,7 +27,6 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

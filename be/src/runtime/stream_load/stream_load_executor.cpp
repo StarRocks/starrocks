@@ -39,6 +39,7 @@
 #include <string_view>
 
 #include "agent/master_info.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/process_exit.h"
 #include "common/status.h"
@@ -50,7 +51,6 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "testutil/sync_point.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 

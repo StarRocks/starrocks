@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/tablet_write_log_manager.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

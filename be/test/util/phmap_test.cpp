@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/parallel_test.h"
 #include "runtime/mem_pool.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks {
 class PhmapTest : public testing::Test {};

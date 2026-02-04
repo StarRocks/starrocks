@@ -19,6 +19,8 @@
 #include <ctime>
 #include <set>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -30,8 +32,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 #include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 

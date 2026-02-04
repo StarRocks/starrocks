@@ -22,11 +22,11 @@
 
 #include <fstream>
 
+#include "base/testutil/assert.h"
 #include "common/config.h"
 #include "common/s3_uri.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
-#include "testutil/assert.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

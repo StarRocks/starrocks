@@ -14,10 +14,10 @@
 
 #include <exec/filter_condition.h>
 
+#include "base/testutil/assert.h"
 #include "column/type_traits.h"
 #include "exec/olap_common.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

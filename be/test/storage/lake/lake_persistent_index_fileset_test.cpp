@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -25,7 +26,6 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "test_util.h"
-#include "testutil/assert.h"
 
 namespace starrocks::lake {
 

@@ -23,6 +23,7 @@
 #include <thread>
 
 #include "agent/master_info.h"
+#include "base/testutil/sync_point.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
@@ -37,7 +38,6 @@
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "testutil/sync_point.h"
 #include "util/misc.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"

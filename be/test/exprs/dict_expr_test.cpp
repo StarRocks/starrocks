@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -34,7 +35,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

@@ -20,13 +20,13 @@
 #include <exception>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
 #include "service/backend_options.h"
-#include "testutil/sync_point.h"
 #include "udf/java/utils.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hdfs_util.h"

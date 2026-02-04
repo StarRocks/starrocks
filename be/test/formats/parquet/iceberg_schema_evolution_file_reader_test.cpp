@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -33,7 +34,6 @@
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {

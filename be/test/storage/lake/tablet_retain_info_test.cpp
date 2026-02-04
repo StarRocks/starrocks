@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "json2pb/json_to_pb.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_metadata.h"
 #include "test_util.h"
-#include "testutil/assert.h"
 
 namespace starrocks::lake {
 

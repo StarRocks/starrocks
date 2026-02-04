@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "cache/disk_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
@@ -26,7 +27,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

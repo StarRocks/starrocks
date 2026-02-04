@@ -22,8 +22,8 @@
 #include "util/starrocks_metrics.h"
 
 #ifdef WITH_STARCACHE
+#include "base/testutil/assert.h"
 #include "cache/disk_cache/starcache_engine.h"
-#include "testutil/assert.h"
 #endif
 
 namespace starrocks {

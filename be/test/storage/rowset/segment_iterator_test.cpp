@@ -21,6 +21,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/object_pool.h"
@@ -39,7 +40,6 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

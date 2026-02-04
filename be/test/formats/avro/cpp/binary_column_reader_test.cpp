@@ -18,10 +18,10 @@
 
 #include <avrocpp/NodeImpl.hh>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "formats/avro/cpp/test_avro_utils.h"
 #include "gen_cpp/Descriptors_types.h"
-#include "testutil/assert.h"
 
 namespace starrocks::avrocpp {
 

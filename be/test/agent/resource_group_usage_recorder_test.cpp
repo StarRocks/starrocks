@@ -14,10 +14,10 @@
 
 #include "agent/resource_group_usage_recorder.h"
 
+#include "base/testutil/assert.h"
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

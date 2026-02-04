@@ -17,9 +17,9 @@
 #include <gtest/gtest.h>
 
 #include "base/concurrency/await.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "testutil/assert.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 
