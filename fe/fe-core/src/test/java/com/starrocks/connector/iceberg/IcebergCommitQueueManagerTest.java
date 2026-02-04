@@ -591,10 +591,9 @@ public class IcebergCommitQueueManagerTest {
         try {
             assertFalse(disabledManager.isEnabled());
 
-            AtomicInteger executionOrder = new AtomicInteger(0);
-            List<Integer> order = new ArrayList<>();
-            CountDownLatch tasksExecuted = new CountDownLatch(3);
-            CountDownLatch allSubmitted = new CountDownLatch(3);
+            AtomicInteger executionCount = new AtomicInteger(0);
+            List<Integer> order = Collections.synchronizedList(new ArrayList<>());
+            CountDownLatch allDone = new CountDownLatch(3);
 
             // Submit multiple concurrent commits
             executor = Executors.newFixedThreadPool(3);
@@ -603,11 +602,10 @@ public class IcebergCommitQueueManagerTest {
                 final int index = i;
                 executor.submit(() -> {
                     try {
-                        allSubmitted.countDown();
                         disabledManager.submitCommit("catalog", "db", "table", () -> {
                             order.add(index);
-                            executionOrder.incrementAndGet();
-                            tasksExecuted.countDown();
+                            executionCount.incrementAndGet();
+                            allDone.countDown();
                         });
                     } catch (Throwable e) {
                         // Log exception if any
@@ -617,18 +615,15 @@ public class IcebergCommitQueueManagerTest {
                 });
             }
 
-            // Wait for all tasks to be submitted first
-            assertTrue(allSubmitted.await(5, TimeUnit.SECONDS));
-
-            // Now wait for all commits to execute
-            assertTrue(tasksExecuted.await(10, TimeUnit.SECONDS));
+            // Wait for all commits to complete
+            assertTrue(allDone.await(10, TimeUnit.SECONDS));
 
             // Shutdown executor
             executor.shutdown();
             executor.awaitTermination(5, TimeUnit.SECONDS);
 
             // When disabled, commits execute immediately (not serialized)
-            assertEquals(3, executionOrder.get(), "All 3 tasks should execute");
+            assertEquals(3, executionCount.get(), "All 3 tasks should execute");
             assertEquals(3, order.size(), "All 3 tasks should complete");
         } finally {
             if (executor != null && !executor.isShutdown()) {
