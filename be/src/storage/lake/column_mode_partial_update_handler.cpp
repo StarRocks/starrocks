@@ -414,6 +414,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         }
         TRACE_COUNTER_INCREMENT("pcu_insert_rows", _partial_update_states[upt_id].insert_rowids.size());
     }
+
+    const size_t partial_update_states_size = _partial_update_states.size();
     _partial_update_states.clear();
     // must record unique column id in delta column group
     // dcg_column_ids and dcg_column_files are mapped one to the other. E.g.
@@ -465,7 +467,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     builder->apply_column_mode_partial_update(params.op_write);
 
     TRACE_COUNTER_INCREMENT("pcu_rss_cnt", rss_upt_id_to_rowid_pairs.size());
-    TRACE_COUNTER_INCREMENT("pcu_upt_cnt", _partial_update_states.size());
+    TRACE_COUNTER_INCREMENT("pcu_upt_cnt", partial_update_states_size);
     TRACE_COUNTER_INCREMENT("pcu_column_cnt", update_column_ids.size());
     return Status::OK();
 }
