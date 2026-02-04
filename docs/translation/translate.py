@@ -339,8 +339,11 @@ def main():
             translator.translate_file(f)
 
     report_path = "translation_summary.md"
-    with open(report_path, "a", encoding="utf-8") as f:
-        if not os.path.exists(report_path) or os.stat(report_path).st_size == 0:
+    report_exists = os.path.exists(report_path)
+    report_is_empty = (not report_exists) or os.stat(report_path).st_size == 0
+    mode = "w" if report_is_empty else "a"
+    with open(report_path, mode, encoding="utf-8") as f:
+        if report_is_empty:
             f.write("### 📝 Translation Report\n\n")
         f.write(f"#### 🌐 Language: {args.lang.upper()}\n")
         if translator.successes:
