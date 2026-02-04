@@ -60,7 +60,6 @@ jobs:
 
             files.forEach(file => {
               if (!fs.existsSync(file)) return;
-              if (!file.endsWith('.md') && !file.endsWith('.mdx')) return;
 
               const parts = file.split('/');
               if (parts.length < 2) return; 
