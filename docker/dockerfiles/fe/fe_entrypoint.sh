@@ -26,6 +26,11 @@ META_DIR=$STARROCKS_HOME/meta
 EXIT_IN_PROGRESS=false
 IS_FE_OBSERVER=${IS_FE_OBSERVER:-"false"}
 
+case "$IS_FE_OBSERVER" in
+    1|true|True) IS_FE_OBSERVER="true" ;;
+    *) IS_FE_OBSERVER="false" ;;
+esac
+
 log_stderr()
 {
     echo "[`date`] $@" >&2
@@ -219,7 +224,7 @@ start_fe_no_meta()
         local start=`date +%s`
         while true
         do
-          if [[ "$IS_FE_OBSERVER" == 'true' ]]; then
+          if [[ "$IS_FE_OBSERVER" != "false" ]]; then
             log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as observer ..."
             mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD OBSERVER \"$MYSELF:$EDIT_LOG_PORT\";"
           else
