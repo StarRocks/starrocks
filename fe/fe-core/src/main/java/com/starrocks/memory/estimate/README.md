@@ -1,16 +1,20 @@
 # Memory Estimation Module
 
-This module provides utilities for estimating the memory footprint of Java objects in StarRocks FE. It is designed for memory tracking and monitoring purposes, enabling accurate memory usage statistics without the overhead of deep object graph traversal.
+This module provides utilities for estimating the memory footprint of Java objects in StarRocks FE. It is designed for
+memory tracking and monitoring, balancing accuracy and performance by combining shallow sizes, sampling, and bounded
+recursion instead of deep object graph traversal.
 
 ## Overview
 
 The memory estimation module offers:
 
-- **Sampling-based estimation** for arrays and collections to balance accuracy and performance
-- **Recursive field traversal** with configurable depth limits
-- **Custom estimator support** for specialized object types
-- **Annotation-based control** to exclude or simplify memory tracking for specific classes/fields
-- **Caching** of class shallow sizes for optimal performance
+- Sampling-based estimation for arrays and collections
+- Recursive field traversal with configurable depth limits
+- Custom estimator support for specialized object types
+- Annotation-based control to exclude or simplify memory tracking for specific classes or fields
+- Optional ignore-class sets for excluding shared objects from a single estimate
+- ClassValue-based caching of class shallow sizes and reference fields
+- Identity-based cycle detection to avoid double counting the same object
 
 ## Components
 
@@ -18,11 +22,13 @@ The memory estimation module offers:
 
 The core utility class (`Estimator.java`) that estimates memory size of Java objects.
 
-**Key Features:**
-- Uses JOL (Java Object Layout) for accurate shallow size calculation
+Key features:
+
+- Uses JOL (Java Object Layout) for accurate shallow size calculation when possible
 - Samples elements from large collections/arrays instead of traversing all elements
-- Caches shallow sizes to avoid repeated reflection overhead
-- Automatically detects and caches classes with no nested reference fields
+- Supports custom estimators and shallow-only classes
+- Provides overloads for max depth, sample size, and ignore-class sets
+- Caches shallow sizes and reference fields via `ClassValue`
 
 ### Annotations
 
@@ -56,7 +62,8 @@ public class SimpleData {
 }
 ```
 
-For collections containing `@ShallowMemory` elements, the estimation uses `shallow_size * element_count` instead of sampling.
+For collections containing `@ShallowMemory` elements, the estimation uses `shallow_size * element_count` instead of
+sampling.
 
 ### CustomEstimator
 
@@ -74,14 +81,24 @@ public interface CustomEstimator {
 ### Basic Estimation
 
 ```java
-// Estimate with default settings (max depth = 8, sample size = 5)
+// Estimate with default settings (max depth = 20, sample size = 5)
 long size = Estimator.estimate(myObject);
 
-// Estimate with custom max depth
-long size = Estimator.estimate(myObject, 4);
+// Estimate with custom sample size
+long size = Estimator.estimate(myObject, 10);
 
-// Estimate with custom max depth and sample size
-long size = Estimator.estimate(myObject, 4, 10);
+// Estimate with custom sample size and max depth
+long size = Estimator.estimate(myObject, 10, 4);
+```
+
+### Ignore Classes for Shared Objects
+
+```java
+Set<Class<?>> ignore = Set.of(SharedCache.class);
+long size = Estimator.estimate(myObject, ignore);
+
+// With custom sample size and max depth
+long size = Estimator.estimate(myObject, 10, 4, ignore);
 ```
 
 ### Register Custom Estimators
@@ -110,7 +127,7 @@ Estimator.registerShallowMemoryClass(SomeExternalClass.class);
 // Get shallow size of an object instance
 long shallowSize = Estimator.shallow(myObject);
 
-// Get shallow size of a class (for non-array types)
+// Get shallow size of a class (non-array types only)
 long shallowSize = Estimator.shallow(MyClass.class);
 ```
 
@@ -118,43 +135,53 @@ long shallowSize = Estimator.shallow(MyClass.class);
 
 ### Estimation Algorithm
 
-1. **Null check**: Returns 0 for null objects
-2. **Annotation check**: Returns 0 for `@IgnoreMemoryTrack` classes
-3. **Custom estimator**: Uses registered custom estimator if available
-4. **Shallow memory check**: Returns shallow size for `@ShallowMemory` classes
-5. **Depth check**: Returns shallow size if max depth is reached
-6. **Type-specific handling**:
-   - **Arrays**: Calculates header + references + sampled element sizes
-   - **Collections**: Calculates shallow size + sampled element sizes
-   - **Maps**: Calculates shallow size + key set + value collection
-   - **Objects**: Recursively estimates all non-static, non-primitive reference fields
+1. Null check: returns 0 for null objects
+2. Cycle check: returns 0 if the object was already visited
+3. Ignore-class check: returns 0 for classes in the ignore set
+4. Annotation check: returns 0 for `@IgnoreMemoryTrack` classes
+5. Custom estimator: uses registered custom estimator if available
+6. Shallow memory check: returns shallow size for `@ShallowMemory` classes
+7. Depth check: returns shallow size if max depth is reached
+8. Type-specific handling based on arrays, collections, maps, or regular objects
+
+Hidden or synthetic lambda classes are treated as a fixed shallow size (16 bytes) to avoid JOL failures.
+
+### Type-Specific Handling
+
+- Arrays: header + references + sampled element sizes
+- Collections: shallow size + sampled element sizes
+- Maps: shallow size + key set + value collection sizes
+- Objects: recursively estimates all non-static, non-primitive, non-enum reference fields
 
 ### Sampling Strategy
 
-For large collections and arrays:
-- **RandomAccess lists** (e.g., ArrayList): Evenly distributed sampling using index access
-- **Non-RandomAccess collections** (e.g., LinkedList): Takes first N elements to avoid O(n) traversal
-- **Arrays**: Evenly distributed sampling
+- If size <= sample size: uses all non-null elements
+- RandomAccess lists (e.g., ArrayList): evenly distributed sampling via index access
+- Non-RandomAccess collections (e.g., LinkedList): iterates and picks evenly spaced elements
+- Arrays: evenly distributed sampling
 
 ### Caching
 
-- **Shallow size cache**: `ConcurrentHashMap<Class<?>, Long>` for class instance sizes
-- **Nested fields cache**: `ConcurrentHashMap<Class<?>, List<Field>>` for reference fields per class
-- **Shallow memory classes**: Auto-detected and cached when a class has no nested reference fields
+- Shallow size cache: `ClassValue<Long>` to avoid repeated JOL reflection work
+- Nested reference fields cache: `ClassValue<Field[]>` with `trySetAccessible()` attempted once during caching
+- Shallow memory classes: stored by class name to avoid pinning ClassLoaders
 
 ### Constants
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `DEFAULT_MAX_DEPTH` | 8 | Default recursion depth limit |
+| `DEFAULT_MAX_DEPTH` | 20 | Default recursion depth limit |
 | `DEFAULT_SAMPLE_SIZE` | 5 | Default number of elements to sample |
-| `ARRAY_HEADER_SIZE` | 16 | Array header size on 64-bit JVM |
+| `ARRAY_HEADER_SIZE` | 16 | Array header size on a 64-bit JVM |
 | `REFERENCE_SIZE` | 4 | Reference size with compressed oops |
+| `HIDDEN_CLASS_SHALLOW_SIZE` | 16 | Fallback size for hidden or synthetic lambda classes |
+
+Note: These constants assume a 64-bit JVM with compressed oops. Actual layouts may differ.
 
 ## Best Practices
 
-1. **Use annotations** for classes with known memory patterns to avoid unnecessary recursion
-2. **Register custom estimators** for complex objects with predictable memory layouts
-3. **Adjust depth and sample size** based on your accuracy vs. performance requirements
-4. **Mark external library classes** as shallow memory if deep traversal is not needed
-5. **Use `@IgnoreMemoryTrack`** for cached or shared objects that shouldn't be counted multiple times
+1. Ensure the target object is immutable or protected by a lock during estimation
+2. Use annotations for classes with known memory patterns to avoid unnecessary recursion
+3. Register custom estimators for complex objects with predictable memory layouts
+4. Adjust depth and sample size based on your accuracy vs. performance requirements
+5. Use `@IgnoreMemoryTrack` or ignore-class sets for shared objects that shouldn't be counted multiple times
