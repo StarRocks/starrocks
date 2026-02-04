@@ -424,6 +424,7 @@ endif ()
 
 add_subdirectory(base)
 add_subdirectory(common)
+add_subdirectory(types)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)

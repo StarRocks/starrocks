@@ -14,14 +14,18 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
+ADD_BE_LIB(TypesCore
+    logical_type.cpp
+)
+
 ADD_BE_LIB(Types
     array_type_info.cpp
     bitmap_value.cpp
     date_value.cpp
     hll.cpp
     hll_sketch.cpp
+    logical_type_size.cpp
     large_int_value.cpp
-    logical_type.cpp
     map_type_info.cpp
     struct_type_info.cpp
     timestamp_value.cpp

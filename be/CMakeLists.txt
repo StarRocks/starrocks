@@ -419,6 +419,7 @@ set(STARROCKS_LINK_LIBS
     Cache
     orc
     ${WL_END_GROUP}
+    TypesCore
     Common
     Base
     Gutil
