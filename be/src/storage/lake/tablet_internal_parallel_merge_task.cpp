@@ -22,32 +22,33 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/load_chunk_spiller.h"
 #include "storage/load_spill_block_manager.h"
+#include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/storage_engine.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 
-TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator,
-                                                                 Schema* schema, int32_t task_index,
-                                                                 QuitFlag* quit_flag,
+TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
+                                                                 std::unique_ptr<LoadSpillPipelineMergeTask> task,
+                                                                 const Schema* schema, std::atomic<bool>* quit_flag,
                                                                  RuntimeProfile::Counter* write_io_timer)
-        : _writer(writer),
-          _block_iterator(block_iterator),
+        : _writer(std::move(writer)),
+          _task(std::move(task)),
           _schema(schema),
-          _task_index(task_index),
           _quit_flag(quit_flag),
           _write_io_timer(write_io_timer) {
-    std::string tracker_label = "LoadSpillMerge-" + std::to_string(writer->tablet_id()) + "-" +
-                                std::to_string(writer->txn_id()) + "-" + std::to_string(task_index);
+    std::string tracker_label =
+            "LoadSpillMerge-" + std::to_string(_writer->tablet_id()) + "-" + std::to_string(_writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
                                                       GlobalEnv::GetInstance()->compaction_mem_tracker());
 }
 
 TabletInternalParallelMergeTask::~TabletInternalParallelMergeTask() {
-    if (_block_iterator != nullptr) {
-        _block_iterator->close();
+    if (_task->merge_itr != nullptr) {
+        _task->merge_itr->close();
     }
 }
 
@@ -59,9 +60,14 @@ void TabletInternalParallelMergeTask::run() {
     auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
     auto st = Status::OK();
-    while (!_quit_flag->quit.load()) {
+
+    // CANCELLATION CHECK: Loop while quit flag is not set. The condition "_quit_flag == nullptr ||"
+    // handles the case where quit_flag is nullptr (cancellation not supported). When nullptr,
+    // we skip the quit check entirely and run to completion. When non-null, we check the
+    // atomic flag on each iteration to support early termination on error or user cancellation.
+    while (_quit_flag == nullptr || !_quit_flag->load()) {
         chunk->reset();
-        auto itr_st = _block_iterator->get_next(chunk);
+        auto itr_st = _task->merge_itr->get_next(chunk);
         if (itr_st.is_end_of_file()) {
             break;
         } else if (itr_st.ok()) {
@@ -84,11 +90,14 @@ void TabletInternalParallelMergeTask::run() {
         SCOPED_TIMER(_write_io_timer);
         st = _writer->finish();
     }
+    // Release block groups to free up spill disk space
+    _task->release_block_groups();
     timer.stop();
     LOG(INFO) << fmt::format(
             "SpillMemTableSink parallel merge blocks to segment finished, txn:{} tablet:{} "
-            "task_index:{}, cost {} ms",
-            _writer->txn_id(), _writer->tablet_id(), _task_index, timer.elapsed_time() / 1000000);
+            "total_block_groups: {}, total_block_bytes: {}, cost {} ms",
+            _writer->txn_id(), _writer->tablet_id(), _task->total_block_groups, _task->total_block_bytes,
+            timer.elapsed_time() / 1000000);
     update_status(st);
 }
 
@@ -97,10 +106,15 @@ void TabletInternalParallelMergeTask::cancel() {
 }
 
 void TabletInternalParallelMergeTask::update_status(const Status& st) {
+    // Update task's status (Status::update is idempotent - first error wins)
     _status.update(st);
+
+    // COOPERATIVE CANCELLATION: When one task fails, signal all other tasks to abort.
+    // WHY: No point continuing other merges if one failed - the entire load will fail anyway.
+    // This saves CPU/IO resources and provides faster failure detection. All tasks check
+    // this flag in their run() loop and exit early when set.
     if (!st.ok() && _quit_flag != nullptr) {
-        // Notify other tasks to quit
-        _quit_flag->quit.store(true);
+        _quit_flag->store(true);
     }
 }
 

@@ -36,6 +36,9 @@
 
 #include <memory>
 
+#include "base/hash/unaligned_access.h"
+#include "base/simd/simd.h"
+#include "base/string/slice.h" // for Slice
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -43,14 +46,11 @@
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "types/logical_type.h"
-#include "util/slice.h" // for Slice
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

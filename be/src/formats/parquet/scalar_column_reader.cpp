@@ -14,6 +14,8 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "base/simd/gather.h"
+#include "base/simd/simd.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
@@ -23,8 +25,6 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/types.h"
-#include "simd/gather.h"
-#include "simd/simd.h"
 #include "statistics_helper.h"
 
 namespace starrocks::parquet {
@@ -323,7 +323,8 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
             // all null
             zone_map_details.emplace_back(Datum{}, Datum{}, true);
         } else {
-            bool has_null = column_index.null_counts[i] > 0;
+            // null_counts is optional in parquet - if unavailable, conservatively assume nulls exist
+            bool has_null = i >= column_index.null_counts.size() || column_index.null_counts[i] > 0;
             zone_map_details.emplace_back(min_column->get(i), max_column->get(i), has_null);
         }
     }

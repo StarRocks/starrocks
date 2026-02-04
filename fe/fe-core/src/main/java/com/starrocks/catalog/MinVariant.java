@@ -14,8 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.thrift.TVariant;
-import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.Type;
 
 import java.util.Objects;
@@ -33,14 +31,6 @@ public class MinVariant extends Variant {
     @Override
     public long getLongValue() {
         return Long.MIN_VALUE;
-    }
-
-    @Override
-    public TVariant toThrift() {
-        TVariant variant = new TVariant();
-        variant.setType(com.starrocks.type.TypeSerializer.toThrift(type));
-        variant.setVariant_type(TVariantType.MINIMUM);
-        return variant;
     }
 
     @Override

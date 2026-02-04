@@ -20,6 +20,8 @@
 #include <memory>
 #include <string_view>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/datum.h"
 #include "column/datum_tuple.h"
@@ -36,9 +38,7 @@
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
-#include "util/defer_op.h"
 #include "util/json.h"
 
 namespace starrocks {

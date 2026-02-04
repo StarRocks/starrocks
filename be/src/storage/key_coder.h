@@ -37,13 +37,13 @@
 #include <string>
 #include <type_traits>
 
+#include "base/bit/bit_util.h"
 #include "column/datum.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/bit_util.h"
 
 namespace starrocks {
 

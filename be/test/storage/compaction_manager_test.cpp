@@ -23,6 +23,7 @@
 #include <mutex>
 #include <random>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_pool.h"
 #include "storage/compaction.h"
@@ -33,7 +34,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -569,7 +569,7 @@ TEST_F(CompactionManagerTest, test_get_compaction_status) {
     rs_meta_pb->set_start_version(0);
     rs_meta_pb->set_end_version(1);
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
-    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta);
+    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta, data_dir.get_meta());
     mock_rowsets.emplace_back(rowset);
 
     // generate compaction task

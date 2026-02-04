@@ -21,6 +21,7 @@
 #include <memory>
 #include <numeric>
 
+#include "base/bit/bit_util.h"
 #include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -36,7 +37,6 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/bit_util.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::spill {
@@ -652,8 +652,11 @@ Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<S
             COUNTER_UPDATE(_spiller->metrics().skew_mem_table_output_bytes, output_mem_size);
             COUNTER_UPDATE(_spiller->metrics().skew_mem_table_input_rows, input_num_rows);
             COUNTER_UPDATE(_spiller->metrics().skew_mem_table_output_rows, output_num_rows);
-            COUNTER_SET(_spiller->metrics().skew_mem_table_skew_ratio,
-                        (input_mem_size - output_mem_size) * 100.0 / input_mem_size);
+            int64_t skew_ratio =
+                    input_mem_size > 0
+                            ? (static_cast<int64_t>((input_mem_size - output_mem_size) * 100 / input_mem_size))
+                            : 0;
+            COUNTER_SET(_spiller->metrics().skew_mem_table_skew_ratio, skew_ratio);
         }
     }
     return Status::OK();

@@ -657,6 +657,9 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+
+  // This field is only used for flat json to provide a uniq id
+  55: optional i32 next_uniq_id
 }
 
 struct TJDBCScanNode {
@@ -703,6 +706,8 @@ struct TLakeScanNode {
   // inverted index
   44: optional bool enable_prune_column_after_index_filter
   45: optional bool enable_gin_filter
+
+  46: optional i32 next_uniq_id
 }
 
 struct TEqJoinCondition {
@@ -1307,6 +1312,7 @@ struct TMetaScanNode {
     // deprecated. use schema key instead
     5: optional i64 schema_id
     6: optional Descriptors.TTableSchemaKey schema_key
+    7: optional i32 next_uniq_id
 }
 
 struct TDecodeNode {
@@ -1338,6 +1344,12 @@ const string BINLOG_OP_COLUMN_NAME = "_binlog_op";
 const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
 const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
 const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
+
+// virtual column names
+const string TABLET_ID_COLUMN_NAME = "_tablet_id_";
+// Future virtual columns (not yet implemented in BE):
+// const string SEGMENT_ID_COLUMN_NAME = "_segment_id_";
+// const string ROW_ID_COLUMN_NAME = "_row_id_";
 
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id

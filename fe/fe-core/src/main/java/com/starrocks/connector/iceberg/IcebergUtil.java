@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -25,6 +26,8 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
@@ -229,5 +232,17 @@ public final class IcebergUtil {
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
         return cloudConfiguration;
+    }
+
+    public static void checkFileFormatSupportedDelete(FileScanTask fileScanTask, boolean uedForDelete) {
+        // Check file format for DELETE operations
+        // Only Parquet format is supported for Iceberg DELETE operations now
+        if (uedForDelete && fileScanTask.file().format() != FileFormat.PARQUET) {
+            throw new StarRocksConnectorException(
+                    String.format("Delete operations on Iceberg tables are only supported for " +
+                                    "Parquet format files. Found %s format file: %s",
+                            fileScanTask.file().format(), fileScanTask.file().location()));
+
+        }
     }
 }

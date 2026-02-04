@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
+#include "io/formatted_output_stream_string.h"
 #include "runtime/types.h"
 
 namespace starrocks::csv {
@@ -88,7 +88,7 @@ TEST_F(DatetimeConverterTest, test_read_quoted_string_invalid_value) {
 TEST_F(DatetimeConverterTest, test_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
 
     col->append_datum(TimestampValue::create(1999, 1, 1, 10, 9, 8));
     col->append_datum(TimestampValue::create(2000, 11, 20, 10, 9, 8));

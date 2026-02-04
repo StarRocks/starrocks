@@ -14,10 +14,10 @@
 
 #include "cache/disk_space_monitor.h"
 
+#include "base/concurrency/await.h"
 #include "cache/datacache_utils.h"
 #include "common/config.h"
 #include "common/statusor.h"
-#include "util/await.h"
 #include "util/thread.h"
 
 namespace starrocks {

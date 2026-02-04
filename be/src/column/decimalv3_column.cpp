@@ -14,8 +14,8 @@
 
 #include "column/decimalv3_column.h"
 
+#include "base/int256.h"
 #include "column/fixed_length_column.h"
-#include "types/int256.h"
 
 namespace starrocks {
 

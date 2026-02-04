@@ -26,7 +26,9 @@ endif()
 #
 set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(${SRC_DIR}/common/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
-add_library(build_version OBJECT ${BUILD_VERSION_CC})
+set(BUILD_VERSION_CPP ${GENSRC_DIR}/gen_cpp/version.cpp)
+set_source_files_properties(${BUILD_VERSION_CPP} PROPERTIES GENERATED TRUE)
+add_library(build_version OBJECT ${BUILD_VERSION_CC} ${BUILD_VERSION_CPP})
 target_include_directories(build_version PRIVATE ${SRC_DIR}/common)
 
 # Add common cmake prefix path and link library path
@@ -323,6 +325,9 @@ set_target_properties(azure-storage-blobs PROPERTIES IMPORTED_LOCATION ${THIRDPA
 
 add_library(azure-storage-files-datalake STATIC IMPORTED GLOBAL)
 set_target_properties(azure-storage-files-datalake PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-files-datalake.a)
+
+add_library(benchgen STATIC IMPORTED GLOBAL)
+set_target_properties(benchgen PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbenchgen.a)
 
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)

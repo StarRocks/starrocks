@@ -20,6 +20,7 @@
 #include "agent/agent_server.h"
 #endif
 
+#include "base/string/string_parser.hpp"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/BackendService.h"
@@ -32,7 +33,6 @@
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "util/network_util.h"
-#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 #include "util/trace.h"
 

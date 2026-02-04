@@ -188,6 +188,10 @@ public class IcebergTable extends Table {
         return partitionColumns;
     }
 
+    public void clearMetadata() {
+        this.nativeTable = null;
+    }
+
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
         for (PartitionField field : getNativeTable().spec().fields()) {
@@ -275,6 +279,7 @@ public class IcebergTable extends Table {
     public int getFormatVersion() {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion();
     }
+
     /**
      * <p>
      * In the Iceberg Partition Evolution scenario, 'org.apache.iceberg.PartitionField#name' only represents the
@@ -329,12 +334,20 @@ public class IcebergTable extends Table {
 
     @Override
     public String getTableIdentifier() {
-        String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
-        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
+        org.apache.iceberg.Table nativeTable = getNativeTable();
+        String uuid = null;
+        if (nativeTable instanceof BaseTable) {
+            uuid = ((BaseTable) nativeTable).operations().current().uuid();
+        }
+        return Joiner.on(":").join(catalogTableName, uuid == null ? "" : uuid);
     }
 
     public IcebergCatalogType getCatalogType() {
         return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+    }
+
+    public Map<String, String> getIcebergProperties() {
+        return icebergProperties;
     }
 
     public String getTableLocation() {

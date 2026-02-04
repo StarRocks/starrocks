@@ -19,6 +19,7 @@
 #include <sstream>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "common/status.h"
@@ -29,7 +30,6 @@
 #include "udf/java/java_native_method.h"
 #include "udf/java/type_traits.h"
 #include "udf/java/utils.h"
-#include "util/defer_op.h"
 
 // find a jclass and return a global jclass ref
 #define JNI_FIND_CLASS(clazz_name)                                                                 \

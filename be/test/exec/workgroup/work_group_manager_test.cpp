@@ -14,9 +14,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/parallel_test.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/mem_tracker.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks::workgroup {
 TWorkGroup create_twg(const int64_t id, const int64_t version, const std::string& name, const std::string& mem_pool,

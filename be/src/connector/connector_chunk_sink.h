@@ -82,6 +82,8 @@ protected:
     std::vector<std::function<void()>> _rollback_actions;
 
     std::map<PartitionKey, PartitionChunkWriterPtr> _partition_chunk_writers;
+    // passed to SinkOperatorMemoryManager to check memory usage
+    std::vector<PartitionChunkWriterPtr> _writers;
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 
     std::shared_mutex _mutex;

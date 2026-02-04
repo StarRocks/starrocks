@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include "base/coding.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "common/status.h"
 #include "storage/range.h"
@@ -41,9 +43,7 @@
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/type_traits.h"
-#include "util/coding.h"
 #include "util/rle_encoding.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

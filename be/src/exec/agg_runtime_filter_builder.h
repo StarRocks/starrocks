@@ -19,6 +19,9 @@
 #include <memory>
 #include <type_traits>
 
+#include "base/container/heap.h"
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h"
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exec/chunks_sorter_heap_sort.h"
@@ -27,9 +30,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/heap.h"
-#include "util/slice.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 class Aggregator;

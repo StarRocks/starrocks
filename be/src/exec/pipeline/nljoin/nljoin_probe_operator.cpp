@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -21,7 +22,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {

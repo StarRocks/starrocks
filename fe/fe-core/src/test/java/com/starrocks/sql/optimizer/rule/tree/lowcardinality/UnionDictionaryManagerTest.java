@@ -15,9 +15,11 @@
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.type.StringType;
@@ -79,7 +81,7 @@ class UnionDictionaryManagerTest {
                 4, makeDict(List.of("z"))));
         UnionDictionaryManager unionDictionaryManager =
                 new UnionDictionaryManager(SESSION_VARIABLE, Map.of(), globalDicts, Set.of());
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(1, 2, 3)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(1, 2, 3)));
         unionDictionaryManager.finalizeColumnDictionaries();
         Assertions.assertEquals(getDictValues(globalDicts.get(1)), List.of("a", "b", "c", "e", "f", "g"));
         Assertions.assertEquals(getDictValues(globalDicts.get(2)), List.of("a", "b", "c", "e", "f", "g"));
@@ -99,10 +101,10 @@ class UnionDictionaryManagerTest {
                 7, makeDict(List.of("x", "y"))));
         UnionDictionaryManager unionDictionaryManager =
                 new UnionDictionaryManager(SESSION_VARIABLE, Map.of(), globalDicts, Set.of());
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(1, 2)));
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(5, 6)));
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(1, 5)));
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(4, 7)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(1, 2)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(5, 6)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(1, 5)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(4, 7)));
         unionDictionaryManager.finalizeColumnDictionaries();
         Assertions.assertEquals(globalDicts.get(1).getDict(), globalDicts.get(2).getDict());
         Assertions.assertEquals(globalDicts.get(1).getDict(), globalDicts.get(5).getDict());
@@ -122,7 +124,6 @@ class UnionDictionaryManagerTest {
         Assertions.assertEquals(2, columnGroups.size());
         Assertions.assertTrue(columnGroups.contains(Set.of(1, 2, 5, 6)));
         Assertions.assertTrue(columnGroups.contains(Set.of(4, 7)));
-
     }
 
     @Test
@@ -135,8 +136,8 @@ class UnionDictionaryManagerTest {
                 3, makeDict(List.of("z"))));
         UnionDictionaryManager unionDictionaryManager =
                 new UnionDictionaryManager(SESSION_VARIABLE, Map.of(), globalDicts, Set.of());
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(2, 3)));
-        Assertions.assertFalse(unionDictionaryManager.mergeDictionaries(List.of(3, 1)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(2, 3)));
+        Assertions.assertNull(unionDictionaryManager.mergeDictionaries(List.of(3, 1)));
         unionDictionaryManager.finalizeColumnDictionaries();
         Assertions.assertEquals(globalDicts.get(2).getDict(), globalDicts.get(3).getDict());
 
@@ -145,9 +146,10 @@ class UnionDictionaryManagerTest {
         Assertions.assertEquals(getDictValues(globalDicts.get(2)), bigList);
         Assertions.assertEquals(getDictValues(globalDicts.get(3)), bigList);
 
-        Assertions.assertEquals(unionDictionaryManager.getMergedDictColumnIds(), Set.of(2, 3));
+        Assertions.assertEquals(unionDictionaryManager.getMergedDictColumnIds(), Set.of(1, 2, 3));
         Collection<Set<Integer>> columnGroups = unionDictionaryManager.getUnionColumnGroups();
-        Assertions.assertEquals(1, columnGroups.size());
+        Assertions.assertEquals(2, columnGroups.size());
+        Assertions.assertTrue(columnGroups.contains(Set.of(1)));
         Assertions.assertTrue(columnGroups.contains(Set.of(2, 3)));
     }
 
@@ -160,8 +162,8 @@ class UnionDictionaryManagerTest {
                 3, makeDict(List.of("z"))));
         UnionDictionaryManager unionDictionaryManager =
                 new UnionDictionaryManager(SESSION_VARIABLE, Map.of(), globalDicts, Set.of());
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(2, 3)));
-        Assertions.assertFalse(unionDictionaryManager.mergeDictionaries(List.of(3, 1)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(2, 3)));
+        Assertions.assertNull(unionDictionaryManager.mergeDictionaries(List.of(3, 1)));
         unionDictionaryManager.finalizeColumnDictionaries();
         Assertions.assertEquals(globalDicts.get(2).getDict(), globalDicts.get(3).getDict());
 
@@ -170,9 +172,10 @@ class UnionDictionaryManagerTest {
         Assertions.assertEquals(getDictValues(globalDicts.get(2)), bigList);
         Assertions.assertEquals(getDictValues(globalDicts.get(3)), bigList);
 
-        Assertions.assertEquals(unionDictionaryManager.getMergedDictColumnIds(), Set.of(2, 3));
+        Assertions.assertEquals(unionDictionaryManager.getMergedDictColumnIds(), Set.of(1, 2, 3));
         Collection<Set<Integer>> columnGroups = unionDictionaryManager.getUnionColumnGroups();
-        Assertions.assertEquals(1, columnGroups.size());
+        Assertions.assertEquals(2, columnGroups.size());
+        Assertions.assertTrue(columnGroups.contains(Set.of(1)));
         Assertions.assertTrue(columnGroups.contains(Set.of(2, 3)));
     }
 
@@ -184,8 +187,8 @@ class UnionDictionaryManagerTest {
                 3, makeDict(List.of("e"))));
         UnionDictionaryManager unionDictionaryManager =
                 new UnionDictionaryManager(SESSION_VARIABLE, Map.of(), globalDicts, Set.of(3));
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(1, 2)));
-        Assertions.assertFalse(unionDictionaryManager.mergeDictionaries(List.of(1, 3)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(1, 2)));
+        Assertions.assertNull(unionDictionaryManager.mergeDictionaries(List.of(1, 3)));
         unionDictionaryManager.finalizeColumnDictionaries();
         Assertions.assertEquals(globalDicts.get(1).getDict(), globalDicts.get(2).getDict());
 
@@ -213,8 +216,8 @@ class UnionDictionaryManagerTest {
         );
         UnionDictionaryManager unionDictionaryManager =
                 new UnionDictionaryManager(SESSION_VARIABLE, stringRefToDefineExprMap, globalDicts, Set.of(2));
-        Assertions.assertTrue(unionDictionaryManager.mergeDictionaries(List.of(4, 7)));
-        Assertions.assertFalse(unionDictionaryManager.mergeDictionaries(List.of(4, 5)));
+        Assertions.assertNotNull(unionDictionaryManager.mergeDictionaries(List.of(4, 7)));
+        Assertions.assertNull(unionDictionaryManager.mergeDictionaries(List.of(4, 5)));
         unionDictionaryManager.finalizeColumnDictionaries();
         Assertions.assertEquals(globalDicts.get(1).getDict(), globalDicts.get(3).getDict());
 
@@ -226,5 +229,55 @@ class UnionDictionaryManagerTest {
         Collection<Set<Integer>> columnGroups = unionDictionaryManager.getUnionColumnGroups();
         Assertions.assertEquals(1, columnGroups.size());
         Assertions.assertTrue(columnGroups.contains(Set.of(1, 3)));
+    }
+
+    @Test
+    void testConstantHandling() {
+        ColumnRefOperator col1 = new ColumnRefOperator(1, StringType.STRING, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(2, StringType.STRING, "col2", true);
+        ColumnRefOperator col3 = new ColumnRefOperator(3, StringType.STRING, "col3", true);
+        ColumnRefOperator col4 = new ColumnRefOperator(4, StringType.STRING, "col4", true);
+        ColumnRefOperator col5 = new ColumnRefOperator(5, StringType.STRING, "col5", true);
+        ColumnRefOperator col6 = new ColumnRefOperator(6, StringType.STRING, "col6", true);
+        ColumnRefOperator col7 = new ColumnRefOperator(7, StringType.STRING, "col7", true);
+        ColumnRefOperator col8 = new ColumnRefOperator(8, StringType.STRING, "col8", true);
+        ColumnRefOperator col9 = new ColumnRefOperator(9, StringType.STRING, "col9", true);
+        ColumnRefOperator col10 = new ColumnRefOperator(9, StringType.STRING, "col9", true);
+        Map<Integer, ColumnDict> globalDicts = new HashMap<>(Map.of(
+                1, makeDict(List.of("a", "g")),
+                2, makeDict(List.of("a", "aa")),
+                3, makeDict(List.of("c", "cc"))));
+        Map<Integer,  ScalarOperator> stringRefToDefineExprMap = Maps.newHashMap();
+        UnionDictionaryManager unionDictionaryManager =
+                new UnionDictionaryManager(SESSION_VARIABLE, stringRefToDefineExprMap, globalDicts, Set.of());
+        unionDictionaryManager.recordIfConstant(col7, ConstantOperator.createVarchar("bbb"));
+        unionDictionaryManager.recordIfConstant(col8, col7);
+        unionDictionaryManager.recordIfConstant(col9, col8);
+
+        Assertions.assertTrue(unionDictionaryManager.isSupportedConstant(col7));
+        Assertions.assertTrue(unionDictionaryManager.isSupportedConstant(col8));
+        Assertions.assertTrue(unionDictionaryManager.isSupportedConstant(col9));
+        Assertions.assertTrue(unionDictionaryManager.isSupportedConstant(col10));
+
+        Assertions.assertEquals(1, unionDictionaryManager.mergeDictionaries(List.of(1, 7)));
+        Assertions.assertEquals(2, unionDictionaryManager.mergeDictionaries(List.of(2, 8)));
+        Assertions.assertEquals(3, unionDictionaryManager.mergeDictionaries(List.of(3, 9)));
+
+        unionDictionaryManager.finalizeColumnDictionaries();
+
+        Assertions.assertEquals(getDictValues(globalDicts.get(1)), List.of("a", "bbb", "g"));
+        Assertions.assertEquals(getDictValues(globalDicts.get(2)), List.of("a", "aa", "bbb"));
+        Assertions.assertEquals(getDictValues(globalDicts.get(3)), List.of("bbb", "c", "cc"));
+
+        stringRefToDefineExprMap.put(4, col1);
+        stringRefToDefineExprMap.put(5, col2);
+        stringRefToDefineExprMap.put(6, col3);
+        List<Map<ColumnRefOperator, ConstantOperator>> constantEncodingMap =
+                unionDictionaryManager.generateConstantEncodingMap(List.of(col4, col5, col6),
+                        List.of(List.of(col1, col8, col3), List.of(col7, col2, col9)), Set.of(1, 2, 4, 5));
+
+        Assertions.assertEquals(2, constantEncodingMap.size());
+        Assertions.assertEquals(Map.of(col8, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
+        Assertions.assertEquals(Map.of(col7, ConstantOperator.createInt(2)), constantEncodingMap.get(1));
     }
 }

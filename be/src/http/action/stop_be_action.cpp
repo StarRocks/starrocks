@@ -17,11 +17,11 @@
 #include <sstream>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "common/process_exit.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
-#include "util/defer_op.h"
 
 #ifdef USE_STAROS
 #include "service/staros_worker.h"

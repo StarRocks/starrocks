@@ -119,6 +119,7 @@ statement
     | adminSetConfigStatement
     | adminSetReplicaStatusStatement
     | adminShowConfigStatement
+    | adminShowAutomatedSnapshotStatement
     | adminShowReplicaDistributionStatement
     | adminShowReplicaStatusStatement
     | adminRepairTableStatement
@@ -762,6 +763,10 @@ adminShowConfigStatement
     : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
     ;
 
+adminShowAutomatedSnapshotStatement
+    : ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
+    ;
+
 adminShowReplicaDistributionStatement
     : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
     ;
@@ -984,6 +989,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | mergeTabletClause
     | alterTableAutoIncrementClause
 
     //Alter partition clause
@@ -1245,6 +1251,16 @@ splitTabletClause
       properties?
     ;
 
+mergeTabletClause
+    : MERGE
+      (((TABLET | TABLETS) partitionNames?) | tabletGroupList)
+      properties?
+    ;
+
+tabletGroupList
+    : (TABLET | TABLETS) integer_list+
+    ;
+
 alterTableAutoIncrementClause
     : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
@@ -1463,6 +1479,8 @@ killAnalyzeStatement
 analyzeProfileStatement
     : ANALYZE PROFILE FROM string
     | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
+    | ANALYZE PROFILE FROM LAST_QUERY_ID '(' ')'
+    | ANALYZE PROFILE FROM LAST_QUERY_ID '(' ')' ',' INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 
@@ -1547,7 +1565,8 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction? #createUdfFunctionStmt
+    | CREATE orReplace GLOBAL? FUNCTION ifNotExists qualifiedName '(' functionArgsList ')' RETURNS expression #createInternalFunctionStmt
     ;
 inlineFunction
     : AS ATTACHMENT
@@ -1555,6 +1574,10 @@ inlineFunction
 
 typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
+    ;
+
+functionArgsList
+    : (identifier type)? (',' identifier type)*
     ;
 
 // ------------------------------------------- Load Statement ----------------------------------------------------------
@@ -2304,8 +2327,8 @@ alterCNGroupStatement
 // ------------------------------------------- Transaction Statement ---------------------------------------------------
 
 beginStatement
-    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
-    | BEGIN WORK?
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)? (WITH LABEL label=identifier)?
+    | BEGIN WORK? (WITH LABEL label=identifier)?
     ;
 
 commitStatement
@@ -2748,6 +2771,7 @@ aggregationFunction
     | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | ARRAY_AGG_DISTINCT '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+    | STRING_AGG '(' setQuantifier? expression ',' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     ;
 
 userVariable
@@ -2804,6 +2828,7 @@ specialFunctionExpression
     | PASSWORD '(' string ')'
     | FLOOR '(' expression ')'
     | CEIL '(' expression ')'
+    | LAST_QUERY_ID '(' ')'
     ;
 
 windowFunction
@@ -3255,7 +3280,7 @@ nonReserved
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
+    | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES

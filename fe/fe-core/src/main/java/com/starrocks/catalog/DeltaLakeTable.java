@@ -120,6 +120,10 @@ public class DeltaLakeTable extends Table {
         return metastoreTable.getCloudConfiguration();
     }
 
+    public void clearMetadata() {
+        this.deltaSnapshot = null;
+    }
+
     @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
@@ -195,6 +199,10 @@ public class DeltaLakeTable extends Table {
     public String getTableIdentifier() {
         String uuid = this.deltaSnapshot.getMetadata().getId();
         return Joiner.on(":").join(tableName, uuid == null ? "" : uuid);
+    }
+
+    public MetastoreTable getMetastoreTable() {
+        return metastoreTable;
     }
 
     @Override

@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "butil/time.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
@@ -34,9 +36,7 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 #include "util/json.h"
 #include "util/json_flattener.h"
 

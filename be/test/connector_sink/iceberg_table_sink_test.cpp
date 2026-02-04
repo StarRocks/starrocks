@@ -20,11 +20,11 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

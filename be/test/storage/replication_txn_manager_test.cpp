@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/uuid/uuid_generator.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -28,8 +30,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_manager.h"
-#include "testutil/assert.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 

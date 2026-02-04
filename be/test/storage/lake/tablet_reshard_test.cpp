@@ -18,6 +18,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -27,14 +29,22 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
+#include "storage/variant_tuple.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {
 
 class LakeTabletReshardTest : public testing::Test {
 public:
+    static TuplePB generate_sort_key(int value) {
+        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(value));
+        VariantTuple tuple;
+        tuple.append(variant);
+        TuplePB tuple_pb;
+        tuple.to_proto(&tuple_pb);
+        return tuple_pb;
+    }
+
     void SetUp() override {
         std::vector<starrocks::StorePath> paths;
         CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
@@ -70,6 +80,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
     auto rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
     rowset_meta_pb->add_segments("test.dat");
+    rowset_meta_pb->add_segment_size(1024);
+    auto* segment_meta = rowset_meta_pb->add_segment_metas();
+    segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
+    segment_meta->set_num_rows(5);
     rowset_meta_pb->add_del_files()->set_name("test.del");
     rowset_meta_pb->set_overlapped(false);
     rowset_meta_pb->set_data_size(1024);

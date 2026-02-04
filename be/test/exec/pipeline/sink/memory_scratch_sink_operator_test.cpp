@@ -14,11 +14,11 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include "base/concurrency/await.h"
+#include "base/testutil/assert.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
-#include "util/await.h"
 
 namespace starrocks::pipeline {
 

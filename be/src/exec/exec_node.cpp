@@ -39,6 +39,7 @@
 
 #include <sstream>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
@@ -84,7 +85,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
@@ -522,6 +522,14 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
         return Status::OK();
     }
+    case TPlanNodeType::BENCHMARK_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::BENCHMARK;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
+        return Status::OK();
+    }
     case TPlanNodeType::ES_HTTP_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
@@ -858,6 +866,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::LAKE_META_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::BENCHMARK_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::STREAM_SCAN_NODE, nodes);

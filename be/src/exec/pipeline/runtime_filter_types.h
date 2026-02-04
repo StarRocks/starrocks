@@ -18,6 +18,7 @@
 #include <mutex>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/observer.h"
@@ -25,7 +26,6 @@
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
-#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 

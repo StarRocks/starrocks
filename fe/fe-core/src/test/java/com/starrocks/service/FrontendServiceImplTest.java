@@ -355,6 +355,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testImmutablePartitionException() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "site_access_exception");
@@ -364,38 +371,70 @@ public class FrontendServiceImplTest {
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
         Table t = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "v");
 
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
 
         request.setDb_id(db.getId());
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
 
         request.setTable_id(t.getId());
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
 
         request.setTable_id(table.getId());
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
 
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
 
         partitionIds.add(1L);
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
 
         partitionIds = table.getPhysicalPartitions().stream()
                     .map(PhysicalPartition::getId).collect(Collectors.toList());
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testImmutablePartitionTransactionNotExist() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return null;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_exception");
+
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_ids(Lists.newArrayList());
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        String errorMsg = partition.getStatus().getError_msgs().get(0);
+        Assertions.assertTrue(errorMsg.contains("error: txn") && errorMsg.contains("does not exist"));
     }
 
     @Test
     public void testImmutablePartitionApi() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "site_access_auto");
@@ -408,18 +447,18 @@ public class FrontendServiceImplTest {
         request.setPartition_ids(partitionIds);
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
 
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
         Assertions.assertEquals(2, table.getPhysicalPartitions().size());
 
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
         Assertions.assertEquals(2, table.getPhysicalPartitions().size());
 
         partitionIds = table.getPhysicalPartitions().stream()
                     .map(PhysicalPartition::getId).collect(Collectors.toList());
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
         Assertions.assertEquals(3, table.getPhysicalPartitions().size());
     }
 
@@ -1330,6 +1369,8 @@ public class FrontendServiceImplTest {
         putRequest.setLoadId(loadId);
         putRequest.setFileType(FILE_STREAM);
         putRequest.setAuth_code(100);
+        putRequest.setUser("user1");
+        putRequest.setUser_ip("127.0.0.1");
         TStreamLoadPutResult putResult = impl.streamLoadPut(putRequest);
         assertEquals(TStatusCode.OK, putResult.getStatus().status_code);
         return beginResult.getTxnId();
@@ -1454,6 +1495,8 @@ public class FrontendServiceImplTest {
         loadRequest.txnId = result.getTxnId();
         loadRequest.loadId = queryId;
         loadRequest.setAuth_code(100);
+        loadRequest.setUser("user1");
+        loadRequest.setUser_ip("127.0.0.1");
         TStreamLoadPutResult loadResult1 = impl.streamLoadPut(loadRequest);
         TStreamLoadPutResult loadResult2 = impl.streamLoadPut(loadRequest);
     }
@@ -1466,7 +1509,9 @@ public class FrontendServiceImplTest {
         request.tbl = "tbl_test";
         request.txnId = 1001L;
         request.setAuth_code(100);
-        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
+        request.setUser("user1");
+        request.setUser_ip("127.0.0.1");
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any(), any());
         TStreamLoadPutResult result = impl.streamLoadPut(request);
         Assertions.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
     }
@@ -1519,7 +1564,7 @@ public class FrontendServiceImplTest {
 
             @Mock
             public RequestLoadResult requestLoad(
-                    TableId tableId, StreamLoadKvParams params, long backendId, String backendHost) {
+                    TableId tableId, StreamLoadKvParams params, String user, long backendId, String backendHost) {
                 return new RequestLoadResult(new TStatus(TStatusCode.OK), "test_label");
             }
         };
@@ -1531,6 +1576,7 @@ public class FrontendServiceImplTest {
     @Test
     public void testMetaNotFound() throws StarRocksException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        final ConnectContext context = new ConnectContext();
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.db = "test";
         request.tbl = "foo";
@@ -1538,15 +1584,15 @@ public class FrontendServiceImplTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setLoadId(new TUniqueId(1, 2));
 
-        Exception e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        Exception e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(context, request));
         Assertions.assertTrue(e.getMessage().contains("unknown table"));
 
         request.tbl = "v";
-        e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(context, request));
         Assertions.assertTrue(e.getMessage().contains("load table type is not OlapTable"));
 
         request.tbl = "mv";
-        e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(context, request));
         Assertions.assertTrue(e.getMessage().contains("is a materialized view"));
     }
 
@@ -1858,5 +1904,57 @@ public class FrontendServiceImplTest {
             schemaService.verify(() -> TableSchemaService.getTableSchema(same(request1)));
             schemaService.verify(() -> TableSchemaService.getTableSchema(same(request2)));
         }
+    }
+
+    @Test
+    public void testCreatePartitionSkipDroppedPartition() throws TException {
+        // Test that when a partition is dropped between create and get (e.g. by TTL cleaner),
+        // the partition should be skipped instead of causing NPE
+        final String droppedPartitionName = "p19900426";
+
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_day");
+
+        // Mock getPartition to return null for a specific partition name, simulating TTL drop
+        // This simulates the race condition where partition is created but then dropped by TTL cleaner
+        // before buildCreatePartitionResponse can retrieve it
+        new MockUp<OlapTable>() {
+            @Mock
+            public Partition getPartition(mockit.Invocation invocation, String partitionName, boolean isTemp) {
+                // Return null for the specific partition we're testing, simulating it was dropped by TTL
+                if (droppedPartitionName.equals(partitionName)) {
+                    return null;
+                }
+                // Call the real method for other partitions
+                return invocation.proceed(partitionName, isTemp);
+            }
+        };
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-26");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        // Should not throw NPE, should return OK
+        TCreatePartitionResult result = impl.createPartition(request);
+
+        // The request should succeed
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        // partitions should be empty since the created partition was "dropped" by TTL
+        Assertions.assertTrue(result.getPartitions() == null || result.getPartitions().isEmpty());
     }
 }

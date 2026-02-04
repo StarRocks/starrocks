@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/assert.h"
+#include "base/testutil/assert.h"
 #include "udf/java/java_udf.h"
 #include "util/metrics.h"
 

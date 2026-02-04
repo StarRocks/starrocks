@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "base/decimal_types.h"
 #include "formats/csv/converter.h"
-#include "util/decimal_types.h"
 
 namespace starrocks::csv {
 
@@ -26,8 +26,9 @@ class DecimalV3Converter final : public Converter {
 public:
     DecimalV3Converter(int precision, int scale) : _precision(precision), _scale(scale) {}
 
-    Status write_string(OutputStream* os, const Column& column, size_t row_num, const Options& options) const override;
-    Status write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+    Status write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+                        const Options& options) const override;
+    Status write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                const Options& options) const override;
     bool read_string(Column* column, const Slice& s, const Options& options) const override;
     bool read_quoted_string(Column* column, const Slice& s, const Options& options) const override;

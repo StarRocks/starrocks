@@ -14,10 +14,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #include "storage/tablet_index.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

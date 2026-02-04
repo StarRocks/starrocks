@@ -17,11 +17,11 @@
 #include <cstdint>
 #include <memory>
 
-#include "util/bthreads/bthread_shared_mutex.h"
+#include "base/concurrency/bthread_shared_mutex.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_base.h"
+#include "base/time/time.h"
 #include "util/metrics.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_base.h"
-#include "util/time.h"
 
 namespace starrocks {
 

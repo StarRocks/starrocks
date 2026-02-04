@@ -16,9 +16,9 @@
 
 #include <vector>
 
+#include "base/concurrency/countdown_latch.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
-#include "util/countdown_latch.h"
 
 namespace starrocks {
 

@@ -1109,22 +1109,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitArithmeticBinary(ArithmeticBinaryExpression node, ParseTreeContext context) {
         Expr left = (Expr) visit(node.getLeft(), context);
         Expr right = (Expr) visit(node.getRight(), context);
+        ArithmeticExpr.Operator operator = BINARY_OPERATOR_MAP.get(node.getOperator());
 
         if (left instanceof com.starrocks.sql.ast.expression.IntervalLiteral) {
-            return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), right,
+            com.starrocks.sql.ast.expression.IntervalLiteral interval = (com.starrocks.sql.ast.expression.IntervalLiteral) left;
+            if (operator.isMultiplyOrDivide()) {
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, value, right);
+                return new com.starrocks.sql.ast.expression.IntervalLiteral(arithmetic, interval.getUnitIdentifier());
+            }
+            return alignWithInputDatetimeType(new TimestampArithmeticExpr(operator, right,
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) left).getValue(),
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) left).getUnitIdentifier().getDescription(),
                     true));
         }
 
         if (right instanceof com.starrocks.sql.ast.expression.IntervalLiteral) {
-            return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left,
+            com.starrocks.sql.ast.expression.IntervalLiteral interval = (com.starrocks.sql.ast.expression.IntervalLiteral) right;
+            if (operator.isMultiplyOrDivide()) {
+                if (operator == ArithmeticExpr.Operator.DIVIDE) {
+                    throw new ParsingException("Do not support expr divide IntervalLiteral syntax");
+                }
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, left, value);
+                return new com.starrocks.sql.ast.expression.IntervalLiteral(arithmetic, interval.getUnitIdentifier());
+            }
+            return alignWithInputDatetimeType(new TimestampArithmeticExpr(operator, left,
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) right).getValue(),
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) right).getUnitIdentifier().getDescription(),
                     false));
         }
 
-        return new ArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left, right);
+        return new ArithmeticExpr(operator, left, right);
     }
 
     @Override

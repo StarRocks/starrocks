@@ -151,6 +151,7 @@ import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -162,7 +163,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -179,6 +182,7 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.filterManifest
 import static com.starrocks.connector.iceberg.IcebergApiConverter.mayHaveEqualityDeletes;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
+import static com.starrocks.connector.iceberg.IcebergUtil.checkFileFormatSupportedDelete;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
@@ -218,17 +222,29 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final ConnectorProperties properties;
     private final IcebergProcedureRegistry procedureRegistry;
 
+    // Commit queue manager for serializing Iceberg commits to avoid optimistic locking conflicts
+    private final IcebergCommitQueueManager commitQueueManager;
+
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
                            ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
                            IcebergCatalogProperties catalogProperties) {
         this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, refreshOtherFeExecutor,
-                catalogProperties, new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry());
+                catalogProperties, new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry(),
+                null);
     }
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
                            ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
                            IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
                            IcebergProcedureRegistry procedureRegistry) {
+        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, refreshOtherFeExecutor,
+                catalogProperties, properties, procedureRegistry, null);
+    }
+
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
+                           IcebergProcedureRegistry procedureRegistry, IcebergCommitQueueManager commitQueueManager) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
@@ -237,6 +253,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         this.catalogProperties = catalogProperties;
         this.properties = properties;
         this.procedureRegistry = procedureRegistry;
+
+        // Use the shared commit queue manager from IcebergConnector if provided.
+        // When null (e.g., for testing or backwards compatibility), fall back to direct commit without queueing.
+        this.commitQueueManager = commitQueueManager;
+        if (commitQueueManager != null) {
+            LOG.info("IcebergMetadata using shared commit queue manager for catalog {}", catalogName);
+        } else {
+            LOG.info("IcebergMetadata will use direct commit (no queue) for catalog {}", catalogName);
+        }
     }
 
     @Override
@@ -869,43 +894,43 @@ public class IcebergMetadata implements ConnectorMetadata {
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
-        Iterator<FileScanTask> iterator =
-                buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, tvrVersionRange,
-                        connectContext, enableCollectColumnStatistics);
-
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
+        try (CloseableIterator<FileScanTask> iterator =
+                     buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, tvrVersionRange,
+                             connectContext, enableCollectColumnStatistics)) {
+            while (iterator.hasNext()) {
+                FileScanTask scanTask = iterator.next();
 
-        while (iterator.hasNext()) {
-            FileScanTask scanTask = iterator.next();
+                FileScanTask icebergSplitScanTask = scanTask;
+                if (enableCollectColumnStatistics) {
+                    try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
+                        icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                    }
 
-            FileScanTask icebergSplitScanTask = scanTask;
-            if (enableCollectColumnStatistics) {
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
-                    icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                    List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
+                    Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
+                            .filter(column -> column.type().isPrimitiveType())
+                            .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
+
+                    Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
+                            .filter(x -> x.transform().isIdentity())
+                            .map(PartitionField::sourceId)
+                            .collect(Collectors.toSet());
+
+                    List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
+                            .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
+                                    column.type().isPrimitiveType())
+                            .collect(toImmutableList());
+
+                    try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
+                        statisticProvider.updateIcebergFileStats(
+                                icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
+                    }
                 }
-
-                List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
-                Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
-                        .filter(column -> column.type().isPrimitiveType())
-                        .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
-
-                Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
-                        .filter(x -> x.transform().isIdentity())
-                        .map(PartitionField::sourceId)
-                        .collect(Collectors.toSet());
-
-                List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
-                        .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
-                                column.type().isPrimitiveType())
-                        .collect(toImmutableList());
-
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
-                    statisticProvider.updateIcebergFileStats(
-                            icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
-                }
+                icebergScanTasks.add(icebergSplitScanTask);
             }
-
-            icebergScanTasks.add(icebergSplitScanTask);
+        } catch (IOException e) {
+            throw new StarRocksConnectorException("Failed to iter iceberg file scan iterator", e);
         }
 
         splitTasks.put(key, icebergScanTasks);
@@ -926,7 +951,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PredicateSearchKey predicateSearchKey = PredicateSearchKey.of(dbName, tableName, params);
         RemoteFileInfoSource baseSource;
         if (splitTasks.containsKey(predicateSearchKey)) {
-            baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey));
+            baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey), params);
         } else {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
@@ -965,28 +990,40 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                        Expression icebergPredicate,
                                                        TvrVersionRange tvrVersionRange,
                                                        GetRemoteFilesParams params) {
-        Iterator<FileScanTask> iterator =
+        CloseableIterator<FileScanTask> iterator =
                 buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
                         params.isEnableColumnStats());
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
-                return new IcebergRemoteFileInfo(iterator.next());
+                FileScanTask fileScanTask = iterator.next();
+                checkFileFormatSupportedDelete(fileScanTask, params.usedForDelete());
+                return new IcebergRemoteFileInfo(fileScanTask);
             }
 
             @Override
             public boolean hasMoreOutput() {
                 return iterator.hasNext();
             }
+
+            @Override
+            public void close() {
+                try {
+                    iterator.close();
+                } catch (Exception ignore) {
+                }
+            }
         };
     }
 
-    private RemoteFileInfoSource buildRemoteInfoSource(List<FileScanTask> tasks) {
+    private RemoteFileInfoSource buildRemoteInfoSource(List<FileScanTask> tasks, GetRemoteFilesParams params) {
         Iterator<FileScanTask> iterator = tasks.iterator();
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
-                return new IcebergRemoteFileInfo(iterator.next());
+                FileScanTask fileScanTask = iterator.next();
+                checkFileFormatSupportedDelete(fileScanTask, params.usedForDelete());
+                return new IcebergRemoteFileInfo(fileScanTask);
             }
 
             @Override
@@ -996,13 +1033,28 @@ public class IcebergMetadata implements ConnectorMetadata {
         };
     }
 
-    private Iterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
+    private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
                                                              Expression icebergPredicate,
                                                              TvrVersionRange tvrVersionRange,
                                                              ConnectContext connectContext,
                                                              boolean enableCollectColumnStats) {
         if (tvrVersionRange.isEmpty()) {
-            return Collections.emptyIterator();
+            return new CloseableIterator<>() {
+                @Override
+                public void close() {
+                    // no-op
+                }
+
+                @Override
+                public boolean hasNext() {
+                    return false;
+                }
+
+                @Override
+                public FileScanTask next() {
+                    throw new NoSuchElementException("empty iterator");
+                }
+            };
         }
 
         String dbName = icebergTable.getCatalogDBName();
@@ -1050,7 +1102,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         Scan tableScan = scan;
-        return new Iterator<>() {
+        return new CloseableIterator<>() {
             CloseableIterable<FileScanTask> fileScanTaskIterable;
             CloseableIterator<FileScanTask> fileScanTaskIterator;
             boolean hasMore = true;
@@ -1094,6 +1146,26 @@ public class IcebergMetadata implements ConnectorMetadata {
                         }
                     }
                     hasMore = false;
+                }
+            }
+
+            @Override
+            public void close() {
+                try {
+                    if (fileScanTaskIterator != null) {
+                        fileScanTaskIterator.close();
+                    }
+                } catch (Exception ignore) {
+                }
+
+                try {
+                    if (fileScanTaskIterable != null) {
+                        fileScanTaskIterable.close();
+                    }
+                } catch (Exception ignore) {
+                } finally {
+                    fileScanTaskIterator = null;
+                    fileScanTaskIterable = null;
                 }
             }
         };
@@ -1300,32 +1372,74 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
-        boolean isOverwrite = false;
-        boolean isRewrite = false;
+        // Normalize db name and table name to lower case for commit queue key
+        // because some catalogs are case-insensitive (e.g., Hive, Glue)
+        //
+        // The normalizing for all catalogs is safe because:
+        // 1. The commit queue only serializes commits, it doesn't affect table identity
+        // 2. In the rare case where two tables differ only by case (e.g., "db.Table" vs "db.TABLE"),
+        //    sharing the same commit queue executor is harmless - commits are still serialized
+        // 3. It prevents bugs from inconsistent casing in user code (e.g., finishSink("DB") vs finishSink("db"))
+        String queueDbName = dbName.toLowerCase(Locale.ROOT);
+        String queueTableName = tableName.toLowerCase(Locale.ROOT);
+
+        final boolean isOverwrite;
+        final boolean isRewrite;
         if (!commitInfos.isEmpty()) {
             TSinkCommitInfo sinkCommitInfo = commitInfos.get(0);
             if (sinkCommitInfo.isSetIs_overwrite()) {
                 isOverwrite = sinkCommitInfo.is_overwrite;
+                isRewrite = false;
             } else if (sinkCommitInfo.isSetIs_rewrite()) {
+                isOverwrite = false;
                 isRewrite = sinkCommitInfo.is_rewrite;
+            } else {
+                isOverwrite = false;
+                isRewrite = false;
             }
+        } else {
+            isOverwrite = false;
+            isRewrite = false;
         }
 
-        List<TIcebergDataFile> dataFiles = commitInfos.stream()
+        final List<TIcebergDataFile> dataFiles = commitInfos.stream()
                 .map(TSinkCommitInfo::getIceberg_data_file).collect(Collectors.toList());
 
-        IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
-        org.apache.iceberg.Table nativeTbl = table.getNativeTable();
-        Transaction transaction = nativeTbl.newTransaction();
+        // Commit task that performs the actual Iceberg transaction commit
+        IcebergCommitQueueManager.CommitTask commitTask = () -> {
+            IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
+            org.apache.iceberg.Table nativeTbl = table.getNativeTable();
+            Transaction transaction = nativeTbl.newTransaction();
 
-        // Check if this is a delete operation (any file is marked as POSITION_DELETES)
-        boolean isDeleteOperation = dataFiles.stream().anyMatch(dataFile ->
-                dataFile.isSetFile_content() &&
-                        (dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES));
-        if (isDeleteOperation) {
-            commitDeleteOperation(transaction, nativeTbl, dataFiles, branch, dbName, tableName, extra);
+            // Check if this is a delete operation (any file is marked as POSITION_DELETES)
+            boolean isDeleteOperation = dataFiles.stream().anyMatch(dataFile ->
+                    dataFile.isSetFile_content() &&
+                            (dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES));
+            if (isDeleteOperation) {
+                commitDeleteOperation(transaction, nativeTbl, dataFiles, branch, dbName, tableName, extra);
+            } else {
+                commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite, isRewrite, extra,
+                        dbName, tableName);
+            }
+        };
+
+        // Use commit queue if available and enabled, otherwise execute directly (original logic)
+        if (commitQueueManager != null && commitQueueManager.isEnabled()) {
+            // Use commit queue to serialize commits to the same table and avoid optimistic locking conflicts
+            commitQueueManager.submitCommitAndRethrow(catalogName, queueDbName, queueTableName, commitTask);
         } else {
-            commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite, isRewrite, extra, dbName, tableName);
+            // Direct execution without queueing (original logic)
+            // The commit task internally uses commitWithCleanup which already handles exceptions
+            // and converts them to RuntimeException. We need to catch Exception due to the
+            // CommitTask.execute() signature, but RuntimeException and Error will propagate as-is.
+            try {
+                commitTask.execute();
+            } catch (RuntimeException | Error e) {
+                throw e;
+            } catch (Exception e) {
+                // Should not reach here as commitWithCleanup already handles all exceptions
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -1334,11 +1448,23 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             commitAction.run();
         } catch (Exception e) {
-            if (!(e instanceof CommitStateUnknownException)) {
+            // Check if this is a "commit state unknown" exception
+            // - Iceberg's CommitStateUnknownException: from the actual Iceberg commit operation
+            // - or from commit queue timeout/interruption where the actual commit may still be in progress
+            boolean isCommitStateUnknown = e instanceof CommitStateUnknownException;
+
+            if (!isCommitStateUnknown) {
+                // Only delete files if we're certain the commit failed
                 List<String> toDeleteFiles = dataFiles.stream()
                         .map(TIcebergDataFile::getPath)
                         .collect(Collectors.toList());
                 icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
+            } else {
+                // Commit state is unknown - the commit may have succeeded, failed, or still be in progress
+                // Do NOT delete the data files as they may have been committed
+                LOG.warn("Commit state unknown for {}.{}.{}, data files may have been committed. " +
+                        "Do NOT retry without verification to avoid duplicate data ingestion.",
+                        catalogName, dbName, tableName);
             }
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
@@ -1749,4 +1875,3 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 }
-

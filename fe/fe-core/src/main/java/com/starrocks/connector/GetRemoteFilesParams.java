@@ -34,6 +34,7 @@ public class GetRemoteFilesParams {
     private boolean checkPartitionExistence = true;
     private boolean enableColumnStats = false;
     private Optional<Boolean> isRecursive = Optional.empty();
+    private boolean usedForDelete = false;
 
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
@@ -47,6 +48,7 @@ public class GetRemoteFilesParams {
         this.checkPartitionExistence = builder.checkPartitionExistence;
         this.enableColumnStats = builder.enableColumnStats;
         this.isRecursive = builder.isRecursive;
+        this.usedForDelete = builder.usedForDelete;
     }
 
     public int getPartitionSize() {
@@ -70,7 +72,8 @@ public class GetRemoteFilesParams {
                 .setLimit(limit)
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
-                .setEnableColumnStats(enableColumnStats);
+                .setEnableColumnStats(enableColumnStats)
+                .setUsedForDelete(usedForDelete);
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
@@ -153,6 +156,10 @@ public class GetRemoteFilesParams {
         return isRecursive;
     }
 
+    public boolean usedForDelete() {
+        return usedForDelete;
+    }
+
     public static class Builder {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
@@ -165,6 +172,7 @@ public class GetRemoteFilesParams {
         private boolean checkPartitionExistence = true;
         private boolean enableColumnStats = false;
         private Optional<Boolean> isRecursive = Optional.empty();
+        private boolean usedForDelete = false;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -218,6 +226,11 @@ public class GetRemoteFilesParams {
 
         public Builder setIsRecursive(boolean isRecursive) {
             this.isRecursive = Optional.of(isRecursive);
+            return this;
+        }
+
+        public Builder setUsedForDelete(boolean usedForDelete) {
+            this.usedForDelete = usedForDelete;
             return this;
         }
 

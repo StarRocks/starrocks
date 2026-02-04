@@ -34,7 +34,6 @@
 
 #include "runtime/runtime_state.h"
 
-#include <boost/algorithm/string/join.hpp>
 #include <cstring>
 #include <memory>
 #include <sstream>
@@ -51,7 +50,9 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
+#include "common/pretty_printer.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -59,8 +60,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_worker.h"
-#include "util/pretty_printer.h"
-#include "util/timezone_utils.h"
 #include "util/uid_util.h"
 
 #ifdef STARROCKS_JIT_ENABLE

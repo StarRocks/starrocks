@@ -37,15 +37,15 @@
 #include <limits>
 #include <ostream>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "base/utility/scoped_cleanup.h"
 #include "common/logging.h"
+#include "common/system/cpu_info.h"
 #include "gutil/macros.h"
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
-#include "testutil/sync_point.h"
-#include "util/cpu_info.h"
-#include "util/defer_op.h"
-#include "util/scoped_cleanup.h"
 #include "util/stack_util.h"
 #include "util/thread.h"
 

@@ -35,9 +35,6 @@ select regexp_replace('xaxaxax', 'xax', '-');
 
 select str, regex, replaced, regexp_replace(str, regex, replaced) from ts order by str, regex, replaced;
 
-
--- name: test_regexp
-
 CREATE TABLE `tsr` (
   `str` varchar(65533) NULL COMMENT "",
   `regex` varchar(65533) NULL COMMENT "",
@@ -62,8 +59,103 @@ SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 3);
 SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 3) from tsr;
 SELECT regexp_extract_all(str, regex, 3) from tsr;
 
+SELECT regexp_position('a.b:c;d', '[.]');
+SELECT regexp_position('a.b:c;d', '[\\.:;]', 2);
+SELECT regexp_position('a.b:c;d', ':');
+SELECT regexp_position('a,b,c', ',');
+SELECT regexp_position('a1b2c3d', '[0-9]');
+SELECT regexp_position('a,b,c', ',', 3);
+SELECT regexp_position('a1b2c3d', '[0-9]', 5);
+SELECT regexp_position('a1b2c3d4e', '[0-9]', 4, 2);
+SELECT regexp_position('a1b2c3d',  '[0-9]', 4, 3);
+SELECT regexp_position('a1b2c3d', '', 1);
+SELECT regexp_position('a1b2c3d', '', 2);
+SELECT regexp_position('a1b2c3d', '', 2, 2);
+SELECT regexp_position('a1b2c3d', '', 2, 6);
+SELECT regexp_position('a1b2c3d', '', 2, 7);
+SELECT regexp_position('a1b2c3d', '', 2, 8);
+SELECT regexp_position('', ',');
+SELECT regexp_position('', ',', 4);
+SELECT regexp_position('', ',', 4, 2);
+SELECT regexp_position('a,b,c',  ',', 2);
+SELECT regexp_position('a1b2c3d', '[0-9]', 4);
+SELECT regexp_position('a,b,c', ',', 1000);
+SELECT regexp_position('a,b,c', ',', 8);
+SELECT regexp_position('有朋$%X自9远方来', '[0-9]', 7);
+SELECT regexp_position('有朋$%X自9远方9来', '[0-9]', 10, 1);
+SELECT regexp_position('有朋$%X自9远方9来', '[0-9]', 10, 2);
+SELECT regexp_position('有朋$%X自9远方9来', '来', 999);
+SELECT regexp_position('行成于思str而毁123于随', '于', 3, 2);
+SELECT regexp_position('行成于思str而毁123于随', '',  3, 1);
+SELECT regexp_position('行成于思str而毁123于随', '',  3, 2);
 
--- name: test_regexp_count
+-- Test VALUES clause inputs to cover expression path
+SELECT regexp_position(column_0, 'T') FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+SELECT regexp_position(column_0, '61') FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+SELECT regexp_position(column_0, '0', 1, 3) FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+-- range: start at end
+SELECT regexp_position(column_0, 'Z', 20) FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+-- range: occurrence beyond match count
+SELECT regexp_position(column_0, '01', 12, 2) FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+-- exception: invalid regex expression path
+SELECT regexp_position(column_0, '(unclosed') FROM (VALUES ('oops')) AS tmp;
+-- NULL input through VALUES
+SELECT regexp_position(column_0, 'x') FROM (VALUES (NULL)) AS tmp;
+
+-- Test general path with non-constant patterns 
+CREATE TABLE `tsp_general` (
+  `str` varchar(65533) NULL COMMENT "",
+  `pattern` varchar(65533) NULL COMMENT "",
+  `start_pos` int NULL COMMENT "",
+  `occurrence` int NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+insert into tsp_general values 
+('abcdef123ghi', '[0-9]+', 1, 1),
+('abc def ghi', '\\s+', 1, 1),
+('test@email.com', '@[a-zA-Z]+', 1, 1),
+('hello world hello universe', 'hello', 1, 2),
+('complex(pattern)test', '\\([^)]*\\)', 1, 1),
+('abc123def456ghi', '[0-9]{2,}', 1, 2),
+('', '.', 1, 1),
+(NULL, '[0-9]', 1, 1),
+('test string', NULL, 1, 1),
+(NULL, NULL, 1, 1);
+
+-- Test general path queries
+SELECT str, pattern, regexp_position(str, pattern) from tsp_general order by str, pattern;
+SELECT str, pattern, start_pos, regexp_position(str, pattern, start_pos) from tsp_general where start_pos is not null order by str, pattern;
+SELECT str, pattern, start_pos, occurrence, regexp_position(str, pattern, start_pos, occurrence) from tsp_general where start_pos is not null and occurrence is not null order by str, pattern;
+
+-- Test NULL and invalid inputs
+SELECT regexp_position(NULL, '[0-9]');
+SELECT regexp_position('test', NULL);
+SELECT regexp_position(NULL, NULL);
+SELECT regexp_position(NULL, '[0-9]', 1);
+SELECT regexp_position('test', NULL, 1);
+SELECT regexp_position('test', '[0-9]', NULL);
+SELECT regexp_position(NULL, '[0-9]', 1, 1);
+SELECT regexp_position('test', NULL, 1, 1);
+SELECT regexp_position('test', '[0-9]', NULL, 1);
+SELECT regexp_position('test', '[0-9]', 1, NULL);
+
+-- Test invalid regex patterns
+SELECT regexp_position('test string', '[0-9');
+SELECT regexp_position('test string', '(unclosed');
+SELECT regexp_position('test string', '?invalid');
+SELECT regexp_position('test string', '*invalid');
+SELECT regexp_position('test string', '+invalid');
+SELECT regexp_position('test string', '\\');
+
+-- Test edge cases with invalid parameters
+SELECT regexp_position('test', '[0-9]', 0);
+SELECT regexp_position('test', '[0-9]', -1);
+SELECT regexp_position('test', '[0-9]', 1, 0);
+SELECT regexp_position('test', '[0-9]', 1, -1);
+
 
 CREATE TABLE `tsc` (
   `str` varchar(65533) NULL COMMENT "",
@@ -88,8 +180,6 @@ select regexp_count('1a 2b 14m', '\\d+');
 
 select str, regex, regexp_count(str, regex) from tsc order by str, regex;
 
--- name: test_regexp_count_invalid
-
 CREATE TABLE `tsc_invalid` (
   `str` varchar(65533) NULL COMMENT "",
   `regex` varchar(65533) NULL COMMENT ""
@@ -113,8 +203,6 @@ select regexp_count('test string', 'a{,}');
 select regexp_count(NULL, '[0-9');
 select regexp_count('', '[0-9');
 select regexp_count('test', NULL);
-
--- name: test_regexp_replace_hyperscan_vec_multiple_rows
 
 -- Test for issue #65936: regexp_replace with enable_hyperscan_vec=true 
 -- produces incorrect output when processing multiple rows

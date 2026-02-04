@@ -14,8 +14,8 @@
 
 #include "llm_cache.h"
 
+#include "base/crypto/md5.h"
 #include "util/lru_cache.h"
-#include "util/md5.h"
 
 namespace starrocks {
 

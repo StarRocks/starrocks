@@ -19,6 +19,7 @@
 
 #include <cstdint>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -26,7 +27,6 @@
 #include "column/type_traits.h"
 #include "common/logging.h"
 #include "function_helper.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

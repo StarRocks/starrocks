@@ -463,6 +463,8 @@ public class ExternalOlapTable extends OlapTable {
             DistributionDesc distributionDesc = new HashDistributionDesc(hashDist.getBucket_num(),
                     hashDist.getDistribution_columns());
             defaultDistributionInfo = DistributionInfoBuilder.build(distributionDesc, getBaseSchema());
+        } else if (type == DistributionInfoType.RANGE) {
+            defaultDistributionInfo = new RangeDistributionInfo();
         }
 
         for (TPartitionMeta partitionMeta : meta.getPartitions()) {
@@ -485,6 +487,11 @@ public class ExternalOlapTable extends OlapTable {
                 index.setRowCount(indexMeta.getRow_count());
                 for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
                     LocalTablet tablet = new LocalTablet(tTabletMeta.getTablet_id());
+                    if (type == DistributionInfoType.RANGE) {
+                        // In shared-nothing mode, ranges do not support splitting.
+                        // There will only be one default range.
+                        tablet.setRange(new TabletRange());
+                    }
                     tablet.setCheckedVersion(tTabletMeta.getChecked_version());
                     tablet.setIsConsistent(tTabletMeta.isConsistent());
                     for (TReplicaMeta replicaMeta : tTabletMeta.getReplicas()) {

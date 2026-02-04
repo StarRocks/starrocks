@@ -375,6 +375,7 @@ public class ConnectProcessor {
                 .setCatalog(ctx.getCurrentCatalog())
                 .setWarehouse(ctx.getCurrentWarehouseName())
                 .setCustomQueryId(ctx.getCustomQueryId())
+                .setCustomSessionName(ctx.getCustomSessionName())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
@@ -865,7 +866,11 @@ public class ConnectProcessor {
         // only change lastQueryId when current command is COM_QUERY
         MysqlCommand cmd = ctx.getCommand();
         if (cmd == MysqlCommand.COM_QUERY || cmd == MysqlCommand.COM_STMT_PREPARE || cmd == MysqlCommand.COM_STMT_EXECUTE) {
-            ctx.setLastQueryId(ctx.queryId);
+            boolean skipSetLastQueryId = executor != null && 
+                    executor.getParsedStmt() instanceof com.starrocks.sql.ast.AnalyzeProfileStmt;
+            if (!skipSetLastQueryId) {
+                ctx.setLastQueryId(ctx.getQueryId());
+            }
             ctx.setQueryId(null);
         }
     }

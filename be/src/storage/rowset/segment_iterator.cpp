@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
@@ -30,7 +31,6 @@
 #include "gutil/stl_util.h"
 #include "io/shared_buffered_input_stream.h"
 #include "segment_options.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/column_expr_predicate.h"
@@ -66,6 +66,7 @@
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/types.h"
 #include "storage/update_manager.h"
+#include "storage/virtual_column_utils.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
 #include "util/scoped_cleanup.h"
@@ -426,6 +427,9 @@ private:
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
     Status _init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc);
+
+    // init column iterator for virtual column like '_tablet_id_', '_rowid_'
+    Status _init_virtual_column_iterator(const ColumnId cid, const std::string_view col_name);
 
     ColumnAccessPath* _lookup_access_path(ColumnId cid, const TabletColumn& col);
 
@@ -815,9 +819,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
     }
     if (_opts.dcg_loader != nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->get_delta_column_group_ns);
-        if (_opts.is_primary_keys ||
-            (_opts.read_by_generated_column_adding && _opts.tablet_schema != nullptr &&
-             _opts.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) /* for adding generated column */) {
+        // Load delta column groups based on table type
+        // For PK tables: use tablet segment id and version
+        // For other table types: use tablet id, rowset id, and segment id
+        if (_opts.is_primary_keys) {
             TabletSegmentId tsid;
             tsid.tablet_id = _opts.tablet_id;
             tsid.segment_id = _opts.rowset_id + segment_id();
@@ -1169,6 +1174,28 @@ ColumnAccessPath* SegmentIterator::_lookup_access_path(ColumnId cid, const Table
     return access_path;
 }
 
+Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const std::string_view col_name) {
+    ColumnIteratorOptions iter_opts;
+    iter_opts.stats = _opts.stats;
+    iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
+    iter_opts.check_dict_encoding = false;
+    iter_opts.reader_type = _opts.reader_type;
+    iter_opts.lake_io_opts = _opts.lake_io_opts;
+    iter_opts.has_preaggregation = _opts.has_preaggregation;
+
+    VirtualColumnFactory::Options factory_option;
+    factory_option.tablet_id = _opts.tablet_id;
+    factory_option.segment_id = segment_id();
+    factory_option.num_rows = _segment->num_rows();
+
+    ASSIGN_OR_RETURN(auto iterator, VirtualColumnFactory::create_virtual_column_iterator(factory_option, col_name));
+    _column_iterators[cid].reset(std::move(iterator));
+    RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
+
+    return Status::OK();
+}
+
 Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
@@ -1259,7 +1286,11 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             } else {
                 check_dict_enc = has_predicate;
             }
-            RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
+            if (f->is_virtual()) {
+                RETURN_IF_ERROR(_init_virtual_column_iterator(cid, f->name()));
+            } else {
+                RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
+            }
 
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid].get());
@@ -2032,7 +2063,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 // after calculation, offset will be 0, and size will be 2MB+123
                 size_t offset = (e.first / buf_size) * buf_size;
                 size_t size = e.second + (e.first % buf_size);
-                while (size > 0) {
+                while (size > 0 && _column_files[cid] != nullptr) {
                     size_t cur_size = std::min(buf_size, size);
                     RETURN_IF_ERROR(_column_files[cid]->touch_cache(offset, cur_size));
                     offset += cur_size;
@@ -3144,7 +3175,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
     ColumnId cid = _schema.field(0)->id();
     auto& column_iterator = _column_iterators[cid];
     ColumnReader* column_reader = column_iterator->get_column_reader();
-    RETURN_IF(column_reader == nullptr, Status::InvalidArgument("Not support page smaple: no column_reader"));
+    RETURN_IF(column_reader == nullptr, Status::InvalidArgument("Not support page sample: no column_reader"));
     int32_t num_data_pages = column_reader->num_data_pages();
     PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
 
@@ -3213,7 +3244,10 @@ Status SegmentIterator::_apply_bitmap_index() {
         SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
 
         std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
-        for (auto& field : _schema.fields()) {
+        for (const auto& field : _schema.fields()) {
+            if (field->is_virtual()) {
+                continue;
+            }
             cid_2_ucid[field->id()] = field->uid();
         }
 
@@ -3273,10 +3307,17 @@ Status SegmentIterator::_init_inverted_index_iterators() {
     _inverted_index_ctx->inverted_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
     std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
 
-    for (auto& field : _schema.fields()) {
+    for (const auto& field : _schema.fields()) {
+        if (field->is_virtual()) {
+            continue;
+        }
         cid_2_ucid[field->id()] = field->uid();
     }
     for (const auto& pair : _opts.pred_tree.get_all_column_predicate_map()) {
+        if (cid_2_ucid.find(pair.first) == cid_2_ucid.end()) {
+            continue;
+        }
+
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
@@ -3662,8 +3703,10 @@ void SegmentIterator::close() {
 
     for (auto& [cid, rfile] : _column_files) {
         // update statistics before reset column file
-        _update_stats(rfile.get());
-        rfile.reset();
+        if (rfile != nullptr) {
+            _update_stats(rfile.get());
+            rfile.reset();
+        }
     }
 
     STLClearObject(&_selection);

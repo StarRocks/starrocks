@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/fetch_processor.h"
 #include "exec/pipeline/lookup_request.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -25,7 +26,6 @@
 #include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
 #include "util/disposable_closure.h"
 
 namespace starrocks::pipeline {

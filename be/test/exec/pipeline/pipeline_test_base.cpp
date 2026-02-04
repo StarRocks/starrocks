@@ -16,6 +16,7 @@
 
 #include <random>
 
+#include "base/testutil/assert.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
@@ -24,7 +25,6 @@
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 #include "util/thrift_util.h"

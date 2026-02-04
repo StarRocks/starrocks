@@ -14,9 +14,12 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -34,14 +37,18 @@ import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.proto.PPlanFragmentCancelReason;
@@ -51,16 +58,20 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TLoadInfo;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -68,9 +79,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 
 /**
  * Executes a single merge-commit load.
@@ -88,9 +102,11 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p>Execution is modeled as a simple state machine to ensure that state transitions
  * and related fields are updated atomically. The execution can be cancelled.
  */
-public class MergeCommitTask extends AbstractTxnStateChangeCallback implements Runnable {
+public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable {
 
     private static final Logger LOG = LoggerFactory.getLogger(MergeCommitTask.class);
+
+    private static final String LOAD_TYPE_NAME = "MERGE_COMMIT";
 
     /**
      * Internal execution states for this task.
@@ -190,6 +206,8 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     private final StreamLoadInfo streamLoadInfo;
     /** Key-value load parameters (e.g. max filter ratio). */
     private final StreamLoadKvParams loadKvParams;
+    /** The user to request the load. */
+    private final String user;
     /** Warehouse name for execution. */
     private final String warehouseName;
     /** Backend IDs selected for execution. */
@@ -233,6 +251,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
      * @param streamLoadInfo stream load request parameters
      * @param mergeCommitIntervalMs merge-commit interval in milliseconds
      * @param loadKvParams key-value load parameters (e.g. max filter ratio)
+     * @param user the user to request the load
      * @param warehouseName warehouse name used for execution
      * @param backendIds backend IDs chosen for execution
      * @param coordinatorFactory factory to create {@link Coordinator} instances
@@ -247,6 +266,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             StreamLoadInfo streamLoadInfo,
             int mergeCommitIntervalMs,
             StreamLoadKvParams loadKvParams,
+            String user,
             String warehouseName,
             Set<Long> backendIds,
             Coordinator.Factory coordinatorFactory,
@@ -259,6 +279,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         this.streamLoadInfo = streamLoadInfo;
         this.loadKvParams = loadKvParams;
         this.mergeCommitIntervalMs = mergeCommitIntervalMs;
+        this.user = user;
         this.warehouseName = warehouseName;
         this.backendIds = backendIds;
         this.coordinatorFactory = coordinatorFactory;
@@ -276,7 +297,9 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
      */
     @Override
     public void run() {
-        loadTimeTrace.pendingCostMs.set(System.currentTimeMillis() - loadTimeTrace.createTimeMs);
+        long startTimeMs = System.currentTimeMillis();
+        loadTimeTrace.startTimeMs.set(startTimeMs);
+        loadTimeTrace.pendingCostMs.set(startTimeMs - loadTimeTrace.createTimeMs);
         TimeoutWatcher timeoutWatcher = new TimeoutWatcher(streamLoadInfo.getTimeout() * 1000L);
         long localTxnId = -1;
         ConnectContext connectContext = null;
@@ -328,9 +351,10 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
                 waiter = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().retryCommitOnRateLimitExceeded(
                         database, localTxnId, loadResult.tabletCommitInfos, loadResult.tabletFailInfos,
                         null, timeoutWatcher.getLeftTimeoutMillis());
+                loadTimeTrace.commitTimeMs.set(System.currentTimeMillis());
             }
 
-            // 6) wait for publish/visibility.
+            // 5) Wait for publish/visibility.
             transitionToState(TaskState.COMMITTED, "", null, () -> {});
             String publishFailMsg = "";
             try (ScopedTimer ignored = new ScopedTimer(loadTimeTrace.publishCostMs)) {
@@ -346,7 +370,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
                         tableRef.getDbName(), tableRef.getTableName(), label, localTxnId, error);
             }
 
-            // 7) Mark finished.
+            // 6) Mark finished.
             transitionToState(TaskState.FINISHED, publishFailMsg, null, () -> {});
         } catch (Exception e) {
             final Pair<TaskState, String> currentState = getTaskState();
@@ -474,7 +498,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
                         String.format("Timed out acquiring read lock. db=%s, table=%s, timeoutMs=%s",
                                 tableRef.getDbName(), tableRef.getTableName(), timeoutMs));
             }
-            try {
+            try (var scope = connectContext.bindScope()) {
                 LoadPlanner loadPlanner = new LoadPlanner(taskId, loadId, txnId, database.getId(),
                         tableRef.getDbName(), table, streamLoadInfo.isStrictMode(), streamLoadInfo.getTimezone(),
                         streamLoadInfo.isPartialUpdate(), connectContext, null,
@@ -614,7 +638,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
             summaryProfile.addInfoString(ProfileManager.QUERY_STATE, taskState.name());
             summaryProfile.addInfoString("State Message", taskStateMessage);
-            summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, "MERGE_COMMIT");
+            summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, LOAD_TYPE_NAME);
             summaryProfile.addInfoString("StarRocks Version",
                     String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
             summaryProfile.addInfoString("Default Db", tableRef.getDbName());
@@ -715,7 +739,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         }
     }
 
-    private Pair<TaskState, String> getTaskState() {
+    Pair<TaskState, String> getTaskState() {
         this.lock.lock();
         try {
             return new Pair<>(taskState, taskStateMessage);
@@ -759,19 +783,6 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         return backendIds.contains(backendId);
     }
 
-    public String getLabel() {
-        return label;
-    }
-
-    /**
-     * Returns the transaction ID once it has been assigned.
-     *
-     * @return the transaction ID; -1 if the transaction has not started yet
-     */
-    public long getTxnId() {
-        return this.txnId;
-    }
-
     private static String getErrorTrackingSql(long taskId) {
         return "SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID=" + taskId;
     }
@@ -790,6 +801,314 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         cancel(txnStatusChangeReason);
     }
 
+    // ================ inherited methods from AbstractStreamLoadTask ================
+
+    @Override
+    public String getDBName() {
+        return  tableRef.getDbName();
+    }
+
+    @Override
+    public long getDBId() {
+        return dbId;
+    }
+
+    @Override
+    public String getTableName() {
+        return tableRef.getTableName();
+    }
+
+    @Override
+    public String getLabel() {
+        return label;
+    }
+
+    @Override
+    public long getTxnId() {
+        return txnId;
+    }
+
+    @Override
+    public String getStateName() {
+        return convertTaskStateToLoadState();
+    }
+
+    @Override
+    public boolean isFinalState() {
+        return taskState.isFinalState();
+    }
+
+    @Override
+    public long createTimeMs() {
+        return loadTimeTrace.createTimeMs;
+    }
+
+    @Override
+    public long endTimeMs() {
+        return loadTimeTrace.endTimeMs.get();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return endTimeMs();
+    }
+
+    @Override
+    public String getStringByType() {
+        return LOAD_TYPE_NAME;
+    }
+
+    @Override
+    public boolean checkNeedRemove(long currentMs, boolean isForce) {
+        if (!isFinalState()) {
+            return false;
+        }
+        long endTime = endTimeMs();
+        if (endTime < 0) {
+            return false;
+        }
+        return isForce || ((currentMs - endTime) > Config.stream_load_task_keep_max_second * 1000L);
+    }
+
+    @Override
+    public List<TLoadInfo> toThrift() {
+        return getLoadInfoWithLock("toThrift", () -> {
+            TLoadInfo info = new TLoadInfo();
+            info.setJob_id(taskId);
+            info.setType(getStringByType());
+            info.setDb(tableRef.getDbName());
+            info.setTable(tableRef.getTableName());
+            info.setUser(user);
+            info.setLabel(label);
+            info.setLoad_id(DebugUtil.printId(loadId));
+            info.setTxn_id(txnId);
+            if (ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
+                info.setProfile_id(DebugUtil.printId(loadId));
+            }
+            info.setProperties(new Gson().toJson(loadKvParams.toMap()));
+            info.setPriority(LoadPriority.NORMAL);
+            info.setState(convertTaskStateToLoadState());
+            info.setError_msg(taskStateMessage);
+
+            LoadStats stats = this.loadStats;
+            if (stats != null) {
+                String trackingUrl = stats.errorTrackingUrl.orElse(null);
+                if (trackingUrl != null && !trackingUrl.isEmpty()) {
+                    info.setUrl(trackingUrl);
+                    info.setTracking_sql(getErrorTrackingSql(taskId));
+                }
+                List<String> rejectedPaths = stats.rejectedRecordPaths.orElse(null);
+                if (rejectedPaths != null && !rejectedPaths.isEmpty()) {
+                    info.setRejected_record_path(Joiner.on(", ").join(rejectedPaths));
+                }
+                info.setNum_scan_rows(stats.normalRows + stats.abnormalRows + stats.unselectedRows);
+                // not have stat for scan bytes, and use normal bytes an approximation
+                info.setNum_scan_bytes(stats.normalBytes);
+                info.setNum_sink_rows(stats.normalRows);
+                info.setNum_filtered_rows(stats.abnormalRows);
+                info.setNum_unselected_rows(stats.unselectedRows);
+            }
+
+            info.setCreate_time(TimeUtils.longToTimeString(loadTimeTrace.createTimeMs));
+            info.setLoad_start_time(TimeUtils.longToTimeString(loadTimeTrace.startTimeMs.get()));
+            info.setLoad_commit_time(TimeUtils.longToTimeString(loadTimeTrace.commitTimeMs.get()));
+            info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs()));
+
+            info.setWarehouse(warehouseName);
+            info.setRuntime_details(getRuntimeDetails());
+            long execStartTime = loadTimeTrace.execWaitStartTimeMs.get();
+            long mergeWindowElapsedMs;
+            if (execStartTime < 0) {
+                mergeWindowElapsedMs = 0;
+            } else if (loadTimeTrace.endTimeMs.get() > 0) {
+                mergeWindowElapsedMs = loadTimeTrace.endTimeMs.get() - execStartTime;
+            } else {
+                mergeWindowElapsedMs = System.currentTimeMillis() - execStartTime;
+            }
+            double progress = (double) Math.min(mergeCommitIntervalMs, mergeWindowElapsedMs) / mergeCommitIntervalMs;
+            info.setProgress(String.format("Merge Window %.2f%%", progress * 100));
+            return info;
+        });
+    }
+
+    @Override
+    public List<List<String>> getShowInfo() {
+        return getLoadInfoWithLock("getShowInfo", () -> {
+            List<String> row = Lists.newArrayList();
+            row.add(label);
+            row.add(String.valueOf(taskId));
+            row.add(DebugUtil.printId(loadId));
+            row.add(String.valueOf(txnId));
+            row.add(tableRef.getDbName());
+            row.add(tableRef.getTableName());
+            row.add(convertTaskStateToLoadState());
+            row.add(taskStateMessage);
+            
+            LoadStats stats = this.loadStats;
+            String trackingUrl = null;
+            if (stats != null) {
+                trackingUrl = stats.errorTrackingUrl.orElse(null);
+            }
+            row.add(trackingUrl != null && !trackingUrl.isEmpty() ? trackingUrl : "");
+            
+            row.add(String.valueOf(backendIds.size()));
+            row.add(String.valueOf(taskState == TaskState.COMMITTED ? backendIds.size() : 0));
+
+            if (stats != null) {
+                row.add(String.valueOf(stats.normalRows));
+                row.add(String.valueOf(stats.abnormalRows));
+                row.add(String.valueOf(stats.unselectedRows));
+                row.add(String.valueOf(stats.normalBytes));
+            } else {
+                row.add("0");
+                row.add("0");
+                row.add("0");
+                row.add("0");
+            }
+            
+            row.add(String.valueOf(streamLoadInfo.getTimeout()));
+            row.add(TimeUtils.longToTimeString(loadTimeTrace.createTimeMs));
+            row.add(TimeUtils.longToTimeString(loadTimeTrace.startTimeMs.get()));
+            row.add(TimeUtils.longToTimeString(loadTimeTrace.startTimeMs.get()));
+            long commitTime = loadTimeTrace.commitTimeMs.get();
+            long commitCost = loadTimeTrace.commitCostMs.get();
+            long startPreparingTime = commitTime > 0 && commitCost > 0 ? Math.max(0, commitTime - commitCost) : -1;
+            row.add(TimeUtils.longToTimeString(startPreparingTime));
+            row.add(TimeUtils.longToTimeString(commitTime));
+            row.add(TimeUtils.longToTimeString(endTimeMs()));
+            
+            // MergeCommitTask doesn't have channel states
+            row.add("");
+            row.add(getStringByType());
+
+            if (trackingUrl != null && !trackingUrl.isEmpty()) {
+                row.add(getErrorTrackingSql(taskId));
+            } else {
+                row.add("");
+            }
+            return row;
+        });
+    }
+
+    @Override
+    public List<List<String>> getShowBriefInfo() {
+        return getLoadInfoWithLock("getShowBriefInfo", () -> {
+            List<String> row = Lists.newArrayList();
+            row.add(label);
+            row.add(String.valueOf(taskId));
+            row.add(tableRef.getDbName());
+            row.add(tableRef.getTableName());
+            row.add(convertTaskStateToLoadState());
+            return row;
+        });
+    }
+
+    @Override
+    public List<TStreamLoadInfo> toStreamLoadThrift() {
+        return getLoadInfoWithLock("toStreamLoadThrift", () -> {
+            TStreamLoadInfo info = new TStreamLoadInfo();
+            info.setLabel(label);
+            info.setId(taskId);
+            info.setLoad_id(DebugUtil.printId(loadId));
+            info.setTxn_id(txnId);
+            info.setDb_name(tableRef.getDbName());
+            info.setTable_name(tableRef.getTableName());
+            info.setState(convertTaskStateToLoadState());
+            info.setError_msg(taskStateMessage);
+
+            LoadStats stats = this.loadStats;
+            if (stats != null) {
+                String trackingUrl = stats.errorTrackingUrl.orElse(null);
+                if (trackingUrl != null && !trackingUrl.isEmpty()) {
+                    info.setTracking_url(trackingUrl);
+                    info.setTracking_sql(getErrorTrackingSql(taskId));
+                }
+                info.setNum_rows_normal(stats.normalRows);
+                info.setNum_rows_ab_normal(stats.abnormalRows);
+                info.setNum_rows_unselected(stats.unselectedRows);
+                info.setNum_load_bytes(stats.normalBytes);
+            }
+
+            info.setChannel_num(backendIds.size());
+            info.setPrepared_channel_num(taskState == TaskState.COMMITTED ? backendIds.size() : 0);
+
+            info.setTimeout_second(streamLoadInfo.getTimeout());
+            info.setCreate_time_ms(TimeUtils.longToTimeString(loadTimeTrace.createTimeMs));
+            info.setBefore_load_time_ms(TimeUtils.longToTimeString(loadTimeTrace.startTimeMs.get()));
+            info.setStart_loading_time_ms(TimeUtils.longToTimeString(loadTimeTrace.startTimeMs.get()));
+            long commitTime = loadTimeTrace.commitTimeMs.get();
+            long commitCost = loadTimeTrace.commitCostMs.get();
+            long startPreparingTime = commitTime > 0 && commitCost > 0 ? Math.max(0, commitTime - commitCost) : -1;
+            info.setStart_preparing_time_ms(TimeUtils.longToTimeString(startPreparingTime));
+            info.setFinish_preparing_time_ms(TimeUtils.longToTimeString(commitTime));
+            info.setEnd_time_ms(TimeUtils.longToTimeString(endTimeMs()));
+
+            info.setChannel_state("");
+            info.setType(getStringByType());
+            return info;
+        });
+    }
+
+    /**
+     * Safely retrieves load information while holding the task's lock.
+     *
+     * @param source the name of the calling method
+     * @param infoBuilder the callable that builds the information object
+     * @param <T> the type of information object to build (e.g., {@link TLoadInfo}, {@link List}{@code <String>})
+     * @return a list containing the built information object, or an empty list if an exception occurred
+     */
+    private <T> List<T> getLoadInfoWithLock(String source, Callable<T> infoBuilder) {
+        List<T> results = new ArrayList<>();
+        try (AutoCloseable ignored = CloseableLock.lock(lock)) {
+            T info = infoBuilder.call();
+            results.add(info);
+        } catch (Exception e) {
+            LOG.debug("Failed for {}, db={}, table={}, taskId={}, label={}, loadId={}, txnId={}",
+                    source, tableRef.getDbName(), tableRef.getTableName(), taskId, label, DebugUtil.printId(loadId), txnId, e);
+        }
+        return results;
+    }
+
+    private String convertTaskStateToLoadState() {
+        TaskState state = taskState;
+        return switch (state) {
+            case PENDING, COMMITTED, FINISHED -> state.name();
+            case CANCELLED, ABORTED -> "CANCELLED";
+            default -> "LOADING";
+        };
+    }
+
+    private String getRuntimeDetails() {
+        TreeMap<String, Object> details = Maps.newTreeMap();
+        details.put(LoadConstants.RUNTIME_DETAILS_LOAD_ID, DebugUtil.printId(loadId));
+        details.put(LoadConstants.RUNTIME_DETAILS_TXN_ID, txnId);
+        details.put(LoadConstants.RUNTIME_DETAILS_BACKENDS, backendIds);
+        details.put("task_state", taskState.name());
+        BiConsumer<String, AtomicLong> timeSetter = (name, time) -> {
+            long value = time.get();
+            if (value >= 0) {
+                details.put(name, value);
+            }
+        };
+        timeSetter.accept("pending_time_ms", loadTimeTrace.pendingCostMs);
+        timeSetter.accept("commit_time_ms", loadTimeTrace.commitCostMs);
+        timeSetter.accept("publish_time_ms", loadTimeTrace.publishCostMs);
+        Gson gson = new Gson();
+        return gson.toJson(details);
+    }
+
+    // =============== inherited methods from  LoadJobWithWarehouse ==============
+
+    @Override
+    public long getCurrentWarehouseId() {
+        return streamLoadInfo.getComputeResource().getWarehouseId();
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isFinalState();
+    }
+
     static class LoadResult {
         final List<TabletCommitInfo> tabletCommitInfos;
         final List<TabletFailInfo> tabletFailInfos;
@@ -801,6 +1120,85 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             this.tabletFailInfos = tabletFailInfos;
             this.loadStats = loadStats;
         }
+    }
+
+    // =============== inherited methods from AbstractStreamLoadTask, but not used by MergeCommitTask ==============
+
+    @Override
+    public void beginTxnFromFrontend(TransactionResult resp) {
+        throw new UnsupportedOperationException("MergeCommitTask uses run() method instead");
+    }
+
+    @Override
+    public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp) {
+        throw new UnsupportedOperationException("MergeCommitTask uses run() method instead");
+    }
+
+    @Override
+    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp) {
+        throw new UnsupportedOperationException("MergeCommitTask uses run() method instead");
+    }
+
+    @Override
+    public TNetworkAddress tryLoad(int channelId, String tableName, TransactionResult resp) throws StarRocksException {
+        throw new UnsupportedOperationException("MergeCommitTask uses run() method instead");
+    }
+
+    @Override
+    public TNetworkAddress executeTask(int channelId, String tableName, HttpHeaders headers, TransactionResult resp) {
+        throw new UnsupportedOperationException("MergeCommitTask uses run() method instead");
+    }
+
+    @Override
+    public void prepareChannel(int channelId, String tableName, HttpHeaders headers, TransactionResult resp) {
+        throw new UnsupportedOperationException("MergeCommitTask uses run() method instead");
+    }
+
+    @Override
+    public void waitCoordFinishAndPrepareTxn(long preparedTimeoutMs, TransactionResult resp) {
+        throw new UnsupportedOperationException("MergeCommitTask uses run() method instead");
+    }
+
+    @Override
+    public void commitTxn(HttpHeaders headers, TransactionResult resp) throws StarRocksException {
+        throw new UnsupportedOperationException("MergeCommitTask uses run() method instead");
+    }
+
+    @Override
+    public void manualCancelTask(TransactionResult resp) throws StarRocksException {
+        throw new UnsupportedOperationException("MergeCommitTask uses cancel() method instead");
+    }
+
+    @Override
+    public boolean checkNeedPrepareTxn() {
+        throw new UnsupportedOperationException("MergeCommitTask uses cancel() method instead");
+    }
+
+    @Override
+    public boolean isDurableLoadState() {
+        return false;
+    }
+
+    @Override
+    public void cancelAfterRestart() {
+        // do nothing
+    }
+
+    @Override
+    public void init() {
+        // do nothing
+    }
+
+    // ===============  inherited methods from GsonPreProcessable/GsonPostProcessable ==============
+
+    @Override
+    public void gsonPreProcess() {
+        // do nothing
+    }
+
+    @Override
+    public void gsonPostProcess() {
+        // do nothing
     }
 
     // ================ methods for testing ================
@@ -859,6 +1257,8 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     private static class TimeTrace {
         /** Task creation timestamp (milliseconds since epoch). */
         final long createTimeMs;
+        /** Timestamp when the task starts running (milliseconds since epoch). */
+        final AtomicLong startTimeMs = new AtomicLong(-1);
         /** Task end timestamp (milliseconds since epoch); {@code -1} if not finished yet. */
         final AtomicLong endTimeMs = new AtomicLong(-1);
         /** Time spent in {@link TaskState#PENDING} (milliseconds). */
@@ -868,6 +1268,8 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
          * {@code -1} if not started.
          */
         final AtomicLong execWaitStartTimeMs = new AtomicLong(-1);
+        /** Timestamp when the transaction is committed (milliseconds since epoch). */
+        final AtomicLong commitTimeMs = new AtomicLong(-1);
         /** Time spent committing the transaction (milliseconds). */
         final AtomicLong commitCostMs = new AtomicLong(-1);
         /** Time spent waiting for publish/visibility (milliseconds). */

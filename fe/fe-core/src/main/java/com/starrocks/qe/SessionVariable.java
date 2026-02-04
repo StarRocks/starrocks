@@ -323,6 +323,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SKIP_PAGE_CACHE = "skip_page_cache";
 
+    public static final String SKIP_BLACK_LIST = "skip_black_list";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -337,6 +339,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_PROFILE_REPORT_INTERVAL = "runtime_profile_report_interval";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
     public static final String ENABLE_ASYNC_PROFILE = "enable_async_profile";
+    // Profile output format version: 1 = legacy (separate MIN/MAX counters), 2 = compact (inline min/max)
+    public static final String PROFILE_FORMAT_VERSION = "profile_format_version";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
     public static final String RESOURCE_GROUP_ID_V2 = "resource_group_id";
@@ -413,6 +417,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
     public static final String LOW_CARDINALITY_OPTIMIZE_ON_LAKE = "low_cardinality_optimize_on_lake";
     public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
+    public static final String STRUCT_LOW_CARDINALITY_OPTIMIZE = "struct_low_cardinality_optimize";
     public static final String ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL =
                     "enable_low_cardinality_optimize_for_union_all";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
@@ -471,6 +476,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
     public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
     public static final String SKEW_JOIN_DATA_SKEW_THRESHOLD = "skew_join_data_skew_threshold";
+    public static final String SKEW_JOIN_MCV_SINGLE_THRESHOLD = "skew_join_mcv_single_threshold";
+    public static final String SKEW_JOIN_MCV_MIN_INPUT_ROWS = "skew_join_mcv_min_input_rows";
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
@@ -519,6 +526,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
+
+    public static final String ENABLE_RANGE_DISTRIBUTION = "enable_range_distribution";
 
     public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
 
@@ -731,6 +740,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String OPTIMIZE_DISTINCT_AGG_OVER_FRAMED_WINDOW =
             "optimize_distinct_agg_over_framed_window";
+
+    public static final String CUSTOM_SESSION_NAME = "custom_session_name";
+    public static final int CUSTOM_SESSION_NAME_MAX_LENGTH = 64;
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -1167,6 +1179,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SKIP_PAGE_CACHE)
     private boolean skipPageCache = false;
 
+    @VariableMgr.VarAttr(name = SKIP_BLACK_LIST)
+    private boolean skipBlackList = false;
+
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
 
@@ -1503,6 +1518,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_THRESHOLD)
     private String bigQueryProfileThreshold = "30s";
 
+    // Profile output format version: 1 = legacy (separate MIN/MAX counters), 2 = compact (inline min/max)
+    @VariableMgr.VarAttr(name = PROFILE_FORMAT_VERSION)
+    private int profileFormatVersion = 1;
+
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
     private int resourceGroupId = 0;
@@ -1741,6 +1760,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ARRAY_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableArrayLowCardinalityOptimize = true;
 
+    @VarAttr(name = STRUCT_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableStructLowCardinalityOptimize = true;
+
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
@@ -1857,6 +1879,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_RANGE_DISTRIBUTION, flag = VariableMgr.INVISIBLE)
+    private boolean enableRangeDistribution = false;
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
@@ -2284,6 +2309,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableArrayLowCardinalityOptimize() {
         return enableArrayLowCardinalityOptimize;
     }
+
+    public void setEnableStructLowCardinalityOptimize(boolean enableStructLowCardinalityOptimize) {
+        this.enableStructLowCardinalityOptimize = enableStructLowCardinalityOptimize;
+    }
+
+    public boolean isEnableStructLowCardinalityOptimize() {
+        return enableStructLowCardinalityOptimize;
+    }
+
 
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = true;
@@ -2994,6 +3028,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SKEW_JOIN_DATA_SKEW_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double skewJoinDataSkewThreshold = 0.2;
 
+    // A single MCV value must exceed this total-domain ratio to be considered as a skew value candidate.
+    @VarAttr(name = SKEW_JOIN_MCV_SINGLE_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double skewJoinMcvSingleThreshold = 0.1;
+
+    // Minimal input rows (estimated) to enable MCV-based skew join elimination rewrite.
+    @VarAttr(name = SKEW_JOIN_MCV_MIN_INPUT_ROWS, flag = VariableMgr.INVISIBLE)
+    private long skewJoinMcvMinInputRows = 10000000;
+
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
@@ -3258,6 +3300,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
     private String customQueryId = "";
 
+    @VarAttr(name = CUSTOM_SESSION_NAME, flag = VariableMgr.SESSION_ONLY)
+    private String customSessionName = "";
+
     @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
     private boolean enableRewriteUnnestBitmapToArray = true;
 
@@ -3477,6 +3522,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isSkipPageCache() {
         return skipPageCache;
+    }
+
+    public boolean isSkipBlackList() {
+        return skipBlackList;
     }
 
     public int getStatisticCollectParallelism() {
@@ -4416,6 +4465,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableAsyncProfile = enableAsyncProfile;
     }
 
+    public int getProfileFormatVersion() {
+        return profileFormatVersion;
+    }
+
+    public void setProfileFormatVersion(int profileFormatVersion) {
+        this.profileFormatVersion = profileFormatVersion;
+    }
+
     public boolean isEnableReplicationJoin() {
         return false;
     }
@@ -4533,20 +4590,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableLowCardinalityOptimize = enableLowCardinalityOptimize;
     }
 
-    public boolean isEnableOptimizerSkewJoinByBroadCastSkewValues() {
-        return enableOptimizerSkewJoinByBroadCastSkewValues;
-    }
-
-    public void setEnableOptimizerSkewJoinByBroadCastSkewValues(boolean enableOptimizerSkewJoinByBroadCastSkewValues) {
+    public void setEnableOptimizerSkewJoinOptimizeV2(boolean enableOptimizerSkewJoinByBroadCastSkewValues) {
         this.enableOptimizerSkewJoinByBroadCastSkewValues = enableOptimizerSkewJoinByBroadCastSkewValues;
         this.enableOptimizerSkewJoinByQueryRewrite = !enableOptimizerSkewJoinByBroadCastSkewValues;
     }
 
-    public boolean isEnableOptimizerSkewJoinByQueryRewrite() {
-        return enableOptimizerSkewJoinByQueryRewrite;
+    public boolean isEnableOptimizerSkewJoinOptimizeV1() {
+        return enableOptimizerSkewJoinByQueryRewrite && !enableOptimizerSkewJoinByBroadCastSkewValues;
     }
 
-    public void setEnableOptimizerSkewJoinByQueryRewrite(boolean enableOptimizerSkewJoinByQueryRewrite) {
+    public boolean isEnableOptimizerSkewJoinOptimizeV2() {
+        return enableOptimizerSkewJoinByBroadCastSkewValues;
+    }
+
+    public void setEnableOptimizerSkewJoinOptimizeV1(boolean enableOptimizerSkewJoinByQueryRewrite) {
         this.enableOptimizerSkewJoinByQueryRewrite = enableOptimizerSkewJoinByQueryRewrite;
         this.enableOptimizerSkewJoinByBroadCastSkewValues = !enableOptimizerSkewJoinByQueryRewrite;
     }
@@ -4565,6 +4622,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isAllowDefaultPartition() {
         return allowDefaultPartition;
+    }
+
+    public boolean isEnableRangeDistribution() {
+        return enableRangeDistribution;
+    }
+
+    public void setEnableRangeDistribution(boolean enableRangeDistribution) {
+        this.enableRangeDistribution = enableRangeDistribution;
     }
 
     public void setAllowDefaultPartition(boolean allowDefaultPartition) {
@@ -5457,6 +5522,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.skewJoinDataSkewThreshold = skewJoinDataSkewThreshold;
     }
 
+    public double getSkewJoinMcvSingleThreshold() {
+        return skewJoinMcvSingleThreshold;
+    }
+
+    public void setSkewJoinMcvSingleThreshold(double skewJoinMcvSingleThreshold) {
+        this.skewJoinMcvSingleThreshold = skewJoinMcvSingleThreshold;
+    }
+
+    public long getSkewJoinMcvMinInputRows() {
+        return skewJoinMcvMinInputRows;
+    }
+
+    public void setSkewJoinMcvMinInputRows(long skewJoinMcvMinInputRows) {
+        this.skewJoinMcvMinInputRows = skewJoinMcvMinInputRows;
+    }
+
     public boolean isEnableStrictOrderBy() {
         return enableStrictOrderBy;
     }
@@ -5527,6 +5608,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCustomQueryId(String customQueryId) {
         this.customQueryId = customQueryId;
+    }
+
+    public String getCustomSessionName() {
+        return customSessionName;
+    }
+
+    public void setCustomSessionName(String customSessionName) {
+        this.customSessionName = customSessionName;
     }
 
     public int getConnectorRemoteFileAsyncQueueSize() {

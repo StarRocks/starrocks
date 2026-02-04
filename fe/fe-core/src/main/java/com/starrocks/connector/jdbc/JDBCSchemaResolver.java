@@ -56,13 +56,48 @@ public abstract class JDBCSchemaResolver {
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_SCHEM");
                 // skip internal schemas
-                if (!schemaName.equalsIgnoreCase("information_schema")) {
+                if (!isInternalSchema(schemaName)) {
                     schemaNames.add(schemaName);
                 }
             }
             return schemaNames.build();
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
+    /**
+     * Check if a schema is an internal system schema that should be hidden from users.
+     * Subclasses can override this method to define their own internal schemas.
+     *
+     * @param schemaName the schema name to check
+     * @return true if the schema is an internal system schema, false otherwise
+     */
+    protected boolean isInternalSchema(String schemaName) {
+        return schemaName.equalsIgnoreCase("information_schema");
+    }
+
+    /**
+     * Check if a database/schema exists in the external JDBC system.
+     *
+     * @param connection JDBC connection
+     * @param dbName database name to check
+     * @return true if database exists, false otherwise
+     * @throws SQLException if a database access error occurs
+     */
+    public boolean databaseExists(Connection connection, String dbName) throws SQLException {
+        // Skip internal schemas to maintain consistency with listSchemas()
+        if (isInternalSchema(dbName)) {
+            return false;
+        }
+        try (ResultSet resultSet = connection.getMetaData().getSchemas()) {
+            while (resultSet.next()) {
+                String schemaName = resultSet.getString("TABLE_SCHEM");
+                if (schemaName.equals(dbName)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

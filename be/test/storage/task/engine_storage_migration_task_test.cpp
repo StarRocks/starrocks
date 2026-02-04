@@ -14,10 +14,17 @@
 
 #include "storage/task/engine_storage_migration_task.h"
 
+#include <butil/file_util.h>
+#include <butil/files/file_path.h>
 #include <gtest/gtest.h>
 
-#include "butil/file_util.h"
+#include "base/path/file_util.h"
+#include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
 #include "common/config.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -36,12 +43,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 

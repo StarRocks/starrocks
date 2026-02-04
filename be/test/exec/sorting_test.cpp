@@ -20,6 +20,8 @@
 #include <random>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
@@ -36,9 +38,7 @@
 #include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

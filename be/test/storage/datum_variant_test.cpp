@@ -18,8 +18,8 @@
 
 #include <string>
 
+#include "base/testutil/assert.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

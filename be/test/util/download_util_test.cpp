@@ -18,9 +18,9 @@
 
 #include <filesystem>
 
+#include "base/testutil/assert.h"
 #include "fmt/format.h"
 #include "fs/fs_util.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

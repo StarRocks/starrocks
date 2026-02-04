@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
@@ -32,7 +33,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

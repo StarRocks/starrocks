@@ -19,6 +19,7 @@
 #include <semaphore>
 #include <set>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -35,7 +36,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/blocking_queue.hpp"
 #include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
@@ -57,7 +57,7 @@ public:
     // serialization and deserialization.
     static size_t max_runtime_filter_serialized_size(RuntimeState* state, const RuntimeFilter* rf);
     static size_t max_runtime_filter_serialized_size(int rf_version, const RuntimeFilter* rf);
-    static size_t max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column);
+    static size_t max_runtime_filter_serialized_size_for_skew_broadcast_join(const ColumnPtr& column);
     static size_t serialize_runtime_filter(RuntimeState* state, const RuntimeFilter* rf, uint8_t* data);
     static size_t serialize_runtime_filter(int rf_version, const RuntimeFilter* rf, uint8_t* data);
     static StatusOr<size_t> serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,

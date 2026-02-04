@@ -44,6 +44,7 @@
 #include <vector>
 
 #include "agent/status.h"
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -54,7 +55,6 @@
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/tablet.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 

@@ -22,6 +22,7 @@
 #include <string>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "column_reader.h"
 #include "common/compiler_util.h"
@@ -31,7 +32,6 @@
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "simd/simd.h"
 
 namespace tparquet {
 class ColumnChunk;

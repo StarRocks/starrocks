@@ -20,7 +20,7 @@
 
 namespace starrocks::csv {
 
-Status NullableConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status NullableConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                        const Options& options) const {
     if (column.is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(&column);
@@ -36,7 +36,7 @@ Status NullableConverter::write_string(OutputStream* os, const Column& column, s
     }
 }
 
-Status NullableConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status NullableConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                               const Options& options) const {
     if (column.is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(&column);

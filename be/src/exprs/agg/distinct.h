@@ -18,6 +18,8 @@
 #include <cstring>
 #include <string>
 
+#include "base/phmap/phmap_dump.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -35,8 +37,6 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -245,7 +245,7 @@ struct AdaptiveSliceHashSet {
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
+struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
@@ -376,7 +376,8 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2Base<LT, SumLT, false, StringLTGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
+struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>>
+        : public DistinctAggregateState<LT, SumLT> {};
 
 template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
 struct DistinctAggregateStateV2 : public DistinctAggregateStateV2Base<LT, SumLT, false> {};

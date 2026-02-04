@@ -17,13 +17,13 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include "base/concurrency/await.h"
+#include "base/testutil/assert.h"
 #include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "util/await.h"
 
 namespace starrocks {
 

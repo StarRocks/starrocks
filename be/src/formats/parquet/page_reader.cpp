@@ -20,6 +20,7 @@
 #include <ostream>
 #include <vector>
 
+#include "base/container/raw_container.h"
 #include "cache/datacache.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
@@ -30,7 +31,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "util/raw_container.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {

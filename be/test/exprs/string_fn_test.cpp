@@ -18,6 +18,8 @@
 #include <memory>
 #include <random>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/function_helper.h"
@@ -25,8 +27,6 @@
 #include "exprs/string_functions.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
 #include "types/large_int_value.h"
 
 namespace starrocks {
@@ -4254,6 +4254,168 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
             ASSERT_EQ(res[i], result->debug_item(i));
         }
     }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, regexpPositionTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto pattern = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto pos = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto occurrence = NullableColumn::create(Int32Column::create(), NullColumn::create());
+
+    struct TestCase {
+        std::optional<std::string> str;
+        std::optional<std::string> pattern;
+        std::optional<int> pos;
+        std::optional<int> occurrence;
+        int expected;
+        bool expect_null;
+    };
+
+    std::vector<TestCase> test_cases = {
+            // Basic matching
+            {"a,b,c", ",", 1, 1, 2, false},
+            {"a1b2c3d", "[0-9]", 1, 1, 2, false},
+            {"test:data", ":", 1, 1, 5, false},
+
+            // Multiple occurrences
+            {"a1b2c3d", "[0-9]", 1, 2, 4, false},
+            {"a1b2c3d", "[0-9]", 1, 3, 6, false},
+            {"a1b2c3", "[0-9]", 1, 4, -1, false},
+
+            // Start position
+            {"a,b,c", ",", 3, 1, 4, false},
+            {"a1b2c3d", "[0-9]", 5, 1, 6, false},
+
+            // Empty pattern (zero-width)
+            {"abc", "", 1, 1, 1, false},
+            {"abc", "", 1, 2, 2, false},
+            {"abc", "", 1, 4, 4, false},
+            {"abc", "", 1, 5, -1, false},
+            {"", "", 1, 1, -1, false},
+
+            // Empty string
+            {"", ",", 1, 1, -1, false},
+
+            // Out of bounds
+            {"abc", ",", 10, 1, -1, false},
+            {"abc", "b", 5, 1, -1, false},
+
+            // Invalid pos/occurrence
+            {"abc", "b", 0, 1, -1, false},
+            {"abc", "b", -1, 1, -1, false},
+            {"abc", "b", 1, 0, -1, false},
+            {"abc", "b", 1, -1, -1, false},
+
+            // NULL inputs
+            {std::nullopt, "x", 1, 1, 0, true},
+            {"hello", std::nullopt, 1, 1, 0, true},
+            {"hello", "l", std::nullopt, 1, 0, true},
+            {"hello", "l", 1, std::nullopt, 0, true},
+
+            {"你好世界", "世", 1, 1, 3, false},
+    };
+
+    for (const auto& tc : test_cases) {
+        // Append str
+        if (tc.str.has_value()) {
+            str->append_datum(Slice(tc.str.value()));
+        } else {
+            str->append_nulls(1);
+        }
+
+        // Append pattern
+        if (tc.pattern.has_value()) {
+            pattern->append_datum(Slice(tc.pattern.value()));
+        } else {
+            pattern->append_nulls(1);
+        }
+
+        // Append pos
+        if (tc.pos.has_value()) {
+            pos->append_datum(tc.pos.value());
+        } else {
+            pos->append_nulls(1);
+        }
+
+        // Append occurrence
+        if (tc.occurrence.has_value()) {
+            occurrence->append_datum(tc.occurrence.value());
+        } else {
+            occurrence->append_nulls(1);
+        }
+    }
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+    columns.push_back(pos);
+    columns.push_back(occurrence);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_position_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_position(context, columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    auto nullable_result = ColumnHelper::as_column<NullableColumn>(result);
+    auto data_col = ColumnHelper::cast_to<TYPE_INT>(nullable_result->data_column());
+
+    for (size_t i = 0; i < test_cases.size(); ++i) {
+        if (test_cases[i].expect_null) {
+            ASSERT_TRUE(nullable_result->is_null(i)) << "Test case " << i << " should return NULL";
+        } else {
+            ASSERT_FALSE(nullable_result->is_null(i)) << "Test case " << i << " should not be NULL";
+            ASSERT_EQ(test_cases[i].expected, data_col->get_data()[i])
+                    << "Test case " << i << " failed: expected " << test_cases[i].expected << " but got "
+                    << data_col->get_data()[i];
+        }
+    }
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_position_close(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, regexpPositionInvalidRegex) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+    auto str = BinaryColumn::create();
+    auto pattern = BinaryColumn::create();
+    auto pos = Int32Column::create();
+    auto occurrence = Int32Column::create();
+
+    str->append("hello");
+    pattern->append("[");
+    pos->append(1);
+    occurrence->append(1);
+
+    str->append("world");
+    pattern->append("(");
+    pos->append(1);
+    occurrence->append(1);
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+    columns.push_back(pos);
+    columns.push_back(occurrence);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(StringFunctions::regexp_position_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    auto result = StringFunctions::regexp_position(context, columns);
+
+    ASSERT_FALSE(result.ok()) << "Expected error for invalid regex";
+    ASSERT_TRUE(result.status().to_string().find("Invalid regex") != std::string::npos);
+
+    StringFunctions::regexp_position_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {

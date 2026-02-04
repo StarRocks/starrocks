@@ -20,6 +20,8 @@
 #include <memory>
 #include <thread>
 
+#include "base/simd/simd.h"
+#include "base/time/time.h"
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/agg_in_runtime_filter.h"
@@ -35,11 +37,9 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/failpoint/fail_point.h"
-#include "util/time.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(global_runtime_filter_sync_B);
@@ -308,7 +308,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFil
     return version;
 }
 
-size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column) {
+size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_broadcast_join(const ColumnPtr& column) {
     size_t size = RF_VERSION_SZ;
     size += (sizeof(bool) + sizeof(size_t) + sizeof(bool) + sizeof(bool));
     size += serde::ColumnArraySerde::max_serialized_size(*column);
@@ -434,6 +434,9 @@ struct FilterIniter {
 
 Status RuntimeFilterHelper::fill_runtime_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                                 size_t column_offset, bool eq_null, bool is_skew_join) {
+    if (column == nullptr || filter == nullptr) {
+        return Status::InternalError("column or filter is nullptr");
+    }
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }

@@ -16,14 +16,14 @@
 
 #include <utility>
 
+#include "base/coding.h"
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "gen_cpp/data.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
-#include "simd/simd.h"
-#include "util/coding.h"
 
 namespace starrocks {
 
@@ -394,9 +394,7 @@ VariantTuple Chunk::get(size_t n, const std::vector<uint32_t>& column_indexes) c
     tuple.reserve(column_indexes.size());
     for (uint32_t i : column_indexes) {
         DCHECK_LT(i, _columns.size());
-        const TypeInfoPtr& type = _schema->field(i)->type();
-        Datum value = _columns[i]->get(n);
-        tuple.append(DatumVariant(type, value));
+        tuple.emplace(_schema->field(i)->type(), _columns[i]->get(n));
     }
     return tuple;
 }

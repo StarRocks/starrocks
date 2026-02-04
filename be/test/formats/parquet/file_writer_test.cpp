@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -32,7 +33,6 @@
 #include "fs/fs_memory.h"
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks::parquet {
 

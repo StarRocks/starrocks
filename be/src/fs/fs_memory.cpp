@@ -17,9 +17,9 @@
 #include <butil/files/file_path.h>
 #include <fmt/format.h>
 
+#include "base/container/raw_container.h"
 #include "fs/encrypt_file.h"
 #include "io/array_input_stream.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

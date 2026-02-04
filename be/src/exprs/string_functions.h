@@ -20,12 +20,13 @@
 
 #include <iomanip>
 
+#include "base/phmap/phmap.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "common/constexpr.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/current_thread.h"
-#include "util/phmap/phmap.h"
 #include "util/url_parser.h"
 
 namespace starrocks {
@@ -469,6 +470,15 @@ public:
      * @return: BigIntColumn
      */
     DEFINE_VECTORIZED_FN(regexp_count);
+
+    /**
+     * @param: [string_value, pattern_value, start_position, occurrence]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn, IntColumn]
+     * @return: IntColumn
+     */
+    DEFINE_VECTORIZED_FN(regexp_position);
+    static Status regexp_position_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_position_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, pattern_value, replace_value]

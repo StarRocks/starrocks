@@ -16,13 +16,13 @@
 
 #include <random>
 
+#include "base/testutil/sync_point.h"
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/txn_manager.h"
-#include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
 
 namespace starrocks {
@@ -2438,7 +2438,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old(b
 
     // link files first and then build snapshot meta file
     for (const auto& rowset : snapshot_rowsets) {
-        ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+        ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
     }
 
     // apply rowset
@@ -2525,7 +2525,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         // rowset status is committed in meta, rowset file is partial rowset
         // link files directly
         for (const auto& rowset : snapshot_rowsets) {
-            ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
         }
         break;
     }
@@ -2533,7 +2533,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         // rowset status is committed in meta, rowset file is partial rowset, but rowset is apply success after link file
         // link files first and do apply
         for (const auto& rowset : snapshot_rowsets) {
-            ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
         }
 
         tablet0->updates()->stop_apply(false);
@@ -2564,7 +2564,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         }
 
         for (const auto& rowset : snapshot_rowsets) {
-            ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
         }
         break;
     }
@@ -2572,7 +2572,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         // rowset status is applied in meta, rowset file is full rowset
         // rowsets applied success, link files directly
         for (const auto& rowset : snapshot_rowsets) {
-            ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
         }
         break;
     }

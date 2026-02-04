@@ -20,6 +20,7 @@
 #include <tuple>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -35,7 +36,6 @@
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

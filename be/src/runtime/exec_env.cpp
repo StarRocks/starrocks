@@ -40,10 +40,14 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "base/time/time.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "common/pretty_printer.h"
 #include "common/process_exit.h"
+#include "common/system/cpu_info.h"
+#include "common/system/mem_info.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -97,13 +101,9 @@
 #include "storage/update_manager.h"
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/cpu_info.h"
-#include "util/mem_info.h"
 #include "util/parse_util.h"
-#include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"

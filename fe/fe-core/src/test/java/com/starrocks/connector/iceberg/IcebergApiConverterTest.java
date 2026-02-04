@@ -318,6 +318,20 @@ public class IcebergApiConverterTest {
         source = ImmutableMap.of("file_format", "avro", "compression_codec", "zstd");
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
         assertEquals("zstd", target.get(AVRO_COMPRESSION));
+
+        source = ImmutableMap.of("write.format.default", "orc");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        assertEquals("orc", target.get(DEFAULT_FILE_FORMAT));
+
+        source = ImmutableMap.of("write.format.default", "parquet", "compression_codec", "snappy");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        assertEquals("parquet", target.get(DEFAULT_FILE_FORMAT));
+        assertEquals("snappy", target.get(PARQUET_COMPRESSION));
+
+        source = ImmutableMap.of("write.format.default", "parquet", "write.parquet.compression-codec", "snappy");
+        target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        assertEquals("parquet", target.get(DEFAULT_FILE_FORMAT));
+        assertEquals("snappy", target.get(PARQUET_COMPRESSION));
     }
 
     @Test

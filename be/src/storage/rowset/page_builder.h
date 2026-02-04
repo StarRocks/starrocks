@@ -37,11 +37,11 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/string/faststring.h"
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "runtime/global_dict/types.h"
 #include "storage/rowset/common.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 

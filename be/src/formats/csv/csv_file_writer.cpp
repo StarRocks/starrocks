@@ -17,19 +17,19 @@
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/http/content_type.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_escape.h"
 #include "formats/utils.h"
-#include "output_stream_file.h"
+#include "io/formatted_output_stream_file.h"
 #include "runtime/current_thread.h"
 #include "util/compression/compression_utils.h"
-#include "util/defer_op.h"
 
 namespace starrocks::formats {
 
-CSVFileWriter::CSVFileWriter(std::string location, std::shared_ptr<csv::OutputStream> output_stream,
+CSVFileWriter::CSVFileWriter(std::string location, std::shared_ptr<io::FormattedOutputStream> output_stream,
                              std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                              std::shared_ptr<CSVWriterOptions> writer_options, std::function<void()> rollback_action)
@@ -220,17 +220,17 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
             std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
 
     // Create base async output stream
-    auto base_stream = std::make_shared<csv::AsyncOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
+    auto base_stream = std::make_shared<io::AsyncFormattedOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
 
     // Wrap with compression if enabled (decorator pattern)
-    std::shared_ptr<csv::OutputStream> csv_output_stream;
+    std::shared_ptr<io::FormattedOutputStream> csv_output_stream;
     CompressionTypePB compression_pb = CompressionUtils::to_compression_pb(_compression_type);
     // Only use compression if it's a valid, recognized compression type
     // (not UNKNOWN_COMPRESSION which is returned for AUTO, DEFAULT_COMPRESSION, etc.)
     if (compression_pb != CompressionTypePB::NO_COMPRESSION &&
         compression_pb != CompressionTypePB::UNKNOWN_COMPRESSION) {
         ASSIGN_OR_RETURN(csv_output_stream,
-                         csv::CompressedOutputStream::create(base_stream, compression_pb, 1024 * 1024));
+                         io::CompressedFormattedOutputStream::create(base_stream, compression_pb, 1024 * 1024));
     } else {
         csv_output_stream = base_stream;
     }

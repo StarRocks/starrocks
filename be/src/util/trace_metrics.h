@@ -38,9 +38,9 @@
 #include <mutex>
 #include <string>
 
+#include "base/concurrency/spinlock.h"
 #include "gutil/macros.h"
 #include "gutil/map_util.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 

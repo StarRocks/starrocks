@@ -21,6 +21,9 @@
 #include <utility>
 
 #include "agent/master_info.h"
+#include "base/container/raw_container.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -41,6 +44,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
@@ -50,10 +54,7 @@
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
-#include "util/raw_container.h"
 #include "util/trace.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
@@ -213,6 +214,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
     tablet_metadata_pb->set_gtid(req.gtid);
+    if (req.__isset.range) {
+        ASSIGN_OR_RETURN(auto range_pb, TabletRangeHelper::convert_t_range_to_pb_range(req.range));
+        *tablet_metadata_pb->mutable_range() = range_pb;
+    }
 
     if (req.__isset.enable_persistent_index) {
         tablet_metadata_pb->set_enable_persistent_index(req.enable_persistent_index);

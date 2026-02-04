@@ -47,6 +47,9 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "agent/master_info.h"
+#include "base/string/string_parser.hpp"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/utils.h"
@@ -74,13 +77,10 @@
 #include "simdjson.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
-#include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
-#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
 

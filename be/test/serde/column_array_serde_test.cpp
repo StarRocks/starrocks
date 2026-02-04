@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -26,8 +28,6 @@
 #include "column/variant_column.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
 #include "types/hll.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"

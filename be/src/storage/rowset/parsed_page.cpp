@@ -39,11 +39,12 @@
 #include <cstddef>
 #include <memory>
 
+#include "base/simd/simd.h"
+#include "base/string/faststring.h"
 #include "column/append_with_mask.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -52,7 +53,6 @@
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_handle_fwd.h"
 #include "util/compression/block_compression.h"
-#include "util/faststring.h"
 #include "util/rle_encoding.h"
 
 namespace starrocks {

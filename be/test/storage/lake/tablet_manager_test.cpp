@@ -20,6 +20,8 @@
 
 #include <fstream>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -33,8 +35,6 @@
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 #include "util/bthreads/util.h"
 #include "util/failpoint/fail_point.h"
 #include "util/filesystem_util.h"
@@ -328,6 +328,218 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_compaction_strategy) {
     EXPECT_TRUE(metadata->enable_persistent_index());
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
     EXPECT_EQ(CompactionStrategyPB::REAL_TIME, metadata->compaction_strategy());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_range) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+    // Set tablet range with lower and upper bounds
+    TTabletRange range;
+    TTuple lower_bound;
+    TVariant lower_val1;
+    TTypeDesc type_desc_int;
+    type_desc_int.types.resize(1);
+    type_desc_int.types[0].type = TTypeNodeType::SCALAR;
+    type_desc_int.types[0].scalar_type.type = TPrimitiveType::INT;
+    type_desc_int.types[0].__isset.scalar_type = true;
+    type_desc_int.__isset.types = true;
+    lower_val1.__set_type(type_desc_int);
+    lower_val1.__set_value("100");
+    lower_val1.__set_variant_type(TVariantType::NORMAL_VALUE);
+    lower_bound.values.push_back(lower_val1);
+
+    TVariant lower_val2;
+    TTypeDesc type_desc_varchar;
+    type_desc_varchar.types.resize(1);
+    type_desc_varchar.types[0].type = TTypeNodeType::SCALAR;
+    type_desc_varchar.types[0].scalar_type.type = TPrimitiveType::VARCHAR;
+    type_desc_varchar.types[0].scalar_type.len = 10;
+    type_desc_varchar.types[0].__isset.scalar_type = true;
+    type_desc_varchar.__isset.types = true;
+    lower_val2.__set_type(type_desc_varchar);
+    lower_val2.__set_value("abc");
+    lower_val2.__set_variant_type(TVariantType::NORMAL_VALUE);
+    lower_bound.values.push_back(lower_val2);
+
+    TTuple upper_bound;
+    TVariant upper_val1;
+    upper_val1.__set_type(type_desc_int);
+    upper_val1.__set_value("200");
+    upper_val1.__set_variant_type(TVariantType::NORMAL_VALUE);
+    upper_bound.values.push_back(upper_val1);
+
+    TVariant upper_val2;
+    upper_val2.__set_type(type_desc_varchar);
+    upper_val2.__set_value("xyz");
+    upper_val2.__set_variant_type(TVariantType::NORMAL_VALUE);
+    upper_bound.values.push_back(upper_val2);
+
+    range.__set_lower_bound(lower_bound);
+    range.__set_upper_bound(upper_bound);
+    range.__set_lower_bound_included(true);
+    range.__set_upper_bound_included(false);
+    req.__set_range(range);
+
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+
+    // Verify range is set correctly
+    EXPECT_TRUE(metadata->has_range());
+    const auto& pb_range = metadata->range();
+    EXPECT_TRUE(pb_range.has_lower_bound());
+    EXPECT_EQ(2, pb_range.lower_bound().values_size());
+    EXPECT_EQ("100", pb_range.lower_bound().values(0).value());
+    EXPECT_EQ("abc", pb_range.lower_bound().values(1).value());
+
+    EXPECT_TRUE(pb_range.has_upper_bound());
+    EXPECT_EQ(2, pb_range.upper_bound().values_size());
+    EXPECT_EQ("200", pb_range.upper_bound().values(0).value());
+    EXPECT_EQ("xyz", pb_range.upper_bound().values(1).value());
+
+    EXPECT_TRUE(pb_range.has_lower_bound_included());
+    EXPECT_TRUE(pb_range.lower_bound_included());
+    EXPECT_TRUE(pb_range.has_upper_bound_included());
+    EXPECT_FALSE(pb_range.upper_bound_included());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+    // Set tablet range with NULL values
+    TTabletRange range;
+    TTuple lower_bound;
+    TVariant null_val;
+    TTypeDesc type_desc;
+    type_desc.types.resize(1);
+    type_desc.types[0].type = TTypeNodeType::SCALAR;
+    type_desc.types[0].scalar_type.type = TPrimitiveType::INT;
+    type_desc.types[0].__isset.scalar_type = true;
+    type_desc.__isset.types = true;
+    null_val.__set_type(type_desc);
+    null_val.__set_value("");
+    null_val.__set_variant_type(TVariantType::NULL_VALUE);
+    lower_bound.values.push_back(null_val);
+    range.__set_lower_bound(lower_bound);
+    req.__set_range(range);
+
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+
+    // Verify range with NULL value
+    EXPECT_TRUE(metadata->has_range());
+    const auto& pb_range = metadata->range();
+    EXPECT_TRUE(pb_range.has_lower_bound());
+    EXPECT_EQ(1, pb_range.lower_bound().values_size());
+    EXPECT_EQ(VariantTypePB::NULL_VALUE, pb_range.lower_bound().values(0).variant_type());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+    // Set tablet range with MIN and MAX values
+    TTabletRange range;
+    TTuple lower_bound;
+    TVariant min_val;
+    TTypeDesc type_desc;
+    type_desc.types.resize(1);
+    type_desc.types[0].type = TTypeNodeType::SCALAR;
+    type_desc.types[0].scalar_type.type = TPrimitiveType::BIGINT;
+    type_desc.types[0].__isset.scalar_type = true;
+    type_desc.__isset.types = true;
+    min_val.__set_type(type_desc);
+    min_val.__set_value("");
+    min_val.__set_variant_type(TVariantType::MINIMUM);
+    lower_bound.values.push_back(min_val);
+
+    TTuple upper_bound;
+    TVariant max_val;
+    max_val.__set_type(type_desc);
+    max_val.__set_value("");
+    max_val.__set_variant_type(TVariantType::MAXIMUM);
+    upper_bound.values.push_back(max_val);
+
+    range.__set_lower_bound(lower_bound);
+    range.__set_upper_bound(upper_bound);
+    req.__set_range(range);
+
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+
+    // Verify range with MIN/MAX values
+    EXPECT_TRUE(metadata->has_range());
+    const auto& pb_range = metadata->range();
+    EXPECT_TRUE(pb_range.has_lower_bound());
+    EXPECT_EQ(1, pb_range.lower_bound().values_size());
+    EXPECT_EQ(VariantTypePB::MINIMUM, pb_range.lower_bound().values(0).variant_type());
+
+    EXPECT_TRUE(pb_range.has_upper_bound());
+    EXPECT_EQ(1, pb_range.upper_bound().values_size());
+    EXPECT_EQ(VariantTypePB::MAXIMUM, pb_range.upper_bound().values(0).variant_type());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_without_range) {
+    // Test backward compatibility: create tablet without range
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    // Explicitly not setting range
+
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+
+    // Verify no range is set
+    EXPECT_FALSE(metadata->has_range());
 }
 
 // NOLINTNEXTLINE

@@ -18,6 +18,7 @@
 
 #include <array>
 
+#include "base/container/raw_container.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -29,7 +30,6 @@
 #include "runtime/time_types.h"
 #include "runtime/types.h"
 #include "types/large_int_value.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

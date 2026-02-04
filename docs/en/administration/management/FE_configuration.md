@@ -373,7 +373,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow FE to log query registration and deregistration messages (e.g., `"register query id = {}"` and `"deregister query id = {}"`) from QeProcessorImpl. The log is emitted only when the query has a non-null ConnectContext and either the command is not `COM_STMT_EXECUTE` or the session variable `isAuditExecuteStmt()` is true. Because these messages are written for every query lifecycle event, enabling this feature can produce high log volume and become a throughput bottleneck in high-concurrency environments. Enable it for debugging or auditing; and disable it to reduce logging overhead and improve performance.
+- Description: Whether to allow FE to log query registration and deregistration messages (e.g., `"register query id = {}"` and `"deregister query id = {}"`) from QeProcessorImpl. The log is emitted only when the query has a non-null ConnectContext and either the command is not `COM_STMT_EXECUTE` or the session variable `isAuditExecuteStmt()` is true. Because these messages are written for every query lifecycle event, enabling this feature can produce high log volume and become a throughput bottleneck in high concurrency environments. Enable it for debugging or auditing; and disable it to reduce logging overhead and improve performance.
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### log_roll_size_mb
@@ -472,7 +472,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow LockManager to include the owning thread's full stack trace in the JSON payload of slow-lock warnings emitted by `logSlowLockTrace` (the "stack" array is populated via `LogUtil.getStackTraceToJsonArray` with `start=0` and `max=Short.MAX_VALUE`). This configuration controls only the extra stack information for lock owners shown when a lock acquisition exceeds the threshold configured by `slow_lock_threshold_ms`. Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high-concurrency environments.
+- Description: Whether to allow LockManager to include the owning thread's full stack trace in the JSON payload of slow-lock warnings emitted by `logSlowLockTrace` (the "stack" array is populated via `LogUtil.getStackTraceToJsonArray` with `start=0` and `max=Short.MAX_VALUE`). This configuration controls only the extra stack information for lock owners shown when a lock acquisition exceeds the threshold configured by `slow_lock_threshold_ms`. Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high concurrency environments.
 - Introduced in: v3.3.16, v3.4.5, v3.5.1
 
 ##### slow_lock_threshold_ms
@@ -1129,7 +1129,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Connections
 - Is mutable: No
-- Description: The maximum number of pooled BRPC connections per endpoint used by the FE's BrpcProxy. This value is applied to RpcClientOptions via `setMaxTotoal` and `setMaxIdleSize`, so it directly limits concurrent outgoing BRPC requests because each request must borrow a connection from the pool. In high-concurrency scenarios increase this to avoid request queuing; increasing it raises socket and memory usage and may increase remote server load. When tuning, consider related settings such as `brpc_idle_wait_max_time`, `brpc_short_connection`, `brpc_inner_reuse_pool`, `brpc_reuse_addr`, and `brpc_min_evictable_idle_time_ms`. Changing this value is not hot-reloadable and requires a restart.
+- Description: The maximum number of pooled BRPC connections per endpoint used by the FE's BrpcProxy. This value is applied to RpcClientOptions via `setMaxTotoal` and `setMaxIdleSize`, so it directly limits concurrent outgoing BRPC requests because each request must borrow a connection from the pool. In high concurrency scenarios increase this to avoid request queuing; increasing it raises socket and memory usage and may increase remote server load. When tuning, consider related settings such as `brpc_idle_wait_max_time`, `brpc_short_connection`, `brpc_inner_reuse_pool`, `brpc_reuse_addr`, and `brpc_min_evictable_idle_time_ms`. Changing this value is not hot-reloadable and requires a restart.
 - Introduced in: v3.2.0
 
 ##### brpc_short_connection
@@ -3792,6 +3792,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
+
+##### enable_iceberg_commit_queue
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable commit queue for Iceberg tables to avoid concurrent commit conflicts. Iceberg uses optimistic concurrency control (OCC) for metadata commits. When multiple threads concurrently commit to the same table, conflicts can occur with errors like: "Cannot commit: Base metadata location is not same as the current table metadata location". When enabled, each Iceberg table has its own single-threaded executor for commit operations, ensuring that commits to the same table are serialized and preventing OCC conflicts. Different tables can commit concurrently, maintaining overall throughput. This is a system-level optimization to improve reliability and should be enabled by default. If disabled, concurrent commits may fail due to optimistic locking conflicts.
+- Introduced in: v4.1.0
+
+##### iceberg_commit_queue_timeout_seconds
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The timeout in seconds for waiting for an Iceberg commit operation to complete. When using the commit queue (`enable_iceberg_commit_queue=true`), each commit operation must complete within this timeout. If a commit takes longer than this timeout, it will be cancelled and an error will be raised. Factors that affect commit time include: number of data files being committed, metadata size of the table, performance of the underlying storage (e.g., S3, HDFS).
+- Introduced in: v4.1.0
+
+##### iceberg_commit_queue_max_size
+
+- Default: 1000
+- Type: Int
+- Unit: Count
+- Is mutable: No
+- Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
+- Introduced in: v4.1.0
 
 ### Other
 

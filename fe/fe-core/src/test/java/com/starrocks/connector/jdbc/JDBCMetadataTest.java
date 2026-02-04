@@ -255,6 +255,105 @@ public class JDBCMetadataTest {
     }
 
     @Test
+    public void testDbCacheHit() {
+        // Test that second getDb call uses cache (getCatalogs only called once)
+        try {
+            // Enable cache for this test and create new JDBCMetadata instance
+            Map<String, String> cachedProperties = new HashMap<>(properties);
+            cachedProperties.put("jdbc_meta_cache_enable", "true");
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(cachedProperties, "catalog", dataSource);
+
+            new Expectations() {
+                {
+                    dataSource.getConnection();
+                    result = connection;
+                    minTimes = 0;
+
+                    // getCatalogs should only be called ONCE due to caching
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                    minTimes = 1;
+                    maxTimes = 1;
+
+                    connection.getMetaData().getTables("test", null, null,
+                            new String[] {"TABLE", "VIEW"});
+                    result = tableResult;
+                    minTimes = 0;
+
+                    connection.getMetaData().getColumns("test", null, "tbl1", "%");
+                    result = columnResult;
+                    minTimes = 0;
+                }
+            };
+
+            dbResult.beforeFirst();
+            Database db1 = jdbcMetadata.getDb(new ConnectContext(), "test");
+            Assertions.assertNotNull(db1);
+            Assertions.assertEquals("test", db1.getOriginName());
+
+            // Second call should use cache, getCatalogs won't be called again
+            Database db2 = jdbcMetadata.getDb(new ConnectContext(), "test");
+            Assertions.assertNotNull(db2);
+            Assertions.assertEquals("test", db2.getOriginName());
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testDbCacheMissForNonExistentDb() {
+        // Test getDb returns null for non-existent database
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            Database db = jdbcMetadata.getDb(new ConnectContext(), "nonexistent");
+            Assertions.assertNull(db);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testDbCacheEnabledReturnsNullForNonExistentDb() throws SQLException {
+        // Test that getDb returns null (not NPE) for non-existent database when cache is enabled
+        // This is the bug fix test - previously it would throw NullPointerException due to
+        // Objects.requireNonNull() in JDBCMetaCache.get() when the lambda returned null
+
+        MockResultSet emptySchemaResult = new MockResultSet("schemas");
+        emptySchemaResult.addColumn("TABLE_SCHEM", Arrays.asList("information_schema"));
+
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                // Mock getSchemas to return empty result (simulating non-existent database)
+                connection.getMetaData().getSchemas();
+                result = emptySchemaResult;
+                minTimes = 0;
+            }
+        };
+
+        // Enable cache
+        Map<String, String> cachedProperties = new HashMap<>(properties);
+        cachedProperties.put("jdbc_meta_cache_enable", "true");
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(cachedProperties, "catalog", dataSource);
+
+        // First call - should return null without throwing NPE
+        Database db1 = jdbcMetadata.getDb(new ConnectContext(), "nonexistent_db");
+        Assertions.assertNull(db1, "First call should return null for non-existent database");
+
+        // Second call - should also return null (not cached, and no NPE)
+        Database db2 = jdbcMetadata.getDb(new ConnectContext(), "nonexistent_db");
+        Assertions.assertNull(db2, "Second call should also return null for non-existent database");
+    }
+
+    @Test
     public void testGetJdbcUrl() {
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
@@ -413,5 +512,54 @@ public class JDBCMetadataTest {
         } finally {
             Config.jdbc_network_timeout_ms = originalTimeoutMs;
         }
+    }
+
+    @Test
+    public void testGetTableResultSetClosed() throws SQLException {
+        // Test that ResultSet is properly closed after getTable() to prevent cursor leaks
+        // This is a regression test for ORA-01000: maximum open cursors exceeded
+
+        // Create a mock ResultSet that tracks whether close() was called
+        final boolean[] closed = {false};
+        MockResultSet trackableColumnResult = new MockResultSet("columns") {
+            @Override
+            public void close() throws SQLException {
+                closed[0] = true;
+                super.close();
+            }
+        };
+        trackableColumnResult.addColumn("DATA_TYPE",
+                Arrays.asList(Types.INTEGER, Types.VARCHAR));
+        trackableColumnResult.addColumn("TYPE_NAME",
+                Arrays.asList("INTEGER", "VARCHAR"));
+        trackableColumnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 100));
+        trackableColumnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0));
+        trackableColumnResult.addColumn("COLUMN_NAME", Arrays.asList("id", "name"));
+        trackableColumnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "YES"));
+
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                connection.getMetaData().getColumns("test", null, "trackable_tbl", "%");
+                result = trackableColumnResult;
+                minTimes = 1;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+
+        // Call getTable which should properly close the ResultSet
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "trackable_tbl");
+
+        // Verify table was retrieved successfully
+        Assertions.assertNotNull(table, "Table should be retrieved successfully");
+        Assertions.assertTrue(table instanceof JDBCTable, "Table should be JDBCTable");
+
+        // Most importantly: verify ResultSet was closed
+        // This prevents cursor leaks (ORA-01000 in Oracle)
+        Assertions.assertTrue(closed[0], "ResultSet must be closed after getTable() to prevent cursor leaks");
     }
 }

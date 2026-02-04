@@ -1,4 +1,4 @@
--- name: test_window_skew_rewrite_with_null
+-- name: test_window_skew_rewrite_with_null @sequential
 DROP TABLE IF EXISTS window_skew_t1;
 -- result:
 -- !result
@@ -42,7 +42,23 @@ shell: sleep 5
 SET enable_split_window_skew_to_union = true;
 -- result:
 -- !result
-function: assert_explain_costs_contains('SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1', 'UNION', 'ANALYTIC', 'pk, INT, true] IS NOT NULL', 'pk, INT, true] IS NULL')
+SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1 ORDER BY pk, v1;
+-- result:
+None	4	1
+None	5	2
+None	6	3
+None	7	4
+None	8	5
+None	9	6
+None	10	7
+None	11	8
+None	12	9
+None	13	10
+1	1	1
+2	2	1
+3	3	1
+-- !result
+function: wait_plan_contains('SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1', 'UNION', 'ANALYTIC')
 -- result:
 None
 -- !result

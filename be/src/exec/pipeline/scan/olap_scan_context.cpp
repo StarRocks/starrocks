@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_context.h"
 
 #include "exec/olap_scan_node.h"
+#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "storage/tablet.h"
@@ -46,6 +47,10 @@ Status ConcurrentJitRewriter::rewrite(std::vector<ExprContext*>& expr_ctxs, Obje
 
 const std::vector<ColumnAccessPathPtr>* OlapScanContext::column_access_paths() const {
     return &_scan_node->column_access_paths();
+}
+
+size_t OlapScanContext::next_unique_id() const {
+    return starrocks::next_uniq_id(_scan_node->thrift_olap_scan_node());
 }
 
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {

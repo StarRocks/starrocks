@@ -58,6 +58,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     JDBCSchemaResolver schemaResolver;
     private String catalogName;
 
+    private JDBCMetaCache<String, Database> dbCache;
     private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
     private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
@@ -124,6 +125,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     private void createMetaAsyncCacheInstances(Map<String, String> properties) {
+        dbCache = new JDBCMetaCache<>(properties, false);
         partitionNamesCache = new JDBCMetaCache<>(properties, false);
         tableIdCache = new JDBCMetaCache<>(properties, true);
         tableInstanceCache = new JDBCMetaCache<>(properties, false);
@@ -183,13 +185,39 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public Database getDb(ConnectContext context, String name) {
-        try {
-            if (listDbNames(context).contains(name)) {
-                return new Database(0, name);
-            } else {
-                return null;
+        // NOTE: We use manual cache control (getIfPresent + put) instead of the lambda-based approach
+        // for the following reason:
+        //
+        // The lambda in getTable() can return null when the table doesn't exist, but JDBCMetaCache.get()
+        // uses Objects.requireNonNull() which throws NullPointerException when the lambda returns null.
+        //
+        // For getDb(), we need to return null for non-existent databases (a valid result, not an error),
+        // so we manually control the cache to avoid the NPE issue:
+        // 1. Use getIfPresent() to check cache without triggering the lambda
+        // 2. On cache miss, query directly and only cache successful (non-null) results
+        // 3. Return null for non-existent databases or SQLException without caching
+
+        // Check cache first
+        Database cached = dbCache.getIfPresent(name);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Cache miss - query directly
+        try (Connection connection = getConnection()) {
+            if (schemaResolver.databaseExists(connection, name)) {
+                Database db = new Database(0, name);
+                // Only cache on success to avoid caching null values
+                dbCache.put(name, db);
+                return db;
             }
-        } catch (StarRocksConnectorException e) {
+            // Database doesn't exist - don't cache null
+            return null;
+        } catch (SQLException e) {
+            // From getConnection() or databaseExists()
+            LOG.warn("Failed to check database existence for {}.{}: {}",
+                    catalogName, name, e.getMessage());
+            // Exception occurred - don't cache null
             return null;
         }
     }
@@ -215,8 +243,8 @@ public class JDBCMetadata implements ConnectorMetadata {
         JDBCTableName jdbcTable = new JDBCTableName(null, dbName, tblName);
         return tableInstanceCache.get(jdbcTable,
                 k -> {
-                    try (Connection connection = getConnection()) {
-                        ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
+                    try (Connection connection = getConnection();
+                            ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName)) {
                         List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
                         List<Column> partitionColumns = Lists.newArrayList();
                         if (schemaResolver.isSupportPartitionInformation()) {

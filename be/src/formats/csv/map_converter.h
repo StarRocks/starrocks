@@ -26,8 +26,9 @@ public:
               _map_delimiter(','),
               _kv_delimiter(':') {}
 
-    Status write_string(OutputStream* os, const Column& column, size_t row_num, const Options& options) const override;
-    Status write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+    Status write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+                        const Options& options) const override;
+    Status write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                const Options& options) const override;
     bool read_string(Column* column, const Slice& s, const Options& options) const override;
     bool read_quoted_string(Column* column, const Slice& s, const Options& options) const override;

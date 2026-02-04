@@ -277,7 +277,8 @@ public class OlapTableSink extends DataSink {
     public List<Long> getOpenPartitions() {
         // if load start after shema change, we should open all of the partitions to avoid different schema during schema change
         // if load start before schema change, it will be finished in waiting_txn state
-        if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (dstTable.getState() != OlapTable.OlapTableState.NORMAL
+                && dstTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             return partitionIds;
         }
         if (enableAutomaticPartition && enableDynamicOverwrite) {
@@ -821,7 +822,9 @@ public class OlapTableSink extends DataSink {
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
                 tTablet.setId(tablet.getId());
-                tTablet.setRange(tablet.getRange().toThrift());
+                if (tablet.getRange() != null) {
+                    tTablet.setRange(tablet.getRange().toThrift());
+                }
                 return tTablet;
             }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
@@ -1025,9 +1028,9 @@ public class OlapTableSink extends DataSink {
     }
 
     private static boolean canUseColocateMVIndex(OlapTable table) {
+        // disable colocate mv index for range distribution for now
         return Config.enable_colocate_mv_index && table.isEnableColocateMVIndex() &&
-               // disable colocate mv index for range distribution for now
-               table.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANGE;
+                !table.isRangeDistribution();
     }
 
     public boolean canUsePipeLine() {

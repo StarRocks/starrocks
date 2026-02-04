@@ -276,6 +276,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
                             .setGtid(gtid)
                             .setCompactionStrategy(table.getCompactionStrategy())
+                            .setRange(table.isRangeDistribution() ? rollupTablet.getRange() : null)
                             .build();
 
                     // For each partition, the schema file is created only when the first Tablet is created

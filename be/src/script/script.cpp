@@ -18,9 +18,7 @@
 
 #include <regex>
 
-#include "common/greplog.h"
 #include "common/logging.h"
-#include "common/prof/heap_prof.h"
 #include "common/vlog_cntl.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/key_cache.h"
@@ -30,6 +28,8 @@
 #include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/prof/heap_prof.h"
+#include "service/greplog.h"
 #include "storage/del_vector.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"

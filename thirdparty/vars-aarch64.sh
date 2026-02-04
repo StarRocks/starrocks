@@ -51,10 +51,10 @@ TENANN_MD5SUM="18c61b80e3e4039bd3c6ca95231cb645"
 #TENANN_MD5SUM="b8683b3df546944b60bc8fe3db8db3af"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc4/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.1-rc1/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="652306980eb0a99d23823e75de807749"
+STARCACHE_MD5SUM="365926dab3ef68d1785f434fab2d7728"
 
 # pprof
 PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251124/pprof-linux-arm64.zip"

@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -31,8 +32,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
-#include "util/compression/stream_compression.h"
-#include "util/defer_op.h"
+#include "util/compression/stream_decompressor.h"
 
 namespace starrocks {
 
@@ -319,9 +319,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         return Status::OK();
     }
 
-    using DecompressorPtr = std::shared_ptr<StreamCompression>;
-    std::unique_ptr<StreamCompression> dec;
-    RETURN_IF_ERROR(StreamCompression::create_decompressor(compression, &dec));
+    using DecompressorPtr = std::shared_ptr<StreamDecompressor>;
+    ASSIGN_OR_RETURN(auto dec, StreamDecompressor::create_decompressor(compression));
     auto stream = std::make_unique<io::CompressedInputStream>(src_file->stream(), DecompressorPtr(dec.release()));
     *file = std::make_shared<SequentialFile>(std::move(stream), range_desc.path);
     return Status::OK();

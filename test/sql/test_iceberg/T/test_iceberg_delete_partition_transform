@@ -1,4 +1,4 @@
--- name: test_iceberg_delete_partition_transform
+-- name: test_iceberg_delete_partition_transform @sequential
 
 create external catalog iceberg_del_trf_${uuid0}
 PROPERTIES ( "type"  =  "iceberg",
@@ -6,7 +6,8 @@ PROPERTIES ( "type"  =  "iceberg",
     "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
     "aws.s3.access_key"  =  "${oss_ak}",
     "aws.s3.secret_key"  =  "${oss_sk}",
-    "aws.s3.endpoint"  =  "${oss_endpoint}" );
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
 
 create database iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0} properties (
     "location" = "oss://${oss_bucket}/test_iceberg_delete_partition_transform/${uuid0}/iceberg_delete_db_${uuid0}"

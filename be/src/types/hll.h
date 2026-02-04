@@ -40,13 +40,13 @@
 #include <string>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "types/constexpr.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

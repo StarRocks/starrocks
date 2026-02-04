@@ -15,12 +15,12 @@
 #include "fs/key_cache.h"
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
 #include "fs/encrypt_file.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
-#include "util/defer_op.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"

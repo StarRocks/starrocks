@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/datum.h"
@@ -26,8 +28,6 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/record_predicate/column_hash_is_congruent.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 

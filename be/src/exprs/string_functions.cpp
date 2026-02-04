@@ -14,8 +14,9 @@
 
 #include "exprs/string_functions.h"
 
+#include "base/utility/defer_op.h"
 #include "column/bytes.h"
-#include "util/defer_op.h"
+#include "function_context.h"
 
 #ifdef __x86_64__
 #include <immintrin.h>
@@ -37,6 +38,9 @@
 #include <stdexcept>
 #include <string>
 
+#include "base/container/raw_container.h"
+#include "base/crypto/sm3.h"
+#include "base/string/utf8.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -57,9 +61,6 @@
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
 #include "types/large_int_value.h"
-#include "util/raw_container.h"
-#include "util/sm3.h"
-#include "util/utf8.h"
 #include "util/utf8_encoding.h"
 
 namespace starrocks {
@@ -4451,6 +4452,207 @@ StatusOr<ColumnPtr> StringFunctions::regexp_count(FunctionContext* context, cons
     }
 }
 
+Status StringFunctions::regexp_position_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new StringFunctionsState();
+    context->set_function_state(scope, state);
+
+    if (!context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    const auto pattern_col = context->get_constant_column(1);
+    if (!pattern_col->only_null()) {
+        Slice pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(pattern_col);
+        state->pattern = std::string(pattern.data, pattern.size);
+        state->const_pattern = true;
+
+        state->options = std::make_unique<re2::RE2::Options>();
+        state->options->set_log_errors(false);
+
+        state->regex = std::make_unique<re2::RE2>(state->pattern, *state->options);
+        if (!state->regex->ok()) {
+            std::stringstream error;
+            error << "Invalid regex expression: " << state->pattern;
+            context->set_error(error.str().c_str());
+            return Status::InvalidArgument(error.str());
+        }
+    }
+
+    return Status::OK();
+}
+
+Status StringFunctions::regexp_position_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state =
+                reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        delete state;
+    }
+    return Status::OK();
+}
+
+static ColumnPtr regexp_position_const_pattern(re2::RE2* const_re, const Columns& columns) {
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto start_viewer = ColumnViewer<TYPE_INT>(columns[2]);
+    auto occurrence_viewer = ColumnViewer<TYPE_INT>(columns[3]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row) || start_viewer.is_null(row) || occurrence_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        int start_pos = start_viewer.value(row);
+        int occurrence = occurrence_viewer.value(row);
+
+        if (start_pos < 1 || occurrence < 1) {
+            result.append(-1);
+            continue;
+        }
+
+        auto str_value = str_viewer.value(row);
+        // get the number of code points in the string
+        int utf8_length = utf8_len(str_value.data, str_value.data + str_value.size);
+
+        if (start_pos > utf8_length) {
+            result.append(-1);
+            continue;
+        }
+
+        const char* search_start = skip_leading_utf8(str_value.data, str_value.data + str_value.size, start_pos - 1);
+        int byte_offset = search_start - str_value.data;
+
+        int count = 0;
+        re2::StringPiece str_sp(str_value.data, str_value.size);
+        re2::StringPiece match;
+
+        bool found = false;
+        while (byte_offset <= str_value.size) {
+            if (const_re->Match(str_sp, byte_offset, str_value.size, re2::RE2::UNANCHORED, &match, 1)) {
+                count++;
+                if (count == occurrence) {
+                    // convert back to one-based index
+                    int code_point_pos = utf8_len(str_value.data, match.data()) + 1;
+                    result.append(code_point_pos);
+                    found = true;
+                    break;
+                }
+
+                byte_offset = match.data() - str_value.data + match.size();
+                if (match.size() == 0) {
+                    byte_offset++;
+                }
+            } else {
+                break;
+            }
+        }
+
+        if (!found) {
+            result.append(-1);
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+static StatusOr<ColumnPtr> regexp_position_general(FunctionContext* context, re2::RE2::Options* options,
+                                                   const Columns& columns) {
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto pattern_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto start_viewer = ColumnViewer<TYPE_INT>(columns[2]);
+    auto occurrence_viewer = ColumnViewer<TYPE_INT>(columns[3]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row) || pattern_viewer.is_null(row) || start_viewer.is_null(row) ||
+            occurrence_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        int start_pos = start_viewer.value(row);
+        int occurrence = occurrence_viewer.value(row);
+
+        if (start_pos < 1 || occurrence < 1) {
+            result.append(-1);
+            continue;
+        }
+
+        auto str_value = str_viewer.value(row);
+        auto pattern_value = pattern_viewer.value(row);
+
+        std::string pattern_str = pattern_value.to_string();
+        // compile the pattern for each new row, keep in stack memory
+        re2::RE2 local_re(pattern_str, *options);
+        if (!local_re.ok()) {
+            return Status::InvalidArgument(strings::Substitute("Invalid regex expression: $0", pattern_str));
+        }
+
+        int utf8_length = utf8_len(str_value.data, str_value.data + str_value.size);
+
+        if (start_pos > utf8_length) {
+            result.append(-1);
+            continue;
+        }
+
+        const char* search_start = skip_leading_utf8(str_value.data, str_value.data + str_value.size, start_pos - 1);
+        int byte_offset = search_start - str_value.data;
+
+        int count = 0;
+        re2::StringPiece str_sp(str_value.data, str_value.size);
+        re2::StringPiece match;
+
+        bool found = false;
+        while (byte_offset <= str_value.size) {
+            if (local_re.Match(str_sp, byte_offset, str_value.size, re2::RE2::UNANCHORED, &match, 1)) {
+                count++;
+                if (count == occurrence) {
+                    int code_point_pos = utf8_len(str_value.data, match.data()) + 1;
+                    result.append(code_point_pos);
+                    found = true;
+                    break;
+                }
+
+                byte_offset = match.data() - str_value.data + match.size();
+                if (match.size() == 0) {
+                    byte_offset++;
+                }
+            } else {
+                break;
+            }
+        }
+
+        if (!found) {
+            result.append(-1);
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_position(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto* state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    if (state && state->const_pattern && state->regex) {
+        // Const col
+        return regexp_position_const_pattern(state->get_or_prepare_regex(), columns);
+    } else {
+        re2::RE2::Options options;
+        options.set_log_errors(false);
+        return regexp_position_general(context, &options, columns);
+    }
+}
+
 struct ReplaceState {
     bool only_null{false};
 
@@ -4714,10 +4916,15 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
         }
         auto str_value = str_viewer.value(row);
         Slice value;
-        if (!UrlParser::parse_url(str_value, url_part, &value)) {
+        auto status = UrlParser::parse_url(str_value, url_part, &value);
+        if (status == UrlParser::ParseStatus::INVALID) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
+            result.append_null();
+            continue;
+        }
+        if (status == UrlParser::ParseStatus::NOT_FOUND) {
             result.append_null();
             continue;
         }
@@ -4741,10 +4948,15 @@ StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url
 
         auto str_value = str_viewer.value(row);
         Slice value;
-        if (!UrlParser::parse_url(str_value, *url_part, &value)) {
+        auto status = UrlParser::parse_url(str_value, *url_part, &value);
+        if (status == UrlParser::ParseStatus::INVALID) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
+            result.append_null();
+            continue;
+        }
+        if (status == UrlParser::ParseStatus::NOT_FOUND) {
             result.append_null();
             continue;
         }
@@ -4805,7 +5017,8 @@ static bool seek_param_key_in_query_params(const Slice& query_params, const Slic
 
 static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, std::string* param_value) {
     Slice query_params;
-    if (!UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params)) {
+    auto status = UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params);
+    if (status != UrlParser::ParseStatus::OK) {
         return false;
     }
     return seek_param_key_in_query_params(query_params, param_key, param_value);
@@ -4928,9 +5141,9 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
         auto url_column = context->get_constant_column(0);
         auto url = ColumnHelper::get_const_value<TYPE_VARCHAR>(url_column);
         Slice query_params;
-        auto parse_success = UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params);
+        auto status = UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params);
         state->opt_const_query_params = query_params.to_string();
-        ill_formed |= !parse_success || query_params.size == 0;
+        ill_formed |= status != UrlParser::ParseStatus::OK || query_params.size == 0;
     }
 
     // result is const null is either url or param_key is ill-formed

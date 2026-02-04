@@ -61,26 +61,28 @@ public class DataCacheSelectExecutor {
             }
 
             ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
-            subContext.setCurrentComputeResource(computeResource);
-            StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
-            isFirstSubContext = false;
-            // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
-            // If DataCacheSelect is forward to leader, connectContext's Executor is null
-            if (connectContext.getExecutor() != null) {
-                connectContext.getExecutor().registerSubStmtExecutor(subStmtExecutor);
-            }
-            subStmtExecutor.addRunningQueryDetail(insertStmt);
-            try {
-                subStmtExecutor.execute();
-            } finally {
-                subStmtExecutor.addFinishedQueryDetail();
-            }
+            try (var scope = subContext.bindScope()) {
+                subContext.setCurrentComputeResource(computeResource);
+                StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
+                isFirstSubContext = false;
+                // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
+                // If DataCacheSelect is forward to leader, connectContext's Executor is null
+                if (connectContext.getExecutor() != null) {
+                    connectContext.getExecutor().registerSubStmtExecutor(subStmtExecutor);
+                }
+                subStmtExecutor.addRunningQueryDetail(insertStmt);
+                try {
+                    subStmtExecutor.execute();
+                } finally {
+                    subStmtExecutor.addFinishedQueryDetail();
+                }
 
-            if (subContext.getState().isError()) {
-                // throw exception if StmtExecutor execute failed
-                throw new StarRocksException(subContext.getState().getErrorMessage());
+                if (subContext.getState().isError()) {
+                    // throw exception if StmtExecutor execute failed
+                    throw new StarRocksException(subContext.getState().getErrorMessage());
+                }
+                subStmtExecutors.add(subStmtExecutor);
             }
-            subStmtExecutors.add(subStmtExecutor);
         }
 
         DataCacheSelectMetrics metrics = null;
@@ -141,12 +143,9 @@ public class DataCacheSelectExecutor {
             LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(executionId), DebugUtil.printId(queryId));
         }
         context.setExecutionId(executionId);
-        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
-        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
-        context.setThreadLocalInfo();
 
         // clone an new session variable
-        SessionVariable sessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        SessionVariable sessionVariable = connectContext.getSessionVariable().clone();
         // overwrite catalog
         sessionVariable.setCatalog(statement.getCatalog());
         // force enable datacache and populate

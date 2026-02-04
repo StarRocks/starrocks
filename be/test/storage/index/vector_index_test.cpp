@@ -19,6 +19,8 @@
 #include <tenann/factory/index_factory.h>
 #endif
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "runtime/mem_pool.h"
 #include "storage/index/index_descriptor.h"
@@ -26,8 +28,6 @@
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

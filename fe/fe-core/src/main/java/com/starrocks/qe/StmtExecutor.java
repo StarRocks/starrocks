@@ -56,6 +56,7 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -688,6 +689,14 @@ public class StmtExecutor {
 
     private ExecPlan generateExecPlan() throws Exception {
         ExecPlan execPlan = null;
+
+        // Collect optimizer timing only when explicitly enabled to avoid overhead on normal queries.
+        // When enabled, we only dump the trace to logs on planning failure.
+        if (Config.enable_dump_optimizer_trace_on_error) {
+            Tracers.enableTraceMode(Tracers.Mode.TIMER);
+            Tracers.enableTraceModule(Tracers.Module.BASE);
+            Tracers.enableTraceModule(Tracers.Module.OPTIMIZER);
+        }
         try (Timer ignored = Tracers.watchScope("Total")) {
             if (!isForwardToLeader()) {
                 if (context.shouldDumpQuery()) {
@@ -744,9 +753,11 @@ public class StmtExecutor {
                 }
             }
         } catch (SemanticException e) {
+            logOptimizerTraceOnGenerateExecPlanFailure(e);
             dumpException(e);
             throw new AnalysisException(e.getMessage(), e);
         } catch (StarRocksPlannerException e) {
+            logOptimizerTraceOnGenerateExecPlanFailure(e);
             dumpException(e);
             if (e.getType().equals(ErrorType.USER_ERROR)) {
                 throw e;
@@ -754,8 +765,35 @@ public class StmtExecutor {
                 LOG.warn("Planner error: " + originStmt.originStmt, e);
                 throw e;
             }
+        } catch (Exception e) {
+            logOptimizerTraceOnGenerateExecPlanFailure(e);
+            throw e;
         }
         return execPlan;
+    }
+
+    private void logOptimizerTraceOnGenerateExecPlanFailure(Throwable e) {
+        String qid = DebugUtil.printId(context.getQueryId());
+        String sql = originStmt == null ? "" : SqlCredentialRedactor.redact(originStmt.originStmt);
+        String err = e == null ? "" : (e.getClass().getSimpleName() + ": " + StringUtils.defaultString(e.getMessage()));
+
+        if (Config.enable_dump_optimizer_trace_on_error) {
+            String trace = Tracers.printScopeTimer();
+            if (StringUtils.isNotBlank(trace)) {
+                final int maxLen = 64 * 1024;
+                if (trace.length() > maxLen) {
+                    trace = trace.substring(0, maxLen) + "\n... truncated ...";
+                }
+                LOG.warn("Generate exec plan failed, dump optimizer trace (trace times optimizer)." +
+                                " query_id={}, sql={}, err={}\n{}", qid, sql, err, trace);
+                return;
+            }
+        }
+
+        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+        Tracers.toRuntimeProfile(plannerProfile);
+        LOG.warn("Generate exec plan failed. Planner profile: query_id={}, sql={}, err={}, profile={}",
+                qid, sql, err, plannerProfile);
     }
 
     // Execute one statement.
@@ -1103,6 +1141,10 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
+            }
+
+            if (coord != null) {
+                coord.clearExternalResources();
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
@@ -1917,8 +1959,12 @@ public class StmtExecutor {
         AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
         String queryId = analyzeProfileStmt.getQueryId();
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
+
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
-        Preconditions.checkNotNull(profileElement, "query not exists");
+        if (profileElement == null) {
+            throw new StarRocksException("Query profile not found for query_id: " + queryId +
+                ". The query may not have generated a profile, or the profile has been evicted from memory.");
+        }
         // For short circuit query, 'ProfileElement#plan' is null
         if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
                 !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
@@ -1957,9 +2003,15 @@ public class StmtExecutor {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.isExternal()) {
             if (analyzeTypeDesc.isHistogram()) {
+                List<com.starrocks.type.Type> columnTypes = analyzeStmt.getColumnTypes();
+                if (CollectionUtils.isEmpty(columnTypes) && CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                    columnTypes = analyzeStmt.getColumnNames().stream()
+                            .map(col -> table.getColumn(col).getType())
+                            .collect(Collectors.toList());
+                }
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new ExternalHistogramStatisticsCollectJob(analyzeStmt.getCatalogName(),
-                                db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
+                                db, table, analyzeStmt.getColumnNames(), columnTypes,
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
@@ -1980,9 +2032,15 @@ public class StmtExecutor {
             }
         } else {
             if (analyzeTypeDesc.isHistogram()) {
+                List<com.starrocks.type.Type> columnTypes = analyzeStmt.getColumnTypes();
+                if (CollectionUtils.isEmpty(columnTypes) && CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                    columnTypes = analyzeStmt.getColumnNames().stream()
+                            .map(col -> table.getColumn(col).getType())
+                            .collect(Collectors.toList());
+                }
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                analyzeStmt.getColumnTypes(), StatsConstants.ScheduleType.ONCE,
+                                columnTypes, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
@@ -3480,6 +3538,7 @@ public class StmtExecutor {
                     getPreparedStmtId());
             // Set query source from context
             queryDetail.setQuerySource(context.getQuerySource());
+            queryDetail.setImpersonatedUser(resolveImpersonatedUser());
             context.setQueryDetail(queryDetail);
             // copy queryDetail, cause some properties can be changed in future
             QueryDetailQueue.addQueryDetail(queryDetail.copy());
@@ -3559,6 +3618,16 @@ public class StmtExecutor {
                 && !isInformationQuery
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+
+    private String resolveImpersonatedUser() {
+        String qualifiedUser = ClusterNamespace.getNameFromFullName(context.getQualifiedUser());
+        String currentUser = context.getCurrentUserIdentity() == null ? null :
+                ClusterNamespace.getNameFromFullName(context.getCurrentUserIdentity().getUser());
+        if (currentUser == null || qualifiedUser == null || currentUser.equals(qualifiedUser)) {
+            return null;
+        }
+        return currentUser;
     }
 
     public double getMaxFilterRatio(DmlStmt dmlStmt) {
