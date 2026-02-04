@@ -355,7 +355,11 @@ public class AlterTableOperationStmtTest {
 
         RemoveOrphanFilesProcedure removeOrphanProc = RemoveOrphanFilesProcedure.getInstance();
         Assertions.assertEquals("remove_orphan_files", removeOrphanProc.getProcedureName());
-        Assertions.assertEquals(1, removeOrphanProc.getArguments().size());
+        Assertions.assertEquals(2, removeOrphanProc.getArguments().size());
+        Assertions.assertEquals("older_than", removeOrphanProc.getArguments().get(0).getName());
+        Assertions.assertFalse(removeOrphanProc.getArguments().get(0).isRequired());
+        Assertions.assertEquals("location", removeOrphanProc.getArguments().get(1).getName());
+        Assertions.assertFalse(removeOrphanProc.getArguments().get(1).isRequired());
 
         RewriteDataFilesProcedure rewriteProc = RewriteDataFilesProcedure.getInstance();
         Assertions.assertEquals("rewrite_data_files", rewriteProc.getProcedureName());
