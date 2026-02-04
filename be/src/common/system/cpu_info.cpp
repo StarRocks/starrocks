@@ -67,6 +67,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <system_error>
 
 #include "base/path/file_util.h"
@@ -193,13 +194,10 @@ void CpuInfo::init() {
     // Print a warning if something is wrong with sched_getcpu().
 #ifdef HAVE_SCHED_GETCPU
     if (sched_getcpu() == -1) {
-        LOG(WARNING) << "Kernel does not support sched_getcpu(). Performance may be impacted.";
+        std::cerr << "Kernel does not support sched_getcpu(). Performance may be impacted.";
     }
 #else
-#ifndef __APPLE__
-    LOG(WARNING) << "Built on a system without sched_getcpu() support. Performance may"
-                 << " be impacted.";
-#endif
+    std::cerr << "Built on a system without sched_getcpu() support. Performance may be impacted.";
 #endif
 
     _init_numa();
