@@ -40,6 +40,23 @@ public class RemoveOrphanFilesProcedureTest {
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
 
     @Test
+    void testTableLocationEmptyThrows() {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn("");
+        when(table.currentSnapshot()).thenReturn(snapshot);
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                () -> procedure.execute(context, Collections.emptyMap()));
+
+        assertTrue(ex.getMessage().contains("table location is empty"));
+    }
+
+    @Test
     void testLocationEmptyThrows() {
         RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
         Table table = Mockito.mock(Table.class);
@@ -132,6 +149,96 @@ public class RemoveOrphanFilesProcedureTest {
         String msg = t.getMessage();
         assertFalse(msg != null && (msg.contains("expected non-empty string") || msg.contains("must be a subdirectory")),
                 "location validation should pass; got: " + msg);
+    }
+
+    @Test
+    void testLocationEqualsTableLocationPassesValidation() {
+        // When location exactly equals table location, validateAndResolveScanLocation returns early
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn("oss://bucket/table");
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.emptyList());
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put(RemoveOrphanFilesProcedure.LOCATION, ConstantOperator.createVarchar("oss://bucket/table"));
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        Throwable t = assertThrows(Throwable.class, () -> procedure.execute(context, args));
+        String msg = t.getMessage();
+        assertFalse(msg != null && (msg.contains("expected non-empty string") || msg.contains("must be a subdirectory")),
+                "location equals table location should pass validation; got: " + msg);
+    }
+
+    @Test
+    void testLocationWithTrailingSlashPassesValidation() {
+        // Trailing slash in location is normalized (stripTrailingSlash); validation still passes
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn("s3://bucket/table");
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.emptyList());
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put(RemoveOrphanFilesProcedure.LOCATION, ConstantOperator.createVarchar("s3://bucket/table/data/"));
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        Throwable t = assertThrows(Throwable.class, () -> procedure.execute(context, args));
+        String msg = t.getMessage();
+        assertFalse(msg != null && (msg.contains("expected non-empty string") || msg.contains("must be a subdirectory")),
+                "location with trailing slash should pass validation; got: " + msg);
+    }
+
+    @Test
+    void testLocationDifferentSchemeThrows() {
+        // Scheme must match (e.g. s3 vs oss)
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn("s3://bucket/table");
+        when(table.currentSnapshot()).thenReturn(snapshot);
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put(RemoveOrphanFilesProcedure.LOCATION, ConstantOperator.createVarchar("oss://bucket/table/data"));
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                () -> procedure.execute(context, args));
+
+        assertTrue(ex.getMessage().contains("invalid argument value"));
+        assertTrue(ex.getMessage().contains(RemoveOrphanFilesProcedure.LOCATION));
+        assertTrue(ex.getMessage().contains("must be a subdirectory of"));
+    }
+
+    @Test
+    void testLocationDifferentAuthorityThrows() {
+        // Authority (e.g. bucket) must match
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn("s3://bucket-a/table");
+        when(table.currentSnapshot()).thenReturn(snapshot);
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put(RemoveOrphanFilesProcedure.LOCATION, ConstantOperator.createVarchar("s3://bucket-b/table/data"));
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                () -> procedure.execute(context, args));
+
+        assertTrue(ex.getMessage().contains("invalid argument value"));
+        assertTrue(ex.getMessage().contains(RemoveOrphanFilesProcedure.LOCATION));
+        assertTrue(ex.getMessage().contains("must be a subdirectory of"));
     }
 
     private IcebergTableProcedureContext createContext(Table table) {
