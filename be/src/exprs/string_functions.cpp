@@ -14,9 +14,9 @@
 
 #include "exprs/string_functions.h"
 
+#include "base/utility/defer_op.h"
 #include "column/bytes.h"
 #include "function_context.h"
-#include "util/defer_op.h"
 
 #ifdef __x86_64__
 #include <immintrin.h>
@@ -38,6 +38,9 @@
 #include <stdexcept>
 #include <string>
 
+#include "base/container/raw_container.h"
+#include "base/crypto/sm3.h"
+#include "base/string/utf8.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -58,9 +61,6 @@
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
 #include "types/large_int_value.h"
-#include "util/raw_container.h"
-#include "util/sm3.h"
-#include "util/utf8.h"
 #include "util/utf8_encoding.h"
 
 namespace starrocks {

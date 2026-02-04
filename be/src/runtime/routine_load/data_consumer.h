@@ -38,10 +38,10 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "librdkafka/rdkafkacpp.h"
 #include "pulsar/Client.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/blocking_queue.hpp"
 #include "util/uid_util.h"
 
 namespace starrocks {

@@ -16,12 +16,12 @@
 
 #include <sstream>
 
+#include "base/string/slice.h"
 #include "exec/exec_node.h"
 #include "exec/jdbc_scanner.h"
 #include "exprs/expr.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "storage/chunk_helper.h"
-#include "util/slice.h"
 
 namespace starrocks::connector {
 

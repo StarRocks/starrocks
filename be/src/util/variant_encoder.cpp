@@ -25,6 +25,8 @@
 #include <vector>
 
 #include "arrow/util/endian.h"
+#include "base/decimal_types.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -39,8 +41,6 @@
 #include "runtime/time_types.h"
 #include "runtime/types.h"
 #include "storage/types.h"
-#include "util/decimal_types.h"
-#include "util/slice.h"
 #include "util/variant.h"
 #include "velocypack/vpack.h"
 

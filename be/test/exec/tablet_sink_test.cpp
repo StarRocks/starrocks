@@ -19,6 +19,9 @@
 #include <fstream>
 #include <sstream>
 
+#include "base/string/slice.h"
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -27,9 +30,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

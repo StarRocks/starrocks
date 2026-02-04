@@ -39,6 +39,7 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/data.pb.h"
@@ -64,7 +65,6 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 using std::string;
 

@@ -19,9 +19,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/string/slice.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
-#include "util/slice.h"
 
 namespace starrocks {
 

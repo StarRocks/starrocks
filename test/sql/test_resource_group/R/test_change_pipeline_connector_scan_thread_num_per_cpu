@@ -1,4 +1,4 @@
--- name: test_change_pipeline_connector_scan_thread_num_per_cpu
+-- name: test_change_pipeline_connector_scan_thread_num_per_cpu @sequential
 create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
 -- result:
 -- !result
@@ -83,9 +83,9 @@ from (
 -- result:
 56
 -- !result
-select count(1) = ${num_cores}*2 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
+select count(1) <= ${num_cores}*8 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
 -- result:
-0
+1
 -- !result
 update information_schema.be_configs set value = "8" where name= "pipeline_connector_scan_thread_num_per_cpu";
 -- result:

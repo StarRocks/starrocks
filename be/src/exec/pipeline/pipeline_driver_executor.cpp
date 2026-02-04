@@ -17,13 +17,13 @@
 #include <memory>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
-#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
@@ -314,10 +314,10 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 }
 
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                                             const Status& status, bool done, bool attach_profile) {
+                                             const Status& status, bool done) {
     auto* profile = fragment_ctx->runtime_state()->runtime_profile();
     ObjectPool obj_pool;
-    if (attach_profile) {
+    if (query_ctx->enable_profile()) {
         profile = _build_merged_instance_profile(query_ctx, fragment_ctx, &obj_pool);
 
         // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
@@ -496,9 +496,6 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
                                                                      FragmentContext* fragment_ctx,
                                                                      ObjectPool* obj_pool) {
     auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
-    if (!query_ctx->enable_profile()) {
-        return instance_profile;
-    }
 
     if (query_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
         return instance_profile;

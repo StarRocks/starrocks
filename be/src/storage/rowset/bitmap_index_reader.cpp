@@ -38,6 +38,7 @@
 
 #include <memory>
 
+#include "base/string/utf8.h"
 #include "bitmap_range_iterator.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -47,7 +48,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/types.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 

@@ -122,6 +122,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     f.set_is_key(c.is_key());
     f.set_length(c.length());
     f.set_uid(c.unique_id());
+    f.set_is_virtual(c.is_virtual_column());
 
     if (type == TYPE_ARRAY) {
         const TabletColumn& sub_column = c.subcolumn(0);

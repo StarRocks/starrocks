@@ -24,15 +24,9 @@ set(EXEC_FILES
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
-        ./common/cow_test.cpp
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
-        ./common/config_test.cpp
-        ./common/process_exit_test.cpp
-        ./common/status_test.cpp
-        ./common/tracer_test.cpp
         ./common/uri_test.cpp
-        ./common/cow_test.cpp
         ./connector/benchmark_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
@@ -216,7 +210,6 @@ set(EXEC_FILES
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
-        ./formats/csv/output_stream_file_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
@@ -282,6 +275,7 @@ set(EXEC_FILES
         ./http/action/proc_profile_e2e_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
+        ./io/formatted_output_stream_file_test.cpp
         ./io/io_profiler_test.cpp
         ./io/fd_output_stream_test.cpp
         ./io/s3_output_stream_test.cpp
@@ -340,67 +334,41 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
-        ./types/int256_test.cpp
-        ./types/int256_arithmetic_test.cpp
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp 
         ./types/variant_value_test.cpp
-        ./simd/batch_run_counter_test.cpp
-        ./simd/simd_test.cpp
-        ./simd/simd_selector_test.cpp
-        ./simd/simd_mulselector_test.cpp
-        ./simd/simd_expand_test.cpp
-        ./util/heap_test.cpp
-        ./util/phmap_test.cpp
+        ./column/simd_selector_test.cpp
+        ./column/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
-        ./util/await_test.cpp
         ./util/base85_test.cpp
         ./util/bitmap_test.cpp
-        ./util/bit_mask_test.cpp
-        ./util/bit_stream_utils_test.cpp
-        ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp
-        ./util/blocking_queue_test.cpp
         ./util/brpc_stub_cache_test.cpp
         ./util/bthreads/future_test.cpp
         ./util/bthreads/promise_test.cpp
         ./util/bthreads/semaphore_test.cpp
-        ./util/bthreads/shared_mutex_test.cpp
         ./util/bthreads/shared_future_test.cpp
         ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp
-        ./util/c_string_test.cpp
         ./util/cidr_test.cpp
-        ./util/coding_test.cpp
         ./util/core_local_test.cpp
         ./util/core_local_counter_test.cpp
-        ./util/countdown_latch_test.cpp
         ./util/cpu_info_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
         ./util/fail_point_test.cpp
-        ./util/faststring_test.cpp
-        ./util/file_util_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
-        ./util/md5_test.cpp
-        ./util/memcmp_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
-        ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
         ./util/new_metrics_test.cpp
         ./util/parse_util_test.cpp
-        ./util/path_trie_test.cpp
-        ./util/path_util_test.cpp
-        ./util/priority_queue_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp
-        ./util/raw_container_test.cpp
-        ./util/scoped_cleanup_test.cpp
-        ./util/string_parser_test.cpp
+        ./base/raw_container_test.cpp
         ./util/string_util_test.cpp
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
@@ -408,13 +376,9 @@ set(EXEC_FILES
         ./util/thrift_customize_test.cpp
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
-        ./util/utf8_check_test.cpp
-        ./util/uuid_generator_test.cpp
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/bit_packing_test.cpp
-        ./util/bit_packing_simd_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
@@ -423,16 +387,12 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
-        ./util/timezone_utils_test.cpp
-        ./util/concurrent_limiter_test.cpp
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
-        ./util/byte_stream_split_test.cpp
         ./util/url_coding_test.cpp
         ./util/url_parser_test.cpp
-        ./util/slice_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp
@@ -451,20 +411,19 @@ set(EXEC_FILES
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
+        ./util/cow_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
         ./util/llm_query_service_test.cpp
         )
 
-if (${USE_AVX512})
-    list(APPEND EXEC_FILES ./simd/delta_decode_test.cpp)
-endif()
-
-
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif ()
+
+add_subdirectory(base)
+add_subdirectory(common)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
@@ -539,6 +498,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
+    ./storage/lake/segment_metadata_filter_test.cpp
     ./storage/lake/schema_change_test.cpp
     ./storage/lake/lake_replication_txn_manager_test.cpp
     ./storage/lake/spill_mem_table_sink_test.cpp

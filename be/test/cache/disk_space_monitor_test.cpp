@@ -20,13 +20,13 @@
 #include <cstring>
 #include <filesystem>
 
+#include "base/testutil/scoped_updater.h"
+#include "base/utility/defer_op.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
-#include "testutil/scoped_updater.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

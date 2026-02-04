@@ -2017,4 +2017,14 @@ public class SubqueryTest extends PlanTestBase {
             connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
         }
     }
+
+    @Test
+    public void testOrderBySubquery() throws Exception {
+        String sql = "SELECT t0.* "
+                + " FROM t0"
+                + " left join t1 x1 on t0.v2 = x1.v4 and x1.v6 = (select v8 from t2 where v9 = 1 order by v8 limit 1, 1) "
+                + " left join t1 xx1 on x1.v5 = xx1.v5 and xx1.v6 = (select v8 from t2 where v9 = 1 order by v8 limit 1) ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "ASSERT NUMBER OF ROWS");
+    }
 }

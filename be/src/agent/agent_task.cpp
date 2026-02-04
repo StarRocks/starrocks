@@ -19,6 +19,7 @@
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
+#include "base/testutil/sync_point.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
 #include "gutil/strings/join.h"
@@ -41,7 +42,6 @@
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 

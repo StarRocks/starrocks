@@ -16,6 +16,7 @@
 
 #include <cstring>
 
+#include "base/container/raw_container.h"
 #include "common/statusor.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
@@ -24,7 +25,6 @@
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "serde/encode_context.h"
-#include "util/raw_container.h"
 
 namespace starrocks::spill {
 

@@ -18,6 +18,7 @@
 #include <arrow/type.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "benchgen/benchmark_suite.h"
 #include "benchgen/record_batch_iterator_factory.h"
 #include "benchgen/table.h"
@@ -26,7 +27,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

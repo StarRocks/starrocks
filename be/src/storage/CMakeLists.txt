@@ -176,6 +176,7 @@ set(STORAGE_FILES
     compaction_manager.cpp
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
+    virtual_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
@@ -201,6 +202,7 @@ set(STORAGE_FILES
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
     lake/rowset.cpp
+    lake/segment_metadata_filter.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp

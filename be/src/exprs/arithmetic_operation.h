@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include "base/utility/guard.h"
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
-#include "util/guard.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include <llvm/IR/Constants.h>

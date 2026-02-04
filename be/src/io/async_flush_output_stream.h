@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 
+#include "base/container/raw_container.h"
 #include "common/statusor.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 class WritableFile;

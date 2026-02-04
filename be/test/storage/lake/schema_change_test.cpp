@@ -18,6 +18,8 @@
 
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "column/binary_column.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -35,8 +37,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 

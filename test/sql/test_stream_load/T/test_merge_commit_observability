@@ -1,0 +1,82 @@
+-- name: test_merge_commit_observability
+-- Test merge commit stream load observability in information_schema.loads
+
+-- ============================================================================
+-- Scene 1: Successful import with profile - verify all fields in loads table
+-- ============================================================================
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `t1`
+(
+    `id` int NOT NULL,
+    `name` varchar(65533),
+    `score` int NOT NULL
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+-- Enable profile for the table
+alter table t1 set('enable_load_profile'='true');
+
+-- Set FE config to collect profile (threshold = 1 second)
+ADMIN SET FRONTEND CONFIG ("stream_load_profile_collect_threshold_second" = "1");
+
+-- Execute merge commit stream load (synchronous mode)
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -d '{"id":1,"name":"test1","score":100}' ${url}/api/db_${uuid0}/t1/_stream_load
+
+sync;
+
+-- Verify data is loaded correctly
+select * from t1 order by id;
+
+-- Verify information_schema.loads for successful merge commit stream load
+select STATE, TYPE, (DB_NAME = 'db_${uuid0}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, SINK_ROWS, FILTERED_ROWS, UNSELECTED_ROWS, PROGRESS, ERROR_MSG, TRACKING_SQL, (PROFILE_ID IS NOT NULL) from information_schema.loads where DB_NAME='db_${uuid0}' and TABLE_NAME='t1';
+SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid0}' and TABLE_NAME='t1' ORDER BY j.`key`;
+SELECT j.`key` FROM information_schema.loads, LATERAL json_each(RUNTIME_DETAILS) AS j WHERE DB_NAME='db_${uuid0}' and TABLE_NAME='t1' ORDER BY j.`key`;
+
+-- ============================================================================
+-- Scene 2: Data quality failure - verify error handling and tracking sql
+-- ============================================================================
+create database db_${uuid1};
+use db_${uuid1};
+
+CREATE TABLE `t2`
+(
+    `id` int(11) NOT NULL,
+    `name` varchar(65533) NOT NULL,
+    `score` int(11) NOT NULL
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+-- Execute merge commit stream load with invalid data (NULL in NOT NULL column)
+-- Set max_filter_ratio to 0 to ensure data quality issues cause failure
+[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -H "max_filter_ratio:0" -d '{"id":1,"name":null,"score":100}' ${url}/api/db_${uuid1}/t2/_stream_load
+
+sync;
+
+-- Verify no data is loaded
+select count(*) from t2;
+
+-- Verify information_schema.loads for failed merge commit stream load
+select STATE, TYPE, (DB_NAME = 'db_${uuid1}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, FILTERED_ROWS, SINK_ROWS, UNSELECTED_ROWS, PROGRESS from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid1}' and TABLE_NAME='t2' ORDER BY j.`key`;
+SELECT j.`key` FROM information_schema.loads, LATERAL json_each(RUNTIME_DETAILS) AS j WHERE DB_NAME='db_${uuid1}' and TABLE_NAME='t2' ORDER BY j.`key`;
+select like(ERROR_MSG, 'There is a data quality issue. Please check the tracking URL or SQL for details. Tracking URL: %. Tracking SQL: %') as MATCHES_PATTERN from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+select (TRACKING_SQL = concat('SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID=', ID)) as MATCHES_PATTERN from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+[UC]JOB_ID=select JOB_ID from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID = ${JOB_ID};
+
+-- Restore FE profile config
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("stream_load_profile_collect_threshold_second" = "0");
+} END CLEANUP

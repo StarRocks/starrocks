@@ -23,13 +23,15 @@
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/string/faststring.h"
 #include "column/chunk.h"
-#include "common/closure_guard.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
+#include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
@@ -51,9 +53,7 @@
 #include "util/compression/block_compression.h"
 #include "util/disposable_closure.h"
 #include "util/failpoint/fail_point.h"
-#include "util/faststring.h"
 #include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 

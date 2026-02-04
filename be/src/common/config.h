@@ -631,6 +631,10 @@ CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
 CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 
+// Enable segment metadata filter for lake tables.
+// When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
+CONF_mBool(enable_lake_segment_metadata_filter, "true");
+
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");
@@ -1802,8 +1806,6 @@ CONF_mBool(enable_tablet_write_log, "false");
 CONF_mInt32(tablet_write_log_buffer_size, "100000");
 
 CONF_mBool(skip_schema_in_rowset_meta, "true");
-
-CONF_mBool(enable_bit_unpack_simd, "true");
 
 CONF_mInt32(max_committed_without_schema_rowset, "1000");
 

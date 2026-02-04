@@ -14,6 +14,7 @@ The Backend is responsible for:
 
 ```
 be/src/
+├── base/             # Base primitives (Status, StatusOr, logging, macros)
 ├── storage/          # Storage engine (tablets, segments, compaction)
 ├── exec/             # Query execution (operators, pipeline, scan)
 ├── column/           # Column types and operations
@@ -22,7 +23,7 @@ be/src/
 ├── formats/          # File formats (Parquet, ORC, etc.)
 ├── connector/        # External data source connectors
 ├── util/             # Utilities and helpers
-├── common/           # Common types, status, config
+├── common/           # Common config, tracing, process utilities
 ├── http/             # HTTP service endpoints
 ├── service/          # Thrift services
 └── simd/             # SIMD utilities
@@ -47,6 +48,26 @@ BUILD_TYPE=ASAN ./build.sh --be
 ./build.sh --be --enable-shared-data  # For shared-data mode
 ```
 
+### Fast UT Build Tip
+
+Use `run-be-ut.sh` with `--build-target` to compile only a single test binary and speed up iteration, e.g.:
+
+```bash
+CMAKE_BUILD_PREFIX=/path/to/build \
+STARROCKS_THIRDPARTY=/path/to/thirdparty \
+./run-be-ut.sh --build-target base_test --module base_test --without-java-ext --gtest_filter 'StatusTest.*'
+```
+
+### Fast UT Build Tip
+
+Use `run-be-ut.sh` with `--build-target` to compile only a single test binary and speed up iteration, e.g.:
+
+```bash
+CMAKE_BUILD_PREFIX=/path/to/build \
+STARROCKS_THIRDPARTY=/path/to/thirdparty \
+./run-be-ut.sh --build-target base_test --module base_test --without-java-ext --gtest_filter 'StatusTest.*'
+```
+
 ### CMake Options
 
 Key CMake options (see `be/CMakeLists.txt`):
@@ -55,6 +76,20 @@ Key CMake options (see `be/CMakeLists.txt`):
 - `USE_STAROS`: Enable shared-data mode
 - `WITH_GCOV`: Enable code coverage
 - `MAKE_TEST`: Build unit tests
+
+### Unit Test Linking Note
+
+- Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
+  which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
+- When `ENABLE_MULTI_DYNAMIC_LIBS=ON`, shared BE libs are built without `WRAP_LINKER_FLAGS` to avoid
+  undefined `__wrap___cxa_throw` in libs that don’t link `Util`.
+- When `ENABLE_MULTI_DYNAMIC_LIBS=ON`, shared BE libs are built without `WRAP_LINKER_FLAGS` to avoid
+  undefined `__wrap___cxa_throw` in libs that don’t link `Util`.
+
+### Unit Test Linking Note
+
+- Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
+  which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
 
 ## Code Style
 
@@ -129,9 +164,25 @@ Use `#pragma once` instead of traditional include guards:
 
 #include <glog/logging.h>    // Third-party
 
-#include "common/status.h"   // StarRocks
+#include "base/status.h"     // StarRocks
 #include "storage/rowset.h"
 ```
+
+## Module Boundaries
+
+### base
+- **Minimal deps only**: `be/src/base` may only depend on `gen_cpp/*`, `gutil/*`, system headers, and third-party libraries.
+- **No other BE modules**: do not include headers from `common/*`, `util/*`, `storage/*`, etc.
+
+### gutil
+- **No StarRocks module deps**: `be/src/gutil` must not include headers from other BE modules (e.g. `common/*`, `util/*`, `storage/*`).
+- **Allowed deps**: `gutil/*`, system headers, and third-party base/butil headers.
+- **Logging**: use `gutil/logging.h` (glog wrapper) instead of `common/logging.h`.
+- **Compiler macros**: use `gutil/compiler_util.h` (do not include `common/compiler_util.h` from gutil).
+
+### common
+- **Allowed deps only**: `be/src/common` may depend on `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
+- **No other BE modules**: do not include headers from `util/*`, `runtime/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, etc.
 
 ## Common Patterns
 

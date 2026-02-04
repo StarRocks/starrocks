@@ -16,10 +16,10 @@
 
 #include <gutil/strings/fastmem.h>
 
+#include "base/decimal_types.h"
 #include "column/column_builder.h"
 #include "exprs/overflow.h"
 #include "runtime/decimalv3.h"
-#include "util/decimal_types.h"
 #include "util/variant.h"
 
 namespace starrocks {

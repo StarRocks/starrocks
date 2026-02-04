@@ -1459,7 +1459,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+                for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                     TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), physicalPartition.getId(),
                             index.getId(), info.getDataProperty().getStorageMedium());
                     for (Tablet tablet : index.getTablets()) {
@@ -1781,17 +1781,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             PhysicalPartition physicalPartition = info.getPhysicalPartition();
             partition.addSubPartition(physicalPartition);
             // the shardGrouId may invalid when upgrade from old version
-            if (olapTable.isCloudNativeTable() &&
-                    physicalPartition.getLatestBaseIndex().getShardGroupId() ==
-                            PhysicalPartition.INVALID_SHARD_GROUP_ID) {
-                physicalPartition.getLatestBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
+            if (olapTable.isCloudNativeTable()) {
+                for (MaterializedIndex index : physicalPartition.getBaseIndices()) {
+                    if (index.getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                        index.setShardGroupId(physicalPartition.getShardGroupId());
+                    }
+                }
             }
             olapTable.addPhysicalPartition(physicalPartition);
 
             if (!isCheckpointThread()) {
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+                for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                     TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(),
                             physicalPartition.getId(), index.getId(), olapTable.getPartitionInfo().getDataProperty(
                             info.getPartitionId()).getStorageMedium(), false);
@@ -2090,7 +2092,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     long physicalPartitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partition.getParentId()).getStorageMedium();
-                    for (MaterializedIndex mIndex : partition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex mIndex : partition.getAllMaterializedIndices(IndexExtState.ALL)) {
                         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
                                 mIndex.getId(), medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : mIndex.getTablets()) {

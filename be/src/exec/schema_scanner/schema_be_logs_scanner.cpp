@@ -15,10 +15,10 @@
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 
 #include "agent/master_info.h"
+#include "base/time/time.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/time.h"
 
 namespace starrocks {
 

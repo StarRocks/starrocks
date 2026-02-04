@@ -22,12 +22,12 @@
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/simd_selector.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "glog/logging.h"
-#include "simd/selector.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

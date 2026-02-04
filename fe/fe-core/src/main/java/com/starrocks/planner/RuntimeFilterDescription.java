@@ -190,7 +190,7 @@ public class RuntimeFilterDescription {
 
     public void setBuildPlanNode(PlanNode buildPlanNode) {
         this.buildPlanNode = buildPlanNode;
-        inferBoradCastJoinInSkew();
+        inferBroadcastJoinInSkew();
     }
 
     public int getSkew_shuffle_filter_id() {
@@ -201,7 +201,7 @@ public class RuntimeFilterDescription {
         this.skew_shuffle_filter_id = skew_shuffle_filter_id;
     }
 
-    private void inferBoradCastJoinInSkew() {
+    private void inferBroadcastJoinInSkew() {
         if (buildPlanNode != null && buildPlanNode instanceof HashJoinNode) {
             HashJoinNode hashJoinNode = (HashJoinNode) buildPlanNode;
             if (hashJoinNode.isSkewJoin() && hashJoinNode.getDistrMode() == JoinNode.DistributionMode.BROADCAST) {
@@ -624,7 +624,7 @@ public class RuntimeFilterDescription {
 
         assert (joinMode != JoinNode.DistributionMode.NONE);
         if (joinMode.equals(BROADCAST)) {
-            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BORADCAST);
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BROADCAST);
         } else if (joinMode.equals(LOCAL_HASH_BUCKET)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET);
         } else if (joinMode.equals(PARTITIONED)) {

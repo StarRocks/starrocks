@@ -53,7 +53,7 @@ subprojects {
         set("fastutil.version", "8.5.15")
         set("gcs.connector.version", "hadoop3-2.2.26")
         set("grpc.version", "1.63.0")
-        set("hadoop.version", "3.4.1")
+        set("hadoop.version", "3.4.2")
         set("hbase.version", "2.6.2")
         set("hikaricp.version", "3.4.5")
         set("hive-apache.version", "3.1.2-22")

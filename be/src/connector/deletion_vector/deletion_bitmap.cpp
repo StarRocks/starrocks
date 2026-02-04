@@ -14,9 +14,9 @@
 
 #include "deletion_bitmap.h"
 
+#include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/memory/column_allocator.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

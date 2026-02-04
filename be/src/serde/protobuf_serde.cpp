@@ -16,6 +16,8 @@
 
 #include <utility>
 
+#include "base/coding.h"
+#include "base/container/raw_container.h"
 #include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
 #include "common/statusor.h"
@@ -24,8 +26,6 @@
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "util/coding.h"
-#include "util/raw_container.h"
 
 namespace starrocks::serde {
 

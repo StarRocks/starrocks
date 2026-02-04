@@ -33,6 +33,7 @@
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
 #endif
+#include "base/utility/pred_guard.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
@@ -40,7 +41,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
-#include "util/pred_guard.h"
 #include "util/value_generator.h"
 
 namespace starrocks {
@@ -166,13 +166,13 @@ void offsets_copy(const T* __restrict arrow_offsets_data, T arrow_base_offset, s
     }
 }
 
-template <LogicalType LT, typename = StringOrBinaryGaurd<LT>>
+template <LogicalType LT, typename = StringOrBinaryGuard<LT>>
 static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY)
                                                              ? TypeDescriptor::MAX_VARCHAR_LENGTH
                                                              : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGaurd<LT>> {
+struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGuard<LT>> {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<LT>;

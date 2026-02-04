@@ -15,12 +15,16 @@
 package com.starrocks.load.batchwrite;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.Pair;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
@@ -31,6 +35,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.transaction.TxnStateCallbackFactory;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
@@ -46,6 +51,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -142,7 +148,7 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
                 result = Optional.of(nodes);
             }
         };
-        RequestLoadResult result1 = load.requestLoad(nodes.get(0).getId(), nodes.get(0).getHost());
+        RequestLoadResult result1 = load.requestLoad("root", nodes.get(0).getId(), nodes.get(0).getHost());
         assertTrue(result1.isOk());
         String label = result1.getValue();
         assertNotNull(label);
@@ -152,7 +158,20 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         assertEquals(nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet()),
                 mergeCommitTask.getBackendIds());
 
-        RequestLoadResult result2 = load.requestLoad(nodes.get(1).getId(), nodes.get(1).getHost());
+        StreamLoadMgr streamLoadMgr = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        AbstractStreamLoadTask streamLoadTask = streamLoadMgr.getTaskByLabel(label);
+        assertSame(mergeCommitTask, streamLoadTask);
+
+        List<AbstractStreamLoadTask> tasksByName = streamLoadMgr.getTaskByName(label);
+        assertNotNull(tasksByName, "getTaskByName should return non-null list");
+        assertEquals(1, tasksByName.size(), "Task list should not be empty");
+        assertSame(mergeCommitTask, tasksByName.get(0));
+
+        TxnStateCallbackFactory txnStateCallbackFactory =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory();
+        assertNull(txnStateCallbackFactory.getCallback(mergeCommitTask.getId()));
+
+        RequestLoadResult result2 = load.requestLoad("root", nodes.get(1).getId(), nodes.get(1).getHost());
         assertTrue(result2.isOk());
         assertEquals(label, result2.getValue());
 
@@ -175,7 +194,7 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         };
 
         // Request from coordinator backend
-        RequestLoadResult result1 = load.requestLoad(nodes.get(0).getId(), nodes.get(0).getHost());
+        RequestLoadResult result1 = load.requestLoad("root", nodes.get(0).getId(), nodes.get(0).getHost());
         assertTrue(result1.isOk());
         String label1 = result1.getValue();
         assertNotNull(label1);
@@ -185,7 +204,7 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         assertEquals(nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet()),
                 mergeCommitTask1.getBackendIds());
 
-        RequestLoadResult result2 = load.requestLoad(allNodes.get(parallel).getId(), allNodes.get(parallel).getHost());
+        RequestLoadResult result2 = load.requestLoad("root", allNodes.get(parallel).getId(), allNodes.get(parallel).getHost());
         assertTrue(result2.isOk());
         String label2 = result2.getValue();
         assertNotNull(label2);
@@ -220,7 +239,7 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
             }
         };
 
-        RequestLoadResult result = load.requestLoad(Integer.MAX_VALUE, "127.0.0.1");
+        RequestLoadResult result = load.requestLoad("root", Integer.MAX_VALUE, "127.0.0.1");
         assertFalse(result.isOk());
         assertEquals(TStatusCode.SERVICE_UNAVAILABLE, result.getStatus().getStatus_code());
     }
@@ -236,10 +255,29 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         };
 
         executor.setThrowException(true);
-        RequestLoadResult result = load.requestLoad(nodes.get(0).getId(), nodes.get(0).getHost());
-        assertFalse(result.isOk());
-        assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
-        assertEquals(0, load.numRunningLoads());
+
+        Map<String, MergeCommitTask> allTasksBefore = getTasksFromStreamLoadMgr(DB_NAME_1, TABLE_NAME_1_1);
+        RequestLoadResult result = load.requestLoad("test_user", nodes.get(0).getId(), nodes.get(0).getHost());
+        assertFalse(result.isOk(), "requestLoad should fail");
+        assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code(),
+                "Status code should be INTERNAL_ERROR");
+        assertNotNull(result.getStatus().getError_msgs(), "Error messages should not be null");
+        assertFalse(result.getStatus().getError_msgs().isEmpty(), "Error messages should not be empty");
+        String errorMsg = result.getStatus().getError_msgs().get(0);
+        assertNotNull(errorMsg, "Error message should not be null");
+        assertTrue(errorMsg.contains("artificial failure"), "Error message should contain exception info: " + errorMsg);
+        assertEquals(0, load.numRunningLoads(), "Task should be removed from mergeCommitTasks");
+
+        Map<String, MergeCommitTask> allTasksAfter = getTasksFromStreamLoadMgr(DB_NAME_1, TABLE_NAME_1_1);
+        for (MergeCommitTask task : allTasksBefore.values()) {
+            assertSame(task, allTasksAfter.remove(task.getLabel()));
+        }
+        assertEquals(1, allTasksAfter.size());
+        MergeCommitTask failedTask = allTasksAfter.values().iterator().next();
+        assertNotNull(failedTask);
+        Pair<MergeCommitTask.TaskState, String> taskState = failedTask.getTaskState();
+        assertEquals(MergeCommitTask.TaskState.CANCELLED, taskState.first);
+        assertTrue(taskState.second.contains("artificial failure"));
     }
 
     @Test
@@ -272,10 +310,63 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
                 assigner,
                 executor,
                 txnStateDispatcher);
-        RequestLoadResult result = mergeCommitJob.requestLoad(nodes.get(0).getId(), nodes.get(0).getHost());
+        RequestLoadResult result = mergeCommitJob.requestLoad("root", nodes.get(0).getId(), nodes.get(0).getHost());
         assertFalse(result.isOk());
         assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
         assertTrue(result.getStatus().getError_msgs().get(0).contains("Database 'non_existent_db' does not exist"));
+    }
+
+    @Test
+    public void testStreamLoadMgrCleanTask() throws Exception {
+        List<ComputeNode> nodes = allNodes.subList(0, parallel);
+        new Expectations() {
+            {
+                assigner.getBackends(1);
+                result = Optional.of(nodes);
+            }
+        };
+
+        // Step 1: Create and complete a MergeCommitTask
+        RequestLoadResult result = load.requestLoad("root", nodes.get(0).getId(), nodes.get(0).getHost());
+        assertTrue(result.isOk());
+        String label = result.getValue();
+        assertNotNull(label);
+        assertEquals(1, load.numRunningLoads());
+
+        MergeCommitTask mergeCommitTask = load.getTask(label);
+        assertNotNull(mergeCommitTask);
+
+        // Execute the task to completion
+        executor.manualRun(mergeCommitTask);
+
+        // Verify task is in final state and has endTime set
+        assertTrue(mergeCommitTask.isFinalState(), "Task should be in final state after completion");
+        assertTrue(mergeCommitTask.endTimeMs() > 0, "Task should have endTime set after completion");
+        assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label));
+
+        // Step 2: Verify task exists in StreamLoadMgr
+        StreamLoadMgr streamLoadMgr = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        AbstractStreamLoadTask taskByLabel = streamLoadMgr.getTaskByLabel(label);
+        assertNotNull(taskByLabel, "Task should exist in StreamLoadMgr before cleanup");
+        assertSame(mergeCommitTask, taskByLabel);
+
+        List<AbstractStreamLoadTask> allTasksBefore = streamLoadMgr.getAllTasks();
+        assertTrue(allTasksBefore.contains(mergeCommitTask),
+                "Task should be in getAllTasks() before cleanup");
+
+        // Step 3: Call cleanOldStreamLoadTasks with force=true
+        streamLoadMgr.cleanOldStreamLoadTasks(true);
+
+        // Step 4: Verify task has been cleaned
+        AbstractStreamLoadTask taskByLabelAfter = streamLoadMgr.getTaskByLabel(label);
+        assertNull(taskByLabelAfter, "Task should be removed from StreamLoadMgr after cleanup");
+    }
+
+    private Map<String, MergeCommitTask> getTasksFromStreamLoadMgr(String db, String table) {
+        return GlobalStateMgr.getCurrentState().getStreamLoadMgr().getAllTasks().stream()
+                .filter(task -> task.getDBName().equals(db) && task.getTableName().equals(table))
+                .map(task -> (MergeCommitTask) task)
+                .collect(Collectors.toMap(AbstractStreamLoadTask::getLabel, Function.identity()));
     }
 
     private class TestThreadPoolExecutor implements Executor {

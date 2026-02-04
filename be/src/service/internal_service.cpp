@@ -46,10 +46,11 @@
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
 #include "agent/task_worker_pool.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/time/time.h"
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
 #include "column/stream_chunk.h"
-#include "common/closure_guard.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/process_exit.h"
@@ -70,6 +71,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
@@ -87,9 +89,7 @@
 #include "util/arrow/row_batch.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
-#include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
-#include "util/time.h"
 #include "util/time_guard.h"
 #include "util/uid_util.h"
 
@@ -830,7 +830,7 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
             return;
         }
         pipeline::DriverExecutor* driver_executor = fragment_ctx->workgroup()->executors()->driver_executor();
-        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
+        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false);
     }
 }
 

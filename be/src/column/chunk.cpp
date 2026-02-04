@@ -16,14 +16,14 @@
 
 #include <utility>
 
+#include "base/coding.h"
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "gen_cpp/data.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
-#include "simd/simd.h"
-#include "util/coding.h"
 
 namespace starrocks {
 

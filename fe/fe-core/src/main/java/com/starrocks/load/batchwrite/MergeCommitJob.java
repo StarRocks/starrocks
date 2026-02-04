@@ -20,6 +20,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -182,11 +183,16 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
     /**
      * Requests a load for the write operation from the specified backend.
      *
-     * @param backendId The id of the backend.
-     * @param backendHost The host of the backend.
-     * @return The result of the request for the load.
+     * <p>This method first checks if there is an active task that can accept the backend. If found,
+     * it returns the existing task's label. Otherwise, it creates a new {@link MergeCommitTask}
+     * and registers it with {@link StreamLoadMgr} for tracking and management.</p>
+     *
+     * @param user the user who initiated the load request
+     * @param backendId the id of the backend requesting the load
+     * @param backendHost the host of the backend requesting the load
+     * @return the result containing the status and the load label if successful
      */
-    public RequestLoadResult requestLoad(long backendId, String backendHost) {
+    public RequestLoadResult requestLoad(String user, long backendId, String backendHost) {
         TStatus status = new TStatus();
         lock.readLock().lock();
         try {
@@ -200,6 +206,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
             lock.readLock().unlock();
         }
 
+        MergeCommitTask newTask = null;
         lock.writeLock().lock();
         try {
             for (MergeCommitTask mergeCommitTask : mergeCommitTasks.values()) {
@@ -237,17 +244,19 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
             }
             TUniqueId loadId = UUIDUtil.genTUniqueId();
             String label = LABEL_PREFIX + DebugUtil.printId(loadId);
-            MergeCommitTask mergeCommitTask = new MergeCommitTask(
+            newTask = new MergeCommitTask(
                     GlobalStateMgr.getCurrentState().getNextId(),
                     dbId.get(), tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
-                    warehouseName, backendIds, queryCoordinatorFactory, this);
-            mergeCommitTasks.put(label, mergeCommitTask);
+                    user, warehouseName, backendIds, queryCoordinatorFactory, this);
+            mergeCommitTasks.put(label, newTask);
             try {
-                executor.execute(mergeCommitTask);
+                executor.execute(newTask);
             } catch (Exception e) {
                 mergeCommitTasks.remove(label);
+                String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                newTask.cancel(String.format("Failed to submit task: %s", errorMsg));
                 status.setStatus_code(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Collections.singletonList(e.getMessage()));
+                status.setError_msgs(Collections.singletonList(errorMsg));
                 return new RequestLoadResult(status, null);
             }
             MergeCommitMetricRegistry.getInstance().updateRunningTask(1L);
@@ -256,6 +265,18 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
             return new RequestLoadResult(status, label);
         } finally {
             lock.writeLock().unlock();
+            if (newTask != null) {
+                // Register the task with StreamLoadMgr for observing (e.g., information_schema.loads).
+                // 1. Pass false for addTxnCallback because MergeCommitTask registers itself in run().
+                // 2. StreamLoadMgr will expire the task automatically, so no need to remove it explicitly.
+                // 3. StreamLoadMgr.addLoadTask may do some cleanup, so register it after unlock
+                try {
+                    GlobalStateMgr.getCurrentState().getStreamLoadMgr().addLoadTask(newTask, false);
+                } catch (Exception e) {
+                    LOG.debug("Failed to register task in StreamLoadMgr, db={}, table={}, label={}",
+                            tableId.getDbName(), tableId.getTableName(), newTask.getLabel(), e);
+                }
+            }
         }
     }
 

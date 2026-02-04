@@ -14,6 +14,7 @@
 
 #include "exec/tablet_info.h"
 
+#include "base/string/string_parser.hpp"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "exprs/expr.h"
@@ -21,7 +22,6 @@
 #include "storage/metadata_util.h"
 #include "storage/tablet_schema.h"
 #include "types/constexpr.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

@@ -18,10 +18,10 @@
 #include <cstdint>
 #include <string>
 
+#include "base/string/slice.h"
 #include "runtime/time_types.h"
 #include "storage/uint24.h"
 #include "util/hash_util.hpp"
-#include "util/slice.h"
 
 namespace starrocks {
 class TimestampValue;

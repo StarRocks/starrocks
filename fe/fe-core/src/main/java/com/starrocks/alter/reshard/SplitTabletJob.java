@@ -246,6 +246,8 @@ public class SplitTabletJob extends TabletReshardJob {
                                 }
                             }
                         }
+                        // Share adjacent tablet range bounds to reduce memory usage
+                        newIndex.shareAdjacentTabletRangeBounds();
                     }
                 } else {
                     LOG.error("Unknown publish state {} in {}", publishResult.publishState(), this);
@@ -308,8 +310,9 @@ public class SplitTabletJob extends TabletReshardJob {
 
     /*
      * 1. Unregister resharding tablets
-     * 2. Set table state to NORMAL
-     * 3. Set job state to ABORTED
+     * 2. Remove new tablets from inverted index
+     * 3. Set table state to NORMAL
+     * 4. Set job state to ABORTED
      */
     @Override
     protected void runAbortingJob() {
@@ -317,13 +320,16 @@ public class SplitTabletJob extends TabletReshardJob {
             // 1. Unregister resharding tablets
             unregisterReshardingTablets();
 
-            // 2. Set table state to NORMAL
+            // 2. Remove new tablets from inverted index
+            removeTabletsFromInvertedIndex();
+
+            // 3. Set table state to NORMAL
             setTableState(null, OlapTable.OlapTableState.NORMAL);
         } catch (Exception e) {
             LOG.warn("Ignore exception when aborting tablet reshard job. {}. ", this, e);
         }
 
-        // 3. Set job state to ABORTED
+        // 4. Set job state to ABORTED
         setJobState(JobState.ABORTED);
     }
 
@@ -386,6 +392,7 @@ public class SplitTabletJob extends TabletReshardJob {
     @Override
     protected void replayAbortedJob() {
         unregisterReshardingTablets();
+        removeTabletsFromInvertedIndex();
         setTableState(null, OlapTable.OlapTableState.NORMAL);
         LOG.info("Split tablet job replayed aborted job. {}", this);
     }
@@ -466,9 +473,6 @@ public class SplitTabletJob extends TabletReshardJob {
     private void setTableState(OlapTable.OlapTableState expectedState, OlapTable.OlapTableState newState) {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
-            if (olapTable.getState() == newState) {
-                return;
-            }
             if (expectedState != null && olapTable.getState() != expectedState) {
                 throw new TabletReshardException(
                         "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
@@ -585,6 +589,19 @@ public class SplitTabletJob extends TabletReshardJob {
                         index.getId(), TStorageMedium.HDD, true);
                 for (Tablet tablet : index.getTablets()) {
                     invertedIndex.addTablet(tablet.getId(), tabletMeta);
+                }
+            }
+        }
+    }
+
+    private void removeTabletsFromInvertedIndex() {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                MaterializedIndex index = reshardingIndex.getMaterializedIndex();
+                for (Tablet tablet : index.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
                 }
             }
         }

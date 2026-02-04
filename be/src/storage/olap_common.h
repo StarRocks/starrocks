@@ -49,10 +49,10 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/utility/guard.h"
 #include "gen_cpp/Types_types.h"
 #include "storage/delete_condition.h"
 #include "storage/olap_define.h"
-#include "util/guard.h"
 #include "util/hash_util.hpp"
 #include "util/uid_util.h"
 
@@ -296,6 +296,11 @@ struct OlapReaderStatistics {
     int64_t read_pk_index_ns = 0;
 
     // ------ for lake tablet ------
+    // Rows skipped by segment metadata filter (sort key range filtering).
+    int64_t segment_metadata_filtered = 0;
+    // Number of segments skipped by segment metadata filter.
+    int64_t segments_metadata_filtered = 0;
+
     int64_t pages_from_local_disk = 0;
 
     int64_t compressed_bytes_read_local_disk = 0;

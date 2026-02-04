@@ -19,6 +19,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "fs/fs_posix.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
@@ -27,7 +28,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

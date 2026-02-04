@@ -18,9 +18,9 @@
 #include <memory>
 #include <vector>
 
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
 #include "storage/olap_define.h"
-#include "util/spinlock.h"
 #include "util/threadpool.h"
 
 namespace brpc {

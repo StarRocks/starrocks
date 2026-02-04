@@ -2,56 +2,101 @@ name: Translation Runner
 on:
   issue_comment:
     types: [created]
+
 jobs:
-  if: false
-  execute:
+  translate:
     if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/translate')
     runs-on: ubuntu-latest
-
     permissions:
-      contents: write      # Required to push the translations
-      pull-requests: write # Required to read/post comments
-      members: read        # Required to check StarRocks org team membership
-
+      contents: write
+      pull-requests: write
     steps:
-      - name: Check Team Membership
+      - name: Get list of docs-maintainers
+        run: |
+          DOC_MEMBERSHIP_PAT=${{ secrets.DOC_MEMBERSHIP_PAT || secrets.GITHUB_TOKEN }}
+          DOCS_MAINTAINERS=$(curl -s -H "Authorization: token $DOC_MEMBERSHIP_PAT" \
+          "https://api.github.com/orgs/starrocks/teams/docs-maintainer/members" | jq -r '.[].login')
+          echo "$DOCS_MAINTAINERS" > allowlisted_users.txt
+
+      - name: Verify approver membership
+        id: verify-approver
+        run: |
+          APPROVER="${{ github.event.comment.user.login }}"
+          if grep -q --line-regexp "$APPROVER" allowlisted_users.txt; then
+            echo "is_allowlisted=true" >> $GITHUB_OUTPUT
+          else
+            echo "::error::User $APPROVER is not authorized."
+            exit 1
+          fi
+
+      - name: Acknowledge Command
         uses: actions/github-script@v7
         with:
           script: |
-            const user = context.payload.comment.user.login;
-            const org = 'StarRocks';
-            const team = 'docs-maintainer';
+            github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes'
+            });
 
-            try {
-              console.log(`Checking membership for ${user} in ${org}/${team}...`);
-              
-              const response = await github.rest.teams.getMembershipForUserInOrg({
-                org: org,
-                team_slug: team,
-                username: user,
-              });
+      # NEW STEP: Adds the direct link to the running workflow
+      - name: Post Run Link
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const newBody = context.payload.comment.body + `\n\n**Maintainer:** monitor the translation in the [GitHub Actions tab](${runUrl})`;
+            
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              body: newBody
+            });
 
-              if (response.data.state === 'active') {
-                console.log(`✅ User ${user} is an active member of ${team}.`);
-              } else {
-                core.setFailed(`❌ User ${user} is in ${team} but their membership is ${response.data.state}.`);
-              }
+      - name: Get PR Information
+        id: pr_data
+        run: |
+          PR_JSON=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "${{ github.event.issue.pull_request.url }}")
+          # NEW: Get the exact SHA of the base
+          echo "base_sha=$(echo $PR_JSON | jq -r '.base.sha')" >> $GITHUB_OUTPUT
+          echo "base_ref=$(echo $PR_JSON | jq -r '.base.ref')" >> $GITHUB_OUTPUT
+          echo "head_ref=$(echo $PR_JSON | jq -r '.head.ref')" >> $GITHUB_OUTPUT
+          echo "head_repo_name=$(echo $PR_JSON | jq -r '.head.repo.full_name')" >> $GITHUB_OUTPUT
 
-            } catch (error) {
-              if (error.status === 404) {
-                core.setFailed(`❌ User ${user} not found in team ${org}/${team}. Please ensure your membership is public or the token has org-read access.`);
-              } else if (error.status === 403) {
-                core.setFailed(`❌ Permission Denied (403). The GITHUB_TOKEN does not have 'members: read' permission or Org settings restrict access.`);
-              } else {
-                core.setFailed(`❌ Unexpected error (Status ${error.status}): ${error.message}`);
-              }
-            }
-
-      - name: Checkout PR
+      - name: Checkout PR (Untrusted Content)
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ steps.pr_data.outputs.head_repo_name }}
+          ref: ${{ steps.pr_data.outputs.head_ref }}
+          path: pr_code
           fetch-depth: 0
-          ref: refs/pull/${{ github.event.issue.number }}/head
+
+      - name: Fetch Upstream Base
+        run: |
+          cd pr_code
+          git remote add upstream https://github.com/${{ github.repository }}.git
+          git fetch upstream ${{ steps.pr_data.outputs.base_sha }}
+
+      - name: Checkout Trusted Tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: main
+          path: trusted_tools
+          sparse-checkout: |
+            docs/translation/
+
+      - name: Get Changed Files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          path: pr_code
+          base_sha: ${{ steps.pr_data.outputs.base_sha }}
+          json: true
 
       - name: Get Checkbox State
         id: get_checks
@@ -65,51 +110,77 @@ jobs:
             const report = comments.find(c => c.body.includes('### 🌎 Translation Required?'));
             return report ? report.body : '';
 
-      - name: Get Changed Files
-        id: changed-files
-        uses: tj-actions/changed-files@v44
-
       - name: Run Translations
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           BODY: ${{ steps.get_checks.outputs.result }}
-          FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+          FILES_JSON: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
-          pip install -U google-genai==0.3.0 pyyaml==6.0.2
-          # Use double quotes around "$FILES" to prevent word-splitting
-          if [[ "$BODY" == *" [x] **Japanese (ja)**"* ]]; then python docs/translation/translate.py -l ja --files "$FILES"; fi
-          if [[ "$BODY" == *" [x] **Chinese (zh)**"* ]]; then python docs/translation/translate.py -l zh --files "$FILES"; fi
-          if [[ "$BODY" == *" [x] **English (en)**"* ]]; then python docs/translation/translate.py -l en --files "$FILES"; fi
+          pip install -r trusted_tools/docs/translation/requirements.txt
+          
+          for FILE in $(echo "$FILES_JSON" | sed 's/\\"/"/g' | jq -r '.[]'); do
+            if [[ "$FILE" =~ ^docs/(en|zh|ja)/ ]]; then
+              SRC=$(echo $FILE | cut -d'/' -f2)
+              for LANG in ja zh en; do
+                if [ "$SRC" == "$LANG" ]; then continue; fi
+                
+                FULL_LANG=$(echo $LANG | sed 's/ja/Japanese/;s/zh/Chinese/;s/en/English/')
+                GLOBAL_STR=" [x] **$FULL_LANG ($LANG)** for **ALL** missing/outdated files"
+                INDIVIDUAL_STR=" [x] **$LANG** for \`$FILE\`"
+                
+                if [[ "$BODY" == *"$GLOBAL_STR"* ]] || [[ "$BODY" == *"$INDIVIDUAL_STR"* ]]; then
+                  echo "🚀 Starting translation for $FILE to $LANG"
+                  python trusted_tools/docs/translation/translate.py -l $LANG --files "pr_code/$FILE"
+                fi
+              done
+            fi
+          done
 
-      - name: Get PR Info
-        id: pr_info
+      # Post the report to the PR
+      - name: Post Translation Report
+        if: always() # Run even if translation failed
         uses: actions/github-script@v7
         with:
           script: |
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            });
-            core.setOutput('is_fork', pr.head.repo.fork);
-            core.setOutput('head_ref', pr.head.ref);
+            const fs = require('fs');
+            // The python script writes to the root of the runner's workspace
+            const summaryPath = 'translation_summary.md';
+            
+            if (fs.existsSync(summaryPath)) {
+              const summary = fs.readFileSync(summaryPath, 'utf8');
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: summary
+              });
+            } else {
+              console.log("No summary file found.");
+            }
 
       - name: Commit and Push
-        # Only runs if this is a branch of our repo
-        if: steps.pr_info.outputs.is_fork == 'false'
         run: |
+          cd pr_code
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          if [[ -n $(git status --porcelain) ]]; then
+
+          if [[ -n $(git status --porcelain docs/) ]]; then
             git add docs/
             git commit -m "docs: automated translation via Gemini [skip ci]"
-            git push origin HEAD:refs/heads/${{ steps.pr_info.outputs.head_ref }}
+
+            # ------------------------------------------------------------------
+            # CRITICAL AUTH FIX: Use PAT to push to Fork
+            # This injects the PAT into the remote URL so we can write to the user's repo
+            # ------------------------------------------------------------------
+            git remote set-url origin https://x-access-token:${{ secrets.DOC_MEMBERSHIP_PAT }}@github.com/${{ steps.pr_data.outputs.head_repo_name }}.git
+
+            # Fetch the specific branch and rebase to ensure a clean history
+            git fetch origin ${{ steps.pr_data.outputs.head_ref }}
+            git rebase origin/${{ steps.pr_data.outputs.head_ref }}
+
+            # Push changes
+            git push origin HEAD:refs/heads/${{ steps.pr_data.outputs.head_ref }}
+          else
+            echo "No translation changes to commit."
           fi
-
-      - name: Add maintainer instruction comment
-        # Only runs if this is a fork of our repo
-        if: github.event.pull_request.head.repo.fork == true
-        uses: thollander/actions-comment-pull-request@v3
-        with:
-          message: "Doc Maintainers: Please generate the translations locally and add them to this PR"
-

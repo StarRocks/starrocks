@@ -2174,6 +2174,240 @@ TEST_F(AggregateTest, test_array_aggV2) {
     }
 }
 
+TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
+    // Test array_agg2 with multiple ORDER BY columns
+    // array_agg(varchar_col order by int_col, varchar_col2)
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    // Set ORDER BY: first column DESC, second column ASC, both with NULLS FIRST
+    std::vector<bool> is_asc_order{false, true};
+    std::vector<bool> nulls_first{true, true};
+    local_ctx->set_is_asc_order(is_asc_order);
+    local_ctx->set_nulls_first(nulls_first);
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+
+    {
+        // Test data:
+        // varchar_col: ["a", "b", "c", "d", "e"]
+        // int_col:     [10, 10, 20, 20, NULL]
+        // varchar_col2:["x", "y", "x", "z", "w"]
+        // Expected order after sorting by int_col DESC NULLS FIRST, varchar_col2 ASC NULLS FIRST:
+        // - First by int_col DESC NULLS FIRST: [NULL, 20, 20, 10, 10]
+        // - Then by varchar_col2 ASC (for same int_col):
+        //   * NULL("w") -> 20("x") -> 20("z") -> 10("x") -> 10("y")
+        // Result: ["e", "c", "d", "a", "b"]
+        auto char_type = TypeDescriptor::create_varchar_type(30);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+        char_column->append_datum("a");
+        char_column->append_datum("b");
+        char_column->append_datum("c");
+        char_column->append_datum("d");
+        char_column->append_datum("e");
+
+        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+        int_column->append_datum(10);
+        int_column->append_datum(10);
+        int_column->append_datum(20);
+        int_column->append_datum(20);
+        int_column->append_datum(Datum());
+
+        MutableColumnPtr char_column2 = ColumnHelper::create_column(char_type, false);
+        char_column2->append_datum("x");
+        char_column2->append_datum("y");
+        char_column2->append_datum("x");
+        char_column2->append_datum("z");
+        char_column2->append_datum("w");
+
+        std::vector<const Column*> raw_columns;
+        std::vector<ColumnPtr> columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
+        columns.emplace_back(char_column2);
+        raw_columns.resize(3);
+        raw_columns[0] = char_column.get();
+        raw_columns[1] = int_column.get();
+        raw_columns[2] = char_column2.get();
+
+        // test update
+        array_agg_func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(),
+                                                  state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+        ASSERT_EQ(agg_state->data_columns.size(), 3);
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[2]->debug_string(), char_column2->debug_string());
+
+        // Test serialize to STRUCT format
+        TypeDescriptor type_array_varchar;
+        type_array_varchar.type = LogicalType::TYPE_ARRAY;
+        type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+        TypeDescriptor type_array_int;
+        type_array_int.type = LogicalType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+        TypeDescriptor type_struct;
+        type_struct.type = LogicalType::TYPE_STRUCT;
+        type_struct.children.emplace_back(type_array_varchar);
+        type_struct.children.emplace_back(type_array_int);
+        type_struct.children.emplace_back(type_array_varchar);
+        type_struct.field_names.emplace_back("vchar");
+        type_struct.field_names.emplace_back("int");
+        type_struct.field_names.emplace_back("vchar2");
+
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct, true);
+        array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
+                         "[{vchar:['a','b','c','d','e'],int:[10,10,20,20,NULL],vchar2:['x','y','x','z','w']}]"),
+                  0);
+
+        // Test merge
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+        // Test convert_to_serialize_format
+        res_struct_col->resize(0);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, char_column->size(), res_struct_col);
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
+                         "[{vchar:['a'],int:[10],vchar2:['x']}, {vchar:['b'],int:[10],vchar2:['y']}, "
+                         "{vchar:['c'],int:[20],vchar2:['x']}, {vchar:['d'],int:[20],vchar2:['z']}, "
+                         "{vchar:['e'],int:[NULL],vchar2:['w']}]"),
+                  0);
+
+        // Test finalize - should be sorted by int_col DESC NULLS FIRST, then varchar_col2 ASC
+        // Order: NULL("w") -> 20("x") -> 20("z") -> 10("x") -> 10("y")
+        // Result: ["e", "c", "d", "a", "b"]
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_varchar, false);
+        array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
+        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['e','c','d','a','b']]"), 0);
+    }
+
+    // Test with DISTINCT
+    {
+        // Expected behavior with DISTINCT:
+        // - DISTINCT is applied on varchar_col (the first argument), regardless of ORDER BY values
+        // - After sorting by int_col ASC NULLS LAST, then varchar_col2 DESC NULLS FIRST:
+        //   Order: 10("zz") -> 10("zy") -> 10("xx") -> 15("zx") -> 15("xz") -> 20("yy") -> 20("xy")
+        //   Values: ["b", "d", "a", "d", "c", "a", "b"]
+        // - Then DISTINCT removes duplicates based on varchar_col value:
+        //   "b" appears twice -> keep first one (at position with 10,"zz")
+        //   "d" appears twice -> keep first one (at position with 10,"zy")
+        //   "a" appears twice -> keep first one (at position with 10,"xx")
+        // Result: ["b", "d", "a", "c"] (duplicates removed, keeping first occurrence after sorting)
+        std::vector<bool> is_asc_order2{true, false};
+        std::vector<bool> nulls_first2{false, true};
+        local_ctx->set_is_asc_order(is_asc_order2);
+        local_ctx->set_nulls_first(nulls_first2);
+        local_ctx->set_is_distinct(true); // Enable DISTINCT
+        local_ctx->set_runtime_state(runtime_state.get());
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+
+        auto char_type = TypeDescriptor::create_varchar_type(30);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, false);
+        // Add duplicate values: "a" appears twice, "b" appears twice, "c" appears once
+        char_column->append_datum("a");
+        char_column->append_datum("a"); // duplicate
+        char_column->append_datum("b");
+        char_column->append_datum("b"); // duplicate
+        char_column->append_datum("c");
+        char_column->append_datum("d");
+        char_column->append_datum("d"); // duplicate
+
+        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+        int_column->append_datum(10);
+        int_column->append_datum(20); // different order by value for duplicate "a"
+        int_column->append_datum(10);
+        int_column->append_datum(20); // different order by value for duplicate "b"
+        int_column->append_datum(15);
+        int_column->append_datum(10);
+        int_column->append_datum(15); // same order by value for duplicate "d"
+
+        MutableColumnPtr char_column2 = ColumnHelper::create_column(char_type, false);
+        char_column2->append_datum("xx");
+        char_column2->append_datum("yy");
+        char_column2->append_datum("zz");
+        char_column2->append_datum("xy");
+        char_column2->append_datum("xz");
+        char_column2->append_datum("zy");
+        char_column2->append_datum("zx");
+
+        std::vector<const Column*> raw_columns;
+        std::vector<ColumnPtr> columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
+        columns.emplace_back(char_column2);
+        raw_columns.resize(3);
+        raw_columns[0] = char_column.get();
+        raw_columns[1] = int_column.get();
+        raw_columns[2] = char_column2.get();
+
+        // test update
+        array_agg_func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(),
+                                                  state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+        ASSERT_EQ(agg_state->data_columns.size(), 3);
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[2]->debug_string(), char_column2->debug_string());
+
+        // Test serialize to STRUCT format
+        TypeDescriptor type_array_varchar;
+        type_array_varchar.type = LogicalType::TYPE_ARRAY;
+        type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+        TypeDescriptor type_array_int;
+        type_array_int.type = LogicalType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+        TypeDescriptor type_struct;
+        type_struct.type = LogicalType::TYPE_STRUCT;
+        type_struct.children.emplace_back(type_array_varchar);
+        type_struct.children.emplace_back(type_array_int);
+        type_struct.children.emplace_back(type_array_varchar);
+        type_struct.field_names.emplace_back("vchar");
+        type_struct.field_names.emplace_back("int");
+        type_struct.field_names.emplace_back("vchar2");
+
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct, true);
+        array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
+                         "[{vchar:['a','a','b','b','c','d','d'],int:[10,20,10,20,15,10,15],vchar2:['xx','yy','zz','xy',"
+                         "'xz','zy','zx']}]"),
+                  0);
+
+        // Test merge
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+        // Test convert_to_serialize_format
+        res_struct_col->resize(0);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, char_column->size(), res_struct_col);
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
+                         "[{vchar:['a'],int:[10],vchar2:['xx']}, {vchar:['a'],int:[20],vchar2:['yy']}, "
+                         "{vchar:['b'],int:[10],vchar2:['zz']}, {vchar:['b'],int:[20],vchar2:['xy']}, "
+                         "{vchar:['c'],int:[15],vchar2:['xz']}, {vchar:['d'],int:[10],vchar2:['zy']}, "
+                         "{vchar:['d'],int:[15],vchar2:['zx']}]"),
+                  0);
+
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_varchar, false);
+        array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
+        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['b','d','a','c']]"), 0);
+    }
+}
+
 TEST_F(AggregateTest, test_group_concatV2) {
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
                                              TypeDescriptor::from_logical_type(TYPE_VARCHAR),

@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
 #include "column/column.h"
 #include "column/container_resource.h"
 #include "storage/olap_common.h"
@@ -43,8 +45,6 @@
 #include "storage/rowset/page_decoder.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/coding.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 

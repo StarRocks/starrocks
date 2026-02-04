@@ -14,10 +14,10 @@
 
 #include "exec/lake_meta_scanner.h"
 
+#include "base/testutil/sync_point.h"
 #include "exec/lake_meta_scan_node.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/global_dict/config.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 
@@ -57,6 +57,7 @@ Status LakeMetaScanner::_real_init() {
     // Pass column access paths and extend schema similar to OLAP path
     if (_parent->_meta_scan_node.__isset.column_access_paths && !_parent->_column_access_paths.empty()) {
         reader_params.column_access_paths = &_parent->_column_access_paths;
+        reader_params.next_uniq_id = starrocks::next_uniq_id(_parent->_meta_scan_node);
     }
 
     _reader = std::make_unique<LakeMetaReader>();

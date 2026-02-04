@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "base/bit/bit_util.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -30,7 +31,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_aggregator.h"
-#include "util/bit_util.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {

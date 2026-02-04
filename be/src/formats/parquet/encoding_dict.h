@@ -18,19 +18,19 @@
 #include <memory>
 #include <vector>
 
+#include "base/coding.h"
+#include "base/simd/expand.h"
+#include "base/simd/simd.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "formats/parquet/encoding.h"
-#include "simd/expand.h"
-#include "simd/simd.h"
-#include "util/coding.h"
-#include "util/cpu_info.h"
 #include "util/rle_encoding.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 

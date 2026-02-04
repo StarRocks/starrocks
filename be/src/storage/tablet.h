@@ -44,6 +44,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "common/statusor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
@@ -57,7 +58,6 @@
 #include "storage/utils.h"
 #include "storage/version_graph.h"
 #include "util/once.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -124,7 +124,6 @@ public:
     size_t num_rows_per_row_block_with_max_version() const;
     size_t next_unique_id() const;
     size_t field_index_with_max_version(const string& field_name) const;
-    size_t field_index(const string& field_name, const string& extra_column_name) const;
     std::string schema_debug_string() const;
     std::string debug_string() const;
     bool enable_shortcut_compaction() const;
@@ -532,10 +531,6 @@ inline size_t Tablet::next_unique_id() const {
 
 inline size_t Tablet::field_index_with_max_version(const string& field_name) const {
     return tablet_schema()->field_index(field_name);
-}
-
-inline size_t Tablet::field_index(const string& field_name, const string& extra_column_name) const {
-    return tablet_schema()->field_index(field_name, extra_column_name);
 }
 
 inline bool Tablet::enable_shortcut_compaction() const {

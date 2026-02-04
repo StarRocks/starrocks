@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "base/phmap/phmap.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -29,7 +30,6 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

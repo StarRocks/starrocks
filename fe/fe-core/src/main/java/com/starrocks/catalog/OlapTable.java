@@ -801,6 +801,27 @@ public class OlapTable extends Table {
         return idToColumn.get(id);
     }
 
+    @Override
+    public Column getColumn(String name) {
+        // First check regular columns
+        Column column = super.getColumn(name);
+        if (column != null) {
+            return column;
+        }
+        
+        // Check if this is a virtual column using registry
+        return VirtualColumnRegistry.getColumn(name);
+    }
+
+    /**
+     * Get all virtual columns for this OLAP table.
+     * @return List of virtual columns from the registry
+     */
+    @Override
+    public List<Column> getVirtualColumns() {
+        return VirtualColumnRegistry.getAllColumns();
+    }
+
     public Map<ColumnId, Column> getIdToColumn() {
         return idToColumn;
     }
@@ -1735,7 +1756,7 @@ public class OlapTable extends Table {
                     for (MaterializedIndex deleteIndex : shadowIndex) {
                         physicalPartition.deleteMaterializedIndexByMetaId(deleteIndex.getMetaId());
                     }
-                    for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(extState)) {
+                    for (MaterializedIndex idx : physicalPartition.getAllMaterializedIndices(extState)) {
                         idx.setState(IndexState.NORMAL);
                         if (copied.isCloudNativeTableOrMaterializedView()) {
                             continue;

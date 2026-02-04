@@ -16,6 +16,9 @@
 
 #include <memory>
 
+#include "base/coding.h"
+#include "base/container/raw_container.h"
+#include "base/utility/defer_op.h"
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -23,10 +26,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
-#include "util/coding.h"
 #include "util/crc32c.h"
-#include "util/defer_op.h"
-#include "util/raw_container.h"
 #include "util/starrocks_metrics.h"
 #include "util/trace.h"
 

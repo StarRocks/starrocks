@@ -38,12 +38,12 @@
 #include <memory>
 #include <thread>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/defer_op.h"
-#include "util/stopwatch.hpp"
 #include "util/uid_util.h"
 
 namespace starrocks {

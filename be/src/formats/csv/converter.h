@@ -22,14 +22,14 @@
 #include <memory>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
+#include "base/string/slice.h"
 #include "common/status.h"
-#include "formats/csv/output_stream.h"
+#include "io/formatted_output_stream.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/time_types.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
-#include "util/raw_container.h"
-#include "util/slice.h"
 
 namespace starrocks {
 struct TypeDescriptor;
@@ -87,10 +87,10 @@ public:
 
     virtual ~Converter() = default;
 
-    virtual Status write_string(OutputStream* buff, const Column& column, size_t row_num,
+    virtual Status write_string(io::FormattedOutputStream* buff, const Column& column, size_t row_num,
                                 const Options& options) const = 0;
 
-    virtual Status write_quoted_string(OutputStream* buff, const Column& column, size_t row_num,
+    virtual Status write_quoted_string(io::FormattedOutputStream* buff, const Column& column, size_t row_num,
                                        const Options& options) const = 0;
 
     virtual bool read_string_for_adaptive_null_column(Column* column, Slice s, const Options& options) const {

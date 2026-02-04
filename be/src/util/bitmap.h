@@ -34,8 +34,8 @@
 
 #pragma once
 
+#include "base/bit/bit_util.h"
 #include "gutil/strings/fastmem.h"
-#include "util/bit_util.h"
 
 namespace starrocks {
 

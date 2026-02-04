@@ -39,9 +39,10 @@
 
 #include <memory>
 
-#include "common/closure_guard.h"
+#include "base/concurrency/stopwatch.hpp"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/closure_guard.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
@@ -49,7 +50,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/utils.h"
 #include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
 #include "util/thread.h"
 
 namespace starrocks {

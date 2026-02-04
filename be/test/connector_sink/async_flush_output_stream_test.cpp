@@ -19,12 +19,12 @@
 
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "connector/async_flush_stream_poller.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/utils.h"
 #include "fs/fs_memory.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::connector {

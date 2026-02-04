@@ -39,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StreamLoadMetaAction extends RestBaseAction {
@@ -118,8 +119,9 @@ public class StreamLoadMetaAction extends RestBaseAction {
             BaseRequest request, BaseResponse response, String dbName, String tableName) {
         TableId tableId = new TableId(dbName, tableName);
         StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
+        String user = Optional.ofNullable(request.getConnectContext()).map(ConnectContext::getQualifiedUser).orElse("");
         RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState()
-                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params);
+                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params, user);
         if (!result.isOk()) {
             StreamLoadMetaResult responseResult = new StreamLoadMetaResult(
                     result.getStatus().status_code.name(), ActionStatus.FAILED,

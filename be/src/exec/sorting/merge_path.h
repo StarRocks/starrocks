@@ -18,13 +18,13 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/descriptors.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::merge_path {

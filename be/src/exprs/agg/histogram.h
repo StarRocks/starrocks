@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/stats/ndv_estimator.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
@@ -25,7 +26,6 @@
 #include "gutil/casts.h"
 #include "simdjson.h"
 #include "storage/types.h"
-#include "util/ndv_estimator.h"
 
 namespace starrocks {
 

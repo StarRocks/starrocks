@@ -20,7 +20,7 @@
 #include <chrono>
 #include <climits>
 
-#include "util/time.h"
+#include "base/time/time.h"
 
 namespace starrocks::bthreads {
 

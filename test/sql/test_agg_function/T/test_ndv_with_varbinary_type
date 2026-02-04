@@ -1,0 +1,254 @@
+-- name: test_ndv_with_varbinary_type
+-- Test table with VARBINARY column
+CREATE TABLE tbinary_ndv_test (
+    id INT,
+    data VARBINARY,
+    category INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Insert test data with various varbinary values
+INSERT INTO tbinary_ndv_test
+SELECT generate_series,
+       to_binary(CONCAT('value_', CAST(generate_series AS VARCHAR)), 'utf8'),
+       (generate_series - 1) % 5 + 1
+FROM TABLE(GENERATE_SERIES(1, 100));
+
+-- Test ndv (alias for approx_count_distinct) with varbinary
+SELECT ndv(data) AS ndv_result FROM tbinary_ndv_test;
+SELECT category, ndv(data) AS ndv_result FROM tbinary_ndv_test GROUP BY category ORDER BY category;
+
+-- Test approx_count_distinct with varbinary
+SELECT approx_count_distinct(data) AS approx_count_result FROM tbinary_ndv_test;
+SELECT category, approx_count_distinct(data) AS approx_count_result FROM tbinary_ndv_test GROUP BY category ORDER BY category;
+
+-- Test ds_hll_count_distinct with varbinary
+SELECT ds_hll_count_distinct(data) AS ds_hll_result FROM tbinary_ndv_test;
+SELECT ds_hll_count_distinct(data, 10) AS ds_hll_result_with_logk FROM tbinary_ndv_test;
+SELECT category, ds_hll_count_distinct(data) AS ds_hll_result FROM tbinary_ndv_test GROUP BY category ORDER BY category;
+
+-- Test ds_theta_count_distinct with varbinary
+SELECT ds_theta_count_distinct(data) AS theta_result FROM tbinary_ndv_test;
+SELECT category, ds_theta_count_distinct(data) AS theta_result FROM tbinary_ndv_test GROUP BY category ORDER BY category;
+
+-- Test count(distinct) with varbinary (uses multi_distinct_count internally)
+SELECT COUNT(DISTINCT data) AS distinct_count FROM tbinary_ndv_test;
+SELECT category, COUNT(DISTINCT data) AS distinct_count FROM tbinary_ndv_test GROUP BY category ORDER BY category;
+
+-- Test with NULL values
+CREATE TABLE tbinary_ndv_null_test (
+    id INT,
+    data VARBINARY,
+    category INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO tbinary_ndv_null_test VALUES
+(1, to_binary('aaa', 'utf8'), 1),
+(2, to_binary('bbb', 'utf8'), 1),
+(3, NULL, 1),
+(4, to_binary('aaa', 'utf8'), 2),
+(5, to_binary('ccc', 'utf8'), 2),
+(6, NULL, 2),
+(7, to_binary('ddd', 'utf8'), 3),
+(8, to_binary('eee', 'utf8'), 3),
+(9, to_binary('fff', 'utf8'), 3);
+
+SELECT ndv(data) AS ndv_with_null FROM tbinary_ndv_null_test;
+SELECT category, ndv(data) AS ndv_with_null FROM tbinary_ndv_null_test GROUP BY category ORDER BY category;
+
+SELECT COUNT(DISTINCT data) AS distinct_count_with_null FROM tbinary_ndv_null_test;
+SELECT category, COUNT(DISTINCT data) AS distinct_count_with_null FROM tbinary_ndv_null_test GROUP BY category ORDER BY category;
+
+-- Test with duplicate varbinary values
+CREATE TABLE tbinary_ndv_dup_test (
+    id INT,
+    data VARBINARY
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO tbinary_ndv_dup_test VALUES
+(1, to_binary('same_value', 'utf8')),
+(2, to_binary('same_value', 'utf8')),
+(3, to_binary('same_value', 'utf8')),
+(4, to_binary('different_value', 'utf8')),
+(5, to_binary('different_value', 'utf8')),
+(6, NULL),
+(7, NULL);
+
+SELECT ndv(data) AS ndv_dup_result FROM tbinary_ndv_dup_test;
+SELECT COUNT(DISTINCT data) AS distinct_count_dup FROM tbinary_ndv_dup_test;
+
+-- Test multiple count distinct functions in the same query
+CREATE TABLE tbinary_multi_distinct_test (
+    id INT,
+    data1 VARBINARY,
+    data2 VARBINARY,
+    data3 VARBINARY,
+    category INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO tbinary_multi_distinct_test VALUES
+(1, to_binary('value1', 'utf8'), to_binary('val1', 'utf8'), to_binary('v1', 'utf8'), 1),
+(2, to_binary('value2', 'utf8'), to_binary('val1', 'utf8'), to_binary('v1', 'utf8'), 1),
+(3, to_binary('value1', 'utf8'), to_binary('val2', 'utf8'), to_binary('v2', 'utf8'), 1),
+(4, to_binary('value3', 'utf8'), to_binary('val2', 'utf8'), to_binary('v1', 'utf8'), 2),
+(5, to_binary('value4', 'utf8'), to_binary('val3', 'utf8'), to_binary('v3', 'utf8'), 2),
+(6, to_binary('value3', 'utf8'), to_binary('val3', 'utf8'), to_binary('v2', 'utf8'), 2),
+(7, to_binary('value5', 'utf8'), to_binary('val4', 'utf8'), to_binary('v4', 'utf8'), 3),
+(8, to_binary('value6', 'utf8'), to_binary('val4', 'utf8'), to_binary('v4', 'utf8'), 3),
+(9, to_binary('value5', 'utf8'), to_binary('val5', 'utf8'), to_binary('v5', 'utf8'), 3);
+
+-- Multiple COUNT(DISTINCT) in the same SELECT
+SELECT COUNT(DISTINCT data1) AS distinct_data1, 
+       COUNT(DISTINCT data2) AS distinct_data2,
+       COUNT(DISTINCT data3) AS distinct_data3
+FROM tbinary_multi_distinct_test;
+
+-- Multiple COUNT(DISTINCT) with GROUP BY
+SELECT category,
+       COUNT(DISTINCT data1) AS distinct_data1,
+       COUNT(DISTINCT data2) AS distinct_data2,
+       COUNT(DISTINCT data3) AS distinct_data3
+FROM tbinary_multi_distinct_test
+GROUP BY category
+ORDER BY category;
+
+-- Multiple approximate count distinct functions in the same SELECT
+SELECT ndv(data1) AS ndv_data1,
+       approx_count_distinct(data2) AS approx_data2,
+       ds_hll_count_distinct(data3) AS hll_data3
+FROM tbinary_multi_distinct_test;
+
+-- Multiple approximate count distinct with GROUP BY
+SELECT category,
+       ndv(data1) AS ndv_data1,
+       approx_count_distinct(data2) AS approx_data2,
+       ds_theta_count_distinct(data3) AS theta_data3
+FROM tbinary_multi_distinct_test
+GROUP BY category
+ORDER BY category;
+
+-- Mix of COUNT(DISTINCT) and approximate count distinct functions
+SELECT COUNT(DISTINCT data1) AS exact_count1,
+       ndv(data2) AS approx_count2,
+       COUNT(DISTINCT data3) AS exact_count3,
+       ds_hll_count_distinct(data1) AS hll_count1
+FROM tbinary_multi_distinct_test;
+
+-- Mix with GROUP BY
+SELECT category,
+       COUNT(DISTINCT data1) AS exact_count1,
+       ndv(data2) AS approx_count2,
+       approx_count_distinct(data3) AS approx_count3
+FROM tbinary_multi_distinct_test
+GROUP BY category
+ORDER BY category;
+
+-- Multiple COUNT(DISTINCT) combined with other aggregate functions
+SELECT COUNT(DISTINCT data1) AS distinct_data1,
+       COUNT(DISTINCT data2) AS distinct_data2,
+       COUNT(*) AS total_rows,
+       MAX(id) AS max_id
+FROM tbinary_multi_distinct_test;
+
+-- Multiple COUNT(DISTINCT) with GROUP BY and other aggregates
+SELECT category,
+       COUNT(DISTINCT data1) AS distinct_data1,
+       COUNT(DISTINCT data2) AS distinct_data2,
+       COUNT(*) AS total_rows,
+       MIN(id) AS min_id,
+       MAX(id) AS max_id
+FROM tbinary_multi_distinct_test
+GROUP BY category
+ORDER BY category;
+
+-- Complex query with multiple distinct aggregations and filters
+SELECT category,
+       COUNT(DISTINCT data1) AS distinct_data1,
+       COUNT(DISTINCT data2) AS distinct_data2,
+       ndv(data3) AS ndv_data3,
+       COUNT(*) AS total
+FROM tbinary_multi_distinct_test
+WHERE id > 2
+GROUP BY category
+HAVING COUNT(DISTINCT data1) > 1
+ORDER BY category;
+
+-- Test with all approximate count distinct variants in one query
+SELECT ndv(data1) AS ndv1,
+       approx_count_distinct(data2) AS approx2,
+       ds_hll_count_distinct(data3) AS hll3,
+       ds_theta_count_distinct(data1) AS theta1
+FROM tbinary_multi_distinct_test;
+
+-- Test with all approximate count distinct variants with GROUP BY
+SELECT category,
+       ndv(data1) AS ndv1,
+       approx_count_distinct(data2) AS approx2,
+       ds_hll_count_distinct(data3) AS hll3,
+       ds_theta_count_distinct(data1) AS theta1
+FROM tbinary_multi_distinct_test
+GROUP BY category
+ORDER BY category;
+
+-- Test multiple COUNT(DISTINCT) with NULL handling
+CREATE TABLE tbinary_multi_null_test (
+    id INT,
+    data1 VARBINARY,
+    data2 VARBINARY,
+    category INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO tbinary_multi_null_test VALUES
+(1, to_binary('val1', 'utf8'), to_binary('valA', 'utf8'), 1),
+(2, NULL, to_binary('valA', 'utf8'), 1),
+(3, to_binary('val1', 'utf8'), NULL, 1),
+(4, NULL, NULL, 1),
+(5, to_binary('val2', 'utf8'), to_binary('valB', 'utf8'), 2),
+(6, to_binary('val2', 'utf8'), NULL, 2),
+(7, NULL, to_binary('valB', 'utf8'), 2);
+
+-- Multiple COUNT(DISTINCT) with NULLs
+SELECT COUNT(DISTINCT data1) AS distinct_data1,
+       COUNT(DISTINCT data2) AS distinct_data2
+FROM tbinary_multi_null_test;
+
+-- Multiple COUNT(DISTINCT) with NULLs and GROUP BY
+SELECT category,
+       COUNT(DISTINCT data1) AS distinct_data1,
+       COUNT(DISTINCT data2) AS distinct_data2
+FROM tbinary_multi_null_test
+GROUP BY category
+ORDER BY category;
+
+-- Mix of COUNT(DISTINCT) and approximate functions with NULLs
+SELECT COUNT(DISTINCT data1) AS exact1,
+       ndv(data2) AS approx2,
+       approx_count_distinct(data1) AS approx1,
+       COUNT(DISTINCT data2) AS exact2
+FROM tbinary_multi_null_test;
+
+-- Clean up
+DROP TABLE IF EXISTS tbinary_ndv_test;
+DROP TABLE IF EXISTS tbinary_ndv_null_test;
+DROP TABLE IF EXISTS tbinary_ndv_dup_test;
+DROP TABLE IF EXISTS tbinary_multi_distinct_test;
+DROP TABLE IF EXISTS tbinary_multi_null_test;

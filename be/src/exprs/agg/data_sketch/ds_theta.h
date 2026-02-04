@@ -17,10 +17,10 @@
 #include <memory>
 #include <string>
 
+#include "base/string/slice.h"
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "util/slice.h"
 
 //  enum flags { IS_BIG_ENDIAN, IS_READ_ONLY, IS_EMPTY, IS_COMPACT, IS_ORDERED };
 #pragma push_macro("IS_BIG_ENDIAN")

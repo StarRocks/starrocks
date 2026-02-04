@@ -110,14 +110,18 @@ public class HiveMetaClient {
         // When the number of currently used clients is less than maxPoolSize,
         // the client will be recycled and reused. If it does, we close the client.
         public void finish() {
+            boolean shouldClose = false;
             synchronized (clientPoolLock) {
                 if (clientPool.size() >= maxPoolSize) {
-                    LOG.warn("There are more than {} connections currently accessing the metastore",
-                            maxPoolSize);
-                    close();
+                    shouldClose = true;
                 } else {
                     clientPool.offer(this);
                 }
+            }
+            if (shouldClose) {
+                LOG.warn("There are more than {} connections currently accessing the metastore",
+                        maxPoolSize);
+                close();
             }
         }
 
@@ -144,17 +148,12 @@ public class HiveMetaClient {
             Thread.currentThread().setContextClassLoader(ClassLoader.getSystemClassLoader());
         }
 
+        RecyclableClient client = null;
         synchronized (clientPoolLock) {
-            RecyclableClient client = clientPool.poll();
-            // The pool was empty so create a new client and return that.
-            // Serialize client creation to defend against possible race conditions accessing
-            // local Kerberos state
-            if (client == null) {
-                return new RecyclableClient(conf);
-            } else {
-                return client;
-            }
+            client = clientPool.poll();
         }
+
+        return client != null ? client : new RecyclableClient(conf);
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {

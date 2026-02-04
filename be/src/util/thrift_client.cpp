@@ -23,9 +23,9 @@
 #include <ostream>
 #include <string>
 
+#include "base/time/monotime.h"
+#include "base/time/time.h"
 #include "gutil/strings/substitute.h"
-#include "util/monotime.h"
-#include "util/time.h"
 
 namespace starrocks {
 

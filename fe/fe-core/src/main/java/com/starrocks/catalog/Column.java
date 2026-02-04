@@ -163,6 +163,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // Whether this column is a hidden column, hidden columns are used to store some internal data(eg: _ROW_ID).
     @SerializedName(value = "isHidden")
     private boolean isHidden = false;
+    // Whether this column is a virtual column, virtual columns are computed during query execution (eg: _tablet_id_).
+    // Virtual columns are not persisted and only exist during query analysis and planning.
+    private transient boolean isVirtual = false;
 
     // Only for persist
     public Column() {
@@ -449,6 +452,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public void setIsHidden(boolean hidden) {
         isHidden = hidden;
+    }
+
+    public boolean isVirtual() {
+        return isVirtual;
+    }
+
+    public void setIsVirtual(boolean virtual) {
+        isVirtual = virtual;
     }
 
     public boolean isShadowColumn() {

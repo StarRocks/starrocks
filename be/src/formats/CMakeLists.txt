@@ -21,7 +21,6 @@ ADD_BE_LIB(Formats
         csv/converter.cpp
         csv/csv_reader.cpp
         csv/csv_file_writer.cpp
-        csv/output_stream_file.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp

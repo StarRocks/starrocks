@@ -63,6 +63,7 @@ public class AggregateFunctionRollupUtils {
             .put(FunctionSet.SUM, FunctionSet.SUM)
             .put(FunctionSet.MAX, FunctionSet.MAX)
             .put(FunctionSet.MIN, FunctionSet.MIN)
+            // NOTE: MIN_N/MAX_N are not included - cannot merge ARRAY results correctly during rollup
             .put(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION)
             .put(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION)
             .put(FunctionSet.PERCENTILE_UNION, FunctionSet.PERCENTILE_UNION)

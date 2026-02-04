@@ -33,6 +33,7 @@
 typedef unsigned long ulong;
 #endif
 #endif
+#include "base/time/timezone_hsscan.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
 #include "runtime/datetime_value.h"
