@@ -88,6 +88,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
@@ -2901,7 +2902,12 @@ public class StmtExecutor {
 
             Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
                     .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
-            connectorMetadata.ifPresent(metadata -> metadata.executeMetadataDelete(table, predicate, context));
+            if (connectorMetadata.isPresent()) {
+                connectorMetadata.get().executeMetadataDelete(table, predicate, context);
+            } else {
+                throw new StarRocksConnectorException("Can not find {} connector metadata for table: {}",
+                        table.getCatalogName(), table.getName());
+            }
             context.getState().setOk();
             return;
         }
