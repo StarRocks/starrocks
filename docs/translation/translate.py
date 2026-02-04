@@ -332,6 +332,9 @@ def main():
     translator = StarRocksTranslator(target_lang=args.lang)
     if args.files:
         for f in args.files:
+            if not f.lower().endswith((".md", ".mdx")):
+                print(f"⏭️ Skipping non-markdown file: {f}", file=sys.stderr)
+                continue
             translator.translate_file(f)
 
     report_path = "translation_summary.md"
