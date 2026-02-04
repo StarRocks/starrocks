@@ -96,7 +96,7 @@ std::shared_ptr<LookUpDispatcher> LookUpDispatcherMgr::create_dispatcher(const T
     auto [_, created] = _dispatcher_map.try_emplace(
             key, std::make_shared<LookUpDispatcher>(query_id, target_node_id, source_id_slots));
     DLOG_IF(INFO, created) << "[GLM] create LookUpDispatcher for query_id=" << print_id(query_id)
-                          << ", target_node_id=" << target_node_id;
+                           << ", target_node_id=" << target_node_id;
     return _dispatcher_map.at(key);
 }
 
@@ -124,7 +124,7 @@ LookUpDispatcherPtr LookUpDispatcherMgr::get_or_create_dispatcher(const pipeline
 
     auto it = _dispatcher_map.lazy_emplace(key, [&](const auto& ctor) {
         DLOG(INFO) << "[GLM] create LookUpDispatcher (lazy) for query_id=" << print_id(t_query_id)
-                  << ", target_node_id=" << lookup_node_id;
+                   << ", target_node_id=" << lookup_node_id;
         ctor(key,
              std::make_shared<LookUpDispatcher>(t_query_id, lookup_node_id, std::vector<TupleId>{request_tuple_id}));
     });
@@ -136,7 +136,7 @@ void LookUpDispatcherMgr::remove_dispatcher(const TUniqueId& query_id, PlanNodeI
     if (_dispatcher_map.contains(key)) {
         _dispatcher_map.erase(key);
         DLOG(INFO) << "[GLM] remove LookUpDispatcher for query_id=" << print_id(query_id)
-                  << ", target_node_id=" << target_node_id;
+                   << ", target_node_id=" << target_node_id;
     }
 }
 
