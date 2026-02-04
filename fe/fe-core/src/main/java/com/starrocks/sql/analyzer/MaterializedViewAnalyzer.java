@@ -183,6 +183,10 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
                     Table.TableType.HIVE_VIEW,
+<<<<<<< HEAD
+=======
+                    Table.TableType.ICEBERG_VIEW,
+>>>>>>> 4d87d0db91 ([Enhancement] Support Paimon view (#56058))
                     Table.TableType.PAIMON_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {

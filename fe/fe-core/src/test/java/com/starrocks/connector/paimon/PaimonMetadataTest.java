@@ -155,7 +155,10 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+<<<<<<< HEAD
 import static org.junit.jupiter.api.Assertions.assertTrue;
+=======
+>>>>>>> 4d87d0db91 ([Enhancement] Support Paimon view (#56058))
 
 public class PaimonMetadataTest {
     @Mocked
