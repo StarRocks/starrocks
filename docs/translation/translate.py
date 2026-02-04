@@ -172,7 +172,7 @@ class StarRocksTranslator:
         return "\n".join(lines).strip()
 
     def validate_mdx(self, original: str, translated: str) -> tuple[bool, str]:
-        def strip_inline_code(t): return re.sub(r'(`[^`\n]+`)', '', t)
+        def strip_inline_code(text): return re.sub(r'(`[^`\n]+`)', '', text)
         
         clean_orig = strip_inline_code(original)
         clean_trans = strip_inline_code(translated)
