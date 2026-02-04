@@ -34,7 +34,7 @@ ${never_translate}
 - Add a space when switching between alphabets and Japanese characters including Kanji, Hiragana, and Katagana.
 - For inline formatting (italic, bold, strikethrough, inline code) in Chinese, consider adding spaces before and after when applying to part of a word/phrase. For example "_A_ and _B_" should be translated as "_A_ 和 _B_", not "_A_和_B_". Without spaces, the translated markdown does not work.
 - Do not treat capitalized words as proper nouns requiring leaving them in the source language unless the phrase appears in the translation dictionary.
-- **HTML Entities:** If the source text contains HTML entities like `&lt;`, `&gt;`, or `&amp;`, preserve them EXACTLY as they are. Do not unescape them to `<` or `>`. Do not translate them.
+- **HTML Entities:** If the source text contains HTML entities like `&lt;`, `&gt;`, or `&amp;`, preserve them EXACTLY as they are in the output. Do not unescape them to `<`, `>`, or `&`, and do not translate or alter them in any way. After translating, explicitly verify that every occurrence of these entities in the source appears identically in the translated text and that no extra or missing HTML entities have been introduced.
 
 ### CRITICAL FORMATTING RULES ###
 1. **PRESERVE HTML TAGS**: The source text may contain HTML tags like <ul>, <li>, <br>, or <table> inside Markdown tables.
