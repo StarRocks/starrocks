@@ -148,6 +148,9 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.use_page_cache = _runtime_state->use_page_cache();
     _params.enable_predicate_col_late_materialize =
             _runtime_state->query_options().enable_predicate_col_late_materialize;
+    if (_runtime_state->query_options().__isset.bitmap_max_filter_ratio) {
+        _params.bitmap_max_filter_ratio = _runtime_state->query_options().bitmap_max_filter_ratio;
+    }
     auto parser = _pool.add(new OlapPredicateParser(_tablet_schema));
 
     ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
