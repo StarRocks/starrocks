@@ -494,12 +494,14 @@ class DecodeContext {
         }
 
         AggregateFunction buildAggregateFunction(AggregateFunction fn, List<ScalarOperator> newChildren,
-                                                 List<ScalarOperator> originalChildren, boolean isMergeState) {
+                                                 List<ScalarOperator> originalChildren) {
             final List<Type> argTypes;
             final Type intermediateType;
             final Type returnType;
             if (FunctionSet.ARRAY_AGG.equals(fn.functionName())) {
-                if (isMergeState) {
+                ScalarOperator child = originalChildren.get(0);
+                if (child.getType().matchesType(fn.getReturnType())
+                        || child.getType().matchesType(fn.getIntermediateTypeOrReturnType())) {
                     argTypes = Lists.newArrayList();
                     Map<String, ColumnRefOperator> fieldMapping = getFieldUseStringRefMap(originalChildren.get(0));
                     Preconditions.checkNotNull(fieldMapping);
@@ -533,14 +535,18 @@ class DecodeContext {
             List<ScalarOperator> newChildren = visitList(call.getChildren(), hasChange);
 
             if (call.getFunction() instanceof AggregateFunction origFn) {
-                boolean isMergeState = origFn.getIntermediateType() != null
-                        && call.getArguments().size() == 1 && call.getArguments().get(0).isColumnRef()
-                        && call.getArguments().get(0).getType().matchesType(origFn.getIntermediateType());
-                AggregateFunction fn = buildAggregateFunction(origFn, newChildren, call.getArguments(), isMergeState);
-                if (isMergeState) {
-                    ColumnRefOperator input = newChildren.get(0).cast();
-                    newChildren = List.of(new ColumnRefOperator(input.getId(), fn.getIntermediateType(),
-                            input.getName(), input.isNullable()));
+                AggregateFunction fn = buildAggregateFunction(origFn, newChildren, call.getArguments());
+                ColumnRefOperator firstChild = newChildren.get(0).isColumnRef() ? newChildren.get(0).cast() : null;
+                if (firstChild != null && firstChild != call.getArguments().get(0)) {
+                    if (firstChild.getType().matchesType(fn.getReturnType())) {
+                        newChildren.set(0, new ColumnRefOperator(firstChild.getId(), fn.getReturnType(),
+                                firstChild.getName(), firstChild.isNullable()));
+                    }
+                    if (fn.getIntermediateType() != null
+                            && firstChild.getType().matchesType(fn.getIntermediateType())) {
+                        newChildren.set(0, new ColumnRefOperator(firstChild.getId(), fn.getIntermediateType(),
+                                firstChild.getName(), firstChild.isNullable()));
+                    }
                 }
                 Type returnType = call.getType().matchesType(origFn.getReturnType())
                         ? fn.getReturnType() : fn.getIntermediateType();

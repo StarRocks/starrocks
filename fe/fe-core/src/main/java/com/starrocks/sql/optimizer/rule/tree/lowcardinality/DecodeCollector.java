@@ -1003,7 +1003,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                         Preconditions.checkState(structType.getFields().size() == value.getArguments().size());
                         for (int i = 0; i < value.getArguments().size(); i++) {
                             if (value.getArguments().get(i).isColumnRef()
-                                    && context.outputStringColumns.contains(value.getArguments().get(i).cast())) {
+                                    && info.inputStringColumns.contains(value.getArguments().get(i).cast())) {
                                 fieldsData.put(structType.getField(i).getName(), value.getArguments().get(i).cast());
                             }
                         }

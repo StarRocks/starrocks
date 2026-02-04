@@ -578,4 +578,19 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "col3 array<int(11)>>, true]); args: INT,INT,INT; result: ARRAY<INT>; args nullable: true;" +
                 " result nullable: true]"), plan);
     }
+
+    @Test
+    public void testArrayAggMultipleStages() throws Exception {
+        String sql = """
+                select array_agg(distinct VARCHAR_COL order by 1 asc), array_agg(VARCHAR_COL order by 1 desc)
+                from T
+                order by 1;
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  6:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: array_agg[([8: array_agg, struct<col1 array<int(11)>, col2 array<int(11)>>, true]);" +
+                " args: INT,INT; result: ARRAY<INT>; args nullable: true; result nullable: true], " +
+                "array_agg[([9: array_agg, struct<col1 array<int(11)>, col2 array<int(11)>>, true]); args: INT,INT;" +
+                " result: ARRAY<INT>; args nullable: true; result nullable: true]\n"), plan);
+    }
 }
