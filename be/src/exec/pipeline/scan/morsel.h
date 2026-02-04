@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include <optional>
 
@@ -251,13 +252,16 @@ public:
     virtual bool could_local_shuffle() const = 0;
 
     virtual Status append_morsels(int driver_seq, Morsels&& morsels);
-    virtual void set_has_more(bool v) {}
+    virtual StatusOr<int> next_driver_seq();
+    virtual bool enable_random_append_split_morsel() const { return false; }
+    virtual void set_has_more_scan_ranges(bool v) {}
+    virtual void mark_split_source_morsel_finished() {}
     virtual bool reach_limit() const { return false; }
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
 public:
-    SharedMorselQueueFactory(MorselQueuePtr queue, int size) : _queue(std::move(queue)), _size(size) {}
+    SharedMorselQueueFactory(MorselQueuePtr queue, int size);
     ~SharedMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override { return _queue.get(); }
@@ -268,17 +272,20 @@ public:
     bool could_local_shuffle() const override { return true; }
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
-    void set_has_more(bool v) override;
+    void set_has_more_scan_ranges(bool v) override;
+    void mark_split_source_morsel_finished() override;
     bool reach_limit() const override;
 
 private:
     MorselQueuePtr _queue;
     const int _size;
+    std::atomic<int64_t> _num_original_morsels{0};
 };
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
 public:
-    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle);
+    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle,
+                                 bool enable_random_append_split_morsel);
     ~IndividualMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override {
@@ -294,12 +301,21 @@ public:
     bool could_local_shuffle() const override { return _could_local_shuffle; }
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
-    void set_has_more(bool v) override;
+    StatusOr<int> next_driver_seq() override;
+    bool enable_random_append_split_morsel() const override {
+        DCHECK(_could_local_shuffle);
+        return _enable_random_append_split_morsel;
+    }
+    void set_has_more_scan_ranges(bool v) override;
+    void mark_split_source_morsel_finished() override;
     bool reach_limit() const override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
+    std::atomic<int> _random_cursor{0};
+    std::atomic<int64_t> _remaining_split_source_morsels{0};
     const bool _could_local_shuffle;
+    const bool _enable_random_append_split_morsel;
 };
 
 class BucketSequenceMorselQueueFactory final : public MorselQueueFactory {
@@ -321,7 +337,7 @@ public:
     bool could_local_shuffle() const override { return _could_local_shuffle; }
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
-    void set_has_more(bool v) override;
+    void set_has_more_scan_ranges(bool v) override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
@@ -373,14 +389,18 @@ public:
         _tablet_schema = tablet_schema;
     }
     // is there any more scan ranges delivered from FE to be processed?
-    bool has_more() const { return _has_more; }
-    void set_has_more(bool v) { _has_more = v; }
+    bool has_more() const { return _has_more_scan_ranges || _has_more_from_split; }
+    bool has_more_scan_ranges() const { return _has_more_scan_ranges; }
+    bool has_more_from_split() const { return _has_more_from_split; }
+    void set_has_more_scan_ranges(bool v) { _has_more_scan_ranges = v; }
+    void set_has_more_from_split(bool v) { _has_more_from_split = v; }
     // do scan operator emit enough rows that we can stop processing scan ranges?
     void set_reach_limit(bool v) { _reach_limit = v; }
     bool reach_limit() const { return _reach_limit; }
 
 protected:
-    std::atomic<bool> _has_more = false;
+    std::atomic<bool> _has_more_scan_ranges = false;
+    std::atomic<bool> _has_more_from_split = false;
     std::atomic<bool> _reach_limit = false;
     Morsels _morsels;
     size_t _num_morsels = 0;
@@ -611,7 +631,7 @@ public:
         (void)append_morsels(std::move(morsels));
         _size = _num_morsels = _queue.size();
         _degree_of_parallelism = _num_morsels;
-        _has_more = has_more;
+        _has_more_scan_ranges = has_more;
     }
 
     ~DynamicMorselQueue() override = default;

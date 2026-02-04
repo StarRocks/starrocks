@@ -77,6 +77,10 @@ void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* param
 }
 
 /// MorselQueueFactory.
+
+SharedMorselQueueFactory::SharedMorselQueueFactory(MorselQueuePtr queue, int size)
+        : _queue(std::move(queue)), _size(size), _num_original_morsels(_queue->num_original_morsels()) {}
+
 size_t SharedMorselQueueFactory::num_original_morsels() const {
     return _queue->num_original_morsels();
 }
@@ -86,8 +90,21 @@ Status SharedMorselQueueFactory::append_morsels([[maybe_unused]] int driver_seq,
     return Status::OK();
 }
 
-void SharedMorselQueueFactory::set_has_more(bool v) {
-    _queue->set_has_more(v);
+void SharedMorselQueueFactory::set_has_more_scan_ranges(bool v) {
+    _queue->set_has_more_scan_ranges(v);
+}
+
+void SharedMorselQueueFactory::mark_split_source_morsel_finished() {
+    int64_t remain = _num_original_morsels.load(std::memory_order_relaxed);
+    while (remain > 0) {
+        if (_num_original_morsels.compare_exchange_weak(remain, remain - 1, std::memory_order_relaxed,
+                                                        std::memory_order_relaxed)) {
+            if (remain == 1) {
+                _queue->set_has_more_from_split(false);
+            }
+            return;
+        }
+    }
 }
 
 bool SharedMorselQueueFactory::reach_limit() const {
@@ -106,9 +123,15 @@ Status MorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
     return Status::NotSupported("MorselQueueFactory::append_morsels not supported");
 }
 
+StatusOr<int> MorselQueueFactory::next_driver_seq() {
+    return Status::NotSupported("MorselQueueFactory::next_driver_seq not supported");
+}
+
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
-                                                           bool could_local_shuffle)
-        : _could_local_shuffle(could_local_shuffle) {
+                                                           bool could_local_shuffle,
+                                                           bool enable_random_append_split_morsel)
+        : _could_local_shuffle(could_local_shuffle),
+          _enable_random_append_split_morsel(enable_random_append_split_morsel) {
     if (queue_per_driver_seq.empty()) {
         _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
         return;
@@ -123,6 +146,11 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
         } else {
             _queue_per_driver_seq.emplace_back(std::move(it->second));
         }
+    }
+
+    if (_enable_random_append_split_morsel) {
+        int64_t total = static_cast<int64_t>(num_original_morsels());
+        _remaining_split_source_morsels.store(total, std::memory_order_relaxed);
     }
 }
 
@@ -140,13 +168,57 @@ static void ensure_size_of_queue_per_drive_seq(std::vector<MorselQueuePtr>& _que
 
 Status IndividualMorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
     ensure_size_of_queue_per_drive_seq(_queue_per_driver_seq, driver_seq);
+
+    if (_enable_random_append_split_morsel) {
+        int64_t added_root_morsels = 0;
+        for (const auto& morsel : morsels) {
+            auto* scan_morsel = down_cast<ScanMorsel*>(morsel.get());
+            if (scan_morsel != nullptr && scan_morsel->get_split_context() == nullptr) {
+                added_root_morsels += 1;
+            }
+        }
+        if (added_root_morsels > 0) {
+            int64_t remain = _remaining_split_source_morsels.fetch_add(added_root_morsels, std::memory_order_relaxed);
+            if (remain == 0) {
+                for (auto& q : _queue_per_driver_seq) {
+                    q->set_has_more_from_split(true);
+                }
+            }
+        }
+    }
+
     RETURN_IF_ERROR(_queue_per_driver_seq[driver_seq]->append_morsels(std::move(morsels)));
     return Status::OK();
 }
 
-void IndividualMorselQueueFactory::set_has_more(bool v) {
+StatusOr<int> IndividualMorselQueueFactory::next_driver_seq() {
+    int size = _queue_per_driver_seq.size();
+    if (size == 0) {
+        return Status::NotSupported("IndividualMorselQueueFactory::next_driver_seq empty");
+    }
+    int seq = _random_cursor.fetch_add(1, std::memory_order_relaxed);
+    return seq % size;
+}
+
+void IndividualMorselQueueFactory::set_has_more_scan_ranges(bool v) {
     for (auto& q : _queue_per_driver_seq) {
-        q->set_has_more(v);
+        q->set_has_more_scan_ranges(v);
+    }
+}
+
+void IndividualMorselQueueFactory::mark_split_source_morsel_finished() {
+    DCHECK(_enable_random_append_split_morsel);
+    int64_t remain = _remaining_split_source_morsels.load(std::memory_order_relaxed);
+    while (remain > 0) {
+        if (_remaining_split_source_morsels.compare_exchange_weak(remain, remain - 1, std::memory_order_relaxed,
+                                                                  std::memory_order_relaxed)) {
+            if (remain == 1) {
+                for (auto& q : _queue_per_driver_seq) {
+                    q->set_has_more_from_split(false);
+                }
+            }
+            return;
+        }
     }
 }
 
@@ -185,9 +257,9 @@ Status BucketSequenceMorselQueueFactory::append_morsels(int driver_seq, Morsels&
     return Status::OK();
 }
 
-void BucketSequenceMorselQueueFactory::set_has_more(bool v) {
+void BucketSequenceMorselQueueFactory::set_has_more_scan_ranges(bool v) {
     for (auto& q : _queue_per_driver_seq) {
-        q->set_has_more(v);
+        q->set_has_more_scan_ranges(v);
     }
 }
 

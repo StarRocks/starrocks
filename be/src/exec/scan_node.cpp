@@ -122,6 +122,8 @@ static StatusOr<std::map<int, pipeline::MorselQueuePtr>> uniform_distribute_mors
     }
 
     auto morsel_queue_type = morsel_queue->type();
+    bool has_more_scan_ranges = morsel_queue->has_more_scan_ranges();
+    bool has_more_from_split = morsel_queue->has_more_from_split();
     DCHECK(morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
            morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
 
@@ -132,7 +134,18 @@ static StatusOr<std::map<int, pipeline::MorselQueuePtr>> uniform_distribute_mors
     } else {
         for (auto& [operator_seq, morsels] : morsels_per_driver) {
             queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::DynamicMorselQueue>(
-                                                           std::move(morsels), morsel_queue->has_more()));
+                                                           std::move(morsels), has_more_scan_ranges));
+        }
+
+        if (has_more_from_split) {
+            for (; driver_seq < dop; driver_seq++) {
+                queue_per_driver.emplace(driver_seq, std::make_unique<pipeline::DynamicMorselQueue>(
+                                                             pipeline::Morsels(), has_more_scan_ranges));
+            }
+            DCHECK_EQ(queue_per_driver.size(), dop);
+            for (auto& [_, queue] : queue_per_driver) {
+                queue->set_has_more_from_split(has_more_from_split);
+            }
         }
     }
 
@@ -157,12 +170,19 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                  morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
 
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
-        if (!always_shared_scan() && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
+        // for Lake, always use SharedMorselQueueFactory
+        // for cloud, if enable_shared_scan, then always use SharedMorselQueueFactory
+        // else it will consider the morsel numbers and io_parallelism to choose individual or shared morsel queue factory
+        if (!always_shared_scan() && !enable_shared_scan && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
             morsel_queue->num_original_morsels() <= io_parallelism) {
+            bool enable_random_append_split_morsel = morsel_queue->has_more_from_split();
+            DCHECK(!enable_random_append_split_morsel || morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
             ASSIGN_OR_RETURN(auto morsel_queue_map, uniform_distribute_morsels(std::move(morsel_queue), scan_dop));
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
-                                                                            /*could_local_shuffle*/ true);
+                                                                            /*could_local_shuffle*/ true,
+                                                                            enable_random_append_split_morsel);
         } else {
+            morsel_queue->set_has_more_from_split(false);
             if (config::use_default_dop_when_shared_scan && enable_shared_scan && is_fixed_or_dynamic_morsel_queue) {
                 scan_dop = pipeline_dop;
             }
@@ -179,6 +199,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
             ASSIGN_OR_RETURN(auto queue, convert_scan_range_to_morsel_queue(
                                                  scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
                                                  tablet_internal_parallel_mode, num_total_scan_ranges));
+            queue->set_has_more_from_split(false);
             queue_per_driver_seq.emplace(dop, std::move(queue));
         }
 
@@ -192,7 +213,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                                                 /*could_local_shuffle*/ false);
         } else {
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
-                                                                            /*could_local_shuffle*/ false);
+                                                                            /*could_local_shuffle*/ false, false);
         }
     }
 }
