@@ -418,10 +418,10 @@ public class OptExternalPartitionPruner {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
             }
 
-            int scanHivePartitionNumLimit = context.getSessionVariable().getScanHivePartitionNumLimit();
-            if (scanHivePartitionNumLimit > 0 && !table.isUnPartitioned()
-                    && selectedPartitionIds.size() > scanHivePartitionNumLimit) {
-                String msg = "Exceeded the limit of " + scanHivePartitionNumLimit + " max scan hive external partitions";
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && !table.isUnPartitioned()
+                    && selectedPartitionIds.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of " + scanLakePartitionNumLimit + " max scan hive external partitions";
                 LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
                 throw new AnalysisException(msg);
             }
