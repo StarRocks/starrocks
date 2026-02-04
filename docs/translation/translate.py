@@ -177,6 +177,7 @@ class StarRocksTranslator:
         clean_orig = strip_inline_code(original)
         clean_trans = strip_inline_code(translated)
         
+        # Updated Regex for better tag matching
         tag_pattern = r'<(?!!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
         IGNORED_TAGS = {"none", "unset", "nil", "generated", "br"}
 
@@ -266,7 +267,7 @@ class StarRocksTranslator:
             content_to_translate = self.normalize_content(chunk['content'])
             
             if not content_to_translate.strip():
-                final_segments.append(content_to_translate)
+                # SKIPPING whitespace-only chunks to prevent excessive spacing
                 continue
 
             anchored_chunk = f"<chunk_to_translate>\n{content_to_translate}\n</chunk_to_translate>"
@@ -304,7 +305,7 @@ class StarRocksTranslator:
 
         print(f"\n✨ Translation complete!")
         
-        # FIX: Join with double newlines to ensure code blocks and headers don't merge with adjacent text
+        # JOINING with double newlines for standard markdown spacing
         full_text = "\n\n".join(final_segments)
         
         is_valid, val_msg = self.validate_mdx(original_content, full_text)
