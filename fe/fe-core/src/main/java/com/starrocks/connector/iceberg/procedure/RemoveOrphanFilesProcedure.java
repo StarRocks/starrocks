@@ -172,11 +172,10 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
         String locationPath = stripTrailingSlash(locationUri.getPath());
 
         if (!Objects.equals(tableUri.getScheme(), locationUri.getScheme()) ||
-            !Objects.equals(tableUri.getAuthority(), locationUri.getAuthority()) ||
-            !locationPath.startsWith(tablePath + Path.SEPARATOR)) {
-            throw new StarRocksConnectorException(
-                    "invalid argument value for %s, location must be under table location %s, got %s",
-                    LOCATION, tableLocation, location);
+                !Objects.equals(tableUri.getAuthority(), locationUri.getAuthority()) ||
+                !locationPath.startsWith(tablePath + Path.SEPARATOR)) {
+            throw new StarRocksConnectorException("invalid argument value for %s, location must be a subdirectory of " +
+                    "table location %s, got %s", LOCATION, tableLocation, location);
         }
 
         return locationPath;
