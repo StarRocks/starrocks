@@ -52,6 +52,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.net.URI;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -705,6 +706,32 @@ public class HdfsFsManager {
     }
 
     /**
+     * Builds the URI identity string used as part of the FileSystem cache key.
+     *
+     * <p>For Azure ABFS(S)/WASB(S) schemes, this method always uses the full URI authority
+     * (e.g., "container@account.dfs.core.windows.net") because different containers under
+     * the same storage account must use separate FileSystem instances.
+     *
+     * <p>For other schemes (S3, GCS, OSS, etc.), the behavior depends on {@code useAuthorityForAllSchemes}:
+     * <ul>
+     *   <li>true: uses URI authority (includes userInfo if present)</li>
+     *   <li>false: uses URI host only (legacy behavior)</li>
+     * </ul>
+     *
+     * @param uri the parsed URI of the file path
+     * @param useAuthorityForAllSchemes whether to use authority for non-Azure schemes
+     * @return the identity string in the format "scheme://authority" or "scheme://host"
+     */
+    private String getUriIdentity(URI uri, boolean useAuthorityForAllSchemes) {
+        String scheme = uri.getScheme();
+        boolean useAuthority = useAuthorityForAllSchemes || ABFS_SCHEME.equalsIgnoreCase(scheme)
+                || ABFSS_SCHEME.equalsIgnoreCase(scheme) || WASB_SCHEME.equalsIgnoreCase(scheme)
+                || WASBS_SCHEME.equalsIgnoreCase(scheme);
+        String identity = useAuthority ? uri.getAuthority() : uri.getHost();
+        return scheme + "://" + identity;
+    }
+
+    /**
      * This function create FileSystem by CloudConfiguration
      * Support s3://, s3a://, abfs://, abfss://, adl://, wasb://, wasbs://, gs://, oss://, obs://, cosn://,
      * tos://, ks3://
@@ -715,8 +742,8 @@ public class HdfsFsManager {
         Preconditions.checkArgument(cloudConfiguration != null);
         WildcardURI pathUri = new WildcardURI(path);
 
-        String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toConfString());
+        String uriIdentity = getUriIdentity(pathUri.getUri(), Config.fs_cache_key_use_uri_authority_for_all_schemes);
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(uriIdentity, cloudConfiguration.toConfString());
 
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
         HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
