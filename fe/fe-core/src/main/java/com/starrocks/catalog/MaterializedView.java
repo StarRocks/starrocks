@@ -1189,6 +1189,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private void onReload(boolean isReloadAsync,
                           boolean desiredActive,
                           boolean isThrowException) {
+        if (hasReloaded()) {
+            return;
+        }
         try {
             // set inactive first to avoid inconsistent state during reloading
             this.active = false;
