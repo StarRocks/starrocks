@@ -66,6 +66,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -2690,20 +2691,18 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
 
-        // Mock NodeMgr.getMySelf() to return a valid Frontend
-        Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
-        new Expectations(frontend) {
-            {
-                frontend.getFeVersion();
-                minTimes = 0;
-                result = "test-version";
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+                return frontend;
             }
         };
-        new Expectations(GlobalStateMgr.getCurrentState().getNodeMgr()) {
-            {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
-                minTimes = 0;
-                result = frontend;
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
             }
         };
 
