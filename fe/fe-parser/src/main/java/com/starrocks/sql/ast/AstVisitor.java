@@ -174,6 +174,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
