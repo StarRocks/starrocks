@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -659,6 +660,35 @@ public class SkewJoinV2Test extends PlanTestBase {
                 "  |    |  \n" +
                 "  |    8:HASH JOIN\n" +
                 "  |    |  join op: INNER JOIN (BROADCAST)");
+    }
+
+    @Test
+    public void testMultiLevelSkewJoinV2RewriteBottomUp() throws Exception {
+        long oldBroadcastLimit = connectContext.getSessionVariable().getBroadcastRowCountLimit();
+        try {
+            connectContext.getSessionVariable().setBroadcastRowCountLimit(0);
+            connectContext.getSessionVariable().disableJoinReorder();
+
+            String sql = "select count(*) from t0 " +
+                    "join[skew|t0.v1(1)] t1 on t0.v1 = t1.v4 " +
+                    "join[skew|t0.v2(1)] t2 on t0.v2 = t2.v7";
+            String plan = getVerboseExplain(sql);
+            assertCContains(plan, "20:UNION\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [12: auto_fill_col, TINYINT, false]\n" +
+                    "  |      [12: auto_fill_col, TINYINT, false]\n" +
+                    "  |  pass-through-operands: all\n" +
+                    "  |  cardinality: 1");
+            assertCContains(plan, "10:UNION\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [2: v2, BIGINT, true]\n" +
+                    "  |      [2: v2, BIGINT, true]\n" +
+                    "  |  pass-through-operands: all\n" +
+                    "  |  cardinality: 1");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastRowCountLimit(oldBroadcastLimit);
+            connectContext.getSessionVariable().enableJoinReorder();
+        }
     }
 
     @Test

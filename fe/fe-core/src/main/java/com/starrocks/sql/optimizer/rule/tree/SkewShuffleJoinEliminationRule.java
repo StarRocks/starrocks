@@ -65,8 +65,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/* rewrite the tree top down
- * if one shuffle join op is decided as skew, rewrite it as below and do not visit its children
+/* rewrite the tree bottom-up
+ * rewrite children first, then rewrite current join if needed.
  *        shuffle join                       concatenate
  *       /         \     --->            /                   \
  *  exchange    exchange           shuffle join        broadcast join
@@ -130,10 +130,19 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
         @Override
         public OptExpression visitPhysicalHashJoin(OptExpression opt, Void context) {
+            // Bottom-up: rewrite children first so multi-level skew joins can all be rewritten.
+            opt = visitChild(opt, context);
+
             PhysicalHashJoinOperator originalShuffleJoinOperator = (PhysicalHashJoinOperator) opt.getOp();
 
+            // Skip hash joins already produced by skew join v2 rewrite to avoid repeated rewriting.
+            // (The rewritten shuffle/broadcast pair are linked via skewJoinFriend and have skewSideChildIndex set.)
+            if (originalShuffleJoinOperator.getSkewJoinFriend().isPresent()) {
+                return opt;
+            }
+
             if (!canOptimize(originalShuffleJoinOperator, opt)) {
-                return visitChild(opt, context);
+                return opt;
             }
 
             SkewJoinSplitInfo splitInfo;
@@ -141,12 +150,12 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 // Hint-based skew join (manual).
                 ScalarOperator originalSkewColumn = originalShuffleJoinOperator.getSkewColumn();
                 if (!(originalSkewColumn instanceof ColumnRefOperator skewColumnRef)) {
-                    return visitChild(opt, context);
+                    return opt;
                 }
 
                 List<ScalarOperator> hintSkewValues = originalShuffleJoinOperator.getSkewValues();
                 if (hintSkewValues == null || hintSkewValues.isEmpty()) {
-                    return visitChild(opt, context);
+                    return opt;
                 }
                 boolean includeNullSkew = hintSkewValues.stream().anyMatch(ScalarOperator::isConstantNull);
                 List<ScalarOperator> nonNullSkewValues = hintSkewValues.stream()
@@ -158,7 +167,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 // Auto-detect skew from statistics (MCV/NULL skew).
                 Optional<SkewJoinSplitInfo> detected = detectSkewFromStats(opt);
                 if (detected.isEmpty()) {
-                    return visitChild(opt, context);
+                    return opt;
                 }
                 splitInfo = detected.get();
             }
@@ -169,14 +178,14 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             boolean includeNullSkew = splitInfo.includeNullSkew;
             if (skewSideJoinKeyExpr == null || nonSkewSideJoinKeyExpr == null || nonNullSkewValues == null ||
                     (nonNullSkewValues.isEmpty() && !includeNullSkew)) {
-                return visitChild(opt, context);
+                return opt;
             }
             int skewSideChildIndex = splitInfo.skewSideChildIndex;
 
             // if this is a left join, and the right side is skew side, we cannot do optimization because
             // the right side's broadcast will cause result incorrect.
             if (originalShuffleJoinOperator.getJoinType().isAnyLeftOuterJoin() && skewSideChildIndex == 1) {
-                return visitChild(opt, context);
+                return opt;
             }
 
             // rewrite plan
@@ -281,7 +290,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                             .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
 
-            // if hit once, we give up rewriting the following subtree
+            // Note: children were already rewritten (bottom-up). Returning the rewritten subtree here.
             return OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
                     .setInputs(List.of(skewSideSplit.splitProducer, cteAnchorOptExp1))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
