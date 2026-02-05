@@ -84,6 +84,7 @@ public:
     uint32_t last_row = -1;
     uint32_t multi_times = 0;
     uint32_t base_type_count = 0; // for count the base type, e.g: int, double, string
+    uint32_t object_count = 0;    // for count the object type
 
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;
@@ -117,7 +118,7 @@ public:
     static std::pair<std::string_view, std::string_view> split_path(const std::string_view& path);
 };
 
-// to deriver json flanttern path
+// to deriver json flatten path
 class JsonPathDeriver {
 public:
     JsonPathDeriver() = default;
@@ -126,7 +127,7 @@ public:
 
     ~JsonPathDeriver() = default;
 
-    // dervie paths
+    // derive paths
     void derived(const std::vector<const Column*>& json_datas);
 
     StatusOr<size_t> check_null_factor(const std::vector<const Column*>& json_datas);
