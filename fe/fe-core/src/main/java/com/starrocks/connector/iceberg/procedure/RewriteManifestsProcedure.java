@@ -94,7 +94,7 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
                     // Cluster by partitions for better locality when reading data files
                     StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(structType).set(file.partition());
                     // Limit the number of clustering buckets to avoid creating too many small manifest files
-                    return Objects.hash(partitionWrapper) % targetManifestClusters;
+                    return Integer.toUnsignedLong(Objects.hash(partitionWrapper)) % targetManifestClusters;
                 })
                 .commit();
     }
