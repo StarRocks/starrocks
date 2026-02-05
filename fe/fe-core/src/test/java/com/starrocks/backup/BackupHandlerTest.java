@@ -842,9 +842,10 @@ public class BackupHandlerTest {
     }
 
     @Test
-    public void testCreateRepositoryStripsTrailingSlash(@Mocked BrokerMgr brokerMgr) throws Exception {
-        setUpMocker();
-
+    public void testCreateRepositoryStripsTrailingSlash(@Mocked GlobalStateMgr globalStateMgr,
+                                                        @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog)
+            throws Exception {
+        setUpMocker(globalStateMgr, brokerMgr, editLog);
         new MockUp<Repository>() {
             @Mock
             public Status initRepository() {
@@ -860,10 +861,9 @@ public class BackupHandlerTest {
             }
         };
 
-        GlobalStateMgr.getCurrentState().getNodeMgr().setBrokerMgr(brokerMgr);
         BackupHandler handler = new BackupHandler(GlobalStateMgr.getCurrentState());
 
-        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "test_repo", brokerName,
+        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "test_repo", "brokerName",
                 "bos://location/path/", Maps.newHashMap());
         handler.createRepository(stmt);
 
