@@ -390,12 +390,11 @@ class WindowSkewTest extends PlanTestBase {
         // Test providing a skew hint for a column that is not in the partition clause
         // Skew hint on 's' but partitioned by 'p'
         String sql = "select p, s, sum(x) over ([skew|s(1)] partition by p order by s) from window_skew_table";
-        String plan = getFragmentPlan(sql);
 
-        // Verify UNION rewrite is NOT triggered because the hint column 's' matches no partition column 'p'
-        assertNotContains(plan, "UNION");
-        assertContains(plan, "ANALYTIC");
-        assertContains(plan, "partition by: 1: p");
+        assertThrows(Exception.class, () ->
+                getFragmentPlan(sql)
+        );
+
     }
 
     @Test
