@@ -114,14 +114,14 @@ class StarRocksTranslator:
     def _parse_document_structure(self, text: str) -> list[dict]:
         """
         Parses document into chunks. 
-        Code blocks (```...```) and HTML comments () are 'SKIP' chunks.
+        Code blocks (```...``` or ~~~...~~~) and HTML comments () are 'SKIP' chunks.
         Headers trigger new 'TRANS' chunks.
         """
         chunks = []
         # 1. Code Block (greedy match)
         # 2. HTML Comment (constructed safely to avoid chat UI bugs)
         # 3. Header start (matches ^ followed by ##.. and rest of line)
-        pattern = r'(```[\s\S]*?```|' + r'<' + r'!--[\s\S]*?--' + r'>|^[ \t]*#{2,5}\s.*)'
+        pattern = r'(```[\s\S]*?```|~~~[\s\S]*?~~~|' + r'<' + r'!--[\s\S]*?--' + r'>|^[ \t]*#{2,5}\s.*)'
         
         # Pass re.MULTILINE so '^' matches start of lines
         parts = re.split(pattern, text, flags=re.MULTILINE)
@@ -138,7 +138,7 @@ class StarRocksTranslator:
             if not part: continue
             
             # Identify the type of this part
-            is_code = part.startswith("```")
+            is_code = part.startswith("```") or part.startswith("~~~")
             is_comment = part.startswith("<" + "!--")
             # Use re.match with MULTILINE to correctly check for headers
             is_header = re.match(r'^[ \t]*#{2,5}\s', part)
@@ -164,9 +164,13 @@ class StarRocksTranslator:
         if not lines: return ""
         
         # Remove markdown fences if the LLM wrapped the whole response
-        if lines[0].strip().startswith("```"):
+        # Checks for both ``` and ~~~
+        first_line = lines[0].strip()
+        last_line = lines[-1].strip()
+        
+        if first_line.startswith("```") or first_line.startswith("~~~"):
             lines = lines[1:]
-        if lines and lines[-1].strip().startswith("```"):
+        if lines and (last_line.startswith("```") or last_line.startswith("~~~")):
             lines = lines[:-1]
             
         return "\n".join(lines).strip()
