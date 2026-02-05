@@ -58,6 +58,7 @@ set(BASE_TEST_FILES
     time/monotime_test.cpp
     time/timezone_utils_test.cpp
     utility/integer_util_test.cpp
+    utility/pretty_printer_test.cpp
     utility/scoped_cleanup_test.cpp
     utility/template_util_test.cpp
     uuid/uuid_generator_test.cpp

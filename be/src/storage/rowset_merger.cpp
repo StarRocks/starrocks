@@ -17,8 +17,8 @@
 #include <memory>
 #include <queue>
 
+#include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
-#include "common/pretty_printer.h"
 #include "gutil/stl_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"

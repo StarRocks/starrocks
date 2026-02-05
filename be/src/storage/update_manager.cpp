@@ -19,7 +19,7 @@
 #include <numeric>
 
 #include "base/time/time.h"
-#include "common/pretty_printer.h"
+#include "base/utility/pretty_printer.h"
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
