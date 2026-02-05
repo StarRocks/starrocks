@@ -342,13 +342,9 @@ bool date::from_string_to_date(const char* date_str, size_t len, int* year, int*
 inline __m128i load_xmm_safe(const char* p) {
 #ifndef ADDRESS_SANITIZER
     constexpr uintptr_t PAGE_MASK = 4096 - 1;
-#ifdef __linux__
-    bool read_cross_page = true;
-#else
     bool read_cross_page = (reinterpret_cast<uintptr_t>(p) & PAGE_MASK) > PAGE_MASK - 16;
-#endif
 #else
-    bool read_cross_page = false;
+    bool read_cross_page = true;
 #endif
     if (!read_cross_page) {
         return _mm_loadu_si128((const __m128i*)p);
