@@ -70,8 +70,6 @@ public:
     OP op = OP_INCLUDE; // merge flat json use, to mark the path is need
     FlatJsonHashMap<std::string_view, std::unique_ptr<JsonFlatPath>> children;
 
-    uint32_t object_count = 0; // for count the object type
-
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;
     JsonFlatPath(const JsonFlatPath& rhs) = default;
@@ -160,6 +158,7 @@ private:
         uint32_t last_row = -1;
         uint32_t multi_times = 0;
         uint32_t base_type_count = 0; // for count the base type, e.g: int, double, string
+        uint32_t object_count = 0;    // for count the object type
     };
 
     bool _has_remain = false;
