@@ -67,7 +67,7 @@ std::string Random::RandomBinaryString(int len) {
     std::string ret;
     ret.resize(len);
     for (int i = 0; i < len; i++) {
-        ret[i] = static_cast<char>(Uniform(CHAR_MAX));
+        ret[i] = static_cast<char>(static_cast<unsigned char>(Uniform(256)));
     }
     return ret;
 }

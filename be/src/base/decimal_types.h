@@ -64,6 +64,13 @@ inline constexpr int32_t exp10_int32(int n) {
                                   EXP10<int32_t, 3>::value, EXP10<int32_t, 4>::value, EXP10<int32_t, 5>::value,
                                   EXP10<int32_t, 6>::value, EXP10<int32_t, 7>::value, EXP10<int32_t, 8>::value,
                                   EXP10<int32_t, 9>::value};
+    constexpr int max_n = decimal_precision_limit<int32_t>;
+    if (n < 0) {
+        return values[0];
+    }
+    if (n > max_n) {
+        return values[max_n];
+    }
     return values[n];
 }
 
@@ -75,6 +82,13 @@ inline constexpr int64_t exp10_int64(int n) {
             EXP10<int64_t, 12>::value, EXP10<int64_t, 13>::value, EXP10<int64_t, 14>::value, EXP10<int64_t, 15>::value,
             EXP10<int64_t, 16>::value, EXP10<int64_t, 17>::value, EXP10<int64_t, 18>::value,
     };
+    constexpr int max_n = decimal_precision_limit<int64_t>;
+    if (n < 0) {
+        return values[0];
+    }
+    if (n > max_n) {
+        return values[max_n];
+    }
     return values[n];
 }
 
@@ -94,6 +108,13 @@ inline constexpr int128_t exp10_int128(int n) {
             EXP10<int128_t, 33>::value, EXP10<int128_t, 34>::value, EXP10<int128_t, 35>::value,
             EXP10<int128_t, 36>::value, EXP10<int128_t, 37>::value, EXP10<int128_t, 38>::value,
     };
+    constexpr int max_n = decimal_precision_limit<int128_t>;
+    if (n < 0) {
+        return values[0];
+    }
+    if (n > max_n) {
+        return values[max_n];
+    }
     return values[n];
 }
 
@@ -126,6 +147,13 @@ inline constexpr int256_t exp10_int256(int n) {
             EXP10<int256_t, 72>::value, EXP10<int256_t, 73>::value, EXP10<int256_t, 74>::value,
             EXP10<int256_t, 75>::value, EXP10<int256_t, 76>::value,
     };
+    constexpr int max_n = decimal_precision_limit<int256_t>;
+    if (n < 0) {
+        return values[0];
+    }
+    if (n > max_n) {
+        return values[max_n];
+    }
     return values[n];
 }
 

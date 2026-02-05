@@ -261,7 +261,7 @@ public:
         return value / divisor + (value % divisor != 0);
     }
 
-    constexpr static inline bool IsPowerOf2(int64_t value) { return (value & (value - 1)) == 0; }
+    constexpr static inline bool IsPowerOf2(int64_t value) { return value > 0 && (value & (value - 1)) == 0; }
 
     constexpr static inline int64_t RoundDown(int64_t value, int64_t factor) { return (value / factor) * factor; }
 

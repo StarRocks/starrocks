@@ -102,4 +102,14 @@ TEST_F(EasyJsonTest, TestAllocatorLifetime) {
     child["child_attr"] = 1;
     ASSERT_EQ(child.value()["child_attr"].GetInt(), 1);
 }
+
+TEST_F(EasyJsonTest, NegativeIndexDies) {
+    ::testing::FLAGS_gtest_death_test_style = "threadsafe";
+    ASSERT_DEATH(
+            {
+                EasyJson ej;
+                ej.Get(-1);
+            },
+            "non-negative");
+}
 } // namespace starrocks

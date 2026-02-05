@@ -26,13 +26,14 @@ extern std::string directory_of_inject;
 namespace starrocks {
 
 // See 'Status::_state' for details.
-static const char g_moved_from_state[5] = {'\x00', '\x00', '\x00', '\x00', TStatusCode::INTERNAL_ERROR};
+static const char g_moved_from_state[5] = {'\x00', '\x00', '\x00', '\x00',
+                                           static_cast<char>(static_cast<uint8_t>(TStatusCode::INTERNAL_ERROR))};
 
 inline const char* assemble_state(TStatusCode::type code, std::string_view msg, std::string_view ctx) {
     DCHECK(code != TStatusCode::OK);
 
     if (msg.empty() && ctx.empty()) {
-        auto result = new char[5]{0, 0, 0, 0, static_cast<char>(code)};
+        auto result = new char[5]{0, 0, 0, 0, static_cast<char>(static_cast<uint8_t>(code))};
         return result;
     }
 
@@ -45,7 +46,7 @@ inline const char* assemble_state(TStatusCode::type code, std::string_view msg, 
     auto result = new char[size + 5];
     memcpy(result, &len1, sizeof(len1));
     memcpy(result + 2, &len2, sizeof(len2));
-    result[4] = static_cast<char>(code);
+    result[4] = static_cast<char>(static_cast<uint8_t>(code));
     strings::memcpy_inlined(result + 5, msg.data(), len1);
     strings::memcpy_inlined(result + 5 + len1, ctx.data(), len2);
     return result;

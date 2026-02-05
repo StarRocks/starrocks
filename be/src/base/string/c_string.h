@@ -73,7 +73,7 @@ public:
 
     // NOTE: it's caller's duty to ensure that the no zero character exist in data[0...len), otherwize
     // size() may return a value different from |len|.
-    CString& assign(const char* data, uint16_t len) {
+    CString& assign(const char* data, size_t len) {
         assert(len == ::strnlen(data, len));
         _dealloc_if_needed();
         char* p = new char[len + 1];

@@ -1,3 +1,4 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,30 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "base/bit/bit_mask.h"
+#include "base/utility/integer_util.h"
 
 #include <gtest/gtest.h>
 
-#include <type_traits>
+#include "base/types/int256.h"
 
 namespace starrocks {
 
-TEST(BitMask, Basic) {
-    BitMask bit_mask(10);
-    for (int i = 0; i < 10; i++) {
-        bit_mask.set_bit(i);
-        ASSERT_TRUE(bit_mask.is_bit_set(i));
-    }
-    for (int i = 0; i < 10; i++) {
-        ASSERT_FALSE(bit_mask.all_bits_zero());
-        bit_mask.clear_bit(i);
-        ASSERT_FALSE(bit_mask.is_bit_set(i));
-    }
-    ASSERT_TRUE(bit_mask.all_bits_zero());
+TEST(IntegerUtilTest, IntegerToStringHandlesLargeValues) {
+    const int256_t value = INT256_MAX;
+    const std::string expected = std::to_string(value);
+    ASSERT_GT(expected.size(), 64u);
+    EXPECT_EQ(integer_to_string(value), expected);
 }
 
-TEST(BitMask, NotCopyable) {
-    EXPECT_FALSE(std::is_copy_constructible_v<BitMask>);
-    EXPECT_FALSE(std::is_copy_assignable_v<BitMask>);
-}
 } // namespace starrocks

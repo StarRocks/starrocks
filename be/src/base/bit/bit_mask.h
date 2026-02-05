@@ -25,6 +25,22 @@ public:
         _bits = new uint8_t[_size];
         memset(_bits, 0, _size);
     }
+    BitMask(const BitMask&) = delete;
+    BitMask& operator=(const BitMask&) = delete;
+    BitMask(BitMask&& other) noexcept : _size(other._size), _bits(other._bits) {
+        other._size = 0;
+        other._bits = nullptr;
+    }
+    BitMask& operator=(BitMask&& other) noexcept {
+        if (this != &other) {
+            delete[] _bits;
+            _size = other._size;
+            _bits = other._bits;
+            other._size = 0;
+            other._bits = nullptr;
+        }
+        return *this;
+    }
     ~BitMask() {
         if (_bits) {
             delete[] _bits;

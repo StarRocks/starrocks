@@ -29,11 +29,16 @@ void PathBuilder::load_starrocks_home() {
         return;
     }
 
-    _s_starrocks_home = getenv("STARROCKS_HOME");
+    const char* home = getenv("STARROCKS_HOME");
+    _s_starrocks_home = home != nullptr ? home : "";
 }
 
 void PathBuilder::get_full_path(const std::string& path, std::string* full_path) {
     load_starrocks_home();
+    if (_s_starrocks_home[0] == '\0') {
+        *full_path = path;
+        return;
+    }
     std::stringstream s;
     s << _s_starrocks_home << "/" << path;
     *full_path = s.str();
@@ -41,6 +46,10 @@ void PathBuilder::get_full_path(const std::string& path, std::string* full_path)
 
 void PathBuilder::get_full_build_path(const std::string& path, std::string* full_path) {
     load_starrocks_home();
+    if (_s_starrocks_home[0] == '\0') {
+        *full_path = path;
+        return;
+    }
     std::stringstream s;
 #ifdef NDEBUG
     s << _s_starrocks_home << "/be/build/release/" << path;
@@ -49,5 +58,11 @@ void PathBuilder::get_full_build_path(const std::string& path, std::string* full
 #endif
     *full_path = s.str();
 }
+
+#if defined(BE_TEST)
+void PathBuilder::reset_starrocks_home_for_test() {
+    _s_starrocks_home = nullptr;
+}
+#endif
 
 } // namespace starrocks

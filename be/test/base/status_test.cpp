@@ -181,4 +181,10 @@ TEST_F(StatusTest, test_to_string) {
     ASSERT_EQ("Query not exist: test query not exist", query_not_exist.to_string());
 }
 
+TEST_F(StatusTest, HighStatusCodePreserved) {
+    const auto code = static_cast<TStatusCode::type>(200);
+    Status st(code, "overflow");
+    EXPECT_EQ(code, st.code());
+}
+
 } // namespace starrocks

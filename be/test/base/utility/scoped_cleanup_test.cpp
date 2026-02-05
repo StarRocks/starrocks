@@ -19,6 +19,8 @@
 
 #include <gtest/gtest.h>
 
+#include <type_traits>
+
 namespace starrocks {
 
 TEST(ScopedCleanup, TestCleanup) {
@@ -50,6 +52,13 @@ TEST(ScopedCleanup, TestCancelCleanup) {
         cleanup.cancel();
     }
     ASSERT_EQ(42, var);
+}
+
+TEST(ScopedCleanup, NotCopyable) {
+    auto cleanup = MakeScopedCleanup([]() {});
+    using CleanupType = decltype(cleanup);
+    EXPECT_FALSE(std::is_copy_constructible_v<CleanupType>);
+    EXPECT_FALSE(std::is_copy_assignable_v<CleanupType>);
 }
 
 } // namespace starrocks

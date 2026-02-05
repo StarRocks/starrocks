@@ -68,4 +68,11 @@ TEST(BitUtil, RoundDown) {
     EXPECT_EQ(BitUtil::RoundDownToPowerOf2(7, 4), 4);
 }
 
+TEST(BitUtil, IsPowerOf2) {
+    EXPECT_FALSE(BitUtil::IsPowerOf2(0));
+    EXPECT_TRUE(BitUtil::IsPowerOf2(1));
+    EXPECT_TRUE(BitUtil::IsPowerOf2(8));
+    EXPECT_FALSE(BitUtil::IsPowerOf2(3));
+}
+
 } // namespace starrocks

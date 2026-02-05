@@ -56,6 +56,9 @@ EasyJson EasyJson::Get(const string& key) {
 }
 
 EasyJson EasyJson::Get(int index) {
+    if (index < 0) {
+        LOG(FATAL) << "EasyJson index must be non-negative: " << index;
+    }
     if (!value_->IsArray()) {
         value_->SetArray();
     }

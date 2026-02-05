@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -269,7 +270,7 @@ public:
     std::string_view detailed_message() const;
 
     TStatusCode::type code() const {
-        return _state == nullptr ? TStatusCode::OK : static_cast<TStatusCode::type>(_state[4]);
+        return _state == nullptr ? TStatusCode::OK : static_cast<TStatusCode::type>(static_cast<uint8_t>(_state[4]));
     }
 
     /// Clone this status and add the specified prefix to the message.
