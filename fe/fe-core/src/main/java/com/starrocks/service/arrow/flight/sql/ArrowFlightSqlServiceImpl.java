@@ -877,8 +877,15 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private <T extends Message> FlightInfo buildFlightInfoFromFE(T request, FlightDescriptor descriptor,
                                                                  Schema schema, CallContext context) {
+        String token = context.peerIdentity();
+
+        // When proxy is enabled and token is from another FE, forward the request
+        if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
+            return forwardGetFlightInfoToRemoteFE(token, request);
+        }
+
         try {
-            sessionManager.validateAndGetConnectContext(context.peerIdentity());
+            sessionManager.validateAndGetConnectContext(token);
             Location endpoint = getFELocation();
             return buildFlightInfo(request, descriptor, schema, endpoint);
         } catch (InvalidConfException e) {

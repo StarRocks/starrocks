@@ -1113,4 +1113,79 @@ public class ArrowFlightSqlServiceImplTest {
         }
     }
 
+    @Test
+    public void testProxyForwarding_metadataRequests_forwardToRemoteFE() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String remoteToken = "remote-fe|550e8400-e29b-41d4-a716-446655440000";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(remoteToken);
+            when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
+                    .thenReturn("remote-fe");
+
+            FlightClient mockFeClient = mock(FlightClient.class);
+            FlightInfo mockFlightInfo = mock(FlightInfo.class);
+            when(mockFeClient.getInfo(any(FlightDescriptor.class), any())).thenReturn(mockFlightInfo);
+
+            Config.arrow_flight_port = 9408;
+            testService.addToCacheForTesting("remote-fe:9408", mockFeClient);
+
+            FlightDescriptor descriptor = FlightDescriptor.command("".getBytes());
+
+            FlightSql.CommandGetCatalogs catalogsCmd = FlightSql.CommandGetCatalogs.newBuilder().build();
+            FlightInfo catalogsResult = testService.getFlightInfoCatalogs(catalogsCmd, callContext, descriptor);
+            assertEquals(mockFlightInfo, catalogsResult);
+
+            FlightSql.CommandGetDbSchemas schemasCmd = FlightSql.CommandGetDbSchemas.newBuilder().build();
+            FlightInfo schemasResult = testService.getFlightInfoSchemas(schemasCmd, callContext, descriptor);
+            assertEquals(mockFlightInfo, schemasResult);
+
+            FlightSql.CommandGetTables tablesCmd = FlightSql.CommandGetTables.newBuilder()
+                    .setIncludeSchema(true).build();
+            FlightInfo tablesResult = testService.getFlightInfoTables(tablesCmd, callContext, descriptor);
+            assertEquals(mockFlightInfo, tablesResult);
+
+            FlightSql.CommandGetSqlInfo sqlInfoCmd = FlightSql.CommandGetSqlInfo.newBuilder().build();
+            FlightInfo sqlInfoResult = testService.getFlightInfoSqlInfo(sqlInfoCmd, callContext, descriptor);
+            assertEquals(mockFlightInfo, sqlInfoResult);
+
+            FlightSql.CommandGetXdbcTypeInfo typeInfoCmd = FlightSql.CommandGetXdbcTypeInfo.newBuilder().build();
+            FlightInfo typeInfoResult = testService.getFlightInfoTypeInfo(typeInfoCmd, callContext, descriptor);
+            assertEquals(mockFlightInfo, typeInfoResult);
+
+            verify(mockFeClient, org.mockito.Mockito.atLeast(5)).getInfo(any(FlightDescriptor.class), any());
+        }
+    }
+
+    @Test
+    public void testProxyForwarding_metadataRequests_invalidToken() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String invalidToken = "invalid-token-format";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(invalidToken);
+            when(sessionManager.isLocalToken(invalidToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(invalidToken))
+                    .thenReturn(null);
+
+            FlightDescriptor descriptor = FlightDescriptor.command("".getBytes());
+
+            FlightSql.CommandGetCatalogs catalogsCmd = FlightSql.CommandGetCatalogs.newBuilder().build();
+            FlightRuntimeException ex = assertThrows(FlightRuntimeException.class, () ->
+                    testService.getFlightInfoCatalogs(catalogsCmd, callContext, descriptor));
+            assertTrue(ex.getMessage().contains("Invalid token format"));
+        }
+    }
+
 }
