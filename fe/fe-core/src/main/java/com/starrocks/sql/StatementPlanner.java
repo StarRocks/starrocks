@@ -268,7 +268,8 @@ public class StatementPlanner {
             } else {
                 // Only pre-resolve external tables when there are internal tables to lock.
                 // This avoids holding meta lock while fetching external metadata.
-                if (locker != null && !locker.isEmpty()) {
+                // Check config first (cheapest), then locker state.
+                if (Config.enable_experimental_external_table_preparse && locker != null && !locker.isEmpty()) {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
                 }
                 takeLock.run();
