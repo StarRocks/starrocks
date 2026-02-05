@@ -599,17 +599,6 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         desc->last_row = mark_row;
 
         if (v.isObject()) {
-<<<<<<< HEAD
-            // Accumulate remain status: if node is ever empty in any row, mark as remain
-            child->remain |= v.isEmptyObject();
-            // If this node was previously visited as primitive (desc->type != JSON_BASE_TYPE_BITS and != initial value),
-            // but now we see an object, this indicates a type mismatch.
-            // Mark the parent node as remain to preserve the actual data structure.
-            if (desc->type != flat_json::JSON_BASE_TYPE_BITS && desc->type != flat_json::JSON_NULL_TYPE_BITS) {
-                root->remain = true;
-            }
-            desc->type = flat_json::JSON_BASE_TYPE_BITS;
-=======
             // If we have seen any non-object value on the same key before, keep parent as remain.
             // This covers array<->object and primitive<->object conflicts and preserves the original structure.
             if (child->hits > child->object_count + 1) {
@@ -618,8 +607,7 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
             child->object_count++;
             // Accumulate remain status: if node is ever empty in any row, mark as remain
             child->remain |= v.isEmptyObject();
-            child->json_type = flat_json::JSON_BASE_TYPE_BITS;
->>>>>>> 8095476144 ([BugFix] Fix JSON flatten array and object conflict on identical paths (#68804))
+            desc->type = flat_json::JSON_BASE_TYPE_BITS;
             _visit_json_paths(v, child, mark_row);
         } else { // NOTE that array is also treated as primitive here.
             // If this node was previously visited as object, but now we see a primitive,
