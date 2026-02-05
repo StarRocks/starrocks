@@ -44,6 +44,27 @@ select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/
 -- result:
 1
 -- !result
+insert into files (
+    "path" = "oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/metadata",
+    "format" = "parquet",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}"
+)
+select 1 as c1;
+-- result:
+-- !result
+select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/metadata", "list_files_only" = "true") where IS_DIR=0;
+-- result:
+12
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute remove_orphan_files(older_than=now(),location="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/metadata");
+-- result:
+-- !result
+select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/metadata", "list_files_only" = "true") where IS_DIR=0;
+-- result:
+11
+-- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 -- result:
 -- !result
