@@ -601,10 +601,10 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         if (v.isObject()) {
             // If we have seen any non-object value on the same key before, keep parent as remain.
             // This covers array<->object and primitive<->object conflicts and preserves the original structure.
-            if (child->hits > child->object_count + 1) {
+            if (desc->hits > desc->object_count + 1) {
                 root->remain = true;
             }
-            child->object_count++;
+            desc->object_count++;
             // Accumulate remain status: if node is ever empty in any row, mark as remain
             child->remain |= v.isEmptyObject();
             desc->type = flat_json::JSON_BASE_TYPE_BITS;
