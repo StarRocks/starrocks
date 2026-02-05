@@ -43,10 +43,10 @@ namespace starrocks {
 typedef unsigned char uchar;
 
 #define int1store(T, A) *((uint8_t*)(T)) = (uint8_t)(A)
-#define int2store(T, A)                       \
-    do {                                      \
-        uint16_t _v = (uint16_t)(A);          \
-        memcpy((T), &_v, sizeof(_v));         \
+#define int2store(T, A)               \
+    do {                              \
+        uint16_t _v = (uint16_t)(A);  \
+        memcpy((T), &_v, sizeof(_v)); \
     } while (0)
 #define int3store(T, A)                           \
     do {                                          \
@@ -54,25 +54,25 @@ typedef unsigned char uchar;
         *(T + 1) = (uchar)(((uint32_t)(A) >> 8)); \
         *(T + 2) = (uchar)(((A) >> 16));          \
     } while (0)
-#define int4store(T, A)                       \
-    do {                                      \
-        uint32_t _v = (uint32_t)(A);          \
-        memcpy((T), &_v, sizeof(_v));         \
+#define int4store(T, A)               \
+    do {                              \
+        uint32_t _v = (uint32_t)(A);  \
+        memcpy((T), &_v, sizeof(_v)); \
     } while (0)
-#define int8store(T, A)                       \
-    do {                                      \
-        uint64_t _v = (uint64_t)(A);          \
-        memcpy((T), &_v, sizeof(_v));         \
+#define int8store(T, A)               \
+    do {                              \
+        uint64_t _v = (uint64_t)(A);  \
+        memcpy((T), &_v, sizeof(_v)); \
     } while (0)
-#define float4store(T, A)                     \
-    do {                                      \
-        float _v = (float)(A);                \
-        memcpy((T), &_v, sizeof(_v));         \
+#define float4store(T, A)             \
+    do {                              \
+        float _v = (float)(A);        \
+        memcpy((T), &_v, sizeof(_v)); \
     } while (0)
-#define float8store(T, A)                     \
-    do {                                      \
-        double _v = (double)(A);              \
-        memcpy((T), &_v, sizeof(_v));         \
+#define float8store(T, A)             \
+    do {                              \
+        double _v = (double)(A);      \
+        memcpy((T), &_v, sizeof(_v)); \
     } while (0)
 #define MAX_TINYINT_WIDTH 3  /* Max width for a TINY w.o. sign */
 #define MAX_SMALLINT_WIDTH 5 /* Max width for a SHORT w.o. sign */

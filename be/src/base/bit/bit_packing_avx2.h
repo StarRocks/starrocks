@@ -25,8 +25,12 @@
 
 namespace starrocks::util::bitpacking_avx2 {
 
-inline uint64_t load_u64(const uint8_t* ptr) { return unaligned_load<uint64_t>(ptr); }
-inline void store_u64(void* ptr, uint64_t value) { unaligned_store<uint64_t>(ptr, value); }
+inline uint64_t load_u64(const uint8_t* ptr) {
+    return unaligned_load<uint64_t>(ptr);
+}
+inline void store_u64(void* ptr, uint64_t value) {
+    unaligned_store<uint64_t>(ptr, value);
+}
 
 // Pdep instruction masks for uint8_t.
 static constexpr const uint64_t kPdepMask8[] = {0x0000000000000000, 0x0101010101010101, 0x0303030303030303,

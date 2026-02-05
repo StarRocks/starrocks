@@ -13,11 +13,12 @@
 // limitations under the License.
 
 #include "base/utility/mem_util.hpp"
-#include "base/utility/mysql_global.h"
 
 #include <gtest/gtest.h>
 
 #include <cstring>
+
+#include "base/utility/mysql_global.h"
 
 namespace starrocks {
 

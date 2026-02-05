@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "base/hash/hash.h"
 #include "base/hash/hash_util.hpp"
 
 #include <gtest/gtest.h>
@@ -21,6 +20,8 @@
 #include <array>
 #include <cstring>
 #include <string_view>
+
+#include "base/hash/hash.h"
 
 #if defined(__SSE4_2__)
 #include <nmmintrin.h>

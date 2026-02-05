@@ -14,8 +14,8 @@
 
 #include <gtest/gtest.h>
 
-#include <cstring>
 #include <cstdint>
+#include <cstring>
 #include <random>
 #include <vector>
 

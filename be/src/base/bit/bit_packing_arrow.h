@@ -15,6 +15,7 @@
 #pragma once
 
 #include <arrow/util/bpacking.h>
+
 #include <array>
 #include <cstring>
 #ifdef __ARM_NEON
@@ -43,11 +44,9 @@ static const uint8_t* UnpackValues(const uint8_t* __restrict__ in, int64_t in_by
         while (decoded < batch_size) {
             std::memcpy(scratch.data(), in, bytes_per_batch);
 #if defined(__AVX2__)
-            int num_unpacked =
-                    arrow::internal::unpack32_avx2(scratch.data(), out32 + decoded, kBatchSize, BIT_WIDTH);
+            int num_unpacked = arrow::internal::unpack32_avx2(scratch.data(), out32 + decoded, kBatchSize, BIT_WIDTH);
 #elif defined(__ARM_NEON)
-            int num_unpacked =
-                    arrow::internal::unpack32_neon(scratch.data(), out32 + decoded, kBatchSize, BIT_WIDTH);
+            int num_unpacked = arrow::internal::unpack32_neon(scratch.data(), out32 + decoded, kBatchSize, BIT_WIDTH);
 #else
             int num_unpacked = arrow::internal::unpack32(scratch.data(), out32 + decoded, kBatchSize, BIT_WIDTH);
 #endif
