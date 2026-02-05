@@ -61,7 +61,8 @@ jobs:
       - name: Ori PR Info
         id: ori_pr_info
         run: |
-          cd /var/lib/elastic-service && git pull
+          cd /var/lib/elastic-service
+          git pull || true
           ./lib/get_pr_info.sh
 
   repo-sync-main:
