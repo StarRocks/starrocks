@@ -2055,7 +2055,7 @@ public class QueryAnalyzer {
                 analyticExpr.setChild(i, visit(analyticExpr.getChild(i)));
             }
 
-            if (HintNode.HINT_ANALYTIC_SORT.equalsIgnoreCase(analyticExpr.getSkewHint())) {
+            if (HintNode.HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(analyticExpr.getSkewHint())) {
                 if (analyticExpr.getSkewColumn() == null) {
                     throw new SemanticException("Window skew column must be specified when using explicit skew hint");
                 }
