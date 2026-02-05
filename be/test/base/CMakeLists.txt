@@ -53,7 +53,6 @@ set(BASE_TEST_FILES
     time/monotime_test.cpp
     time/timezone_utils_test.cpp
     utility/alignment_test.cpp
-    utility/mem_util_test.cpp
     utility/scoped_cleanup_test.cpp
     uuid/uuid_generator_test.cpp
     status_test.cpp

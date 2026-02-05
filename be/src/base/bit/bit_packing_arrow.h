@@ -15,9 +15,6 @@
 #pragma once
 
 #include <arrow/util/bpacking.h>
-
-#include <array>
-#include <cstring>
 #ifdef __ARM_NEON
 #include <arrow/util/bpacking_neon.h>
 #endif
@@ -35,26 +32,20 @@ static const uint8_t* UnpackValues(const uint8_t* __restrict__ in, int64_t in_by
                                    OutType* __restrict__ out) {
     int batch_size = num_values / 32 * 32;
     const int byte_width = 8;
-    constexpr int kBatchSize = 32;
     if constexpr (sizeof(OutType) == 4) {
-        const int bytes_per_batch = BIT_WIDTH * 4;
-        std::array<uint32_t, 64> scratch;
-        int64_t decoded = 0;
-        auto* out32 = reinterpret_cast<uint32_t*>(out);
-        while (decoded < batch_size) {
-            std::memcpy(scratch.data(), in, bytes_per_batch);
 #if defined(__AVX2__)
-            int num_unpacked = arrow::internal::unpack32_avx2(scratch.data(), out32 + decoded, kBatchSize, BIT_WIDTH);
+        int num_unpacked = arrow::internal::unpack32_avx2(reinterpret_cast<const uint32_t*>(in),
+                                                          reinterpret_cast<uint32_t*>(out), batch_size, BIT_WIDTH);
 #elif defined(__ARM_NEON)
-            int num_unpacked = arrow::internal::unpack32_neon(scratch.data(), out32 + decoded, kBatchSize, BIT_WIDTH);
+        int num_unpacked = arrow::internal::unpack32_neon(reinterpret_cast<const uint32_t*>(in),
+                                                          reinterpret_cast<uint32_t*>(out), batch_size, BIT_WIDTH);
 #else
-            int num_unpacked = arrow::internal::unpack32(scratch.data(), out32 + decoded, kBatchSize, BIT_WIDTH);
+        int num_unpacked = arrow::internal::unpack32(reinterpret_cast<const uint32_t*>(in),
+                                                     reinterpret_cast<uint32_t*>(out), batch_size, BIT_WIDTH);
 #endif
 
-            DCHECK(num_unpacked == kBatchSize);
-            in += bytes_per_batch;
-            decoded += kBatchSize;
-        }
+        DCHECK(num_unpacked == batch_size);
+        in += num_unpacked * BIT_WIDTH / byte_width;
     } else if constexpr (sizeof(OutType) == 8 && BIT_WIDTH > 32) {
         // Use unpack64 only if BIT_WIDTH is larger than 32
         // TODO (ARROW-13677): improve the performance of internal::unpack64
@@ -67,25 +58,25 @@ static const uint8_t* UnpackValues(const uint8_t* __restrict__ in, int64_t in_by
         DCHECK_LE(BIT_WIDTH, 32);
         const int buffer_size = 1024;
         uint32_t unpack_buffer[buffer_size];
-        std::array<uint32_t, buffer_size> scratch;
 
         int64_t decoded = 0;
         while (decoded < batch_size) {
             auto size = batch_size - decoded > buffer_size ? buffer_size : batch_size - decoded;
-            const int bytes_per_block = size * BIT_WIDTH / byte_width;
-            std::memcpy(scratch.data(), in, bytes_per_block);
 #if defined(__AVX2__)
-            int num_unpacked = arrow::internal::unpack32_avx2(scratch.data(), unpack_buffer, size, BIT_WIDTH);
+            int num_unpacked = arrow::internal::unpack32_avx2(reinterpret_cast<const uint32_t*>(in), unpack_buffer,
+                                                              size, BIT_WIDTH);
 #elif defined(__ARM_NEON)
-            int num_unpacked = arrow::internal::unpack32_neon(scratch.data(), unpack_buffer, size, BIT_WIDTH);
+            int num_unpacked = arrow::internal::unpack32_neon(reinterpret_cast<const uint32_t*>(in), unpack_buffer,
+                                                              size, BIT_WIDTH);
 #else
-            int num_unpacked = arrow::internal::unpack32(scratch.data(), unpack_buffer, size, BIT_WIDTH);
+            int num_unpacked =
+                    arrow::internal::unpack32(reinterpret_cast<const uint32_t*>(in), unpack_buffer, size, BIT_WIDTH);
 #endif
             DCHECK(num_unpacked == size);
             for (int k = 0; k < size; ++k) {
                 out[decoded + k] = static_cast<OutType>(unpack_buffer[k]);
             }
-            in += bytes_per_block;
+            in += num_unpacked * BIT_WIDTH / byte_width;
             decoded += size;
         }
     }

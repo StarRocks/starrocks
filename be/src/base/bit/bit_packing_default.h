@@ -41,7 +41,6 @@
 #include <utility>
 
 #include "base/bit/bit_util.h"
-#include "base/hash/unaligned_access.h"
 
 namespace starrocks::util::bitpacking_default {
 
@@ -121,7 +120,7 @@ inline uint64_t ALWAYS_INLINE UnpackValue(const uint8_t* __restrict__ in_buf) {
 
     constexpr int FIRST_BIT_OFFSET = FIRST_BIT_IDX - FIRST_WORD_IDX * 32;
     constexpr uint64_t mask = (BIT_WIDTH == 64) ? ~0ULL : (1ULL << BIT_WIDTH) - 1;
-    const auto* in = reinterpret_cast<const uint8_t*>(in_buf);
+    const auto* in = reinterpret_cast<const uint32_t*>(in_buf);
 
     // Avoid reading past the end of the buffer. We can safely read 64 bits if we know that
     // this is a full batch read (so the input buffer is 32 * BIT_WIDTH long) and there is
@@ -137,17 +136,17 @@ inline uint64_t ALWAYS_INLINE UnpackValue(const uint8_t* __restrict__ in_buf) {
     constexpr bool READ_32_BITS = WORDS_TO_READ == 1 && (!CAN_SAFELY_READ_64_BITS || BitUtil::IsPowerOf2(BIT_WIDTH));
 
     if (READ_32_BITS) {
-        uint32_t word = unaligned_load<uint32_t>(in + FIRST_WORD_IDX * sizeof(uint32_t));
+        uint32_t word = in[FIRST_WORD_IDX];
         word >>= FIRST_BIT_OFFSET < 32 ? FIRST_BIT_OFFSET : 0;
         return word & mask;
     }
 
-    uint64_t word = unaligned_load<uint64_t>(in + FIRST_WORD_IDX * sizeof(uint32_t));
+    uint64_t word = *reinterpret_cast<const uint64_t*>(in + FIRST_WORD_IDX);
     word >>= FIRST_BIT_OFFSET;
 
     if (WORDS_TO_READ > 2) {
         constexpr int USEFUL_BITS = FIRST_BIT_OFFSET == 0 ? 0 : 64 - FIRST_BIT_OFFSET;
-        uint64_t extra_word = unaligned_load<uint32_t>(in + (FIRST_WORD_IDX + 2) * sizeof(uint32_t));
+        uint64_t extra_word = in[FIRST_WORD_IDX + 2];
         word |= extra_word << USEFUL_BITS;
     }
 

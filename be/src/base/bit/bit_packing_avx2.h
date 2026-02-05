@@ -20,17 +20,9 @@
 #endif
 
 #include "base/bit/bit_packing_default.h"
-#include "base/hash/unaligned_access.h"
 #include "base/logging.h"
 
 namespace starrocks::util::bitpacking_avx2 {
-
-inline uint64_t load_u64(const uint8_t* ptr) {
-    return unaligned_load<uint64_t>(ptr);
-}
-inline void store_u64(void* ptr, uint64_t value) {
-    unaligned_store<uint64_t>(ptr, value);
-}
 
 // Pdep instruction masks for uint8_t.
 static constexpr const uint64_t kPdepMask8[] = {0x0000000000000000, 0x0101010101010101, 0x0303030303030303,
@@ -105,7 +97,7 @@ static inline void unpack1to7(const uint8_t* __restrict__ in, uint16_t* __restri
     auto writeEndOffset = out + num_values;
 
     while (out + 8 <= writeEndOffset) {
-        uint64_t val = load_u64(in);
+        uint64_t val = *reinterpret_cast<const uint64_t*>(in);
         uint64_t intermediateVal = _pdep_u64(val, pdepMask);
 
         __m128i result = _mm_cvtepu8_epi16(_mm_loadl_epi64((reinterpret_cast<const __m128i*>(&intermediateVal))));
@@ -120,7 +112,7 @@ static inline void unpack8(const uint8_t* __restrict__ in, uint16_t* __restrict_
     auto writeEndOffset = out + num_values;
 
     while (out + 8 <= writeEndOffset) {
-        uint64_t value = load_u64(in);
+        uint64_t value = *(reinterpret_cast<const uint64_t*>(in));
 
         __m128i result = _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)&value));
         _mm_storeu_si128(reinterpret_cast<__m128i*>(out), result);
@@ -142,11 +134,11 @@ static inline void unpack9to15(const uint8_t* __restrict__ in, uint16_t* __restr
 
     // Process bit_width bytes (8 values) a time.
     while (out + 8 <= writeEndOffset) {
-        uint64_t value_0 = load_u64(in);
-        uint64_t value_1 = load_u64(in + 8);
+        uint64_t value_0 = *(reinterpret_cast<const uint64_t*>(in));
+        uint64_t value_1 = *(reinterpret_cast<const uint64_t*>(in + 8));
 
-        store_u64(out, _pdep_u64(value_0, pdepMask));
-        store_u64(out + 4, _pdep_u64((value_0 >> shift1) | (value_1 << shift2), pdepMask));
+        *reinterpret_cast<uint64_t*>(out) = _pdep_u64(value_0, pdepMask);
+        *reinterpret_cast<uint64_t*>(out + 4) = _pdep_u64((value_0 >> shift1) | (value_1 << shift2), pdepMask);
 
         in += bit_width;
         out += 8;
@@ -171,7 +163,7 @@ static inline void unpack1to7(const uint8_t* __restrict__ in, uint32_t* __restri
 
     // Process bit_width bytes (8 values) a time.
     while (out + 8 <= writeEndOffset) {
-        uint64_t val = load_u64(in);
+        uint64_t val = *reinterpret_cast<const uint64_t*>(in);
 
         uint64_t intermediateVal = _pdep_u64(val, pdepMask);
         __m256i result = _mm256_cvtepu8_epi32(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(&intermediateVal)));
@@ -188,7 +180,7 @@ static inline void unpack8(const uint8_t* __restrict__ in, uint32_t* __restrict_
 
     // Process 8 bytes (8 values) a time.
     while (out + 8 <= writeEndOffset) {
-        uint64_t value = load_u64(in);
+        uint64_t value = *(reinterpret_cast<const uint64_t*>(in));
         __m128i packed = _mm_set_epi64x(0, value);
         __m256i result = _mm256_cvtepu8_epi32(packed);
         _mm256_storeu_si256(reinterpret_cast<__m256i*>(out), result);
@@ -210,8 +202,8 @@ static inline void unpack9to15(const uint8_t* __restrict__ in, uint32_t* __restr
 
     // Process bit_width bytes (8 values) a time.
     while (out + 8 <= writeEndOffset) {
-        uint64_t value_0 = load_u64(in);
-        uint64_t value_1 = load_u64(in + 8);
+        uint64_t value_0 = *(reinterpret_cast<const uint64_t*>(in));
+        uint64_t value_1 = *(reinterpret_cast<const uint64_t*>(in + 8));
 
         uint64_t intermediateValue_0 = _pdep_u64(value_0, pdepMask);
         uint64_t intermediateValue_1 = _pdep_u64((value_0 >> shift1) | (value_1 << shift2), pdepMask);
@@ -254,14 +246,16 @@ static inline void unpack17to21(const uint8_t* __restrict__ in, uint32_t* __rest
 
     // Process bit_width bytes (8 values) a time.
     while (out + 8 <= writeEndOffset) {
-        uint64_t value_0 = load_u64(in);
-        uint64_t value_1 = load_u64(in + 8);
-        uint64_t value_2 = load_u64(in + 16);
+        uint64_t value_0 = *(reinterpret_cast<const uint64_t*>(in));
+        uint64_t value_1 = *(reinterpret_cast<const uint64_t*>(in + 8));
+        uint64_t value_2 = *(reinterpret_cast<const uint64_t*>(in + 16));
 
-        store_u64(out, _pdep_u64(value_0, pdepMask));
-        store_u64(out + 2, _pdep_u64((value_0 >> rightShift1) | (value_1 << leftShift1), pdepMask));
-        store_u64(out + 4, _pdep_u64(value_1 >> rightShift2, pdepMask));
-        store_u64(out + 6, _pdep_u64((value_1 >> rightShift3) | (value_2 << leftShift3), pdepMask));
+        *reinterpret_cast<uint64_t*>(out) = _pdep_u64(value_0, pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 1) =
+                _pdep_u64((value_0 >> rightShift1) | (value_1 << leftShift1), pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 2) = _pdep_u64(value_1 >> rightShift2, pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 3) =
+                _pdep_u64((value_1 >> rightShift3) | (value_2 << leftShift3), pdepMask);
 
         in += bit_width;
         out += 8;
@@ -283,14 +277,16 @@ static inline void unpack22to24(const uint8_t* __restrict__ in, uint32_t* __rest
 
     // Process bit_width bytes (8 values) a time.
     while (out + 8 <= writeEndOffset) {
-        uint64_t value_0 = load_u64(in);
-        uint64_t value_1 = load_u64(in + 8);
-        uint64_t value_2 = load_u64(in + 16);
+        uint64_t value_0 = *(reinterpret_cast<const uint64_t*>(in));
+        uint64_t value_1 = *(reinterpret_cast<const uint64_t*>(in + 8));
+        uint64_t value_2 = *(reinterpret_cast<const uint64_t*>(in + 16));
 
-        store_u64(out, _pdep_u64(value_0, pdepMask));
-        store_u64(out + 2, _pdep_u64((value_1 << leftShift1) | (value_0 >> rightShift1), pdepMask));
-        store_u64(out + 4, _pdep_u64((value_2 << leftShift2) | (value_1 >> rightShift2), pdepMask));
-        store_u64(out + 6, _pdep_u64((value_2 >> rightShift3), pdepMask));
+        *reinterpret_cast<uint64_t*>(out) = _pdep_u64(value_0, pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 1) =
+                _pdep_u64((value_1 << leftShift1) | (value_0 >> rightShift1), pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 2) =
+                _pdep_u64((value_2 << leftShift2) | (value_1 >> rightShift2), pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 3) = _pdep_u64((value_2 >> rightShift3), pdepMask);
 
         in += bit_width;
         out += 8;
@@ -313,15 +309,18 @@ static inline void unpack25to31(const uint8_t* __restrict__ in, uint32_t* __rest
 
     // Process bit_width bytes (8 values) a time.
     while (out + 8 <= writeEndOffset) {
-        uint64_t value_0 = load_u64(in);
-        uint64_t value_1 = load_u64(in + 8);
-        uint64_t value_2 = load_u64(in + 16);
-        uint64_t value_3 = load_u64(in + 24);
+        uint64_t value_0 = *(reinterpret_cast<const uint64_t*>(in));
+        uint64_t value_1 = *(reinterpret_cast<const uint64_t*>(in + 8));
+        uint64_t value_2 = *(reinterpret_cast<const uint64_t*>(in + 16));
+        uint64_t value_3 = *(reinterpret_cast<const uint64_t*>(in + 24));
 
-        store_u64(out, _pdep_u64(value_0, pdepMask));
-        store_u64(out + 2, _pdep_u64((value_1 << leftShift1) | (value_0 >> rightShift1), pdepMask));
-        store_u64(out + 4, _pdep_u64((value_2 << leftShift2) | (value_1 >> rightShift2), pdepMask));
-        store_u64(out + 6, _pdep_u64((value_3 << leftShift3) | (value_2 >> rightShift3), pdepMask));
+        *reinterpret_cast<uint64_t*>(out) = _pdep_u64(value_0, pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 1) =
+                _pdep_u64((value_1 << leftShift1) | (value_0 >> rightShift1), pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 2) =
+                _pdep_u64((value_2 << leftShift2) | (value_1 >> rightShift2), pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 3) =
+                _pdep_u64((value_3 << leftShift3) | (value_2 >> rightShift3), pdepMask);
 
         in += bit_width;
         out += 8;
@@ -355,8 +354,8 @@ inline void unpack<uint8_t>(int bit_width, const uint8_t* __restrict__ in, int64
     // performance of direct memcpy is about the same as this solution.
     while (out + 8 <= writeEndOffset) {
         // Using memcpy() here may result in non-optimized loops by clang.
-        uint64_t val = load_u64(in);
-        store_u64(out, _pdep_u64(val, mask));
+        uint64_t val = *reinterpret_cast<const uint64_t*>(in);
+        *(reinterpret_cast<uint64_t*>(out)) = _pdep_u64(val, mask);
         in += bit_width;
         out += 8;
     }

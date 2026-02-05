@@ -24,7 +24,11 @@ namespace starrocks {
 
 template <const size_t N>
 inline void fixed_size_memory_copy(void* dst, const void* src) {
-    std::memcpy(dst, src, N);
+    struct X {
+        uint8_t byte[N];
+    };
+
+    *(reinterpret_cast<X*>(dst)) = *(reinterpret_cast<const X*>(src));
 }
 
 template <>
@@ -32,22 +36,22 @@ inline void fixed_size_memory_copy<0>(void*, const void*) {}
 
 template <>
 inline void fixed_size_memory_copy<1>(void* dst, const void* src) {
-    std::memcpy(dst, src, 1);
+    *(reinterpret_cast<uint8_t*>(dst)) = *(reinterpret_cast<const uint8_t*>(src));
 }
 
 template <>
 inline void fixed_size_memory_copy<2>(void* dst, const void* src) {
-    std::memcpy(dst, src, 2);
+    *(reinterpret_cast<uint16_t*>(dst)) = *(reinterpret_cast<const uint16_t*>(src));
 }
 
 template <>
 inline void fixed_size_memory_copy<4>(void* dst, const void* src) {
-    std::memcpy(dst, src, 4);
+    *(reinterpret_cast<uint32_t*>(dst)) = *(reinterpret_cast<const uint32_t*>(src));
 }
 
 template <>
 inline void fixed_size_memory_copy<8>(void* dst, const void* src) {
-    std::memcpy(dst, src, 8);
+    *(reinterpret_cast<uint64_t*>(dst)) = *(reinterpret_cast<const uint64_t*>(src));
 }
 
 inline void memory_copy(void* dst, const void* src, size_t size) {
