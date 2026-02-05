@@ -440,12 +440,9 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
-    // meta lock free shutdown for primary key table. In current impl, TabletUpdates's context
-    // is protected by specified lock defined in TabletUpdates itself but not tablet meta lock
-    // It is safe call stop_and_wait_apply_done out of tablet meta lock
-    if (dropped_tablet->updates() != nullptr) {
-        dropped_tablet->updates()->stop_and_wait_apply_done();
-    }
+    // For primary key table, stop apply thread and clear index cache.
+    // This is safe to call outside of tablet meta lock since TabletUpdates has its own locking.
+    _stop_and_clear_primary_index_cache(dropped_tablet);
 
     if (flag == kDeleteFiles) {
         {
@@ -1558,6 +1555,24 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                               tablet_meta);
 }
 
+void TabletManager::_stop_and_clear_primary_index_cache(const TabletSharedPtr& tablet) {
+    if (tablet->updates() == nullptr) {
+        return;
+    }
+    // For primary key tablets, stop the apply thread and clear index cache.
+    // This is critical to prevent a race condition where:
+    // 1. Old tablet is dropped and marked as SHUTDOWN
+    // 2. New tablet with same tablet_id is created (e.g., via clone or storage migration)
+    // 3. New tablet's apply operation gets the old PersistentIndex from cache (with old path)
+    // 4. delete_shutdown_tablet_before_clone deletes the old tablet directory
+    // 5. New tablet's on_commited() tries to access the old path and fails
+    // 6. This sets error state, causing subsequent clone operations to fail
+    // By clearing the cache here, we ensure new tablet will create a fresh PersistentIndex
+    // with the correct path.
+    tablet->updates()->stop_and_wait_apply_done();
+    StorageEngine::instance()->update_manager()->index_cache().try_remove_by_key(tablet->tablet_id());
+}
+
 Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
     StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
 
@@ -1584,12 +1599,8 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
-    // meta lock free shutdown for primary key table. In current impl, TabletUpdates's context
-    // is protected by specified lock defined in TabletUpdates itself but not tablet meta lock
-    // It is safe call stop_and_wait_apply_done out of tablet meta lock
-    if (dropped_tablet->updates() != nullptr) {
-        dropped_tablet->updates()->stop_and_wait_apply_done();
-    }
+    // For primary key table, stop apply thread and clear index cache.
+    _stop_and_clear_primary_index_cache(dropped_tablet);
 
     if (flag == kMoveFilesToTrash) {
         {

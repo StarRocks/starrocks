@@ -855,6 +855,8 @@ public:
     void test_pk_dump(size_t rowset_cnt);
     void update_and_recover(bool enable_persistent_index);
     void test_recover_rowset_sorter();
+    void test_drop_tablet_clears_index_cache(bool enable_persistent_index);
+    void test_index_cache_race_condition_simulation(bool enable_persistent_index);
 
 protected:
     TabletSharedPtr _tablet;

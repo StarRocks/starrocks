@@ -248,6 +248,11 @@ private:
 
     Status _drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag);
 
+    // Stop apply thread and clear primary index cache for the tablet.
+    // This prevents a race condition where a new tablet with the same tablet_id
+    // would use a stale PersistentIndex pointing to the old tablet's path.
+    void _stop_and_clear_primary_index_cache(const TabletSharedPtr& tablet);
+
     TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id);
     TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err);
 
