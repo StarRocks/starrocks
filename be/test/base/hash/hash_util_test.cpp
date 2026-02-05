@@ -17,8 +17,17 @@
 #include <gtest/gtest.h>
 #include <zlib.h>
 
+#include <array>
 #include <cstring>
 #include <string_view>
+
+#include "base/hash/hash.h"
+
+#if defined(__SSE4_2__)
+#include <nmmintrin.h>
+#elif defined(__aarch64__)
+#include <arm_acle.h>
+#endif
 
 #include "base/hash/murmur_hash3.h"
 #include "gutil/cpu.h"
@@ -176,6 +185,37 @@ TEST(HashUtilTest, UnalignedLoad) {
     memcpy(&expected, buffer + 1, sizeof(expected));
     EXPECT_EQ(HashUtil::unaligned_load<uint32_t>(buffer + 1), expected);
 }
+
+TEST(HashUtilTest, CrcHashUnalignedInput) {
+    std::array<uint8_t, 32> buffer{};
+    for (size_t i = 0; i < buffer.size(); ++i) {
+        buffer[i] = static_cast<uint8_t>(i);
+    }
+    const uint8_t* unaligned = buffer.data() + 1;
+    const int32_t len = static_cast<int32_t>(buffer.size() - 1);
+    std::string aligned(reinterpret_cast<const char*>(unaligned), len);
+
+    const uint32_t seed32 = 0x13579bdu;
+    const uint64_t seed64 = 0x12345678abcdef90ULL;
+
+    EXPECT_EQ(HashUtil::crc_hash(unaligned, len, seed32), HashUtil::crc_hash(aligned.data(), len, seed32));
+    EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64), HashUtil::crc_hash64(aligned.data(), len, seed64));
+}
+
+#if (defined(__x86_64__) && defined(__SSE4_2__)) || defined(__aarch64__)
+TEST(HashUtilTest, CrcHash64UnmixedDoesNotDoubleHashTail) {
+    const uint64_t seed = 0x12345678abcdef90ULL;
+    const uint64_t data = 0x1122334455667788ULL;
+    uint64_t expected = seed;
+#if defined(__x86_64__) && defined(__SSE4_2__)
+    expected = _mm_crc32_u64(expected, data);
+#elif defined(__aarch64__)
+    expected = __crc32cd(expected, data);
+#endif
+    const uint64_t actual = crc_hash_64_unmixed(&data, sizeof(data), seed);
+    EXPECT_EQ(expected, actual);
+}
+#endif
 
 } // namespace
 } // namespace starrocks

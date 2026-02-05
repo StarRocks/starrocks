@@ -21,6 +21,7 @@
 #include <mutex>
 
 #include "base/hash/murmur_hash3.h"
+#include "base/hash/unaligned_access.h"
 #include "base/hash/xxh3.h"
 #include "gutil/cpu.h"
 
@@ -115,18 +116,16 @@ static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash) {
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % sizeof(uint32_t);
 
-    const uint32_t* p = reinterpret_cast<const uint32_t*>(data);
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
 
     while (words--) {
-        hash = _mm_crc32_u32(hash, *p);
-        ++p;
+        hash = _mm_crc32_u32(hash, unaligned_load<uint32_t>(p));
+        p += sizeof(uint32_t);
     }
 
-    const uint8_t* s = reinterpret_cast<const uint8_t*>(p);
-
     while (bytes--) {
-        hash = _mm_crc32_u8(hash, *s);
-        ++s;
+        hash = _mm_crc32_u8(hash, *p);
+        ++p;
     }
 
     // The lower half of the CRC hash has poor uniformity, so swap the halves
@@ -142,22 +141,21 @@ static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash)
     uint32_t h1 = hash >> 32;
     uint32_t h2 = (hash << 32) >> 32;
 
-    const uint32_t* p = reinterpret_cast<const uint32_t*>(data);
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
     while (words--) {
-        (words & 1) ? (h1 = _mm_crc32_u32(h1, *p)) : (h2 = _mm_crc32_u32(h2, *p));
-        ++p;
+        const uint32_t value = unaligned_load<uint32_t>(p);
+        (words & 1) ? (h1 = _mm_crc32_u32(h1, value)) : (h2 = _mm_crc32_u32(h2, value));
+        p += sizeof(uint32_t);
     }
 
-    const uint8_t* s = reinterpret_cast<const uint8_t*>(p);
     while (bytes--) {
-        (bytes & 1) ? (h1 = _mm_crc32_u8(h1, *s)) : (h2 = _mm_crc32_u8(h2, *s));
-        ++s;
+        (bytes & 1) ? (h1 = _mm_crc32_u8(h1, *p)) : (h2 = _mm_crc32_u8(h2, *p));
+        ++p;
     }
 
     h1 = (h1 << 16) | (h1 >> 16);
     h2 = (h2 << 16) | (h2 >> 16);
-    ((uint32_t*)(&hash))[0] = h1;
-    ((uint32_t*)(&hash))[1] = h2;
+    hash = (static_cast<uint64_t>(h2) << 32) | h1;
     return hash;
 }
 #endif
