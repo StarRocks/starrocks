@@ -29,14 +29,14 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 public class ClusterOverviewActionV2Test extends StarRocksHttpTestCase {
 
-    private static final String QUERY_PLAN_URI = "/api/v2/cluster_overview";
+    private static final String CLUSTER_OVERVIEW_URI = "/api/v2/cluster_overview";
 
     @Test
-    public void testGetBackend() throws IOException {
+    public void testGetClusterOverview() throws IOException {
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
-                .url("http://localhost:" + HTTP_PORT + QUERY_PLAN_URI)
+                .url("http://localhost:" + HTTP_PORT + CLUSTER_OVERVIEW_URI)
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();

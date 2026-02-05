@@ -61,7 +61,7 @@ public class ClusterOverviewActionV2 extends RestBaseAction {
                 .stream()
                 .map(db -> db.getTables().size())
                 .reduce(Integer::sum).orElse(0);
-        return  tableCount;
+        return tableCount;
     }
 
     private long getDataUsedCapacity() {
