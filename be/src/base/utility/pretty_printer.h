@@ -21,10 +21,11 @@
 #include <iomanip>
 #include <sstream>
 
+#include "base/logging.h"
 #include "base/utility/template_util.h"
-#include "common/system/cpu_info.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/strings/join.h"
+#include "gutil/sysinfo.h"
 
 /// Truncate a double to offset decimal places.
 #define DOUBLE_TRUNCATE(val, offset) floor(val* pow(10, offset)) / pow(10, offset)
@@ -79,10 +80,14 @@ public:
         }
 
         case TUnit::CPU_TICKS: {
-            if (value < CpuInfo::cycles_per_ms()) {
+            int64_t cycles_per_ms = static_cast<int64_t>(base::CyclesPerSecond() / 1000.0);
+            if (cycles_per_ms <= 0) {
+                cycles_per_ms = 1;
+            }
+            if (value < cycles_per_ms) {
                 ss << std::setprecision(PRECISION) << (value / 1000.) << "K clock cycles";
             } else {
-                value /= CpuInfo::cycles_per_ms();
+                value /= cycles_per_ms;
                 print_timems(value, &ss);
             }
             break;

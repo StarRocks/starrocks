@@ -44,8 +44,8 @@
 #include <sstream>
 #include <vector>
 
+#include "base/utility/pretty_printer.h"
 #include "common/configbase.h"
-#include "common/pretty_printer.h"
 #include "http/action/profile_utils.h"
 #include "http/web_page_handler.h"
 #include "jemalloc/jemalloc.h"

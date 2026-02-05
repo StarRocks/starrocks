@@ -57,7 +57,7 @@
 #include "base/path/file_util.h"
 #include "base/string/string_parser.hpp"
 #include "base/system/errno.h"
-#include "common/pretty_printer.h"
+#include "base/utility/pretty_printer.h"
 #include "gutil/strings/split.h"
 
 namespace starrocks {

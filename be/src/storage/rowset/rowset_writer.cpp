@@ -41,10 +41,10 @@
 #include <ctime>
 #include <memory>
 
+#include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "common/pretty_printer.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"

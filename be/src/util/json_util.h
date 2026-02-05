@@ -40,9 +40,9 @@
 #include <string>
 #include <vector>
 
+#include "base/utility/pretty_printer.h"
 #include "base/utility/template_util.h"
 #include "column/vectorized_fwd.h"
-#include "common/pretty_printer.h"
 #include "common/status.h"
 
 namespace starrocks {

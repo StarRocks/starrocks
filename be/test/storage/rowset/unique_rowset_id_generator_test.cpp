@@ -21,7 +21,7 @@
 
 #include <iostream>
 
-#include "common/pretty_printer.h"
+#include "base/utility/pretty_printer.h"
 #include "util/runtime_profile.h"
 #include "util/threadpool.h"
 

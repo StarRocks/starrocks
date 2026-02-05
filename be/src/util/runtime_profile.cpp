@@ -41,8 +41,8 @@
 #include <queue>
 #include <utility>
 
+#include "base/utility/pretty_printer.h"
 #include "common/object_pool.h"
-#include "common/pretty_printer.h"
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
 

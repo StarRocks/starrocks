@@ -51,8 +51,8 @@
 #include "fslib/star_cache_handler.h"
 #endif
 #include "base/time/timezone_utils.h"
+#include "base/utility/pretty_printer.h"
 #include "cache/datacache.h"
-#include "common/pretty_printer.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"

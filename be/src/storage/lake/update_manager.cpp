@@ -15,7 +15,7 @@
 #include "storage/lake/update_manager.h"
 
 #include "base/testutil/sync_point.h"
-#include "common/pretty_printer.h"
+#include "base/utility/pretty_printer.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
