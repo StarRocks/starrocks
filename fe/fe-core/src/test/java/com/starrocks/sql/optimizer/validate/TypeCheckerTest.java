@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
 
@@ -38,38 +39,31 @@ class TypeCheckerTest {
 
     @Test
     void testHashJoinEqualPredicateTypeMismatch() {
-        ColumnRefOperator leftCol = new ColumnRefOperator(1, IntegerType.BIGINT, "l", true);
-        ColumnRefOperator rightCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "r", true);
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, rightCol, leftCol);
+        {
+            OptExpression root = generateHashJoinExpr(IntegerType.BIGINT, VarcharType.VARCHAR);
+            StarRocksPlannerException ex = assertThrows(StarRocksPlannerException.class,
+                    () -> TypeChecker.getInstance().validate(root, null));
+            assertTrue(ex.getMessage().contains("hash join equal predicate type mismatch"),
+                    "Unexpected error: " + ex.getMessage());
+        }
 
-        PhysicalHashJoinOperator join = new PhysicalHashJoinOperator(
-                JoinOperator.INNER_JOIN,
-                predicate,
-                "",
-                Operator.DEFAULT_LIMIT,
-                null,
-                null,
-                null,
-                null);
+        {
+            OptExpression root = generateHashJoinExpr(IntegerType.BIGINT, IntegerType.INT);
+            StarRocksPlannerException ex = assertThrows(StarRocksPlannerException.class,
+                    () -> TypeChecker.getInstance().validate(root, null));
+            assertTrue(ex.getMessage().contains("hash join equal predicate type mismatch"),
+                    "Unexpected error: " + ex.getMessage());
+        }
 
-        OptExpression left = new OptExpression(new MockOperator(OperatorType.LOGICAL_VALUES));
-        left.setLogicalProperty(new LogicalProperty(ColumnRefSet.of(leftCol)));
-
-        OptExpression right = new OptExpression(new MockOperator(OperatorType.LOGICAL_VALUES));
-        right.setLogicalProperty(new LogicalProperty(ColumnRefSet.of(rightCol)));
-
-        OptExpression root = OptExpression.create(join, left, right);
-
-        StarRocksPlannerException ex = assertThrows(StarRocksPlannerException.class,
-                () -> TypeChecker.getInstance().validate(root, null));
-        assertTrue(ex.getMessage().contains("hash join equal predicate type mismatch"),
-                "Unexpected error: " + ex.getMessage());
+        {
+            OptExpression root = generateHashJoinExpr(IntegerType.BIGINT, IntegerType.BIGINT);
+            assertDoesNotThrow(() -> TypeChecker.getInstance().validate(root, null));
+        }
     }
 
-    @Test
-    void testHashJoinEqualPredicateTypeMatch() {
-        ColumnRefOperator leftCol = new ColumnRefOperator(1, VarcharType.VARCHAR, "l", true);
-        ColumnRefOperator rightCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "r", true);
+    private static OptExpression generateHashJoinExpr(Type leftType, Type rightType) {
+        ColumnRefOperator leftCol = new ColumnRefOperator(1, leftType, "l", true);
+        ColumnRefOperator rightCol = new ColumnRefOperator(2, rightType, "r", true);
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, rightCol, leftCol);
 
         PhysicalHashJoinOperator join = new PhysicalHashJoinOperator(
@@ -88,8 +82,6 @@ class TypeCheckerTest {
         OptExpression right = new OptExpression(new MockOperator(OperatorType.LOGICAL_VALUES));
         right.setLogicalProperty(new LogicalProperty(ColumnRefSet.of(rightCol)));
 
-        OptExpression root = OptExpression.create(join, left, right);
-
-        assertDoesNotThrow(() -> TypeChecker.getInstance().validate(root, null));
+        return OptExpression.create(join, left, right);
     }
 }
