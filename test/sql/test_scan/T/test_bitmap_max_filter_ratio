@@ -17,7 +17,7 @@ PROPERTIES (
 insert into t_bitmap_ratio
 select
     generate_series as id,
-    case when generate_series <= 20 then 'hot' else concat('v', generate_series) end as v
+    case when generate_series % 20 = 0 then 'hot' else concat('v', generate_series) end as v
 from table(generate_series(1, 100));
 
 create view profile_bitmap_filter_rows as
