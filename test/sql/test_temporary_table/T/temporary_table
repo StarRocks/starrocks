@@ -170,7 +170,7 @@ WITH BROKER
     "fs.oss.endpoint" = "${oss_endpoint}"
 );
 
--- name: test_sys_temp_tables
+-- name: test_sys_temp_tables @native
 create temporary table `t` (
     `c1` int,
     `c2` int,
