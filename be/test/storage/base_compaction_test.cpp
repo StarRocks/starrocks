@@ -301,7 +301,9 @@ protected:
 };
 
 TEST_F(BaseCompactionTest, test_init_succeeded) {
+    create_tablet_schema(DUP_KEYS);
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
+    tablet_meta->set_tablet_schema(_tablet_schema);
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
@@ -309,7 +311,7 @@ TEST_F(BaseCompactionTest, test_init_succeeded) {
 
 TEST_F(BaseCompactionTest, test_input_rowsets_LE_1) {
     TabletSchemaPB schema_pb;
-    schema_pb.set_keys_type(KeysType::DUP_KEYS);
+    schema_pb.set_keys_type(DUP_KEYS);
     auto schema = std::make_shared<const TabletSchema>(schema_pb);
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     tablet_meta->set_tablet_schema(schema);
