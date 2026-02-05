@@ -37,7 +37,10 @@ public:
             if (!ok) {
                 return;
             }
-            ifs >> std::get<i>(tvalues);
+            if (!(ifs >> std::get<i>(tvalues))) {
+                ok = false;
+                return;
+            }
         });
 
         if (ifs.is_open()) {

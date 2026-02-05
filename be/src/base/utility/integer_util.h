@@ -16,12 +16,15 @@
 
 #include <fmt/format.h>
 
+#include <string>
+
 namespace starrocks {
 template <class T>
 inline std::string integer_to_string(T value) {
-    char buf[64] = {0};
-    auto end = fmt::format_to(buf, "{}", value);
-    int len = end - buf;
-    return std::string(buf, len);
+    const auto size = fmt::formatted_size("{}", value);
+    std::string result;
+    result.resize(size);
+    fmt::format_to(result.data(), "{}", value);
+    return result;
 }
 } // namespace starrocks

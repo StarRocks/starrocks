@@ -1,3 +1,4 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,30 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "base/bit/bit_mask.h"
+#include "base/decimal_types.h"
 
 #include <gtest/gtest.h>
 
-#include <type_traits>
-
 namespace starrocks {
 
-TEST(BitMask, Basic) {
-    BitMask bit_mask(10);
-    for (int i = 0; i < 10; i++) {
-        bit_mask.set_bit(i);
-        ASSERT_TRUE(bit_mask.is_bit_set(i));
-    }
-    for (int i = 0; i < 10; i++) {
-        ASSERT_FALSE(bit_mask.all_bits_zero());
-        bit_mask.clear_bit(i);
-        ASSERT_FALSE(bit_mask.is_bit_set(i));
-    }
-    ASSERT_TRUE(bit_mask.all_bits_zero());
+TEST(DecimalTypesTest, Exp10ClampsOutOfRange) {
+    constexpr int max32 = decimal_precision_limit<int32_t>;
+    constexpr int max64 = decimal_precision_limit<int64_t>;
+
+    EXPECT_EQ(exp10_int32(0), exp10_int32(-1));
+    EXPECT_EQ(exp10_int32(max32), exp10_int32(max32 + 1));
+
+    EXPECT_EQ(exp10_int64(0), exp10_int64(-1));
+    EXPECT_EQ(exp10_int64(max64), exp10_int64(max64 + 1));
 }
 
-TEST(BitMask, NotCopyable) {
-    EXPECT_FALSE(std::is_copy_constructible_v<BitMask>);
-    EXPECT_FALSE(std::is_copy_assignable_v<BitMask>);
-}
 } // namespace starrocks

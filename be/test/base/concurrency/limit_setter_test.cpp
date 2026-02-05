@@ -1,3 +1,4 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,30 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "base/bit/bit_mask.h"
+#include "base/concurrency/limit_setter.h"
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <type_traits>
 
 namespace starrocks {
 
-TEST(BitMask, Basic) {
-    BitMask bit_mask(10);
-    for (int i = 0; i < 10; i++) {
-        bit_mask.set_bit(i);
-        ASSERT_TRUE(bit_mask.is_bit_set(i));
-    }
-    for (int i = 0; i < 10; i++) {
-        ASSERT_FALSE(bit_mask.all_bits_zero());
-        bit_mask.clear_bit(i);
-        ASSERT_FALSE(bit_mask.is_bit_set(i));
-    }
-    ASSERT_TRUE(bit_mask.all_bits_zero());
+TEST(LimitSetterTest, DefaultInitialized) {
+    EXPECT_FALSE(std::is_trivially_default_constructible_v<LimitSetter>);
+
+    alignas(LimitSetter) unsigned char storage[sizeof(LimitSetter)];
+    std::memset(storage, 0xA5, sizeof(storage));
+    auto* setter = new (storage) LimitSetter();
+
+    int32_t old_expect = -1;
+    ASSERT_TRUE(setter->adjust_expect_num(0, &old_expect));
+    EXPECT_EQ(0, old_expect);
 }
 
-TEST(BitMask, NotCopyable) {
-    EXPECT_FALSE(std::is_copy_constructible_v<BitMask>);
-    EXPECT_FALSE(std::is_copy_assignable_v<BitMask>);
-}
 } // namespace starrocks

@@ -30,9 +30,20 @@ std::unordered_map<std::string, NDVEstimatorType> estimator_name_to_type = {
         {"POLYNOMIAL", NDVEstimatorType::POLYNOMIAL},
         {"GEE", NDVEstimatorType::GEE}};
 
+double normalize_sample_ratio(double sample_ratio) {
+    if (!(sample_ratio > 0.0)) {
+        return 0.0;
+    }
+    if (sample_ratio > 1.0) {
+        return 1.0;
+    }
+    return sample_ratio;
+}
+
 } // namespace
 
 int64_t DUJ1Estimator::estimate(int64_t sample_row, int64_t sample_distinct, int64_t count_once, double sample_ratio) {
+    sample_ratio = normalize_sample_ratio(sample_ratio);
     if (sample_ratio == 0.0) {
         return 0;
     }
@@ -41,6 +52,7 @@ int64_t DUJ1Estimator::estimate(int64_t sample_row, int64_t sample_distinct, int
 
 int64_t LinearEstimator::estimate(int64_t /*sample_row*/, int64_t sample_distinct, int64_t /*count_once*/,
                                   double sample_ratio) {
+    sample_ratio = normalize_sample_ratio(sample_ratio);
     if (sample_ratio == 0.0) {
         return 0;
     }
@@ -49,6 +61,7 @@ int64_t LinearEstimator::estimate(int64_t /*sample_row*/, int64_t sample_distinc
 
 int64_t PolynomialEstimator::estimate(int64_t /*sample_row*/, int64_t sample_distinct, int64_t /*count_once*/,
                                       double sample_ratio) {
+    sample_ratio = normalize_sample_ratio(sample_ratio);
     if (sample_ratio == 0.0) {
         return 0;
     }
@@ -56,6 +69,7 @@ int64_t PolynomialEstimator::estimate(int64_t /*sample_row*/, int64_t sample_dis
 }
 
 int64_t GEEEstimator::estimate(int64_t sample_row, int64_t sample_distinct, int64_t count_once, double sample_ratio) {
+    sample_ratio = normalize_sample_ratio(sample_ratio);
     if (sample_ratio == 0.0) {
         return 0;
     }

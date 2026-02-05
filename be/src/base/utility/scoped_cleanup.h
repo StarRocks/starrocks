@@ -42,6 +42,22 @@ template <typename F>
 class ScopedCleanup {
 public:
     explicit ScopedCleanup(F f) : f_(std::move(f)) {}
+    ScopedCleanup(const ScopedCleanup&) = delete;
+    ScopedCleanup& operator=(const ScopedCleanup&) = delete;
+    ScopedCleanup(ScopedCleanup&& other) noexcept : cancelled_(other.cancelled_), f_(std::move(other.f_)) {
+        other.cancelled_ = true;
+    }
+    ScopedCleanup& operator=(ScopedCleanup&& other) noexcept {
+        if (this != &other) {
+            if (!cancelled_) {
+                f_();
+            }
+            cancelled_ = other.cancelled_;
+            f_ = std::move(other.f_);
+            other.cancelled_ = true;
+        }
+        return *this;
+    }
     ~ScopedCleanup() {
         if (!cancelled_) {
             f_();

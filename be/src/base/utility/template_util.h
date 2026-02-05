@@ -43,4 +43,4 @@
 /// Enables a method only if 'type_param' is a floating point type, i.e. some variant of
 /// float or double.
 #define ENABLE_IF_FLOAT(type_param, return_type) \
-    typename std::enable_if<!std::is_integral<type_param>::value, return_type>::type
+    typename std::enable_if<std::is_floating_point<type_param>::value, return_type>::type
