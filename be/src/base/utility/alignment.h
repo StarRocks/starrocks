@@ -18,7 +18,6 @@
 // Macros for dealing with memory alignment.
 #pragma once
 
-#include <limits>
 #include <type_traits>
 
 namespace starrocks {
@@ -26,7 +25,7 @@ namespace starrocks {
 template <typename T>
 constexpr T AlignDown(T x, T align) {
     static_assert(std::is_integral_v<T>, "AlignDown requires an integral type");
-    if (align <= 0) {
+    if (align == 0) {
         return x;
     }
     return (x / align) * align;
@@ -35,23 +34,10 @@ constexpr T AlignDown(T x, T align) {
 template <typename T>
 constexpr T AlignUp(T x, T align) {
     static_assert(std::is_integral_v<T>, "AlignUp requires an integral type");
-    if (align <= 0) {
+    if (align == 0) {
         return x;
     }
-    if constexpr (std::is_signed_v<T>) {
-        if (x < 0) {
-            return x;
-        }
-    }
-    const T rem = x % align;
-    if (rem == 0) {
-        return x;
-    }
-    const T max_aligned = (std::numeric_limits<T>::max() / align) * align;
-    if (x > max_aligned) {
-        return max_aligned;
-    }
-    return x + (align - rem);
+    return ((x + align - 1) / align) * align;
 }
 
 } // namespace starrocks
@@ -59,6 +45,5 @@ constexpr T AlignUp(T x, T align) {
 // Round down 'x' to the nearest 'align' boundary
 #define ALIGN_DOWN(x, align) (::starrocks::AlignDown((x), (align)))
 
-// Round up 'x' to the nearest 'align' boundary. If rounding would overflow,
-// returns the largest representable aligned value.
+// Round up 'x' to the nearest 'align' boundary
 #define ALIGN_UP(x, align) (::starrocks::AlignUp((x), (align)))
