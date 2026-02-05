@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -39,10 +40,12 @@ import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
+import com.starrocks.common.TimeoutWatcher;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
@@ -110,6 +113,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -145,6 +150,36 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public enum RefreshMoment {
         IMMEDIATE,
         DEFERRED
+    }
+    /**
+     * Reason for materialized view being inactive.
+     * @param isActive whether the materialized view is active
+     * @param reason the reason for being inactive
+     */
+    public static class InactiveReason {
+        private final boolean isActive;
+        private final String reason;
+
+        public InactiveReason(boolean isActive, String reason) {
+            this.isActive = isActive;
+            this.reason = reason;
+        }
+
+        public static InactiveReason ofInactive(String reason) {
+            return new InactiveReason(false, reason);
+        }
+
+        public static InactiveReason ofActive() {
+            return new InactiveReason(true, null);
+        }
+
+        public boolean isActive() {
+            return isActive;
+        }
+
+        public String getReason() {
+            return reason;
+        }
     }
 
     @Override
@@ -529,6 +564,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     protected volatile ParseNode defineQueryParseNode = null;
 
+    // Use a flag to prevent MV reload too many times while recursively reloading every mv at FE start time
+    // and in each round of checkpoint
+    private static final int RELOAD_STATE_NOT = -1;
+    private static final int RELOAD_STATE_ING = 0;
+    private static final int RELOAD_STATE_DONE = 1;
+    private AtomicInteger reloadState = new AtomicInteger(RELOAD_STATE_NOT);
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -609,6 +651,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.inactiveReason = null;
     }
 
+    /**
+     * This can be time costing because `evictMaterializedViewCache` may visit all its base tables to build ast key, so only use
+     * it when necessary.
+     * @param reason the reason for being inactive
+     */
     public synchronized void setInactiveAndReason(String reason) {
         LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
@@ -732,6 +779,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setQueryOutputIndices(List<Integer> queryOutputIndices) {
         this.queryOutputIndices = queryOutputIndices;
+    }
+
+    public boolean hasReloaded() {
+        return reloadState.get() == RELOAD_STATE_DONE;
+    }
+
+    public int getReloadState() {
+        return  reloadState.get();
+    }
+
+    public void changeReloadState(int state) {
+        this.reloadState.set(state);
     }
 
     /**
@@ -906,6 +965,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mv.refreshScheme = this.refreshScheme.copy();
         mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
         mv.viewDefineSql = this.viewDefineSql;
+        mv.warehouseId = this.warehouseId;
         if (this.baseTableIds != null) {
             mv.baseTableIds = Sets.newHashSet(this.baseTableIds);
         }
@@ -925,6 +985,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mv.refBaseTablePartitionSlotsOpt = this.refBaseTablePartitionSlotsOpt;
         mv.refBaseTablePartitionColumnsOpt = this.refBaseTablePartitionColumnsOpt;
         mv.tableToBaseTableInfoCache = this.tableToBaseTableInfoCache;
+        mv.defineQueryParseNode = this.defineQueryParseNode;
+        mv.reloadState = this.reloadState;
     }
 
     @Override
@@ -1025,16 +1087,89 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void onReload() {
+        onReload(false);
+    }
+
+    /**
+     * Reload the materialized view with original active state.
+     * NOTE: This method will not try to activate the materialized view.
+     * @param isReloadAsync whether reload mv asynchronously when it is desired to be active.
+     */
+    public void onReload(boolean isReloadAsync) {
+        onReload(isReloadAsync, isActive());
+    }
+
+    /**
+     * `isReLoadAsync` is used to distinct wether it's called after FE's image loading process,
+     * such as FE startup or checkpointing.
+     *
+     * Note!! The `onReload` method is called in some other scenarios such as - schema change of a materialize view.
+     * The reloaded flag was introduced only to increase the speed of FE startup and checkpointing.
+     * It shouldn't affect the behavior of other operations which might indeed need to do a reload process.
+     *
+     * @param isReloadAsync whether this reload is called after FE's image loading process.
+     * @param desiredActive whether the materialized view should be active after reload.
+     */
+    private void onReload(boolean isReloadAsync, boolean desiredActive) {
         try {
-            boolean desiredActive = active;
-            active = false;
-            boolean reloadActive = onReloadImpl();
-            if (desiredActive && reloadActive) {
-                setActive();
+            // set inactive first to avoid inconsistent state during reloading
+            this.active = false;
+            // set reload first
+            this.changeReloadState(RELOAD_STATE_ING);
+            // reload mv required metadata synchronously
+            onReloadImpl();
+            // if desired to be active, check whether you can be active
+            if (desiredActive) {
+                checkAndSetActive(isReloadAsync);
             }
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
-            setInactiveAndReason("reload failed: " + e.getMessage());
+            // only set inactive when it is desired to be active
+            if (desiredActive) {
+                setInActiveReason(InactiveReason.ofInactive("reload failed: " + e.getMessage()));
+            }
+        } finally {
+            if (!isReloadAsync || !desiredActive) {
+                LOG.info("finish reloading mv {}. current active state: {}", getName(), isActive());
+                changeReloadState(RELOAD_STATE_DONE);
+            }
+        }
+    }
+
+    private void checkAndSetActive(boolean isReloadAsync) {
+        // to avoid blocking the main replay thread and reduce fe restart time, check isActive asynchronously,
+        // this method is time costing because:
+        // - if mv contains external base tables, it may need to connect external systems to check table existence
+        // - if mv contains hierarchical mvs, it may need to recursively reload base mvs
+        // so we submit an async task to do this check
+        if (isReloadAsync) {
+            CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
+                try {
+                    InactiveReason reason = checkIsActiveOnLoadBlocking();
+                    setInActiveReason(reason);
+                } catch (Throwable e) {
+                    LOG.error("check and set active failed for mv: {}", this, e);
+                    setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
+                } finally {
+                    changeReloadState(RELOAD_STATE_DONE);
+                }
+                return null;
+            });
+        } else {
+            InactiveReason reason = checkIsActiveOnLoadBlocking();
+            setInActiveReason(reason);
+        }
+    }
+
+    private String buildTaskName(String prefix) {
+        return String.format("%s-%s-%d", prefix, getName(), getId());
+    }
+
+    private void setInActiveReason(InactiveReason reason) {
+        if (!reason.isActive) {
+            setInactiveAndReason(reason.reason);
+        } else {
+            setActive();
         }
     }
 
@@ -1049,15 +1184,34 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * @return active or not
+     * On reload implementation.
+     *
+     * NOTE: this method only implements the necessary reloading logic and it should not connect other external systems
+     * which may block the main replay thread.
      */
-    private boolean onReloadImpl() {
-        long startTime = System.currentTimeMillis();
+    private void onReloadImpl() {
+        long startMillis = System.currentTimeMillis();
+        // analyze partition info
+        analyzePartitionInfo();
+        // analyze mv partition exprs
+        analyzePartitionExprs();
+        // register constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.registerConstraint(this);
+        // log reload cost
+        long duration = System.currentTimeMillis() - startMillis;
+        LOG.info("finish reloading mv {} in {}ms, total base table count: {}", getName(), duration, baseTableInfos.size());
+    }
+
+    /**
+     * Check whether this materialized view can be active on load.
+     * @return InactiveReason, which contains whether this mv is active and the reason if not active.
+     */
+    private InactiveReason checkIsActiveOnLoadBlocking() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForDbNotExists(dbId));
-            return false;
+            return InactiveReason.ofInactive(MaterializedViewExceptions.inactiveReasonForDbNotExists(dbId));
         }
         if (baseTableInfos == null) {
             baseTableInfos = Lists.newArrayList();
@@ -1066,14 +1220,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 for (long tableId : baseTableIds) {
                     Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                     if (table == null) {
-                        setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(tableId));
-                        return false;
+                        return InactiveReason.ofInactive(MaterializedViewExceptions
+                                .inactiveReasonForBaseTableNotExists(tableId));
                     }
                     baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), table.getName(), tableId));
                 }
             } else {
                 active = false;
-                return false;
+                return InactiveReason.ofInactive("Base table infos and base table ids are both null");
             }
         } else {
             // for compatibility
@@ -1083,9 +1237,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Optional<Table> table = MvUtils.getTableWithIdentifier(baseTableInfo);
                     if (!table.isPresent()) {
-                        setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(
+                        return InactiveReason.ofInactive(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(
                                 baseTableInfo.getTableId()));
-                        return false;
                     }
                     newBaseTableInfos.add(
                             new BaseTableInfo(dbId, db.getFullName(), table.get().getName(), table.get().getId()));
@@ -1094,7 +1247,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
 
-        boolean res = true;
+        InactiveReason res = InactiveReason.ofActive();
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Table table = null;
             try {
@@ -1106,20 +1259,28 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 LOG.warn("failed to get base table {} of MV {}", baseTableInfo, this, e);
             }
             if (table == null) {
-                res = false;
-                setInactiveAndReason(
-                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
+                res = InactiveReason.ofInactive(MaterializedViewExceptions
+                        .inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 continue;
             } else if (table.isMaterializedView()) {
                 MaterializedView baseMV = (MaterializedView) table;
-                // recursive reload MV, to guarantee the order of hierarchical MV
-                baseMV.onReload();
+                if (baseMV.hasReloaded()) {
+                    LOG.info("baseMv: {} has reloaded before, skip reload it again", baseMV.getName());
+                } else {
+                    if (baseMV.getReloadState() == RELOAD_STATE_ING) {
+                        LOG.info("baseMv: {} is reloading, wait it to be reloaded first", baseMV.getName());
+                        baseMV.waitForReloaded();
+                        LOG.info("baseMv: {} has been reloaded, continue to check mv: {}", baseMV.getName(), getName());
+                    } else {
+                        // recursive reload MV, to guarantee the order of hierarchical MV
+                        baseMV.onReload(false);
+                    }
+                }
                 if (!baseMV.isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
-                    setInactiveAndReason(
+                    res = InactiveReason.ofInactive(
                             MaterializedViewExceptions.inactiveReasonForBaseTableActive(baseTableInfo.getTableName()));
-                    res = false;
                 }
             }
 
@@ -1135,16 +1296,28 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 );
             }
         }
-        // analyze partition info
-        analyzePartitionInfo();
-        // analyze mv partition exprs
-        analyzePartitionExprs();
-        // register constraints from global state manager
-        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
-        globalConstraintManager.registerConstraint(this);
-
-        LOG.info("finish to reload mv:{} cost:{}(ms)", getName(), System.currentTimeMillis() - startTime);
         return res;
+    }
+
+    /**
+     * Wait until the materialized view has reloaded.
+     */
+    public void waitForReloaded() {
+        if (hasReloaded()) {
+            return;
+        }
+        long maxWaitMillis = Config.mv_async_reload_wait_timeout_second * 1000L;
+        TimeoutWatcher timeoutWatcher = new TimeoutWatcher(maxWaitMillis);
+        while (!hasReloaded() && !isActive()) {
+            if (timeoutWatcher.isTimedOut()) {
+                LOG.warn("Timeout waiting for MV [{}] reload (waited {} ms), continuing.",
+                        getName(), maxWaitMillis);
+                break;
+            }
+            Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MICROSECONDS);
+        }
+        LOG.info("MV [{}] reload finished, isActive: {}, hasReloaded: {}, duration(ms): {}",
+                getName(), isActive(), hasReloaded(), timeoutWatcher.getElapsedMillis());
     }
 
     private void analyzePartitionInfo() {
