@@ -23,8 +23,10 @@
 
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
+#include "column/datum.h"
 #include "column/type_traits.h"
 #include "common/config_scan_io_fwd.h"
 #include "column/vectorized_fwd.h"
@@ -52,7 +54,10 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/type_traits.h"
 #include "types/date_value.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "util/priority_thread_pool.hpp"
 
 // Print log with query id.
@@ -463,9 +468,14 @@ StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc,
         } else if (slot_desc->type().is_integer_type()) {
             size_t size = column_range.end_key - column_range.begin_key + 1;
             auto col = ColumnHelper::create_column(slot_desc->type(), true, false, size, false);
-            for (int64_t v = column_range.begin_key; v <= column_range.end_key; v++) {
-                col->append_datum(Datum(v));
-            }
+#define M(TYPE)                                                                    \
+    if (slot_desc->type().type == TYPE) {                                          \
+        for (int64_t v = column_range.begin_key; v <= column_range.end_key; v++) { \
+            col->append_datum(Datum((CppTypeTraits<TYPE>::CppType)v));             \
+        }                                                                          \
+    }
+            APPLY_FOR_ALL_INT_TYPE(M)
+#undef M
             return col;
         } else {
             DCHECK(false) << "Unsupported partition column range, column name: " << column_range.column_name;
