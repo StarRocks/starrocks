@@ -41,7 +41,7 @@ TEST(TestDeltaColumnGroup, testLoad) {
     }
     DeltaColumnGroup dcg2;
     dcg2.init(100, {{2, 12}}, {"abc1.cols"}, {ep.encryption_meta});
-    dcg.merge_by_version(dcg2, "tmp", RowsetId(100, 100), 100);
+    dcg.merge_by_version(dcg2, "tmp", RowsetId{100, 100}, 100);
     ASSERT_EQ(2, dcg.encryption_metas().size());
 };
 
