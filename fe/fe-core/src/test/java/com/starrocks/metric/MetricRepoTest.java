@@ -18,6 +18,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.rpc.BrpcProxy;
@@ -250,6 +251,40 @@ public class MetricRepoTest extends PlanTestBase {
             } else {
                 Assertions.fail("Unknown type: " + type);
             }
+        }
+    }
+
+    @Test
+    public void testEnableTableMetricsCollect() throws Exception {
+        starRocksAssert.withDatabase("test_table_metrics").useDatabase("test_table_metrics")
+                .withTable("create table t_metrics (c1 int, c2 string)" +
+                        " distributed by hash(c1)" +
+                        " properties('replication_num'='1')");
+        Table tbl = starRocksAssert.getTable("test_table_metrics", "t_metrics");
+        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
+        entity.counterScanBytesTotal.increase(512L);
+
+        boolean original = Config.enable_table_metrics_collect;
+        try {
+            // enabled: table metrics should be present
+            Config.enable_table_metrics_collect = true;
+            PrometheusMetricVisitor visitor1 = new PrometheusMetricVisitor("m");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+            MetricRepo.getMetric(visitor1, params);
+            String output1 = visitor1.build();
+            Assertions.assertTrue(output1.contains("t_metrics"),
+                    "Table metrics should be present when enable_table_metrics_collect is true");
+
+            // disabled: table metrics should NOT be present
+            Config.enable_table_metrics_collect = false;
+            PrometheusMetricVisitor visitor2 = new PrometheusMetricVisitor("m");
+            MetricRepo.getMetric(visitor2, params);
+            String output2 = visitor2.build();
+            Assertions.assertFalse(output2.contains("t_metrics"),
+                    "Table metrics should not be present when enable_table_metrics_collect is false");
+        } finally {
+            Config.enable_table_metrics_collect = original;
+            starRocksAssert.dropDatabase("test_table_metrics");
         }
     }
 }
