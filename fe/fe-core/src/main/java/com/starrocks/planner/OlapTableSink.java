@@ -70,6 +70,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -336,62 +338,75 @@ public class OlapTableSink extends DataSink {
         tSink.setTable_name(dstTable.getName());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
         tSink.setIs_multi_statements_txn(isMultiStatementTxn);
-        int numReplicas = 1;
-        Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
-        if (optionalPartition.isPresent()) {
-            long partitionId = optionalPartition.get().getId();
-            numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
-        }
-        if (enableAutomaticPartition && enableDynamicOverwrite) {
-            tSink.setDynamic_overwrite(true);
-        }
-        tSink.setNum_replicas(numReplicas);
-        tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
-        tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
 
-        TransactionState txnState = getTransactionState(tSink, dstTable.isOlapExternalTable());
+        // Acquire read lock to protect partition data access.
+        // During planning, the PlannerMetaLocker may release locks for performance,
+        // so we need to acquire lock here to ensure consistent reads of partition info.
+        // Only lock when accessing partition-related data structures (HashMap not thread-safe).
+        long dbId = tSink.getDb_id();
+        long tableId = dstTable.getId();
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+        try {
+            int numReplicas = 1;
+            Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
+            if (optionalPartition.isPresent()) {
+                long partitionId = optionalPartition.get().getId();
+                numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+            }
+            if (enableAutomaticPartition && enableDynamicOverwrite) {
+                tSink.setDynamic_overwrite(true);
+            }
+            tSink.setNum_replicas(numReplicas);
+            tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
+            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
 
-        TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
-                enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState);
-        tSink.setPartition(partitionParam);
-        tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
-        tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
-        tSink.setPartial_update_mode(this.partialUpdateMode);
-        tSink.setAutomatic_bucket_size(automaticBucketSize);
-        if (canUseColocateMVIndex(dstTable)) {
-            tSink.setEnable_colocate_mv_index(true);
-        }
+            TransactionState txnState = getTransactionState(tSink, dstTable.isOlapExternalTable());
 
-        Map<Long, Long> doubleWritePartitions = dstTable.getDoubleWritePartitions();
-        if (!doubleWritePartitions.isEmpty()) {
-            List<Long> doubleWritePartitionIds = new ArrayList<>();
-            for (Long partitionId : partitionIds) {
-                if (doubleWritePartitions.containsKey(partitionId)) {
-                    doubleWritePartitionIds.add(doubleWritePartitions.get(partitionId));
+            TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
+                    enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState);
+            tSink.setPartition(partitionParam);
+            tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
+            tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
+            tSink.setPartial_update_mode(this.partialUpdateMode);
+            tSink.setAutomatic_bucket_size(automaticBucketSize);
+            if (canUseColocateMVIndex(dstTable)) {
+                tSink.setEnable_colocate_mv_index(true);
+            }
+
+            Map<Long, Long> doubleWritePartitions = dstTable.getDoubleWritePartitions();
+            if (!doubleWritePartitions.isEmpty()) {
+                List<Long> doubleWritePartitionIds = new ArrayList<>();
+                for (Long partitionId : partitionIds) {
+                    if (doubleWritePartitions.containsKey(partitionId)) {
+                        doubleWritePartitionIds.add(doubleWritePartitions.get(partitionId));
+                    }
+                }
+
+                if (!doubleWritePartitionIds.isEmpty()) {
+                    TOlapTableSink tSink2 = new TOlapTableSink(tSink);
+                    tSink2.unsetPartition();
+                    tSink2.unsetLocation();
+                    TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
+                            false, automaticBucketSize, doubleWritePartitionIds, txnState);
+                    tSink2.setPartition(partitionParam2);
+                    tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, computeResource, txnState));
+                    tSink2.setIgnore_out_of_partition(true);
+
+                    TDataSink tDataSink2 = new TDataSink();
+                    tDataSink2.setType(TDataSinkType.OLAP_TABLE_SINK);
+                    tDataSink2.setOlap_table_sink(tSink2);
+
+                    TDataSink newDataSink = new TDataSink(TDataSinkType.MULTI_OLAP_TABLE_SINK);
+                    tDataSink.setSink_id(0);
+                    newDataSink.addToMulti_olap_table_sinks(tDataSink);
+                    tDataSink2.setSink_id(1);
+                    newDataSink.addToMulti_olap_table_sinks(tDataSink2);
+                    tDataSink = newDataSink;
                 }
             }
-
-            if (!doubleWritePartitionIds.isEmpty()) {
-                TOlapTableSink tSink2 = new TOlapTableSink(tSink);
-                tSink2.unsetPartition();
-                tSink2.unsetLocation();
-                TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
-                        false, automaticBucketSize, doubleWritePartitionIds, txnState);
-                tSink2.setPartition(partitionParam2);
-                tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, computeResource, txnState));
-                tSink2.setIgnore_out_of_partition(true);
-
-                TDataSink tDataSink2 = new TDataSink();
-                tDataSink2.setType(TDataSinkType.OLAP_TABLE_SINK);
-                tDataSink2.setOlap_table_sink(tSink2);
-
-                TDataSink newDataSink = new TDataSink(TDataSinkType.MULTI_OLAP_TABLE_SINK);
-                tDataSink.setSink_id(0);
-                newDataSink.addToMulti_olap_table_sinks(tDataSink);
-                tDataSink2.setSink_id(1);
-                newDataSink.addToMulti_olap_table_sinks(tDataSink2);
-                tDataSink = newDataSink;
-            }
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
         }
 
         LOG.debug("tDataSink: {}", tDataSink);
