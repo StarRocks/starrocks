@@ -18,8 +18,32 @@
 // Macros for dealing with memory alignment.
 #pragma once
 
+#include <type_traits>
+
+namespace starrocks {
+
+template <typename T>
+constexpr T AlignDown(T x, T align) {
+    static_assert(std::is_integral_v<T>, "AlignDown requires an integral type");
+    if (align == 0) {
+        return x;
+    }
+    return (x / align) * align;
+}
+
+template <typename T>
+constexpr T AlignUp(T x, T align) {
+    static_assert(std::is_integral_v<T>, "AlignUp requires an integral type");
+    if (align == 0) {
+        return x;
+    }
+    return ((x + align - 1) / align) * align;
+}
+
+} // namespace starrocks
+
 // Round down 'x' to the nearest 'align' boundary
-#define ALIGN_DOWN(x, align) ((x) & (~(align) + 1))
+#define ALIGN_DOWN(x, align) (::starrocks::AlignDown((x), (align)))
 
 // Round up 'x' to the nearest 'align' boundary
-#define ALIGN_UP(x, align) (((x) + ((align)-1)) & (~(align) + 1))
+#define ALIGN_UP(x, align) (::starrocks::AlignUp((x), (align)))

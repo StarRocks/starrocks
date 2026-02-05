@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <cstdint>
 #include <random>
 #include <vector>
@@ -105,6 +106,32 @@ TYPED_TEST(BitPackingSIMDTest, test_bit_packing) {
         for (auto i = 0; i < kNumValues; i++) {
             ASSERT_EQ(result[0][i], result[1][i]);
             ASSERT_EQ(result[0][i], result[2][i]);
+        }
+    }
+}
+
+TYPED_TEST(BitPackingSIMDTest, test_bit_packing_unaligned_input) {
+    using T = typename TestFixture::T;
+    constexpr int width = TestFixture::Width;
+    auto max_result_width = std::min(32, width);
+    constexpr auto kNumValues = TestFixture::kNumValues;
+
+    for (auto bit_width = 1; bit_width <= max_result_width; bit_width++) {
+        auto source = TestFixture::bitPackedData[bit_width];
+        const size_t bytes = source.size() * sizeof(uint64_t);
+
+        std::vector<uint8_t> misaligned(bytes + 1);
+        std::memcpy(misaligned.data() + 1, source.data(), bytes);
+        const uint8_t* in = misaligned.data() + 1;
+
+        std::vector<T> result_default(kNumValues);
+        std::vector<T> result_arrow(kNumValues);
+
+        starrocks::util::bitpacking_default::UnpackValues(bit_width, in, bytes, kNumValues, result_default.data());
+        starrocks::util::bitpacking_arrow::UnpackValues(bit_width, in, bytes, kNumValues, result_arrow.data());
+
+        for (auto i = 0; i < kNumValues; i++) {
+            ASSERT_EQ(result_default[i], result_arrow[i]);
         }
     }
 }

@@ -24,6 +24,7 @@ set(BASE_TEST_FILES
     concurrency/concurrent_limiter_test.cpp
     concurrency/countdown_latch_test.cpp
     concurrency/shared_mutex_test.cpp
+    concurrency/spinlock_test.cpp
     container/heap_test.cpp
     container/priority_queue_test.cpp
     coding_test.cpp
@@ -51,6 +52,8 @@ set(BASE_TEST_FILES
     string/utf8_check_test.cpp
     time/monotime_test.cpp
     time/timezone_utils_test.cpp
+    utility/alignment_test.cpp
+    utility/mem_util_test.cpp
     utility/scoped_cleanup_test.cpp
     uuid/uuid_generator_test.cpp
     status_test.cpp

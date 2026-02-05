@@ -16,6 +16,9 @@
 // under the License.
 
 #pragma once
+
+#include <atomic>
+
 #include "base/logging.h"
 
 namespace starrocks {
@@ -35,16 +38,17 @@ public:
     }
 
     void unlock() {
-        // Memory barrier here. All updates before the unlock need to be made visible.
-        __sync_synchronize();
-        DCHECK(_locked);
-        _locked = false;
+        DCHECK(_locked.load(std::memory_order_relaxed));
+        _locked.store(false, std::memory_order_release);
     }
 
     // Tries to acquire the lock
-    inline bool try_lock() { return __sync_bool_compare_and_swap(&_locked, false, true); }
+    inline bool try_lock() {
+        bool expected = false;
+        return _locked.compare_exchange_strong(expected, true, std::memory_order_acquire, std::memory_order_relaxed);
+    }
 
-    void dcheck_locked() { DCHECK(_locked); }
+    void dcheck_locked() { DCHECK(_locked.load(std::memory_order_relaxed)); }
 
 private:
     // Out-of-line definition of the actual spin loop. The primary goal is to have the
@@ -67,7 +71,7 @@ private:
     // TODO: how do we set this.
     static const int NUM_SPIN_CYCLES = 70;
     // TODO: pad this to be a cache line?
-    bool _locked{false};
+    std::atomic<bool> _locked{false};
 };
 
 } // end namespace starrocks
