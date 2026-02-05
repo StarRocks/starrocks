@@ -430,32 +430,12 @@ public abstract class StarRocksHttpTestCase {
     @BeforeAll
     public static void initHttpServer() throws IllegalArgException, InterruptedException {
         try {
-<<<<<<< HEAD
-            socket = new ServerSocket(0);
-            socket.setReuseAddress(true);
-            HTTP_PORT = socket.getLocalPort();
-            BASE_URL = "http://localhost:" + HTTP_PORT;
-            URI = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/" + TABLE_NAME;
-        } catch (Exception e) {
-            throw new IllegalStateException("Could not find a free TCP/IP port to start HTTP Server on");
-        } finally {
-            if (socket != null) {
-                try {
-                    socket.close();
-                } catch (Exception e) {
-                }
-            }
-        }
-
-        httpServer = new HttpServer(HTTP_PORT);
-=======
             httpServer = new HttpServer(0);
         } catch (Exception e) {
             System.err.println("Failed to initialize HttpServer: " + e.getMessage());
             e.printStackTrace();
             throw new RuntimeException("HttpServer initialization failed", e);
         }
->>>>>>> 34969b4840 ([UT] allow OS assign free tcp port for httpserver (#68902))
         httpServer.setup();
         httpServer.start();
         // must ensure the http server started before any unit test
