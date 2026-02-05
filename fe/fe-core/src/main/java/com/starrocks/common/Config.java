@@ -1876,6 +1876,12 @@ public class Config extends ConfigBase {
     public static boolean enable_metric_calculator = true;
 
     /**
+     * Whether to export table-level metrics in FE.
+     */
+    @ConfField(mutable = true, comment = "Whether to export table-level metrics in FE")
+    public static boolean enable_table_metrics_collect = true;
+
+    /**
      * enable replicated storage as default table engine
      */
     @ConfField(mutable = true)
