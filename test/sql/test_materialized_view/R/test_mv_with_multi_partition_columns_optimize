@@ -17,7 +17,10 @@ REFRESH MANUAL
 AS select sum(k1), k2, k3 from t1 group by k2, k3;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW mv1 with sync mode;
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+-- result:
+019c2c3f-cc0b-78ec-80a3-a156a843c609
+-- !result
 function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
 -- result:
 True
@@ -31,9 +34,9 @@ select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;
 alter table t1 partition by date_trunc("month", k2);
 -- result:
 -- !result
-function: wait_alter_table_finish()
+function: wait_optimize_table_finish()
 -- result:
-
+None
 -- !result
 function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
 -- result:
@@ -49,6 +52,9 @@ INSERT INTO t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2,'2020-07-02
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+-- result:
+E: (1064, 'execute task mv-10019 failed: Materialized view: mv1/10019 is not active due to base-table optimized:t1.')
+-- !result
 function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
 -- result:
 False
