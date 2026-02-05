@@ -214,14 +214,14 @@ mkdir -p ${meta_dir:-"$STARROCKS_HOME/meta"}
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
 done
-# Explicitly put fe-core-main.jar at the front of classpath to ensure StarRocks' 
+# Explicitly put fe-core-4.1.0-rc01.jar at the front of classpath to ensure StarRocks' 
 # customized classes (e.g., HiveMetaStoreClient) are loaded before the original 
 # ones from third-party JARs (e.g., hive-apache-3.1.2-22.jar).
 # This prevents ClassLoader conflicts where the original HiveMetaStoreClient 
 # (which uses old thrift paths like org.apache.thrift.transport.TFramedTransport)
 # might be loaded instead of StarRocks' version (which uses the correct new paths
 # like org.apache.thrift.transport.layered.TFramedTransport).
-export CLASSPATH=${STARROCKS_HOME}/lib/fe-core-main.jar:${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
+export CLASSPATH=${STARROCKS_HOME}/lib/fe-core-4.1.0-rc01.jar:${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
 
 pidfile=$PID_DIR/fe.pid
 
