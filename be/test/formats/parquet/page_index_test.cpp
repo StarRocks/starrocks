@@ -694,5 +694,4 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     }
     EXPECT_GT(total_row_nums, 0);
 }
-
 } // namespace starrocks::parquet
