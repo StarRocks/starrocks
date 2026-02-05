@@ -49,6 +49,9 @@ public:
     }
     ScopedCleanup& operator=(ScopedCleanup&& other) noexcept {
         if (this != &other) {
+            if (!cancelled_) {
+                f_();
+            }
             cancelled_ = other.cancelled_;
             f_ = std::move(other.f_);
             other.cancelled_ = true;

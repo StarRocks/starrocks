@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include <functional>
 #include <type_traits>
 
 namespace starrocks {
@@ -59,6 +60,29 @@ TEST(ScopedCleanup, NotCopyable) {
     using CleanupType = decltype(cleanup);
     EXPECT_FALSE(std::is_copy_constructible_v<CleanupType>);
     EXPECT_FALSE(std::is_copy_assignable_v<CleanupType>);
+}
+
+TEST(ScopedCleanup, MoveAssignRunsExistingCleanup) {
+    int var = 0;
+    {
+        auto first = MakeScopedCleanup<std::function<void()>>(std::function<void()>([&]() { var = 1; }));
+        auto second = MakeScopedCleanup<std::function<void()>>(std::function<void()>([&]() { var = 2; }));
+        first = std::move(second);
+        ASSERT_EQ(1, var);
+    }
+    ASSERT_EQ(2, var);
+}
+
+TEST(ScopedCleanup, MoveAssignFromCancelledDoesNotRunNewCleanup) {
+    int var = 0;
+    {
+        auto first = MakeScopedCleanup<std::function<void()>>(std::function<void()>([&]() { var = 1; }));
+        auto second = MakeScopedCleanup<std::function<void()>>(std::function<void()>([&]() { var = 2; }));
+        second.cancel();
+        first = std::move(second);
+        ASSERT_EQ(1, var);
+    }
+    ASSERT_EQ(1, var);
 }
 
 } // namespace starrocks

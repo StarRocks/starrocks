@@ -103,13 +103,17 @@ TEST_F(EasyJsonTest, TestAllocatorLifetime) {
     ASSERT_EQ(child.value()["child_attr"].GetInt(), 1);
 }
 
-TEST_F(EasyJsonTest, NegativeIndexDies) {
-    ::testing::FLAGS_gtest_death_test_style = "threadsafe";
-    ASSERT_DEATH(
-            {
-                EasyJson ej;
-                ej.Get(-1);
-            },
-            "non-negative");
+TEST_F(EasyJsonTest, NegativeIndexIgnored) {
+    EasyJson ej(EasyJson::kArray);
+    ej.Get(0) = 7;
+    auto before_size = ej.value().Size();
+
+    EasyJson child = ej.Get(-1);
+    ASSERT_TRUE(child.value().IsNull());
+    ASSERT_EQ(before_size, ej.value().Size());
+
+    child = 99;
+    ASSERT_EQ(before_size, ej.value().Size());
+    ASSERT_EQ(7, ej.value()[0].GetInt());
 }
 } // namespace starrocks
