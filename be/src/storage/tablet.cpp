@@ -76,8 +76,7 @@ TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& table
 }
 
 Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
-        : BaseTablet(tablet_meta, data_dir),
-          _cumulative_point(kInvalidCumulativePoint) {
+        : BaseTablet(tablet_meta, data_dir), _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
