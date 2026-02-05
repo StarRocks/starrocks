@@ -66,6 +66,8 @@ private:
     // yielding to another thread.
     // TODO: how do we set this.
     static const int NUM_SPIN_CYCLES = 70;
+    // TODO: Revisit using std::atomic<bool> for stricter memory-model semantics once
+    // ObjectPool/other users no longer rely on SpinLock being movable.
     // TODO: pad this to be a cache line?
     bool _locked{false};
 };
