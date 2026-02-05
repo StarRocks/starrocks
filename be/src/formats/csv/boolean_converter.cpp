@@ -20,7 +20,7 @@
 
 namespace starrocks::csv {
 
-Status BooleanConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status BooleanConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                       const Options& options) const {
     const static Slice kTrue("true");
     const static Slice kFalse("false");
@@ -33,7 +33,7 @@ Status BooleanConverter::write_string(OutputStream* os, const Column& column, si
     }
 }
 
-Status BooleanConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status BooleanConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                              const Options& options) const {
     return write_string(os, column, row_num, options);
 }

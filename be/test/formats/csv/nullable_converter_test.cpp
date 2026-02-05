@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
+#include "io/formatted_output_stream_string.h"
 #include "runtime/types.h"
 
 namespace starrocks::csv {
@@ -104,7 +104,7 @@ TEST_F(NullableConverterTest, test_write_string_nullable_column) {
     col->append_datum(Datum()); // null
     col->append_datum((int32_t)10);
 
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 0, Converter::Options()).ok());
@@ -120,7 +120,7 @@ TEST_F(NullableConverterTest, test_write_string_not_nullable_column) {
     col->append_datum((int32_t)1);
     col->append_datum((int32_t)10);
 
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 0, Converter::Options()).ok());

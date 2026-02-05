@@ -131,6 +131,7 @@ import io.netty.util.concurrent.EventExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Future;
@@ -143,7 +144,7 @@ import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NU
 
 public class HttpServer {
     private static final Logger LOG = LogManager.getLogger(HttpServer.class);
-    private int port;
+    private volatile int port;
     private ActionController controller;
 
     private Thread serverThread;
@@ -163,6 +164,10 @@ public class HttpServer {
         this.asyncExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                 Config.http_async_threads_num, "starrocks-http-pool", true);
         this.enableHttps = enableHttps;
+    }
+
+    public int getPort() {
+        return port;
     }
 
     public void setup() throws IllegalArgException {
@@ -348,6 +353,10 @@ public class HttpServer {
                         .channel(NioServerSocketChannel.class)
                         .childHandler(new StarrocksHttpServerInitializer(sslContext));
                 Channel ch = serverBootstrap.bind(port).sync().channel();
+
+                if (port == 0 && ch.localAddress() instanceof InetSocketAddress) {
+                    port = ((InetSocketAddress) ch.localAddress()).getPort();
+                }
 
                 isStarted.set(true);
                 registerMetrics(workerGroup);

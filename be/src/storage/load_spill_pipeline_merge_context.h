@@ -52,7 +52,7 @@ class TabletWriter;
 class LoadSpillPipelineMergeContext {
 public:
     LoadSpillPipelineMergeContext(lake::TabletWriter* writer) : _writer(writer) {}
-    ~LoadSpillPipelineMergeContext() = default;
+    ~LoadSpillPipelineMergeContext();
 
     /**
      * Lazily create thread pool token for submitting parallel merge tasks.

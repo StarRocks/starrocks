@@ -16,7 +16,6 @@
 
 #include "simd/simd.h"
 #include "types/logical_type_infra.h"
-#include "util/compression/stream_compression.h"
 
 namespace starrocks {
 

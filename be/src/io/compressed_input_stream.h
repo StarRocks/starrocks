@@ -24,14 +24,14 @@
 #include "util/slice.h"
 
 namespace starrocks {
-class StreamCompression;
+class StreamDecompressor;
 } // namespace starrocks
 
 namespace starrocks::io {
 
 class CompressedInputStream final : public InputStream {
 public:
-    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<StreamCompression> decompressor,
+    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<StreamDecompressor> decompressor,
                           size_t compressed_data_cache_size = 8 * 1024 * 1024LU)
             : _source_stream(std::move(source_stream)),
               _decompressor(std::move(decompressor)),
@@ -77,7 +77,7 @@ private:
     };
 
     std::shared_ptr<InputStream> _source_stream;
-    std::shared_ptr<StreamCompression> _decompressor;
+    std::shared_ptr<StreamDecompressor> _decompressor;
     CompressedBuffer _compressed_buff;
     bool _stream_end = false;
 };

@@ -49,6 +49,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
@@ -56,6 +57,7 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -85,6 +87,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
@@ -112,6 +116,7 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergDeleteSink;
+import com.starrocks.planner.IcebergMetadataDeleteNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
@@ -2879,6 +2884,26 @@ public class StmtExecutor {
             return;
         }
 
+        // Handle metadata-level delete for Iceberg
+        // execute the delete operation here
+        if (stmt instanceof DeleteStmt && execPlan != null && execPlan.isIcebergMetadataDelete()) {
+            // Execute metadata-level delete
+            IcebergMetadataDeleteNode node = (IcebergMetadataDeleteNode) execPlan.getTopFragment().getPlanRoot();
+            IcebergTable table = node.getTable();
+            ScalarOperator predicate = node.getPredicate();
+
+            Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
+            if (connectorMetadata.isPresent()) {
+                connectorMetadata.get().executeMetadataDelete(table, predicate, context);
+            } else {
+                throw new StarRocksConnectorException("Can not find {} connector metadata for table: {}",
+                        table.getCatalogName(), table.getName());
+            }
+            context.getState().setOk();
+            return;
+        }
+
         DmlType dmlType = DmlType.fromStmt(stmt);
         TableRef tableRef = stmt.getTableRef();
         if (tableRef == null) {
@@ -3529,6 +3554,7 @@ public class StmtExecutor {
                     getPreparedStmtId());
             // Set query source from context
             queryDetail.setQuerySource(context.getQuerySource());
+            queryDetail.setImpersonatedUser(resolveImpersonatedUser());
             context.setQueryDetail(queryDetail);
             // copy queryDetail, cause some properties can be changed in future
             QueryDetailQueue.addQueryDetail(queryDetail.copy());
@@ -3608,6 +3634,16 @@ public class StmtExecutor {
                 && !isInformationQuery
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+
+    private String resolveImpersonatedUser() {
+        String qualifiedUser = ClusterNamespace.getNameFromFullName(context.getQualifiedUser());
+        String currentUser = context.getCurrentUserIdentity() == null ? null :
+                ClusterNamespace.getNameFromFullName(context.getCurrentUserIdentity().getUser());
+        if (currentUser == null || qualifiedUser == null || currentUser.equals(qualifiedUser)) {
+            return null;
+        }
+        return currentUser;
     }
 
     public double getMaxFilterRatio(DmlStmt dmlStmt) {

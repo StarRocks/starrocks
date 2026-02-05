@@ -12,26 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.sql.ast;
 
-#include "formats/csv/output_stream.h"
+import com.starrocks.sql.parser.NodePosition;
 
-namespace starrocks::csv {
-
-class OutputStreamString final : public OutputStream {
-public:
-    explicit OutputStreamString(size_t capacity = 64) : OutputStream(capacity) {}
-
-    const std::string& as_string() const { return _str; }
-
-protected:
-    Status _sync(const char* data, size_t size) override {
-        _str.append(data, size);
-        return Status::OK();
+public class AdminShowAutomatedSnapshotStmt extends ShowStmt {
+    public AdminShowAutomatedSnapshotStmt() {
+        this(NodePosition.ZERO);
     }
 
-private:
-    std::string _str;
-};
+    public AdminShowAutomatedSnapshotStmt(NodePosition pos) {
+        super(pos);
+    }
 
-} // namespace starrocks::csv
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminShowAutomatedSnapshotStatement(this, context);
+    }
+}

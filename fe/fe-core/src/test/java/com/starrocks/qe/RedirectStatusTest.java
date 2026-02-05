@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -945,6 +946,12 @@ public class RedirectStatusTest {
     @Test
     public void testAdminShowConfigStmt() {
         AdminShowConfigStmt stmt = new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null);
+        Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testAdminShowAutomatedSnapshotStmt() {
+        AdminShowAutomatedSnapshotStmt stmt = new AdminShowAutomatedSnapshotStmt();
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
