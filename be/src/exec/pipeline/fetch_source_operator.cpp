@@ -49,6 +49,7 @@ bool FetchSourceOperator::pending_finish() const {
 Status FetchSourceOperator::set_finishing(RuntimeState* state) {
     VLOG_ROW << "[GLM] FetchSourceOperator::set_finishing, processor: " << (void*)_processor.get() << ", "
              << (void*)this;
+    _processor->set_source_finishing();
     return Status::OK();
 }
 

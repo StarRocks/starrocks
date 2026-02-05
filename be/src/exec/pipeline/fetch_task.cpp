@@ -64,7 +64,9 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     const auto& request_chunk = _ctx->request_chunk;
 
     auto* closure = new DisposableClosure<PLookUpResponse, FetchTaskContextPtr>(_ctx);
-    closure->addSuccessHandler([this, closure](const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
+    const auto* node_info = _ctx->processor->_nodes_info->find_node(source_id);
+    closure->addSuccessHandler([this, closure, host = node_info->host, port = node_info->brpc_port](
+                                       const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
         DLOG(INFO) << "[GLM] receive a response, finished request num: " << ctx->unit->finished_request_num
                    << ", total request num: " << ctx->unit->total_request_num << ", " << (void*)ctx->processor
                    << ", latency: " << (MonotonicNanos() - ctx->send_ts) * 1.0 / 1000000 << "ms";
@@ -79,7 +81,8 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         COUNTER_UPDATE(ctx->processor->_network_timer, MonotonicNanos() - ctx->send_ts);
 
         if (resp.status().status_code() != TStatusCode::OK) {
-            auto msg = fmt::format("fetch request failed, error: {}", resp.status().DebugString());
+            auto msg = fmt::format("fetch request failed, error: {}, host: {}, port: {}", resp.status().DebugString(),
+                                   host, port);
             LOG(WARNING) << msg;
             ctx->processor->_set_io_task_status(Status::InternalError(msg));
             return;
@@ -176,7 +179,6 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)_ctx->processor
                << ", unit: " << _ctx->unit->debug_string();
     _ctx->send_ts = MonotonicNanos();
-    const auto* node_info = _ctx->processor->_nodes_info->find_node(source_id);
     auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
     stub->lookup(&closure->cntl, &request, &closure->result, closure);
 
