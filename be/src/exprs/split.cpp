@@ -190,7 +190,8 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
                     ArrayColumn::create(NullableColumn::create(std::move(array_binary_column),
                                                                NullColumn::create(std::move(offset), 0)),
                                         std::move(array_offsets)),
-                    NullColumn::create(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()));
+                    NullColumn::static_pointer_cast(
+                            ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()->clone()));
         }
     } else {
         array_binary_column->reserve(row_nums * 5, haystack_columns->get_immutable_bytes().size() * sizeof(uint8_t));

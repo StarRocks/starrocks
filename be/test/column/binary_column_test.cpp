@@ -430,11 +430,11 @@ PARALLEL_TEST(BinaryColumnTest, test_copy_constructor) {
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
-    auto c2(*c1);
+    auto c2 = BinaryColumn::static_pointer_cast(c1->clone());
 
     c1.reset();
-    slices = c2.get_data();
-    ASSERT_EQ(2, c2.size());
+    slices = c2->get_data();
+    ASSERT_EQ(2, c2->size());
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 }
@@ -470,12 +470,11 @@ PARALLEL_TEST(BinaryColumnTest, test_copy_assignment) {
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
-    BinaryColumn c2;
-    c2 = *c1;
+    auto c2 = BinaryColumn::static_pointer_cast(c1->clone());
 
     c1.reset();
-    slices = c2.get_data();
-    ASSERT_EQ(2, c2.size());
+    slices = c2->get_data();
+    ASSERT_EQ(2, c2->size());
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 }

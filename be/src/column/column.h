@@ -26,6 +26,7 @@
 #include "common/config.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
+#include "gutil/macros.h"
 #include "runtime/memory/column_allocator.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 #include "util/cow.h"

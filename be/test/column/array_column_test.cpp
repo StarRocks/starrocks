@@ -719,12 +719,12 @@ PARALLEL_TEST(ArrayColumnTest, test_copy_constructor) {
     c0->elements_column_raw_ptr()->append_datum(6);
     c0->offsets_column_raw_ptr()->append(6);
 
-    ArrayColumn c1(*c0);
+    auto c1 = ArrayColumn::static_pointer_cast(c0->clone());
     c0->reset_column();
-    ASSERT_EQ("[1,2,3]", c1.debug_item(0));
-    ASSERT_EQ("[4,5,6]", c1.debug_item(1));
-    ASSERT_TRUE(c1.elements_column()->use_count() == 1);
-    ASSERT_TRUE(c1.offsets_column()->use_count() == 1);
+    ASSERT_EQ("[1,2,3]", c1->debug_item(0));
+    ASSERT_EQ("[4,5,6]", c1->debug_item(1));
+    ASSERT_TRUE(c1->elements_column()->use_count() == 1);
+    ASSERT_TRUE(c1->offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE
@@ -766,13 +766,12 @@ PARALLEL_TEST(ArrayColumnTest, test_copy_assignment) {
     c0->elements_column_raw_ptr()->append_datum(6);
     c0->offsets_column_raw_ptr()->append(6);
 
-    ArrayColumn c1(NullableColumn::create(Int32Column::create(), NullColumn::create()), UInt32Column::create());
-    c1 = *c0;
+    auto c1 = ArrayColumn::static_pointer_cast(c0->clone());
     c0->reset_column();
-    ASSERT_EQ("[1,2,3]", c1.debug_item(0));
-    ASSERT_EQ("[4,5,6]", c1.debug_item(1));
-    ASSERT_TRUE(c1.elements_column()->use_count() == 1);
-    ASSERT_TRUE(c1.offsets_column()->use_count() == 1);
+    ASSERT_EQ("[1,2,3]", c1->debug_item(0));
+    ASSERT_EQ("[4,5,6]", c1->debug_item(1));
+    ASSERT_TRUE(c1->elements_column()->use_count() == 1);
+    ASSERT_TRUE(c1->offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE

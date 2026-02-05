@@ -3502,9 +3502,10 @@ PARALLEL_TEST(VecStringFunctionsTest, strposInstanceTest) {
         instance->append(1);
         nulls->append(1);
 
-        auto haystack_nullable = NullableColumn::create(haystack, NullColumn::create(*nulls));
-        auto needle_nullable = NullableColumn::create(needle->clone(), NullColumn::create(*nulls));
-        auto instance_nullable = NullableColumn::create(instance->clone(), NullColumn::create(*nulls));
+        auto haystack_nullable = NullableColumn::create(haystack, NullColumn::static_pointer_cast(nulls->clone()));
+        auto needle_nullable = NullableColumn::create(needle->clone(), NullColumn::static_pointer_cast(nulls->clone()));
+        auto instance_nullable =
+                NullableColumn::create(instance->clone(), NullColumn::static_pointer_cast(nulls->clone()));
 
         columns.emplace_back(haystack_nullable);
         columns.emplace_back(needle_nullable);

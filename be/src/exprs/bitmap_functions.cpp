@@ -409,7 +409,8 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
                 ArrayColumn::create(
                         NullableColumn::create(std::move(array_bigint_column), NullColumn::create(offset, 0)),
                         std::move(array_offsets)),
-                NullColumn::create(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()));
+                NullColumn::static_pointer_cast(
+                        ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()->clone()));
     }
 }
 
