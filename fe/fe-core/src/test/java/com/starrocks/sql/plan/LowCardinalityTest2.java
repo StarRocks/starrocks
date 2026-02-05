@@ -2636,7 +2636,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  \n" +
                 "  7:Project\n" +
                 "  |  output columns:\n" +
-                "  |  38 <-> if[([37: cast, BIGINT, false] = 1, DictDecode([41: c_user, INT, true], " +
+                "  |  38 <-> if[([37: cast, BIGINT, false] = 1, DictDecode(41: c_user, " +
                 "[<place-holder>]), NULL); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR(50); args nullable: true;" +
                 " result nullable: true]\n" +
                 "  |  41 <-> [41: c_user, INT, true]\n" +
@@ -2648,5 +2648,41 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  child exprs:\n" +
                 "  |      [39: c_user, INT, true] | [23: cast, BIGINT, false]\n" +
                 "  |      [40: c_user, INT, true] | [35: cast, BIGINT, false]", plan);
+    }
+
+    @Test
+    public void testUnionWithConstants() throws Exception {
+        String sql = """
+                  SELECT
+                      C_USER a, C_USER as b, C_USER as c
+                    FROM
+                      low_card_t1
+                  UNION ALL
+                  SELECT
+                    S_ADDRESS, 'zzz', NULL
+                  FROM
+                      supplier
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  8:Decode\n" +
+                "  |  <dict id 33> : <string id 27>\n" +
+                "  |  <dict id 31> : <string id 25>\n" +
+                "  |  <dict id 32> : <string id 26>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [31, INT, true] | [32, INT, true] | [33, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [28: c_user, INT, true] | [34: cast, INT, true] | [28: c_user, INT, true]\n" +
+                "  |      [30: cast, INT, true] | [35: expr, INT, false] | [36: expr, INT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  |----7:Project\n" +
+                "  |    |  output columns:\n" +
+                "  |    |  30 <-> [30: cast, INT, true]\n" +
+                "  |    |  35 <-> 2\n" +
+                "  |    |  36 <-> NULL", plan);
     }
 }
