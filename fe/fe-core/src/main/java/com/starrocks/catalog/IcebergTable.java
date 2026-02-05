@@ -165,6 +165,10 @@ public class IcebergTable extends Table {
         return partitionColumns;
     }
 
+    public void clearMetadata() {
+        this.nativeTable = null;
+    }
+
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
         for (PartitionField field : getNativeTable().spec().fields()) {

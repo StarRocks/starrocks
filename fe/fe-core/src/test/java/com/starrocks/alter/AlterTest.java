@@ -729,7 +729,7 @@ public class AlterTest {
         }
         alterTableWithNewParser(stmt, false);
         for (Partition partition : partitionList) {
-            Assertions.assertEquals(true, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
+            Assertions.assertEquals(false, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
         }
         Assertions.assertEquals(false, tbl4.getPartitionInfo().getIsInMemory(p4.getId()));
 

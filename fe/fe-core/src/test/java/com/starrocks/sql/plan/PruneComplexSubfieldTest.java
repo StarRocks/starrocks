@@ -1275,4 +1275,29 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 + "  |  <slot 18> : clone(20: expr)\n"
                 + "  |  <slot 20> : 20: expr");
     }
+
+    @Test
+    public void testProjectionPrune() throws Exception {
+        connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+        String sql = "SELECT amount_arr\n"
+                + "FROM (\n"
+                + "    SELECT c2, map_from_arrays(ARRAY_AGG(coalesce(id, 'xx')), ARRAY_AGG(a1)) data_map\n"
+                + "    FROM (\n"
+                + "        SELECT id, c2, ARRAY_AGG(c1) a1\n"
+                + "        FROM t1\n"
+                + "        GROUP BY id, c2\n"
+                + "      ) tap_ev\n"
+                + "    GROUP BY c2\n"
+                + "    ORDER BY c2 DESC, MAX(a1[1]) DESC\n\n"
+                + "    LIMIT 1000\n"
+                + "    \n"
+                + "  ) tap_ev CROSS JOIN "
+                + "unnest(map_keys(tap_ev.`data_map`), map_values(tap_ev.`data_map`)) AS b(`dt_0`, `amount_arr`);";
+
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "UNKNOWN_TYPE\n");
+        connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+    }
 }

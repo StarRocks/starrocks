@@ -316,7 +316,8 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
             // all null
             zone_map_details.emplace_back(Datum{}, Datum{}, true);
         } else {
-            bool has_null = column_index.null_counts[i] > 0;
+            // null_counts is optional in parquet - if unavailable, conservatively assume nulls exist
+            bool has_null = i >= column_index.null_counts.size() || column_index.null_counts[i] > 0;
             zone_map_details.emplace_back(min_column->get(i), max_column->get(i), has_null);
         }
     }

@@ -865,3 +865,49 @@ A: Taking the Query Error item as an example, you can create two alert rules for
 
 - **Risk Level**: Set the failure rate greater than 0.05, indicating a risk. Send the alert to the development team.
 - **Severity Level**: Set the failure rate greater than 0.20, indicating a severity. At this point, the alert notification will be sent to both the development and operations teams simultaneously.
+
+### Q: How can I retrieve more detailed metrics, including table-level metrics, materialized view metrics, and connection statistics with user labels?
+
+A: By default, the `/metrics` endpoint collects metrics in a minified mode to minimize performance impact. To retrieve detailed metrics, you need to add specific parameters to the request and provide Basic Authentication credentials for a user with ADMIN privileges.
+
+**Supported Parameters:**
+
+- `with_table_metrics=all`: Collects all table-level metrics.
+- `with_materialized_view_metrics=all`: Collects all materialized view metrics.
+- `with_user_connections=all`: Collects connection statistics categorized by user labels.
+
+**Authentication Requirement:**
+
+These parameters take effect only when the request includes valid Basic Authentication credentials for an ADMIN user. If the request is anonymous or the user lacks ADMIN privileges, these parameters are ignored, and only default metrics are returned.
+
+**Example Curl Command:**
+
+```bash
+curl -u <admin_username>:<admin_password> \
+"http://<fe_host>:<fe_http_port>/metrics?with_table_metrics=all&with_materialized_view_metrics=all&with_user_connections=all"
+```
+
+**Prometheus Configuration Example:**
+
+To enable detailed metric collection in Prometheus, configure `params` and `basic_auth` in your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'StarRocks_Detailed_Metrics'
+    metrics_path: '/metrics'
+    params:
+      with_table_metrics: ['all']
+      with_materialized_view_metrics: ['all']
+      with_user_connections: ['all']
+    basic_auth:
+      username: '<admin_username>'
+      password: '<admin_password>'
+    static_configs:
+      - targets: ['<fe_host>:<fe_http_port>']
+```
+
+:::note
+
+Collecting all table and materialized view metrics may increase the load on the FE node. Use these parameters with caution in large-scale environments.
+
+:::

@@ -119,6 +119,7 @@ statement
     | adminSetConfigStatement
     | adminSetReplicaStatusStatement
     | adminShowConfigStatement
+    | adminShowAutomatedSnapshotStatement
     | adminShowReplicaDistributionStatement
     | adminShowReplicaStatusStatement
     | adminRepairTableStatement
@@ -751,6 +752,10 @@ adminSetReplicaStatusStatement
     ;
 adminShowConfigStatement
     : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    ;
+
+adminShowAutomatedSnapshotStatement
+    : ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
     ;
 
 adminShowReplicaDistributionStatement

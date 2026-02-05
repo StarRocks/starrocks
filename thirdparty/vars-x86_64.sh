@@ -46,7 +46,7 @@ TENANN_SOURCE="tenann-v0.5.0-RELEASE"
 TENANN_MD5SUM="b4ac5be487dd136c4903fe5db1bbd11f"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc4/starcache-centos7_amd64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.0.1/starcache-centos7_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="996aef75dbbf1b1f231bb95f4402fc59"
+STARCACHE_MD5SUM="229302fa84dee36ad6b2f147adabfa20"

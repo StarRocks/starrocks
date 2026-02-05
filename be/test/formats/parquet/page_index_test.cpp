@@ -622,8 +622,6 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     EXPECT_EQ(total_row_nums, 19000);
 }
 
-<<<<<<< HEAD
-=======
 // Test for parquet files with empty null_counts in ColumnIndex.
 // This can happen with some parquet writers that don't populate null_counts.
 // The bug was accessing column_index.null_counts[i] without bounds checking.
@@ -665,7 +663,7 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     std::vector<TExpr> t_conjuncts;
     // id > 2
     // this triggers page index filtering
-    ParquetUTBase::append_bigint_conjunct(TExprOpcode::GT, 0, 2, &t_conjuncts);
+    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 2, &t_conjuncts);
 
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
@@ -697,6 +695,4 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     }
     EXPECT_GT(total_row_nums, 0);
 }
-
->>>>>>> 1dfa8a14e4 ([UT] Fix wrong conjunct used for TestEmptyNullCountsInColumnIndex (#68513))
 } // namespace starrocks::parquet
