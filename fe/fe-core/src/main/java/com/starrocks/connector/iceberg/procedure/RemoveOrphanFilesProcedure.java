@@ -154,7 +154,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
     /**
      * Validates that the given location is non-empty and is the table root or a subdirectory of it
-     * Returns the normalized path (no trailing slash) for use in scanning.
+     * Returns the normalized path for use in scanning.
      */
     private static String validateAndResolveScanLocation(String location, String tableLocation) {
         if (location == null || location.isEmpty()) {
@@ -166,8 +166,8 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
             return location;
         }
 
-        URI tableUri = new Path(tableLocation).toUri().normalize();
-        URI locationUri = new Path(location).toUri().normalize();
+        URI tableUri = new Path(tableLocation).toUri();
+        URI locationUri = new Path(location).toUri();
         String tablePath = stripTrailingSlash(tableUri.getPath());
         String locationPath = stripTrailingSlash(locationUri.getPath());
 
@@ -178,7 +178,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
                     "table location %s, got %s", LOCATION, tableLocation, location);
         }
 
-        return locationPath;
+        return locationUri.toString();
     }
 
     private static String stripTrailingSlash(String path) {
@@ -218,7 +218,8 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
                 filesToDelete.clear();
             }
         } catch (IOException e) {
-            throw new StarRocksConnectorException("Failed accessing data: ", e);
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
+            throw new StarRocksConnectorException("Failed accessing data: " + msg, e);
         }
     }
 
