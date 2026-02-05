@@ -31,6 +31,7 @@ set(BASE_TEST_FILES
     int256_test.cpp
     phmap_test.cpp
     crypto/md5_test.cpp
+    hash/hash_util_test.cpp
     json/easy_json-test.cpp
     path/file_util_test.cpp
     path/path_util_test.cpp
