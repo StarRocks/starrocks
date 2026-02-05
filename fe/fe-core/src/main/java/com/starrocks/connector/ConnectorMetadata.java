@@ -236,6 +236,10 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
+    default String getMaxPartitionValue(Table table, boolean nonEmptyPartition) {
+        return null;
+    }
+
     /**
      * Get partition info at a specific snapshot identified by the request context.
      * Default implementation ignores the context and falls back to the live-snapshot variant.

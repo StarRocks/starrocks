@@ -54,6 +54,7 @@ public class OdpsCacheUpdateProcessorTest {
     private LoadingCache<String, Set<String>> tableNameCache;
     private LoadingCache<OdpsTableName, OdpsTable> tableCache;
     private LoadingCache<OdpsTableName, List<Partition>> partitionCache;
+    private LoadingCache<OdpsTableName, String> maxPartitionCache;
 
     @BeforeEach
     public void setUp() {
@@ -77,11 +78,18 @@ public class OdpsCacheUpdateProcessorTest {
                         return ImmutableList.of();
                     }
                 });
+        maxPartitionCache = CacheBuilder.newBuilder()
+                .build(new CacheLoader<>() {
+                    @Override
+                    public String load(OdpsTableName key) {
+                        return mock(String.class);
+                    }
+                });
     }
 
     private OdpsCacheUpdateProcessor createProcessor() {
         return new OdpsCacheUpdateProcessor(
-                CATALOG_NAME, odps, tableNameCache, tableCache, partitionCache);
+                CATALOG_NAME, odps, tableNameCache, tableCache, partitionCache, maxPartitionCache);
     }
 
     // --- refreshTable ---

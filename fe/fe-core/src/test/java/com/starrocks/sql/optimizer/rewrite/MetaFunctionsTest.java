@@ -17,19 +17,27 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.OdpsTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.VarcharType;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -40,6 +48,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -308,14 +317,14 @@ public class MetaFunctionsTest extends MVTestBase {
         starRocksAssert.withTable("create table base_table_single_mv(k1 int, v1 int) properties('replication_num'='1')");
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_single distributed by random " +
                 "as select k1, sum(v1) from test.base_table_single_mv group by k1");
-        
+
         ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_single_mv"));
         Assertions.assertNotNull(result);
         String json = result.getVarchar();
         Assertions.assertTrue(json.contains("\"name\":\"mv_single\""));
         Assertions.assertTrue(json.contains("\"level\":0"));
         Assertions.assertTrue(json.contains("\"related_mvs\":[]"));
-        
+
         starRocksAssert.dropMaterializedView("mv_single");
         starRocksAssert.dropTable("base_table_single_mv");
     }
@@ -324,27 +333,27 @@ public class MetaFunctionsTest extends MVTestBase {
     public void testInspectRelatedMvWithNestedMVs() throws Exception {
         // Create base table
         starRocksAssert.withTable("create table base_table_nested(k1 int, v1 int) properties('replication_num'='1')");
-        
+
         // Create first level MV
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_level_0 distributed by random " +
                 "as select k1, sum(v1) as sum_v1 from test.base_table_nested group by k1");
-        
+
         // Create second level MV (nested)
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_level_1 distributed by random " +
                 "as select k1, sum(sum_v1) as total from test.mv_level_0 group by k1");
-        
+
         ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_nested"));
         Assertions.assertNotNull(result);
         String json = result.getVarchar();
-        
+
         // Check level 0 MV
         Assertions.assertTrue(json.contains("\"name\":\"mv_level_0\""));
         Assertions.assertTrue(json.contains("\"level\":0"));
-        
+
         // Check nested level 1 MV
         Assertions.assertTrue(json.contains("\"name\":\"mv_level_1\""));
         Assertions.assertTrue(json.contains("\"level\":1"));
-        
+
         // Clean up in reverse order
         starRocksAssert.dropMaterializedView("mv_level_1");
         starRocksAssert.dropMaterializedView("mv_level_0");
@@ -354,21 +363,21 @@ public class MetaFunctionsTest extends MVTestBase {
     @Test
     public void testInspectRelatedMvWithMultipleMVsAtSameLevel() throws Exception {
         starRocksAssert.withTable("create table base_table_multi_mv(k1 int, v1 int, v2 int) properties('replication_num'='1')");
-        
+
         // Create multiple MVs at level 0
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_multi_1 distributed by random " +
                 "as select k1, sum(v1) from test.base_table_multi_mv group by k1");
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_multi_2 distributed by random " +
                 "as select k1, sum(v2) from test.base_table_multi_mv group by k1");
-        
+
         ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_multi_mv"));
         Assertions.assertNotNull(result);
         String json = result.getVarchar();
-        
+
         // Both MVs should be at level 0
         Assertions.assertTrue(json.contains("\"name\":\"mv_multi_1\"") || json.contains("\"name\":\"mv_multi_2\""));
         Assertions.assertTrue(json.contains("\"level\":0"));
-        
+
         starRocksAssert.dropMaterializedView("mv_multi_1");
         starRocksAssert.dropMaterializedView("mv_multi_2");
         starRocksAssert.dropTable("base_table_multi_mv");
@@ -378,23 +387,23 @@ public class MetaFunctionsTest extends MVTestBase {
     public void testInspectRelatedMvWithDeepNesting() throws Exception {
         // Create base table
         starRocksAssert.withTable("create table base_table_deep(k1 int, v1 int) properties('replication_num'='1')");
-        
+
         // Create level 0 MV
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_deep_0 distributed by random " +
                 "as select k1, sum(v1) as sum_v1 from test.base_table_deep group by k1");
-        
+
         // Create level 1 MV
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_deep_1 distributed by random " +
                 "as select k1, sum(sum_v1) as sum_v2 from test.mv_deep_0 group by k1");
-        
+
         // Create level 2 MV
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_deep_2 distributed by random " +
                 "as select k1, sum(sum_v2) as sum_v3 from test.mv_deep_1 group by k1");
-        
+
         ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_deep"));
         Assertions.assertNotNull(result);
         String json = result.getVarchar();
-        
+
         // Verify all levels exist
         Assertions.assertTrue(json.contains("\"name\":\"mv_deep_0\""));
         Assertions.assertTrue(json.contains("\"level\":0"));
@@ -402,7 +411,7 @@ public class MetaFunctionsTest extends MVTestBase {
         Assertions.assertTrue(json.contains("\"level\":1"));
         Assertions.assertTrue(json.contains("\"name\":\"mv_deep_2\""));
         Assertions.assertTrue(json.contains("\"level\":2"));
-        
+
         // Clean up in reverse order
         starRocksAssert.dropMaterializedView("mv_deep_2");
         starRocksAssert.dropMaterializedView("mv_deep_1");
@@ -421,17 +430,17 @@ public class MetaFunctionsTest extends MVTestBase {
         starRocksAssert.withTable("create table base_table_json(k1 int, v1 int) properties('replication_num'='1')");
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_json distributed by random " +
                 "as select k1, sum(v1) from test.base_table_json group by k1");
-        
+
         ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_json"));
         Assertions.assertNotNull(result);
         String json = result.getVarchar();
-        
+
         // Verify JSON structure contains required fields
         Assertions.assertTrue(json.contains("\"id\":"));
         Assertions.assertTrue(json.contains("\"name\":"));
         Assertions.assertTrue(json.contains("\"level\":"));
         Assertions.assertTrue(json.contains("\"related_mvs\":"));
-        
+
         starRocksAssert.dropMaterializedView("mv_json");
         starRocksAssert.dropTable("base_table_json");
     }
@@ -591,5 +600,183 @@ public class MetaFunctionsTest extends MVTestBase {
             connectContext.setCurrentRoleIds(UserIdentity.ROOT);
             connectContext.setThreadLocalInfo();
         }
+    }
+
+    @Test
+    public void testMaxPartitionWithOdpsTable() throws Exception {
+        // Use MockedMetadataMgr to avoid creating actual catalog
+        MockedMetadataMgr mockedMetadataMgr = new MockedMetadataMgr(
+                connectContext.getGlobalStateMgr().getLocalMetastore(),
+                connectContext.getGlobalStateMgr().getConnectorMgr());
+
+        // Create a mock ConnectorMetadata for ODPS that implements getMaxPartitionValue
+        ConnectorMetadata mockedOdpsMetadata = new ConnectorMetadata() {
+            @Override
+            public String getMaxPartitionValue(com.starrocks.catalog.Table table, boolean nonEmptyPartition) {
+                return "20230101";
+            }
+        };
+
+        mockedMetadataMgr.registerMockedMetadata("odps_catalog", mockedOdpsMetadata);
+        MetadataMgr originalMetadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        GlobalStateMgr.getCurrentState().setMetadataMgr(mockedMetadataMgr);
+
+        try {
+            // Mock the table and metadataMgr.getMaxPartitionValue
+            new Expectations(mockedMetadataMgr) {
+                {
+                    // Mock getTable(ConnectContext, TableName) which returns Optional<Table>
+                    mockedMetadataMgr.getTable((ConnectContext) any, (TableName) any);
+                    result = Optional.of(new OdpsTable() {
+                        @Override
+                        public String getCatalogName() {
+                            return "odps_catalog";
+                        }
+
+                        @Override
+                        public String getCatalogDBName() {
+                            return "project";
+                        }
+
+                        @Override
+                        public String getName() {
+                            return "test_table";
+                        }
+
+                        @Override
+                        public boolean isOdpsTable() {
+                            return true;
+                        }
+                    });
+                    minTimes = 0;
+
+                    mockedMetadataMgr.getMaxPartitionValue((Table) any, anyBoolean);
+                    result = "20230101";
+                    minTimes = 0;
+                }
+            };
+
+            // Test max_partition function with ODPS table
+            ConstantOperator result =
+                    MetaFunctions.max_partition(ConstantOperator.createVarchar("odps_catalog.project.test_table"));
+            Assertions.assertNotNull(result);
+            Assertions.assertFalse(result.isNull());
+            Assertions.assertEquals("20230101", result.getVarchar());
+        } finally {
+            // Restore original metadataMgr
+            GlobalStateMgr.getCurrentState().setMetadataMgr(originalMetadataMgr);
+        }
+    }
+
+    @Test
+    public void testMaxPartitionWithTableNotFound() {
+        assertThrows(SemanticException.class, () -> {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            MetadataMgr metadataMgr = globalStateMgr.getMetadataMgr();
+
+            new Expectations(metadataMgr) {
+                {
+                    metadataMgr.getTable(connectContext, "odps_catalog", "project", "non_existent_table");
+                    result = null;
+                    minTimes = 0;
+                }
+            };
+
+            MetaFunctions.max_partition(ConstantOperator.createVarchar("odps_catalog.project.non_existent_table"));
+        });
+    }
+
+    @Test
+    public void testMaxPartitionWithUnsupportedTableType() {
+        assertThrows(SemanticException.class, () -> {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            MetadataMgr metadataMgr = globalStateMgr.getMetadataMgr();
+
+            // Mock a table that is not ODPS or Hive
+            new Expectations(metadataMgr) {
+                {
+                    metadataMgr.getTable(connectContext, "mysql_catalog", "db", "test_table");
+                    result = new Table(Table.TableType.MYSQL) {
+                        @Override
+                        public String getCatalogName() {
+                            return "mysql_catalog";
+                        }
+
+                        @Override
+                        public String getCatalogDBName() {
+                            return "db";
+                        }
+
+                        @Override
+                        public String getName() {
+                            return "test_table";
+                        }
+
+                        @Override
+                        public boolean isOdpsTable() {
+                            return false;
+                        }
+
+                        @Override
+                        public boolean isHiveTable() {
+                            return false;
+                        }
+
+                        @Override
+                        public boolean isHMSExternalTable() {
+                            return true;
+                        }
+                    };
+                    minTimes = 0;
+                }
+            };
+
+            MetaFunctions.max_partition(ConstantOperator.createVarchar("mysql_catalog.db.test_table"));
+        });
+    }
+
+    @Test
+    public void testMaxPartitionWithNullPartitionValue() throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        MetadataMgr metadataMgr = globalStateMgr.getMetadataMgr();
+
+        // Mock the table and metadataMgr.getMaxPartitionValue returning null
+        new Expectations(metadataMgr) {
+            {
+                // Mock getTable(ConnectContext, TableName) which returns Optional<Table>
+                metadataMgr.getTable((ConnectContext) any, (TableName) any);
+                result = Optional.of(new OdpsTable() {
+                    @Override
+                    public String getCatalogName() {
+                        return "odps_catalog";
+                    }
+
+                    @Override
+                    public String getCatalogDBName() {
+                        return "project";
+                    }
+
+                    @Override
+                    public String getName() {
+                        return "test_table";
+                    }
+
+                    @Override
+                    public boolean isOdpsTable() {
+                        return true;
+                    }
+                });
+                minTimes = 0;
+
+                metadataMgr.getMaxPartitionValue((Table) any, anyBoolean);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        // Test max_partition function when partition value is null
+        ConstantOperator result = MetaFunctions.max_partition(ConstantOperator.createVarchar("odps_catalog.project.test_table"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.isNull());
     }
 }

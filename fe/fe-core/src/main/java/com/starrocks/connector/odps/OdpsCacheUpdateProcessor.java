@@ -22,11 +22,14 @@ import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.CacheUpdateProcessor;
 import com.starrocks.connector.DatabaseTableName;
+import org.apache.groovy.util.Maps;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
@@ -39,17 +42,20 @@ public class OdpsCacheUpdateProcessor implements CacheUpdateProcessor {
     private final LoadingCache<String, Set<String>> tableNameCache;
     private final LoadingCache<OdpsTableName, OdpsTable> tableCache;
     private final LoadingCache<OdpsTableName, List<Partition>> partitionCache;
+    private final LoadingCache<OdpsTableName, String> maxPartitionCache;
 
     public OdpsCacheUpdateProcessor(String catalogName,
                                     Odps odps,
                                     LoadingCache<String, Set<String>> tableNameCache,
                                     LoadingCache<OdpsTableName, OdpsTable> tableCache,
-                                    LoadingCache<OdpsTableName, List<Partition>> partitionCache) {
+                                    LoadingCache<OdpsTableName, List<Partition>> partitionCache,
+                                    LoadingCache<OdpsTableName, String> maxPtCache) {
         this.catalogName = catalogName;
         this.odps = odps;
         this.tableNameCache = tableNameCache;
         this.tableCache = tableCache;
         this.partitionCache = partitionCache;
+        this.maxPartitionCache = maxPtCache;
     }
 
     @Override
@@ -118,6 +124,27 @@ public class OdpsCacheUpdateProcessor implements CacheUpdateProcessor {
 
                 LOG.info("Background refreshed table {}.{} in catalog {}",
                         odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName(), catalogName);
+
+                List<Partition> oPartitions = oTable.getPartitions();
+                partitionCache.invalidate(odpsTableName);
+                partitionCache.put(odpsTableName, oPartitions);
+                LOG.info("Background refreshed partitions of table {}.{} in catalog {}",
+                        odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName(), catalogName);
+
+                Partition firstPartition = oPartitions.get(0);
+                String partitionKey = firstPartition
+                        .getPartitionSpec()
+                        .keys()
+                        .stream()
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalStateException("Partition spec has no keys"));
+
+                Partition maxPartition = oPartitions.stream()
+                        .filter(p -> p.getPhysicalSize() > 0)
+                        .max(Comparator.comparing(p -> p.getPartitionSpec().get(partitionKey)))
+                        .orElseThrow(() -> new IllegalStateException("No valid partitions found"));
+                maxPartitionCache.invalidate(odpsTableName);
+                maxPartitionCache.put(odpsTableName, maxPartition.getPartitionSpec().get(partitionKey));
             } catch (Exception e) {
                 LOG.error("Failed to background refresh table {}.{} in catalog {}",
                         odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName(), catalogName, e);
@@ -153,6 +180,26 @@ public class OdpsCacheUpdateProcessor implements CacheUpdateProcessor {
         partitionCache.put(odpsTableName, merged);
         LOG.debug("Refreshed {} partition(s) for table {}.{} in catalog {}",
                 refreshed.size(), odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName(), catalogName);
+
+        Map<OdpsTableName, List<Partition>> latestPartitions =
+                Maps.of(odpsTableName, OdpsUtils.getOdpsTablePartitions(odps, odpsTable));
+        partitionCache.invalidate(odpsTableName);
+        partitionCache.putAll(latestPartitions);
+
+        Partition firstPartition = latestPartitions.get(odpsTableName).get(0);
+        String partitionKey = firstPartition
+                .getPartitionSpec()
+                .keys()
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Partition spec has no keys"));
+
+        Partition maxPartition = latestPartitions.get(odpsTableName).stream()
+                .filter(p -> p.getPhysicalSize() > 0)
+                .max(Comparator.comparing(p -> p.getPartitionSpec().get(partitionKey)))
+                .orElseThrow(() -> new IllegalStateException("No valid partitions found"));
+        maxPartitionCache.invalidate(odpsTableName);
+        maxPartitionCache.put(odpsTableName, maxPartition.getPartitionSpec().get(partitionKey));
     }
 }
 
