@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace starrocks {
 
 TEST(AlignmentTest, HandlesNonPowerOfTwoAlignment) {
@@ -26,6 +28,16 @@ TEST(AlignmentTest, HandlesNonPowerOfTwoAlignment) {
 TEST(AlignmentTest, HandlesPowerOfTwoAlignment) {
     EXPECT_EQ(16, ALIGN_UP(13, 8));
     EXPECT_EQ(8, ALIGN_DOWN(13, 8));
+}
+
+TEST(AlignmentTest, AlignUpSaturatesOnOverflow) {
+    using U = size_t;
+    constexpr U align = 8;
+    const U max_value = std::numeric_limits<U>::max();
+    const U max_aligned = (max_value / align) * align;
+    const U x = max_value - 3;
+
+    EXPECT_EQ(max_aligned, ALIGN_UP(x, align));
 }
 
 } // namespace starrocks
