@@ -471,6 +471,15 @@ public:
     DEFINE_VECTORIZED_FN(regexp_count);
 
     /**
+     * @param: [string_value, pattern_value, start_position, occurrence]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn, IntColumn]
+     * @return: IntColumn
+     */
+    DEFINE_VECTORIZED_FN(regexp_position);
+    static Status regexp_position_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_position_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
      * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
      * @return: BinaryColumn
