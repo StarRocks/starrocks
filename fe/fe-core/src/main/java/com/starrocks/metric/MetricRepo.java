@@ -1074,6 +1074,9 @@ public final class MetricRepo {
 
     // collect table-level metrics
     private static void collectTableMetrics(MetricVisitor visitor, boolean minifyTableMetrics) {
+        if (!Config.enable_table_metrics_collect) {
+            return;
+        }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext());
         for (String dbName : dbNames) {
@@ -1255,4 +1258,3 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(metric);
     }
 }
-

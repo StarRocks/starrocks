@@ -5589,6 +5589,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：是否启用附加物化视图名称前缀的日志记录，用于提升调试能力。
 - 引入版本：v3.4.0
 
+##### enable_table_metrics_collect
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在 FE 中导出表级指标。关闭后，FE 将跳过导出表级指标（如表扫描/导入计数器及表大小指标），但仍会在内存中记录计数器。
+- 引入版本：-
+
 ##### enable_mv_post_image_reload_cache
 - 默认值：true
 - 类型：布尔值
