@@ -26,6 +26,7 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include "base/metrics.h"
 #include "base/string/string_parser.hpp"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
@@ -54,7 +55,6 @@
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
 #include "util/json_util.h"
-#include "util/metrics.h"
 #include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"

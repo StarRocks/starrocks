@@ -43,7 +43,6 @@ set(UTIL_FILES
   json_flattener.cpp
   json_converter.cpp
   starrocks_metrics.cpp
-  metrics.cpp
   metrics/file_scan_metrics.cpp
   misc.cpp
   network_util.cpp
@@ -64,7 +63,6 @@ set(UTIL_FILES
   filesystem_util.cc
 # coding_util.cpp
   cidr.cpp
-  core_local.cpp
   uid_util.cpp
   aes_util.cpp
   string_util.cpp

@@ -49,11 +49,11 @@
 #include <string>
 #include <utility>
 
+#include "base/compiler_util.h"
+#include "base/concurrency/core_local.h"
 #include "base/concurrency/spinlock.h"
+#include "base/logging.h"
 #include "base/phmap/phmap.h"
-#include "common/compiler_util.h"
-#include "common/config.h"
-#include "util/core_local.h"
 
 namespace starrocks {
 
@@ -355,6 +355,8 @@ class MetricRegistry {
 public:
     MetricRegistry(std::string name) : _name(std::move(name)) {}
     ~MetricRegistry() noexcept;
+    void set_collect_hook_enabled(bool enabled);
+    bool collect_hook_enabled() const;
     bool register_metric(const std::string& name, Metric* metric) {
         return register_metric(name, MetricLabels::EmptyLabels, metric);
     }
@@ -372,8 +374,7 @@ public:
     void deregister_hook(const std::string& name);
 
     void collect(MetricsVisitor* visitor) {
-        if (!config::enable_metric_calculator) {
-            // Before we collect, need to call hooks
+        if (collect_hook_enabled()) {
             std::shared_lock lock(_hooks_mutex);
             unprotected_trigger_hook();
         }
@@ -406,6 +407,8 @@ private:
     mutable std::shared_mutex _hooks_mutex;
     std::map<std::string, MetricCollector*> _collectors;
     std::map<std::string, std::function<void()>> _hooks;
+
+    std::atomic<bool> _collect_hook_enabled{false};
 };
 
 using IntCounter = CoreLocalCounter<int64_t>;

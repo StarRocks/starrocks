@@ -41,9 +41,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/metrics.h"
 #include "common/status.h"
 #include "util/hash_util.hpp"
-#include "util/metrics.h"
 #include "util/thrift_client.h"
 
 namespace starrocks {

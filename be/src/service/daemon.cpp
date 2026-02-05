@@ -325,6 +325,7 @@ std::string dump_memory_tracker() {
 }
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
+    StarRocksMetrics::instance()->metrics()->set_collect_hook_enabled(!config::enable_metric_calculator);
     bool init_system_metrics = config::enable_system_metrics;
     bool init_jvm_metrics = config::enable_jvm_metrics;
     std::set<std::string> disk_devices;

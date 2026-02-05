@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <deque>
 #include <map>
 #include <memory>
@@ -40,8 +41,7 @@ static inline unsigned starrocks_sched_getcpu_fallback() {
 #include <sched.h>
 #endif
 
-#include "common/compiler_util.h"
-#include "common/system/cpu_info.h"
+#include "base/compiler_util.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
