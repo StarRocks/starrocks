@@ -146,6 +146,10 @@ public class IcebergTable extends Table {
         return partitionColumns;
     }
 
+    public void clearMetadata() {
+        this.nativeTable = null;
+    }
+
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
         for (PartitionField field : getNativeTable().spec().fields()) {
@@ -280,6 +284,10 @@ public class IcebergTable extends Table {
 
     public IcebergCatalogType getCatalogType() {
         return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+    }
+
+    public Map<String, String> getIcebergProperties() {
+        return icebergProperties;
     }
 
     public String getTableLocation() {

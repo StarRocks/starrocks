@@ -937,6 +937,10 @@ public class StmtExecutor {
                 coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
             }
 
+            if (coord != null) {
+                coord.clearExternalResources();
+            }
+
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
                 clearQueryScopeHintContext();
             }
