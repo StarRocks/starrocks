@@ -30,7 +30,7 @@ jobs:
             docs/zh/**/*.md*
             docs/ja/**/*.md*
 
-      # 3. Generate Checklist (Same logic as before)
+
       - name: Generate Checklist Body
         id: checklist
         uses: actions/github-script@v7
@@ -42,37 +42,36 @@ jobs:
               files = JSON.parse('${{ steps.changed-files.outputs.all_changed_files }}');
             } catch (e) { console.log("No files detected"); }
 
+            // 1. Prepare the Header (Must match 'find-comment' criteria)
+            let body = "### 🌎 Translation Required?\n";
+            const timestamp = new Date().toUTCString();
+
+            // 2. logic to find missing files
             if (files.length === 0) {
-              core.setOutput('body', 'No translatable files detected.');
+              body += "\n✅ **All translation files are up to date.**\n";
+              body += "No translation actions are required for this PR.\n";
+              body += `\n> 🕒 **Last updated:** ${timestamp}`;
+              core.setOutput('body', body);
               return;
             }
 
-            let body = "### 🌎 Translation Required?\n";
-            body += "Thanks for your doc contribution! The following languages are missing or outdated for your changes.\n\n";
-            body += "If you are fluent in any of the missing languages you can add them. If not, a maintainer will take a look and generate the changes below.\n\n";
-            body += "**Maintainer:** Check the ones you wish to generate:\n\n";
-            
-            body += "#### ⚡ Global Actions\n";
-            body += "- [ ] **Japanese (ja)** for **ALL** missing/outdated files\n";
-            body += "- [ ] **Chinese (zh)** for **ALL** missing/outdated files\n";
-            body += "- [ ] **English (en)** for **ALL** missing/outdated files\n\n---\n";
+            let contentBuffer = "";
+            let hasMissingTranslations = false;
 
             files.forEach(file => {
-              // Safety: If the source file was deleted in this PR, skip it
               if (!fs.existsSync(file)) return;
 
               const parts = file.split('/');
+              if (parts.length < 2) return; 
+              
               const sourceLang = parts[1]; 
+              if (!['en', 'zh', 'ja'].includes(sourceLang)) return;
+
               const targets = ['en', 'zh', 'ja'].filter(l => l !== sourceLang);
               
               let fileChecklist = "";
               targets.forEach(lang => {
                 const targetPath = file.replace(`docs/${sourceLang}/`, `docs/${lang}/`);
-                
-                // CRITICAL FIX:
-                // We offer translation if:
-                // 1. The target file does not exist (New)
-                // 2. OR The target file exists but is NOT in the list of changed files (Stale/Outdated)
                 const isTargetChanged = files.includes(targetPath);
                 const exists = fs.existsSync(targetPath);
                 
@@ -83,12 +82,31 @@ jobs:
               });
 
               if (fileChecklist) {
-                body += `#### \`${file}\`\n${fileChecklist}\n`;
+                hasMissingTranslations = true;
+                contentBuffer += `#### \`${file}\`\n${fileChecklist}\n`;
               }
             });
 
-            const timestamp = new Date().toUTCString();
-            body += "---\n*Maintainers: Check boxes and reply with `/translate` to start.*\n";
+            // 3. Output logic
+            if (!hasMissingTranslations) {
+              // SUCCESS CASE: Keep the header so we find the comment next time!
+              body += "\n✅ **All translation files are up to date.**\n";
+              body += "Great job! No translation actions are required for this PR.\n";
+            } else {
+              // ACTION REQUIRED CASE
+              body += "Thanks for your doc contribution! The following languages are missing or outdated for your changes.\n\n";
+              body += "If you are fluent in any of the missing languages you can add them. If not, a maintainer will take a look and generate the changes below.\n\n";
+              body += "**Maintainer:** Check the ones you wish to generate:\n\n";
+              
+              body += "#### ⚡ Global Actions\n";
+              body += "- [ ] **Japanese (ja)** for **ALL** missing/outdated files\n";
+              body += "- [ ] **Chinese (zh)** for **ALL** missing/outdated files\n";
+              body += "- [ ] **English (en)** for **ALL** missing/outdated files\n\n---\n";
+
+              body += contentBuffer;
+              body += "---\n*Maintainers: Check boxes and reply with `/translate` to start.*\n";
+            }
+
             body += `\n\n> 🕒 **Last updated:** ${timestamp}`;
             
             core.setOutput('body', body);
