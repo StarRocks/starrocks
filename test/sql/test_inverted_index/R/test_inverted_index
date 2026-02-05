@@ -381,6 +381,26 @@ hello starrocks
 select query_english from t_test_gin_index_query where query_english match 'nonexistent' order by id1;
 -- result:
 -- !result
+select count(*) from t_test_gin_index_query where query_english match '' or id1=1;
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_english match '' or query_english match 'hello';
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english match 'hello' or query_english match '';
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english match '' or id1 > 3;
+-- result:
+2
+-- !result
+select count(*) from t_test_gin_index_query where (query_english match '' or id1=1) and id1 < 5;
+-- result:
+1
+-- !result
 drop table t_test_gin_index_query;
 -- result:
 -- !result

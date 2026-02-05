@@ -69,7 +69,7 @@
 #include "storage/virtual_column_utils.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
-#include "util/scoped_cleanup.h"
+#include "base/utility/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -295,11 +295,9 @@ private:
 
         // Inverted index state
         bool has_inverted_index = false;
+        bool has_fallback_predicates = false;
         std::vector<InvertedIndexIterator*> inverted_index_iterators;
         std::unordered_set<ColumnId> prune_cols_candidate_by_inverted_index;
-
-        // Fallback predicates for MATCH expressions in OR queries (wrapped with segment-specific bitmaps)
-        std::vector<InvertedIndexFallbackPredicate*> fallback_predicates;
 
         // Cleanup method to properly delete iterators
         void cleanup() {
@@ -309,7 +307,7 @@ private:
                 }
             }
             inverted_index_iterators.clear();
-            fallback_predicates.clear();
+            has_fallback_predicates = false;
             has_inverted_index = false;
         }
     };
@@ -1979,7 +1977,7 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     Status st;
     const bool need_rowids =
             (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) ||
-            (_inverted_index_ctx && !_inverted_index_ctx->fallback_predicates.empty());
+            (_inverted_index_ctx && _inverted_index_ctx->has_fallback_predicates);
     if (need_rowids) {
         _rowid_buffer.clear();  // Reuse existing capacity
     }
@@ -3365,7 +3363,8 @@ struct InvertedIndexFallbackVisitor {
         const std::string& column_name = expr_pred->slot_desc()->col_name();
         ASSIGN_OR_RETURN(auto roaring_opt, expr_pred->read_inverted_index(column_name, inverted_iter));
         if (!roaring_opt.has_value()) {
-            return Status::OK();
+            // use empty bitmap (no matches)
+            roaring_opt.emplace();
         }
         
         // Create the fallback wrapper with segment-specific bitmap and rowid buffer pointer
@@ -3376,9 +3375,8 @@ struct InvertedIndexFallbackVisitor {
         // Replace the predicate in the tree
         node.set_col_pred(wrapper);
         
-        // Track the wrapper for later rowid injection
-        fallback_predicates->push_back(wrapper);
-        
+        // Mark that we have fallback predicates (need rowids during scan)
+        *has_fallback_predicates = true;
         return Status::OK();
     }
     
@@ -3392,8 +3390,8 @@ struct InvertedIndexFallbackVisitor {
     }
     
     std::vector<InvertedIndexIterator*>& inverted_index_iterators;
+    bool* has_fallback_predicates;
     ObjectPool* pool;
-    std::vector<InvertedIndexFallbackPredicate*>* fallback_predicates;
     const std::vector<rowid_t>* rowid_buffer;
 };
 
@@ -3408,17 +3406,15 @@ Status SegmentIterator::_apply_inverted_index() {
     SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
 
     // For OR queries: wrap MATCH predicates with InvertedIndexFallbackPredicate
-    _inverted_index_ctx->fallback_predicates.clear();
+    _inverted_index_ctx->has_fallback_predicates = false;
     const bool gin_fallback_enabled = _opts.pred_tree.has_or_predicate();
     if (gin_fallback_enabled) {
-        _inverted_index_ctx->fallback_predicates.reserve(_opts.pred_tree.size());
-        
         // Walk the OR nodes (non-immediate children) and wrap MATCH predicates
         auto root = _opts.pred_tree.release_root();
         InvertedIndexFallbackVisitor visitor{
             _inverted_index_ctx->inverted_index_iterators,
+            &_inverted_index_ctx->has_fallback_predicates,
             &_obj_pool,
-            &_inverted_index_ctx->fallback_predicates,
             &_rowid_buffer
         };
         

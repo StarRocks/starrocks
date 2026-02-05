@@ -172,6 +172,13 @@ select query_english from t_test_gin_index_query where query_english match 'hell
 -- Empty result
 select query_english from t_test_gin_index_query where query_english match 'nonexistent' order by id1;
 
+-- Empty MATCH string with OR (fallback predicate test)
+select count(*) from t_test_gin_index_query where query_english match '' or id1=1;
+select count(*) from t_test_gin_index_query where query_english match '' or query_english match 'hello';
+select count(*) from t_test_gin_index_query where query_english match 'hello' or query_english match '';
+select count(*) from t_test_gin_index_query where query_english match '' or id1 > 3;
+select count(*) from t_test_gin_index_query where (query_english match '' or id1=1) and id1 < 5;
+
 drop table t_test_gin_index_query;
 
 -- name: test_gin_index_single_predicate_none @native
