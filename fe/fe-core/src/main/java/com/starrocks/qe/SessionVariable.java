@@ -1653,7 +1653,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxPushdownConditionsPerColumn = -1;
     // 0 means unset, BE will use its config value
     @VariableMgr.VarAttr(name = BITMAP_MAX_FILTER_RATIO)
-    private int bitmapMaxFilterRatio = 1;
+    private int bitmapMaxFilterRatio = 0;
     @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
     private boolean enableLambdaPushdown = true;
 
