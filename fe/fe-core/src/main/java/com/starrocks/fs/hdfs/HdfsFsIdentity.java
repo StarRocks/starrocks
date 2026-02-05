@@ -19,7 +19,7 @@ package com.starrocks.fs.hdfs;
 
 public class HdfsFsIdentity {
 
-    // A URI identity key, which may be built from either host or authority,
+    // A URI identity key, which may be built from either host or authority.
     private final String uriIdentity;
     private final String ugiInfo;
 

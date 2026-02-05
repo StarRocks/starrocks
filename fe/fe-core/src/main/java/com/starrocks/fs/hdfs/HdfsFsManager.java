@@ -724,6 +724,8 @@ public class HdfsFsManager {
      */
     private String getUriIdentity(URI uri, boolean useAuthorityForAllSchemes) {
         String scheme = uri.getScheme();
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(scheme),
+                "URI scheme must not be null or empty: %s", uri);
         boolean useAuthority = useAuthorityForAllSchemes || ABFS_SCHEME.equalsIgnoreCase(scheme)
                 || ABFSS_SCHEME.equalsIgnoreCase(scheme) || WASB_SCHEME.equalsIgnoreCase(scheme)
                 || WASBS_SCHEME.equalsIgnoreCase(scheme);

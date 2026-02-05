@@ -3439,7 +3439,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to use URI authority (rather than host) to build the file system cache key for all schemes. If set to `false`, only Azure-related schemes (abfs, abfss, wasb, wasbs) use authority and other schemes fall back to legacy host-based keying. This flag exists for rollback purposes: if issues arise in production, it can be dynamically set to `false` via `ADMIN SET FRONTEND CONFIG` to revert non-Azure schemes to the legacy behavior without restart.
-- Introduced in: -
+- Introduced in: v3.4.11, v3.5.14, v4.0.7, v4.1
 
 ##### cloud_native_hdfs_url
 

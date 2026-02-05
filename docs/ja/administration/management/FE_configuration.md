@@ -2895,7 +2895,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: はい
 - 説明: すべてのスキームに対して、ファイルシステムキャッシュキーの構築に URI authority（host ではなく）を使用するかどうか。`false` に設定すると、Azure 関連スキーム（abfs、abfss、wasb、wasbs）のみが authority を使用し、その他のスキームは従来の host ベースのキャッシュキー方式にフォールバックする。この設定はロールバック用：本番環境で問題が発生した場合、`ADMIN SET FRONTEND CONFIG` を使用して動的に `false` に設定することで、再起動なしで非 Azure スキームを従来の動作に戻すことができる。
-- 導入バージョン: -
+- 導入バージョン: v3.4.11、v3.5.14、v4.0.7、v4.1
 
 ##### cloud_native_hdfs_url
 
