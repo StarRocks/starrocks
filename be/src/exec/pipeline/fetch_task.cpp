@@ -70,6 +70,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
 
     auto* closure = new DisposableClosure<PLookUpResponse, FetchTaskContextPtr>(_ctx);
     const auto* node_info = _ctx->processor->_nodes_info->find_node(source_id);
+<<<<<<< HEAD
     // The RPC callback can outlive queue ownership when the source finishes early.
     auto self = shared_from_this();
     closure->addSuccessHandler([self, closure, host = node_info->host, port = node_info->brpc_port](
@@ -82,6 +83,12 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         }
         DLOG(INFO) << "[GLM] receive a response, finished request num: " << unit->finished_request_num
                    << ", total request num: " << unit->total_request_num
+=======
+    closure->addSuccessHandler([this, closure, host = node_info->host, port = node_info->brpc_port](
+                                       const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
+        DLOG(INFO) << "[GLM] receive a response, finished request num: " << ctx->unit->finished_request_num
+                   << ", total request num: " << ctx->unit->total_request_num << ", " << (void*)ctx->processor
+>>>>>>> 2e66516428 ([BugFix] fix the issue of not being able to find LookUpDispatcher (#68860))
                    << ", latency: " << (MonotonicNanos() - ctx->send_ts) * 1.0 / 1000000 << "ms";
         DeferOp defer([&]() {
             if (++unit->finished_request_num == unit->total_request_num) {
