@@ -344,7 +344,7 @@ inline __m128i load_xmm_safe(const char* p) {
     constexpr uintptr_t PAGE_MASK = 4096 - 1;
     bool read_cross_page = (reinterpret_cast<uintptr_t>(p) & PAGE_MASK) > PAGE_MASK - 16;
 #else
-    bool read_cross_page = false;
+    bool read_cross_page = true;
 #endif
     if (!read_cross_page) {
         return _mm_loadu_si128((const __m128i*)p);
