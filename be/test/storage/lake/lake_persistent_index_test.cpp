@@ -379,14 +379,9 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
     ASSERT_OK(index->commit(&builder));
 
     // Mark all sstables as shared so that range pruning path is exercised.
-    // For shared sstables, we need to set shared_rssid and shared_version properly
     auto* sstable_meta = tablet_metadata_ptr->mutable_sstable_meta();
-    int64_t shared_rssid = 1000;  // Use a base rssid for shared sstables
-    int64_t shared_version = 1;   // Use a version for shared sstables
     for (auto& sst_pb : *sstable_meta->mutable_sstables()) {
         sst_pb.set_shared(true);
-        sst_pb.set_shared_rssid(shared_rssid);
-        sst_pb.set_shared_version(shared_version);
     }
 
     auto txn_log = std::make_shared<TxnLogPB>();
