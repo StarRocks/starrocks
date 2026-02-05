@@ -136,9 +136,13 @@ import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.ValidationException;
+import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.ExpressionUtil;
 import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.expressions.ResidualEvaluator;
+import org.apache.iceberg.expressions.StrictMetricsEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
@@ -452,6 +456,128 @@ public class IcebergMetadata implements ConnectorMetadata {
         update.set(ENGINE_VERSION, GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
         update.set(STARROCKS_USER, context.getCurrentUserIdentity() != null ?
                 context.getCurrentUserIdentity().getUser() : "None");
+    }
+
+    /**
+     * Check if the delete can be performed using metadata operations only.
+     * This is possible when:
+     * 1. The delete expression selects entire partitions, OR
+     * 2. The delete expression matches all rows in candidate files (based on file statistics)
+     *
+     * @param table     The Iceberg table
+     * @param predicate The delete predicate in ScalarOperator form
+     * @return true if metadata-level delete can be used, false otherwise
+     */
+    @Override
+    public boolean canDeleteUsingMetadata(Table table, ScalarOperator predicate) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        // Use caseSensitive=false to be consistent with StarRocks expression conversion
+        boolean caseSensitive = false;
+
+        // Convert ScalarOperator to Iceberg Expression
+        Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTable.schema());
+        if (deleteExpr == null) {
+            return false;
+        }
+
+        // First check: does the expression select entire partitions?
+        if (ExpressionUtil.selectsPartitions(deleteExpr, nativeTable, caseSensitive)) {
+            return true;
+        }
+
+        // Second check: scan candidate files and verify all rows match using file statistics
+        TableScan scan = nativeTable.newScan()
+                .filter(deleteExpr)
+                .caseSensitive(caseSensitive)
+                .includeColumnStats()   // Must include column statistics for evaluation
+                .ignoreResiduals();
+
+        try (CloseableIterable<FileScanTask> tasks = scan.planFiles()) {
+            StrictMetricsEvaluator metricsEvaluator =
+                    new StrictMetricsEvaluator(nativeTable.schema(), deleteExpr, caseSensitive);
+
+            for (FileScanTask task : tasks) {
+                DataFile file = task.file();
+                PartitionSpec spec = task.spec();
+
+                // Check 1: strict partition projection matches
+                Evaluator evaluator = new Evaluator(
+                        spec.partitionType(),
+                        Projections.strict(spec, caseSensitive).project(deleteExpr));
+                boolean partitionMatches = evaluator.eval(file.partition());
+
+                // Check 2: file statistics indicate all rows match
+                boolean metricsMatch = metricsEvaluator.eval(file);
+
+                // Must satisfy at least one condition, otherwise cannot use metadata delete
+                if (!partitionMatches && !metricsMatch) {
+                    return false;
+                }
+            }
+            // All files can be deleted via metadata operation
+            return true;
+        } catch (IOException e) {
+            LOG.warn("Failed to evaluate files for metadata delete", e);
+            return false;
+        }
+    }
+
+    /**
+     * Execute metadata-level delete using Iceberg's DeleteFiles API.
+     * This method is used for DELETE operations that can be performed without
+     * generating position delete files, when the delete expression matches
+     * entire partitions or all rows in candidate files.
+     *
+     * @param table     The Iceberg table
+     * @param predicate The delete predicate in ScalarOperator form
+     * @param context   The connect context for audit info
+     */
+    @Override
+    public void executeMetadataDelete(Table table, ScalarOperator predicate, ConnectContext context) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
+
+        // Convert ScalarOperator to Iceberg Expression
+        Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
+        if (deleteExpr == null) {
+            throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
+        }
+
+        DeleteFiles deleteFiles = nativeTbl.newDelete()
+                .deleteFromRowFilter(deleteExpr);
+
+        // Set engine info and user for audit
+        updateCommitInfo(deleteFiles, context);
+
+        try {
+            deleteFiles.commit();
+            LOG.info("Successfully executed metadata delete on {}.{}, delete expression: {}",
+                    dbName, tableName, deleteExpr);
+        } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
+            LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
+            throw new StarRocksConnectorException("Failed to execute metadata delete on %s.%s: %s",
+                    dbName, tableName, e.getMessage());
+        }
+
+        // Invalidate cache after commit
+        invalidateCacheAfterCommit(dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    /**
+     * Helper method to convert ScalarOperator to Iceberg Expression.
+     * Returns null if conversion fails.
+     */
+    private Expression convertScalarOperatorToIcebergExpr(ScalarOperator predicate, Schema schema) {
+        if (predicate == null) {
+            return Expressions.alwaysTrue();
+        }
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                new ScalarOperatorToIcebergExpr.IcebergContext(schema.asStruct());
+        return new ScalarOperatorToIcebergExpr().convertStrict(Collections.singletonList(predicate), icebergContext);
     }
 
     @Override

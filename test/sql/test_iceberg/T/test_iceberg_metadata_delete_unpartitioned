@@ -1,0 +1,217 @@
+-- name: test_iceberg_metadata_delete_unpartitioned
+
+-- ====================================================
+-- SECTION 1: Setup
+-- ====================================================
+
+-- Create external catalog for Iceberg
+create external catalog iceberg_unpart_${uuid0}
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "${hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false"
+);
+
+-- Create database
+create database iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}
+properties ("location" = "oss://${oss_bucket}/test_unpart_delete/${uuid0}/db");
+
+-- Create unpartitioned table
+create table iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned (
+    id INT,
+    name STRING,
+    category STRING,
+    amount DECIMAL(10,2)
+);
+
+-- Insert test data
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(1, 'Alice', 'Electronics', 100.00),
+(2, 'Bob', 'Electronics', 200.00),
+(3, 'Charlie', 'Clothing', 150.00),
+(4, 'David', 'Clothing', 300.00),
+(5, 'Eve', 'Food', 50.00),
+(6, 'Frank', 'Food', 75.00);
+
+-- ====================================================
+-- SECTION 2: Unpartitioned Table Delete Tests
+-- ====================================================
+
+-- Test 2.1: Delete with single column condition - should use position delete
+-- For unpartitioned tables, any row-level delete uses position delete
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id = 1", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id = 1;
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.2: Delete with IN clause - should use position delete
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id in (2, 3)", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id in (2, 3);
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.3: Delete with range condition - should use position delete
+-- This test verifies that position delete is used when file statistics don't guarantee all rows match
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id > 4", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id > 4;
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.4: Delete with string column condition
+-- Re-insert data first
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(7, 'Grace', 'Electronics', 120.00),
+(8, 'Henry', 'Clothing', 180.00);
+
+-- Delete by string column
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category = 'Electronics'", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category = 'Electronics';
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.5: Delete with LIKE pattern
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where name like 'H%'", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where name like 'H%';
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.6: Delete with BETWEEN condition
+-- Re-insert data
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(10, 'Ivy', 'Food', 60.00),
+(11, 'Jack', 'Food', 90.00),
+(12, 'Kate', 'Food', 110.00);
+
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id between 10 and 11", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id between 10 and 11;
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.7: Delete with compound AND condition
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category = 'Food' and amount < 100", "ICEBERG DELETE SINK")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category = 'Food' and amount < 100;
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and added-position-deletes for POSITION DELETE
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.8: Delete with OR condition - should trigger optimization
+-- Re-insert data
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(20, 'Test1', 'Books', 50.00),
+(21, 'Test2', 'Books', 60.00);
+
+-- Delete with id = 20 or category = 'Books' - should trigger metadata delete optimization
+-- because table scan will filter out files that don't match the predicate
+-- Old file (id=10,11,12, category='Food') will be filtered out
+-- New file (id=20,21, category='Books') will be included in scan and fully matches
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id = 20 or category = 'Books'", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id = 20 or category = 'Books';
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.9: Delete with IS NULL condition using file-level statistics
+-- Re-insert data with NULL
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(30, 'NullTest', null, 100.00),
+(31, 'NullTest2', null, 200.00);
+
+-- Delete with category is null - should trigger metadata delete optimization
+-- because file statistics will show that all rows in files have null category
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category is null", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category is null;
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Test 2.10: Delete with non-partition column condition using file-level statistics
+-- This test verifies that metadata delete can be used for unpartitioned tables
+-- when file statistics indicate all rows match, even though the table is not partitioned
+-- Re-insert test data with high id values to ensure file-level statistics match
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(100, 'Alice', 'Electronics', 100.00),
+(101, 'Bob', 'Electronics', 200.00),
+(102, 'Charlie', 'Clothing', 150.00),
+(103, 'David', 'Clothing', 300.00);
+
+-- Delete with id > 50 - should trigger metadata delete optimization
+-- because file statistics will show that all rows in files have id > 50
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id > 50", "ICEBERG METADATA DELETE")
+
+-- Execute delete
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id > 50;
+
+-- Verify data
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+
+-- Query snapshots table to verify operation type and deleted-data-files for METADATA DELETE
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+
+-- Query snapshots to verify operation history
+select operation from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 5;
+
+-- ====================================================
+-- SECTION 3: Cleanup
+-- ====================================================
+
+drop table iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned force;
+drop database iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_unpart_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_unpart_delete/${uuid0} >/dev/null || echo "exit 0" >/dev/null

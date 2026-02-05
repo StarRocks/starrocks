@@ -24,16 +24,21 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.load.Load;
+import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.IcebergDeleteSink;
+import com.starrocks.planner.IcebergMetadataDeleteNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
@@ -53,6 +58,8 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -62,12 +69,17 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
 import org.apache.iceberg.Schema;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public class DeletePlanner {
+    private static final Logger LOG = LogManager.getLogger(DeletePlanner.class);
+
     public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session) {
         if (deleteStatement.shouldHandledByDeleteHandler()) {
             // executor will use DeleteHandler to handle delete statement
@@ -90,10 +102,24 @@ public class DeletePlanner {
 
         // Determine physical properties based on table type
         PhysicalPropertySet requiredProperty;
-        if (table instanceof IcebergTable) {
+
+        // Check if we can use metadata-level delete optimization for Iceberg
+        if (table instanceof IcebergTable icebergTable) {
+            Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
+            // Extract predicate from logical plan
+            ScalarOperator predicate = extractPredicateFromOptExpression(logicalPlan.getRoot());
+            if (predicate != null && connectorMetadata.isPresent()) {
+                ConnectorMetadata metadata = connectorMetadata.get();
+                if (metadata.canDeleteUsingMetadata(icebergTable, predicate)) {
+                    // Return a plan with IcebergMetadataDeleteNode
+                    return createMetadataDeletePlan(icebergTable, predicate);
+                }
+            }
+
             // For Iceberg, create shuffled property based on partitioning
             List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
-            requiredProperty = createShuffleProperty((IcebergTable) table, outputColumns);
+            requiredProperty = createShuffleProperty(icebergTable, outputColumns);
         } else {
             // For other tables, use default empty property
             requiredProperty = new PhysicalPropertySet();
@@ -109,6 +135,33 @@ public class DeletePlanner {
                 colNames,
                 table
         );
+    }
+
+    /**
+     * Extract predicate from OptExpression tree
+     */
+    private ScalarOperator extractPredicateFromOptExpression(OptExpression expr) {
+        if (expr == null || expr.getOp() == null) {
+            return null;
+        }
+        if (expr.getOp() instanceof LogicalApplyOperator) {
+            return null;
+        }
+
+        // Try to get predicate from the operator
+        if (expr.getOp() instanceof LogicalFilterOperator filterOp) {
+            return filterOp.getPredicate();
+        }
+
+        // Recursively check children for filter operators
+        for (OptExpression child : expr.getInputs()) {
+            ScalarOperator pred = extractPredicateFromOptExpression(child);
+            if (pred != null) {
+                return pred;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -162,6 +215,28 @@ public class DeletePlanner {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
         }
+    }
+
+    /**
+     * Creates a metadata delete plan for Iceberg tables.
+     * This plan contains a single IcebergMetadataDeleteNode for EXPLAIN output.
+     */
+    private ExecPlan createMetadataDeletePlan(IcebergTable table, ScalarOperator predicate) {
+        ExecPlan plan = new ExecPlan();
+
+        // Create the metadata delete node
+        IcebergMetadataDeleteNode node = new IcebergMetadataDeleteNode(
+                new PlanNodeId(0), table, predicate);
+
+        // Create a fragment with the node
+        PlanFragment fragment = new PlanFragment(
+                new PlanFragmentId(0),
+                node,
+                DataPartition.UNPARTITIONED
+        );
+
+        plan.getFragments().add(fragment);
+        return plan;
     }
 
     /**

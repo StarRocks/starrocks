@@ -22,6 +22,7 @@ import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExecGroup;
 import com.starrocks.planner.HashJoinNode;
+import com.starrocks.planner.IcebergMetadataDeleteNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
@@ -125,6 +126,15 @@ public class ExecPlan {
 
     public PlanFragment getTopFragment() {
         return fragments.get(0);
+    }
+
+    /**
+     * Check if this plan is for Iceberg metadata-level delete operation.
+     * Metadata delete is performed without generating position delete files.
+     */
+    public boolean isIcebergMetadataDelete() {
+        return fragments.size() == 1
+                && fragments.get(0).getPlanRoot() instanceof IcebergMetadataDeleteNode;
     }
 
     public DescriptorTable getDescTbl() {
