@@ -19,7 +19,7 @@
 #include <random>
 #include <vector>
 
-#include "base/int256.h"
+#include "base/types/int256.h"
 
 namespace starrocks {
 

@@ -27,8 +27,11 @@ set(BASE_TEST_FILES
     container/heap_test.cpp
     container/priority_queue_test.cpp
     coding_test.cpp
+    types/decimal12_test.cpp
+    types/int128_test.cpp
     int256_arithmetic_test.cpp
     int256_test.cpp
+    types/int96_test.cpp
     phmap_test.cpp
     crypto/md5_test.cpp
     hash/hash_util_test.cpp

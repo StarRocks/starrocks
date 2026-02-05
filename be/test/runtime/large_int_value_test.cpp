@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include <sstream>
 #include <string>
 
 #include "common/configbase.h"
@@ -61,29 +62,6 @@ TEST_F(LargeIntValueTest, string_to_largeint) {
         __int128 v;
         ss >> v;
         ASSERT_TRUE(v == MIN_INT128);
-    }
-}
-
-TEST_F(LargeIntValueTest, largeint_to_string) {
-    {
-        __int128 v1 = std::numeric_limits<int64_t>::max();
-        std::stringstream ss;
-        ss << v1;
-        ASSERT_EQ(ss.str(), "9223372036854775807");
-    }
-
-    {
-        __int128 v2 = MAX_INT128;
-        std::stringstream ss;
-        ss << v2;
-        EXPECT_EQ(ss.str(), "170141183460469231731687303715884105727");
-    }
-
-    {
-        __int128 v2 = MIN_INT128;
-        std::stringstream ss;
-        ss << v2;
-        EXPECT_EQ(ss.str(), "-170141183460469231731687303715884105728");
     }
 }
 

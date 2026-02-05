@@ -376,7 +376,7 @@ set(EXEC_FILES
         ./util/thrift_customize_test.cpp
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
-        ./util/int96_test.cpp
+        ./base/types/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
         ./util/gc_helper_test.cpp
@@ -424,6 +424,7 @@ endif ()
 
 add_subdirectory(base)
 add_subdirectory(common)
+add_subdirectory(types)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
@@ -455,7 +456,7 @@ SET(DW_TEST_FILES
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
     ./storage/datum_variant_test.cpp
-    ./storage/decimal12_test.cpp
+    ./base/types/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
     ./storage/delete_predicates_test.cpp

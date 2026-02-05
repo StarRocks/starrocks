@@ -15,8 +15,8 @@
 #pragma once
 
 #include "base/string/slice.h"
+#include "base/types/int96.h"
 #include "gen_cpp/parquet_types.h"
-#include "util/int96.h"
 
 namespace starrocks::parquet {
 

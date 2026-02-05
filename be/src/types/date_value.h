@@ -19,8 +19,8 @@
 #include <string>
 
 #include "base/string/slice.h"
+#include "base/types/uint24.h"
 #include "runtime/time_types.h"
-#include "storage/uint24.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {

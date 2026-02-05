@@ -36,7 +36,7 @@
 
 #include "base/container/raw_container.h"
 #include "base/string/slice.h"
-#include "storage/uint24.h"
+#include "base/types/uint24.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
 

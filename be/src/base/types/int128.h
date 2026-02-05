@@ -14,9 +14,23 @@
 
 #pragma once
 
+#include <ostream>
+#include <string>
+
+#include "base/utility/integer_util.h"
+
 namespace starrocks {
 
 using int128_t = __int128;
 using uint128_t = unsigned __int128;
+
+class LargeIntValue {
+public:
+    static std::string to_string(__int128 value) { return integer_to_string<__int128>(value); }
+};
+
+inline std::ostream& operator<<(std::ostream& os, __int128 const& value) {
+    return os << LargeIntValue::to_string(value);
+}
 
 } // namespace starrocks

@@ -16,7 +16,7 @@
 
 #include <limits>
 
-#include "base/int256.h"
+#include "base/types/int256.h"
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
 #include "column/json_column.h"

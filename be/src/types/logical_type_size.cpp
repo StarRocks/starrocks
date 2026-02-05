@@ -12,23 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/int96.h"
-
-#include "types/large_int_value.h"
+#include "column/type_traits.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
-std::string int96_t::to_string() const {
-    std::stringstream os;
-    __int128 val128 = ((__int128)hi << 64) + lo;
-    starrocks::operator<<(os, val128);
-    return os.str();
-}
+struct FixedLengthTypeGetter {
+    template <LogicalType ltype>
+    size_t operator()() {
+        return RunTimeFixedTypeLength<ltype>::value;
+    }
+};
 
-std::ostream& operator<<(std::ostream& os, const int96_t& val) {
-    __int128 val128 = ((__int128)val.hi << 64) + val.lo;
-    starrocks::operator<<(os, val128);
-    return os;
+size_t get_size_of_fixed_length_type(LogicalType ltype) {
+    return type_dispatch_all(ltype, FixedLengthTypeGetter());
 }
 
 } // namespace starrocks

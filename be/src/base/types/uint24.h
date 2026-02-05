@@ -22,10 +22,9 @@
 #include <iostream>
 #include <string>
 
-namespace starrocks {
+#include "base/types/int128.h"
 
-typedef __int128 int128_t;
-typedef unsigned __int128 uint128_t;
+namespace starrocks {
 
 // 24bit int type, used to store date type in storage
 struct uint24_t {

@@ -41,8 +41,8 @@
 #include "base/bit/bit_stream_utils.h"
 #include "base/bit/bit_stream_utils.inline.h"
 #include "base/string/faststring.h"
+#include "base/types/uint24.h"
 #include "storage/olap_common.h"
-#include "storage/uint24.h"
 
 namespace starrocks {
 

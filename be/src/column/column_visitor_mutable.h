@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include "base/types/decimal12.h"
+#include "base/types/int96.h"
+#include "base/types/uint24.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "runtime/decimalv2_value.h"
-#include "storage/decimal12.h"
-#include "storage/uint24.h"
-#include "util/int96.h"
 
 namespace starrocks {
 class ColumnVisitorMutable {

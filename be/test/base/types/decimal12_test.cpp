@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/decimal12.h"
+#include "base/types/decimal12.h"
 
 #include <gtest/gtest.h>
 

@@ -42,8 +42,8 @@
 #include <sstream>
 #include <string>
 
+#include "base/types/decimal12.h"
 #include "common/logging.h"
-#include "storage/decimal12.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {

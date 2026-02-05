@@ -26,6 +26,9 @@
 
 #include "base/phmap/phmap.h"
 #include "base/simd/simd.h"
+#include "base/types/decimal12.h"
+#include "base/types/int96.h"
+#include "base/types/uint24.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -37,14 +40,11 @@
 #include "gutil/casts.h"
 #include "runtime/decimalv2_value.h"
 #include "storage/chunk_helper.h"
-#include "storage/decimal12.h"
-#include "storage/uint24.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/timestamp_value.h"
 #include "util/date_func.h"
-#include "util/int96.h"
 
 namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {

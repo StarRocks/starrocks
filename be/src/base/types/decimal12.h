@@ -35,10 +35,11 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 
-#include "common/status.h"
+#include "base/status.h"
 
 namespace starrocks {
 

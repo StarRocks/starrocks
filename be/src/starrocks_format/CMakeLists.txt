@@ -36,6 +36,7 @@ set(STARROCKS_LIBS
     Storage
     Rowset
     Runtime
+    TypesCore
     Types
     Util
     Script

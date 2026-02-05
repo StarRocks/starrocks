@@ -74,7 +74,6 @@ set(UTIL_FILES
   threadpool.cpp
   trace.cpp
   trace_metrics.cpp
-  int96.cpp
   hdfs_util.cpp
   gc_helper.cpp
   lru_cache.cpp
