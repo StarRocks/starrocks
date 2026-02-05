@@ -461,8 +461,9 @@ public class CreateTableAnalyzerTest {
 
         testInvalidComplexDefault(
                 "c4 STRUCT<id INT, name STRING> DEFAULT row('not_int', 123, 456)",
-                "Invalid default value for 'c4': Default value type struct<col1 varchar, col2 tinyint(4), col3 smallint(6)> " +
-                        "cannot be cast to column type struct<id int(11), name varchar(65533)>");
+                "Invalid default value for 'c4': Default value type struct<`col1` varchar, `col2` tinyint(4), " +
+                        "`col3` smallint(6)> cannot be cast to column type struct<`id` int(11), `name` " +
+                        "varchar(65533)>");
 
         testInvalidComplexDefault("c1 ARRAY<STRUCT<id INT>> DEFAULT [row(1, 'extra_field')]", "");
 
