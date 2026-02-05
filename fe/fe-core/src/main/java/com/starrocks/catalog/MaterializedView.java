@@ -29,8 +29,6 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
-import com.starrocks.catalog.LightWeightDeltaLakeTable;
-import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
@@ -1324,6 +1322,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private void onReload(boolean isReloadAsync,
                           boolean desiredActive,
                           boolean isThrowException) {
+        // Only skip reload during FE startup/checkpoint scenarios (isReloadAsync=true).
+        if (isReloadAsync && hasReloaded()) {
+            return;
+        }
         try {
             // set inactive first to avoid inconsistent state during reloading
             this.active = false;
@@ -1361,6 +1363,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (isReloadAsync) {
             CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
                 try {
+                    reloadBaseTableInfosBlocking();
+
                     InactiveReason reason = checkIsActiveOnLoadBlocking();
                     setInActiveReason(reason);
                 } catch (Throwable e) {
@@ -1372,6 +1376,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 return null;
             });
         } else {
+            // Sync path: don't catch exceptions here - let them propagate to onReload
+            // so isThrowException can work correctly for onCreate scenarios.
+            reloadBaseTableInfosBlocking();
             InactiveReason reason = checkIsActiveOnLoadBlocking();
             setInActiveReason(reason);
         }
@@ -1409,17 +1416,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         long startMillis = System.currentTimeMillis();
         // analyze partition info
         analyzePartitionInfo();
-        // analyze mv partition exprs
-        analyzePartitionExprs();
-
-        if (tableProperty != null) {
-            tableProperty.buildConstraint();
-        }
-        
-        // register constraints from global state manager
-        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
-        globalConstraintManager.registerConstraint(this);
-
         // register into mv metrics
         try {
             MaterializedViewMetricsRegistry.getInstance().registerMetricsEntity(getMvId());
@@ -1434,7 +1430,26 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Check whether this materialized view can be active on load.
+     * This method needs to visit external catalog to analyze partition exprs,
+     * so it should be called in an async load thread.
+     */
+    private void reloadBaseTableInfosBlocking() {
+        // analyze mv partition exprs
+        analyzePartitionExprs();
+
+        if (tableProperty != null) {
+            tableProperty.buildConstraint();
+        }
+
+        // register constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.registerConstraint(this);
+    }
+
+    /**
+     * Check whether this materialized view can be active on load, since this method may
+     * visit external systems and recursively reload base mvs, it may cost some time.
+     *
      * @return InactiveReason, which contains whether this mv is active and the reason if not active.
      */
     private InactiveReason checkIsActiveOnLoadBlocking() {
