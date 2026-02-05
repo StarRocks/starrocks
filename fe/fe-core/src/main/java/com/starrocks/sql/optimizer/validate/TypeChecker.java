@@ -145,7 +145,7 @@ public class TypeChecker implements PlanValidator.Checker {
                     if (!leftColumns.containsAll(leftUsed) || !rightColumns.containsAll(rightUsed)) {
                         continue;
                     }
-                    if (!left.getType().equals(right.getType())) {
+                    if (!left.getType().matchesType(right.getType())) {
                         throw new StarRocksPlannerException(
                                 String.format("%s hash join equal predicate type mismatch: left %s, right %s, predicate: %s",
                                         PREFIX, left.getType(), right.getType(), predicate),
