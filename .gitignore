@@ -35,6 +35,7 @@ fe/mocked
 fe/ut_ports
 fe/*/target
 fe/*/bin
+fe/target/
 fe/plugin/*/target/
 fe/fe-grammar/gen
 fe/fe-grammar/src/main/antlr/com/starrocks/grammar/gen
