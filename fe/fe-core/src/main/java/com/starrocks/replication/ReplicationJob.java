@@ -774,8 +774,10 @@ public class ReplicationJob implements GsonPostProcessable {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
         for (Partition partition : table.getPartitions()) {
             Partition srcPartition = srcTable.getPartition(partition.getName(), false);
-            Preconditions.checkState(srcPartition != null,
-                    "Partition " + partition.getName() + " in table " + srcTable.getName() + " not found");
+            if (srcPartition == null) {
+                LOG.info("Partition {} in src table {} not found", partition.getName(), srcTable.getName());
+                continue;
+            }
 
             List<PhysicalPartition> physicalPartitions = getOrderedPhysicalPartitions(partition);
             List<PhysicalPartition> srcPhysicalPartitions = getOrderedPhysicalPartitions(srcPartition);
