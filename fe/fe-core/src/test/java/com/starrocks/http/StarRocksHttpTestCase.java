@@ -429,8 +429,8 @@ public abstract class StarRocksHttpTestCase {
 
     @BeforeAll
     public static void initHttpServer() throws IllegalArgException, InterruptedException {
-        ServerSocket socket = null;
         try {
+<<<<<<< HEAD
             socket = new ServerSocket(0);
             socket.setReuseAddress(true);
             HTTP_PORT = socket.getLocalPort();
@@ -448,12 +448,31 @@ public abstract class StarRocksHttpTestCase {
         }
 
         httpServer = new HttpServer(HTTP_PORT);
+=======
+            httpServer = new HttpServer(0);
+        } catch (Exception e) {
+            System.err.println("Failed to initialize HttpServer: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("HttpServer initialization failed", e);
+        }
+>>>>>>> 34969b4840 ([UT] allow OS assign free tcp port for httpserver (#68902))
         httpServer.setup();
         httpServer.start();
         // must ensure the http server started before any unit test
+        int retry = 0;
         while (!httpServer.isStarted()) {
             Thread.sleep(500);
+            retry++;
+            if (retry > 60) {
+                throw new RuntimeException("HttpServer failed to start within 30 seconds");
+            }
         }
+        HTTP_PORT = httpServer.getPort();
+        if (HTTP_PORT == 0) {
+            throw new IllegalStateException("HttpServer port is not assigned");
+        }
+        BASE_URL = "http://localhost:" + HTTP_PORT;
+        URI = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/" + TABLE_NAME;
     }
 
     @BeforeEach
