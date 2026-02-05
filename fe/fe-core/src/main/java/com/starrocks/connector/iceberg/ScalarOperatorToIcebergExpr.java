@@ -101,18 +101,36 @@ public class ScalarOperatorToIcebergExpr {
     private static final Logger LOG = LogManager.getLogger(ScalarOperatorToIcebergExpr.class);
 
     public Expression convert(List<ScalarOperator> operators, IcebergContext context) {
+        return convert(operators, context, false);
+    }
+
+    public Expression convertStrict(List<ScalarOperator> operators, IcebergContext context) {
+        return convert(operators, context, true);
+    }
+
+    public Expression convert(List<ScalarOperator> operators, IcebergContext context, boolean strict) {
         IcebergExprVisitor visitor = new IcebergExprVisitor();
         List<Expression> expressions = Lists.newArrayList();
         for (ScalarOperator operator : operators) {
             Expression filterExpr = operator.accept(visitor, context);
-            if (filterExpr != null) {
-                try {
-                    Binder.bind(context.getSchema(), filterExpr, false);
-                    expressions.add(filterExpr);
-                } catch (ValidationException e) {
-                    LOG.error("binding to the table schema failed, cannot be pushed down scanOperator: {}",
-                            operator.debugString());
+            if (filterExpr == null) {
+                if (strict) {
+                    LOG.debug("Strict mode: cannot convert operator {}", operator.debugString());
+                    return null;
                 }
+                continue;
+            }
+
+            try {
+                Binder.bind(context.getSchema(), filterExpr, false);
+                expressions.add(filterExpr);
+            } catch (ValidationException e) {
+                if (strict) {
+                    LOG.debug("Strict mode: bind failed, {}", operator.debugString());
+                    return null;
+                }
+                LOG.error("binding to the table schema failed, cannot be pushed down scanOperator: {}",
+                        operator.debugString());
             }
         }
 
