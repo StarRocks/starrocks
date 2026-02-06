@@ -33,20 +33,22 @@ public:
 
     DISALLOW_COPY_AND_MOVE(RemoteStarletLocationProvider);
 
+    std::string custom_root_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id) {
+        return join_path(root_location(tablet_id), fmt::format("db{}/{}/{}", db_id, table_id, partition_id));
+    }
+
     // build metadata root location using current rule
     // returned value has following format: `staros://{tablet_id}/db{db_id}/{table_id}/{partition_id}/meta`
     std::string metadata_root_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id) {
-        std::string partition_path = fmt::format("db{}/{}/{}", db_id, table_id, partition_id);
-        std::string custom_root_location = join_path(root_location(tablet_id), partition_path);
-        return join_path(custom_root_location, kMetadataDirectoryName);
+        std::string partition_root_path = custom_root_location(tablet_id, db_id, table_id, partition_id);
+        return join_path(partition_root_path, kMetadataDirectoryName);
     }
 
     // build metadata root location using current rule
     // returned value has following format: `staros://{tablet_id}/db{db_id}/{table_id}/{partition_id}/data`
     std::string segment_root_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id) {
-        std::string partition_path = fmt::format("db{}/{}/{}", db_id, table_id, partition_id);
-        std::string custom_root_location = join_path(root_location(tablet_id), partition_path);
-        return join_path(custom_root_location, kSegmentDirectoryName);
+        std::string partition_root_path = custom_root_location(tablet_id, db_id, table_id, partition_id);
+        return join_path(partition_root_path, kSegmentDirectoryName);
     }
 
     std::string data_file_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
@@ -61,7 +63,8 @@ public:
 
     std::string schema_file_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
                                      const std::string& file) {
-        return join_path(root_location(tablet_id), file);
+        std::string partition_root_path = custom_root_location(tablet_id, db_id, table_id, partition_id);
+        return join_path(partition_root_path, file);
     }
 
     std::string partition_directory_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id) {

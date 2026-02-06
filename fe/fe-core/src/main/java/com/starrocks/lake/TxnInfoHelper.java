@@ -37,6 +37,15 @@ public class TxnInfoHelper {
             infoPB.forcePublish = false;
         }
         infoPB.setGtid(state.getGlobalTransactionId());
+        // if restoreForcePublish is true, the txn is commited in snapshot but not publish successfully,
+        // and we need to publish it again.
+        // Some tablet may publish success and generate tablet metadata, so we set restoreGtid as gtid +1 
+        // to skip these metadatas
+        boolean restoreForcePublish = state.isRestoreForcePublish();
+        infoPB.restoreForcePublish = restoreForcePublish;
+        if (restoreForcePublish) {
+            infoPB.restoreGtid = state.getGlobalTransactionId() + 1;
+        }
         // set load ids
         if (state.getLoadIds() != null && state.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             infoPB.setLoadIds(state.getLoadIds().stream()

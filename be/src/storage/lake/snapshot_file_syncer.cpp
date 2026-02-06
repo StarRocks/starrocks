@@ -27,7 +27,8 @@ namespace starrocks::lake {
 namespace {
 
 template <typename Files, typename SrcFunc, typename DstFunc>
-Status copy_files(const Files& files, SrcFunc&& make_src, DstFunc&& make_dst, bool skip_if_exists) {
+Status copy_files(const Files& files, SrcFunc&& make_src, DstFunc&& make_dst, bool skip_if_exists,
+                  bool skip_if_not_exists) {
     for (const auto& file : files) {
         auto src_path = make_src(file);
         auto dst_path = make_dst(file);
@@ -35,6 +36,10 @@ Status copy_files(const Files& files, SrcFunc&& make_src, DstFunc&& make_dst, bo
 
         ASSIGN_OR_RETURN(auto src_fs, FileSystem::CreateSharedFromString(src_path));
         ASSIGN_OR_RETURN(auto dst_fs, FileSystem::CreateSharedFromString(dst_path));
+
+        if (skip_if_not_exists && src_fs->path_exists(src_path).is_not_found()) {
+            continue;
+        }
 
         if (skip_if_exists && dst_fs->path_exists(dst_path).ok()) {
             continue;
@@ -69,7 +74,7 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
                 return remote_starlet_location_provider->data_file_location(dst_tablet_id, db_id, table_id,
                                                                             physical_partition_id, name);
             },
-            true));
+            true, false));
 
     RETURN_IF_ERROR(copy_files(
             snapshot_info.tablet_snapshot->new_metadata_files(),
@@ -78,8 +83,9 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
                 return remote_starlet_location_provider->metadata_file_location(dst_tablet_id, db_id, table_id,
                                                                                 physical_partition_id, name);
             },
-            false));
+            false, false));
 
+    // fast schema evolution v2 don't not generate schema file any more, so the schema file may not exist in src bucket
     RETURN_IF_ERROR(copy_files(
             snapshot_info.tablet_snapshot->new_schema_files(),
             [&](const auto& name) { return join_path(location_provider->root_location(src_tablet_id), name); },
@@ -87,17 +93,16 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
                 return remote_starlet_location_provider->schema_file_location(dst_tablet_id, db_id, table_id,
                                                                               physical_partition_id, name);
             },
-            true));
+            true, true));
 #endif
     return Status::OK();
 }
 
 Status SnapshotFileSyncer::delete_partition(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
                                             int64_t physical_partition_id) {
-    auto location_provider = _env->lake_location_provider();
     auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
-#ifdef USE_STAROS
-    auto tablet_root = location_provider->root_location(tablet_id);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    auto tablet_root = remote_starlet_location_provider->root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_root));
     auto dir_path = remote_starlet_location_provider->partition_directory_location(tablet_id, db_id, table_id,
                                                                                    physical_partition_id);
@@ -107,10 +112,9 @@ Status SnapshotFileSyncer::delete_partition(int64_t tablet_id, int64_t db_id, in
 }
 
 Status SnapshotFileSyncer::delete_files(int64_t tablet_id, const ExternalClusterSnapshotLogPB& log_pb) {
-    auto location_provider = _env->lake_location_provider();
     auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
 #ifdef USE_STAROS
-    auto tablet_root = location_provider->root_location(tablet_id);
+    auto tablet_root = remote_starlet_location_provider->root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_root));
 
     std::vector<std::string> files;
@@ -131,7 +135,7 @@ Status SnapshotFileSyncer::delete_files(int64_t tablet_id, const ExternalCluster
     }
 
     for (const auto& file : files) {
-        VLOG(3) << "delete file: " << file;
+        LOG(INFO) << "delete file: " << file;
     }
 
     return fs->delete_files(files);

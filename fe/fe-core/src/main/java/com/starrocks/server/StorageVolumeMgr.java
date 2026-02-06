@@ -42,6 +42,8 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.storagevolume.StorageVolume;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -59,6 +61,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 
 public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(StorageVolumeMgr.class);
     private static final String ENABLED = "enabled";
 
     public static final String DEFAULT = "default";
@@ -66,6 +69,8 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public static final String LOCAL = "local";
 
     public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
+
+    public static final String BASE_STORAGE_VOLUME = "__base_storage_volume__";
 
     private static final String S3 = "s3";
 
@@ -218,7 +223,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     }
 
     public void replaceStorageVolume(String name, String svType, List<String> locations,
-            Map<String, String> properties, String comment) throws DdlException {
+            Map<String, String> properties, String comment, String baseStorageVolumeName) throws DdlException {
         Map<String, String> params = new HashMap<>();
         Optional<Boolean> enabled = parseProperties(properties, params);
         validateParams(svType, params);
@@ -260,6 +265,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 if (!params.isEmpty()) {
                     newStorageVolume.setCloudConfiguration(params);
                 }
+
+                if (!Strings.isNullOrEmpty(baseStorageVolumeName)) {
+                    newStorageVolume.setBaseStorageVolumeName(baseStorageVolumeName);
+                }
             } else {
                 Preconditions.checkState(locations != null, "Location is null");
                 validateLocations(svType, locations);
@@ -274,6 +283,9 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                     newStorageVolume.setVTabletGroupId(oldStorageVolume.getVTabletGroupId());
                 }
 
+                if (!Strings.isNullOrEmpty(baseStorageVolumeName)) {
+                    newStorageVolume.setBaseStorageVolumeName(baseStorageVolumeName);
+                }
                 locationChangedStorageVolumeId = newStorageVolume.getId();
             }
 
@@ -546,4 +558,6 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             throws MetaNotFoundException;
 
     public abstract boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId);
+
+    public abstract void updateBaseStorageVolumeName(String svName) throws DdlException;
 }

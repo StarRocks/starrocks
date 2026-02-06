@@ -24,6 +24,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.StarOSAgent;
@@ -33,6 +34,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.ComputeNode;
@@ -76,6 +78,12 @@ public class ExternalClusterSnapshotJobTest {
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
     private boolean initSv = false;
     private AtomicLong nextId = new AtomicLong(0);
+
+
+    @BeforeAll
+    public static void beforeAll() {
+        ExtensionManager.getInstance().loadExtensionsFromClassPath("target/classes");
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -136,6 +144,13 @@ public class ExternalClusterSnapshotJobTest {
             @Mock
             public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
                 return Lists.newArrayList();
+            }
+        };
+
+        new MockUp<ExternalClusterSnapshotJob>() {
+            @Mock
+            public ComputeResource getComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
 

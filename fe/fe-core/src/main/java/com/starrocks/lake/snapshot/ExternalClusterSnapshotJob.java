@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.storagevolume.StorageVolume;
@@ -37,6 +38,8 @@ import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TComputeNodeTablets;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -61,6 +64,8 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     public ExternalClusterSnapshotJob() {
         super(0, "", "", 0);
     }
+
+    private long feImageCreatedTimeMs = 0;
 
     public ExternalClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         super(id, snapshotName, storageVolumeName, createdTimeMs);
@@ -93,7 +98,8 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     @Override
     protected void runSnapshottingJob(SnapshotJobContext context) throws StarRocksException {
         LOG.debug("begin to snapshot cluster snapshot job. job: {}", getId());
-
+        // Record the time when FE image was created
+        feImageCreatedTimeMs = System.currentTimeMillis();
         ClusterSnapshotInfo newClusterSnapshotInfo = createImagesAndGetSnapshotInfo(context);
         setClusterSnapshotInfo(newClusterSnapshotInfo);
 
@@ -156,6 +162,12 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         try {
             createDeleteClusterSnasphotTasks();
             persistStateChange(ClusterSnapshotJobState.FINISHED);
+            // Update metric with the FE image creation time when snapshot job finishes successfully
+            if (feImageCreatedTimeMs > 0) {
+                MetricRepo.GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME.setValue(feImageCreatedTimeMs);
+            }
+            // Update success counter for external snapshot job
+            MetricRepo.COUNTER_EXTERNAL_SNAPSHOT_JOB_SUCCESS.increase(1L);
         } catch (StarRocksException e) {
             LOG.warn("failed to create delete cluster snapshot tasks when run finished job {}", getId(), e);
             persistStateChange(ClusterSnapshotJobState.ERROR);
@@ -218,6 +230,10 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             return;
         }
         try {
+            if (GlobalStateMgr.isCheckpointThread()
+                    || !GlobalStateMgr.getCurrentState().isLeader()) {
+                return;
+            }
             createUploadClusterSnapshotTasks();
         } catch (StarRocksException e) {
             LOG.warn("failed to create cluster snapshot tasks when replay external snapshot job {}", getId(), e);
@@ -235,6 +251,10 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             return;
         }
         try {
+            if (GlobalStateMgr.isCheckpointThread()
+                    || !GlobalStateMgr.getCurrentState().isLeader()) {
+                return;
+            }
             runCleaningJob(null);
         } catch (StarRocksException e) {
             LOG.warn("failed to run cleaning job when replay external snapshot job {}", getId(), e);
@@ -264,7 +284,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             // create a new id as tablet id
             long vTabletId = GlobalStateMgr.getCurrentState().getNextId();
             starOSAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, shardGroupId, properties, vTabletId,
-                            WarehouseManager.DEFAULT_RESOURCE);
+                            getComputeResource());
             sv.setVTabletGroupId(shardGroupId);
             sv.setVTabletId(vTabletId);
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr().
@@ -273,6 +293,14 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         } else {
             return sv.getVTabletId();
         }
+    }
+
+    public ComputeResource getComputeResource() {
+        String warehouseName = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getWarehouseName();
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        // if warehouse is not found, `getWarehouse` will throw exception
+        Warehouse warehouse = warehouseManager.getWarehouse(warehouseName);
+        return warehouseManager.acquireComputeResource(warehouse.getId());
     }
 
     private void createUploadClusterSnapshotTasks() throws StarRocksException {
@@ -368,7 +396,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             }
         }
         LakeAggregator lakeAggregator = new LakeAggregator();
-        ComputeNode computeNode = lakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
+        ComputeNode computeNode = lakeAggregator.chooseAggregatorNode(getComputeResource());
         if (computeNode == null) {
             return 0;
         }
@@ -380,7 +408,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
         for (Long tabletId : tabletIds) {
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, tabletId);
+                    .getComputeNodeAssignedToTablet(getComputeResource(), tabletId);
             if (computeNode == null) {
                 throw new StarRocksException("failed to get compute node for tablet " + tabletId);
             }

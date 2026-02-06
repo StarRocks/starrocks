@@ -165,6 +165,9 @@ import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
+import com.starrocks.lake.snapshot.ClusterSnapshotRestoredVersionCleaner;
+import com.starrocks.lake.snapshot.ClusterSnapshotRestoredVersionMgr;
+import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
 import com.starrocks.leader.CheckpointController;
@@ -358,6 +361,7 @@ public class GlobalStateMgr {
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
+    private FrontendDaemon clusterSnapshotRestoredVersionCleaner;
     private Daemon replayer;
     private Daemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
@@ -571,6 +575,7 @@ public class GlobalStateMgr {
     private final WarehouseIdleChecker warehouseIdleChecker;
 
     private final ClusterSnapshotMgr clusterSnapshotMgr;
+    private final ClusterSnapshotRestoredVersionMgr clusterSnapshotRestoredVersionMgr;
 
     private final SqlBlackList sqlBlackList;
     private final SqlDigestBlackList sqlDigestBlackList;
@@ -843,6 +848,8 @@ public class GlobalStateMgr {
         this.globalConstraintManager = new GlobalConstraintManager();
 
         this.clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+
+        this.clusterSnapshotRestoredVersionMgr = new ClusterSnapshotRestoredVersionMgr();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1270,6 +1277,10 @@ public class GlobalStateMgr {
         return clusterSnapshotMgr;
     }
 
+    public ClusterSnapshotRestoredVersionMgr getClusterSnapshotRestoredVersionMgr() {
+        return clusterSnapshotRestoredVersionMgr;
+    }
+
     public TabletReshardJobMgr getTabletReshardJobMgr() {
         return tabletReshardJobMgr;
     }
@@ -1356,6 +1367,8 @@ public class GlobalStateMgr {
             // 6. start task cleaner thread
             createTaskCleaner();
             createTableKeeper();
+            // 7. start cluster snapshot restored version cleaner
+            createClusterSnapshotRestoredVersionCleaner();
         } catch (Exception e) {
             try {
                 if (isFirstTimeStart) {
@@ -1480,6 +1493,12 @@ public class GlobalStateMgr {
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
+            
+            // update FE Storage configuration after loading image for restore
+            if (RunMode.isSharedDataMode() && RestoreClusterSnapshotMgr.isExternalSnapshot()) {
+                clusterSnapshotRestoredVersionMgr.init(clusterSnapshotMgr.getLastSuccFullSnapshotInfo());
+            }
+            RestoreClusterSnapshotMgr.finishRestoring();
 
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
@@ -1641,6 +1660,7 @@ public class GlobalStateMgr {
 
         if (RunMode.isSharedDataMode()) {
             clusterSnapshotMgr.start();
+            clusterSnapshotRestoredVersionCleaner.start();
         }
         reportHandler.start();
         tabletCollector.start();
@@ -2081,6 +2101,10 @@ public class GlobalStateMgr {
 
     public void createTableKeeper() {
         tableKeeper = TableKeeper.startDaemon();
+    }
+
+    public void createClusterSnapshotRestoredVersionCleaner() {
+        clusterSnapshotRestoredVersionCleaner = new ClusterSnapshotRestoredVersionCleaner(5 * 60 * 1000L);
     }
 
     public void createTxnTimeoutChecker() {

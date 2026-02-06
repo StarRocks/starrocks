@@ -154,4 +154,7 @@ public class CloudConfigurationConstants {
     public static final String HUAWEI_OBS_ACCESS_KEY_DOT = "fs.obs.access.key";
     public static final String HUAWEI_OBS_SECRET_KEY_DOT = "fs.obs.secret.key";
     public static final String HUAWEI_OBS_ENDPOINT = "fs.obs.endpoint";
+
+    // Base Storage Volume Key
+    public static final String BASE_STOAGE_VOLUME_NAME = "base_fs_name";
 }

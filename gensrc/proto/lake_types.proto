@@ -371,6 +371,8 @@ message TxnInfoPB {
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
     repeated PUniqueId load_ids = 8;
+    optional bool restore_force_publish = 9; // Txn from snapshot restore, publish directly succeed
+    optional int64 restore_gtid = 10;
 }
 
 message SplittingTabletInfoPB {

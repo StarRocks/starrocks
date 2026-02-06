@@ -314,9 +314,9 @@ public:
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         // local persistent index will update index version, so we need to load first
         // still need prepre primary index even there is an empty compaction
-        if (_index_entry == nullptr &&
-            (_has_empty_compaction || (_metadata->enable_persistent_index() &&
-                                       _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
+        if (_index_entry == nullptr && (_has_empty_compaction || _has_empty_publish ||
+                                        (_metadata->enable_persistent_index() &&
+                                         _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
             // get lock to avoid gc
             _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
             DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });

@@ -22,6 +22,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
+import com.starrocks.lake.snapshot.ExternalClusterSnapshotJob;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -32,6 +34,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
@@ -53,6 +56,7 @@ import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_SNAPSHOT_SCOPE;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_WAREHOUSE;
 
 // only used for AUTOMATED snapshot for now
 public class ClusterSnapshotMgr implements GsonPostProcessable {
@@ -111,9 +115,26 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return RunMode.isSharedDataMode() && storageVolumeName != null;
     }
 
+    public boolean isExternalSnapshot() {
+        return properties != null && properties.get(PROPERTIES_SNAPSHOT_SCOPE) != null && 
+                properties.get(PROPERTIES_SNAPSHOT_SCOPE).equalsIgnoreCase("external");
+    }
+
+    public String getWarehouseName() {
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (properties != null && properties.get(PROPERTIES_WAREHOUSE) != null) {
+            warehouseName = properties.get(PROPERTIES_WAREHOUSE);
+        }
+        return warehouseName;
+    }
+
     // Turn off automated snapshot, use stmt for extension in future
     public void setAutomatedSnapshotOff(AdminSetAutomatedSnapshotOffStmt stmt) {
-        clearFinishedAutomatedClusterSnapshot(null);
+        if (isExternalSnapshot()) {
+            clearFinishedAutomatedClusterSnapshotExceptLast();
+        } else {
+            clearFinishedAutomatedClusterSnapshot(null);
+        }
 
         ClusterSnapshotLog log = new ClusterSnapshotLog();
         log.setAutomatedSnapshotOff();
@@ -125,11 +146,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     protected void setAutomatedSnapshotOff() {
         // drop AUTOMATED snapshot
         storageVolumeName = null;
-    }
-
-    public boolean isExternalSnapshot() {
-        return properties != null && properties.get(PROPERTIES_SNAPSHOT_SCOPE) != null && 
-                properties.get(PROPERTIES_SNAPSHOT_SCOPE).equalsIgnoreCase("external");
+        if (properties != null) {
+            properties.clear();
+        }
+        lastSuccFullSnapshotInfo = null;
     }
 
     public void setAutomatedSnapshotInterval(AdminAlterAutomatedSnapshotIntervalStmt stmt) {
@@ -257,6 +277,9 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             addSnapshotJob(job);
         });
 
+        if (isExternalSnapshot()) {
+            MetricRepo.COUNTER_EXTERNAL_SNAPSHOT_JOB_NUM.increase(1L);
+        }
         LOG.info("Create automated cluster snapshot job successfully, job id: {}, snapshot name: {}, scope: {}",
                 id, snapshotName, isExternalSnapshot() ? "external" : "local");
         return job;

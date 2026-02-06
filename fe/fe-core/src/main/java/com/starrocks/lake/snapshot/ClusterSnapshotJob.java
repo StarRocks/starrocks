@@ -235,7 +235,7 @@ public class ClusterSnapshotJob implements Writable {
         CheckpointController feController = context.getFeController();
         CheckpointController starMgrController = context.getStarMgrController();
         long feCheckpointJournalId = getFeJournalId();
-        long starMgrCheckpointJournalId = getStarMgrJournalId();
+        long starMgrCheckpointJournalId = getStarMgrJournalId();      
 
         long feImageJournalId = feController.getImageJournalId();
         if (feImageJournalId < feCheckpointJournalId) {
@@ -320,6 +320,10 @@ public class ClusterSnapshotJob implements Writable {
             LOG.warn("failed to run cluster snapshot job {}", getId(), e);
             setErrMsg(e.getMessage());
             persistStateChange(ClusterSnapshotJobState.ERROR);
+            // Update failed counter for external snapshot job
+            if (this instanceof ExternalClusterSnapshotJob) {
+                com.starrocks.metric.MetricRepo.COUNTER_EXTERNAL_SNAPSHOT_JOB_FAILED.increase(1L);
+            }
         }
     }
 

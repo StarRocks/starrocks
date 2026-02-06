@@ -275,6 +275,12 @@ public final class MetricRepo {
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
+    // BCDR Mertic
+    public static LongCounterMetric COUNTER_EXTERNAL_SNAPSHOT_JOB_NUM;
+    public static LongCounterMetric COUNTER_EXTERNAL_SNAPSHOT_JOB_SUCCESS;
+    public static LongCounterMetric COUNTER_EXTERNAL_SNAPSHOT_JOB_FAILED;
+    public static GaugeMetricImpl<Long> GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME;
+
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
@@ -701,6 +707,22 @@ public final class MetricRepo {
         COUNTER_VACUUM_FILES_BYTES = new LongCounterMetric("vacuum_files_bytes", MetricUnit.BYTES,
                 "total file bytes have been vacuumed");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_BYTES);
+
+        // BCDR/External Snapshot Metrics
+        COUNTER_EXTERNAL_SNAPSHOT_JOB_NUM = new LongCounterMetric("external_snapshot_job_num", MetricUnit.REQUESTS,
+                "total number of external snapshot jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EXTERNAL_SNAPSHOT_JOB_NUM);
+        COUNTER_EXTERNAL_SNAPSHOT_JOB_SUCCESS = new LongCounterMetric("external_snapshot_job_success", MetricUnit.REQUESTS,
+                "total number of successful external snapshot jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EXTERNAL_SNAPSHOT_JOB_SUCCESS);
+        COUNTER_EXTERNAL_SNAPSHOT_JOB_FAILED = new LongCounterMetric("external_snapshot_job_failed", MetricUnit.REQUESTS,
+                "total number of failed external snapshot jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EXTERNAL_SNAPSHOT_JOB_FAILED);
+        GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME = new GaugeMetricImpl<>("external_last_success_snapshot_time_ms",
+                MetricUnit.MILLISECONDS,
+                "timestamp of last successful external snapshot job when FE image was created");
+        GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME.setValue(0L);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME);
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));

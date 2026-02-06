@@ -1211,4 +1211,82 @@ public class SharedDataStorageVolumeMgrTest {
 
         svm.removeStorageVolume(storageVolumeName);
     }
+
+    @Test
+    public void testUpdateBaseStorageVolumeName() throws DdlException, AlreadyExistsException {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        // Create multiple storage volumes
+        String baseSvName = "base_sv";
+        String sv1Name = "sv1";
+        String sv2Name = "sv2";
+
+        svm.createStorageVolume(baseSvName, "S3", locations, storageParams, Optional.empty(), "");
+        svm.createStorageVolume(sv1Name, "S3", locations, storageParams, Optional.empty(), "");
+        svm.createStorageVolume(sv2Name, "S3", locations, storageParams, Optional.empty(), "");
+
+        // Get storage volume IDs and FileStoreInfo before creating new mock
+        String baseSvId = svm.getStorageVolumeByName(baseSvName).getId();
+        String sv1Id = svm.getStorageVolumeByName(sv1Name).getId();
+        String sv2Id = svm.getStorageVolumeByName(sv2Name).getId();
+        FileStoreInfo baseSvFsInfo = svm.getStorageVolumeByName(baseSvName).toFileStoreInfo();
+        FileStoreInfo sv1FsInfo = svm.getStorageVolumeByName(sv1Name).toFileStoreInfo();
+        FileStoreInfo sv2FsInfo = svm.getStorageVolumeByName(sv2Name).toFileStoreInfo();
+
+        // Mock listFileStore to return all storage volumes
+        // This mock needs to maintain state with updateFileStore
+        new MockUp<StarOSAgent>() {
+            Map<String, FileStoreInfo> fileStores = new HashMap<>();
+
+            {
+                // Initialize fileStores with existing storage volumes
+                fileStores.put(baseSvId, baseSvFsInfo);
+                fileStores.put(sv1Id, sv1FsInfo);
+                fileStores.put(sv2Id, sv2FsInfo);
+            }
+
+            @Mock
+            public List<FileStoreInfo> listFileStore() throws DdlException {
+                return new ArrayList<>(fileStores.values());
+            }
+
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                for (FileStoreInfo fsInfo : fileStores.values()) {
+                    if (fsInfo.getFsName().equals(fsName)) {
+                        return fsInfo;
+                    }
+                }
+                return null;
+            }
+
+            @Mock
+            public FileStoreInfo getFileStore(String fsKey) {
+                return fileStores.get(fsKey);
+            }
+
+            @Mock
+            public void updateFileStore(FileStoreInfo fsInfo) {
+                fileStores.put(fsInfo.getFsKey(), fsInfo);
+            }
+        };
+
+        // Update base storage volume name
+        svm.updateBaseStorageVolumeName(baseSvName);
+
+        // Verify that other storage volumes have been updated (excluding baseSvName itself)
+        StorageVolume sv1 = svm.getStorageVolumeByName(sv1Name);
+        StorageVolume sv2 = svm.getStorageVolumeByName(sv2Name);
+        StorageVolume baseSv = svm.getStorageVolumeByName(baseSvName);
+
+        Assertions.assertEquals(baseSvName, sv1.getBaseStorageVolumeName());
+        Assertions.assertEquals(baseSvName, sv2.getBaseStorageVolumeName());
+        // Base storage volume itself should not be updated
+        Assertions.assertNull(baseSv.getBaseStorageVolumeName());
+    }
 }

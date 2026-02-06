@@ -472,7 +472,8 @@ public class ShowExecutorSimpleTest {
         };
 
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        Deencapsulation.invoke(clusterSnapshotMgr, "setAutomatedSnapshotOn", "builtin_storage_volume", 86400L);
+        Deencapsulation.invoke(clusterSnapshotMgr, "setAutomatedSnapshotOn", "builtin_storage_volume", 86400L,
+                    Maps.newHashMap(Collections.emptyMap()));
 
         long createdTimeMs = 1700000000000L;
         ClusterSnapshotJob job = new ClusterSnapshotJob(1L,

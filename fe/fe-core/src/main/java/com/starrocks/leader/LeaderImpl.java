@@ -266,7 +266,8 @@ public class LeaderImpl {
                         && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
                         && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT
                         && taskType != TTaskType.UPDATE_SCHEMA
-                        && taskType != TTaskType.TABLET_RESTORE) {
+                        && taskType != TTaskType.TABLET_RESTORE
+                        && taskType != TTaskType.EXTERNAL_CLUSTER_SNAPSHOT) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {

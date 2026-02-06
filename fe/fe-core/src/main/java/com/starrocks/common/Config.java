@@ -4083,6 +4083,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int automated_cluster_snapshot_schedule_interval_millisecond = 30000;
 
+    @ConfField(mutable = true)
+    public static boolean skip_publish_version = false;
+
     /**
      * The URL to a JWKS service or a local file in the conf dir
      */

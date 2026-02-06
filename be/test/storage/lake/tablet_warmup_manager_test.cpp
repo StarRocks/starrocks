@@ -19,6 +19,7 @@
 
 #include <random>
 
+#include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/scoped_updater.h"
@@ -30,7 +31,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "test_util.h"
-#include "util/await.h"
 #include "util/filesystem_util.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
@@ -172,7 +172,7 @@ static void write_data_and_increase_visible_version(TabletContext& ctx, TabletMa
         ASSERT_OK(writer->write(chunk0));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        auto files = writer->segments();
 
         // add rowset metadata
         auto* rowset = tablet_meta->add_rowsets();
@@ -180,9 +180,9 @@ static void write_data_and_increase_visible_version(TabletContext& ctx, TabletMa
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add(std::string(file.path));
+            segs_size->Add(file.size.value());
         }
         writer->close();
     }

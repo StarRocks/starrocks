@@ -103,4 +103,48 @@ public class ClusterSnapshotConfigTest {
         storageVolume1.setComment(storageVolume2.getComment());
         storageVolume1.setProperties(storageVolume2.getProperties());
     }
+
+    @Test
+    public void testLoadExternalClusterSnapshotFromFile() {
+        ClusterSnapshotConfig config = ClusterSnapshotConfig.load("src/test/resources/conf/external_cluster_snapshot.yaml");
+
+        ClusterSnapshotConfig.ClusterSnapshot clusterSnapshot = config.getClusterSnapshot();
+        Assertions.assertNotNull(clusterSnapshot);
+        // basic snapshot fields
+        Assertions.assertEquals(
+                "s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image/automated_cluster_snapshot_1704038400000",
+                clusterSnapshot.getClusterSnapshotPath());
+        Assertions.assertEquals("my_s3_volume", clusterSnapshot.getStorageVolumeName());
+        Assertions.assertTrue(clusterSnapshot.isExternalSnapshot());
+
+        // snapshot_storage_volume section
+        ClusterSnapshotConfig.StorageVolume snapshotVolume = config.getSnapshotStorageVolume();
+        Assertions.assertNotNull(snapshotVolume);
+        Assertions.assertEquals("my_s3_volume", snapshotVolume.getName());
+        Assertions.assertEquals("S3", snapshotVolume.getType());
+        Assertions.assertEquals("s3://defaultbucket/test/", snapshotVolume.getLocation());
+        Assertions.assertEquals("snapshot_volume", snapshotVolume.getComment());
+        Assertions.assertEquals(4, snapshotVolume.getProperties().size());
+        Assertions.assertEquals("us-west-2", snapshotVolume.getProperties().get("aws.s3.region"));
+        Assertions.assertEquals("https://s3.us-west-2.amazonaws.com",
+                snapshotVolume.getProperties().get("aws.s3.endpoint"));
+        Assertions.assertEquals("xxxxxxxxxx", snapshotVolume.getProperties().get("aws.s3.access_key"));
+        Assertions.assertEquals("yyyyyyyyyy", snapshotVolume.getProperties().get("aws.s3.secret_key"));
+
+        // storage_volumes section (restore targets), locations must differ from snapshotVolume
+        Assertions.assertEquals(2, config.getStorageVolumes().size());
+        ClusterSnapshotConfig.StorageVolume restoreVolume1 = config.getStorageVolumes().get(0);
+        Assertions.assertEquals("my_s3_volume", restoreVolume1.getName());
+        Assertions.assertEquals("S3", restoreVolume1.getType());
+        Assertions.assertEquals("s3://defaultbucket_restore/test/", restoreVolume1.getLocation());
+        Assertions.assertNotEquals(snapshotVolume.getLocation(), restoreVolume1.getLocation());
+
+        ClusterSnapshotConfig.StorageVolume restoreVolume2 = config.getStorageVolumes().get(1);
+        Assertions.assertEquals("my_hdfs_volume", restoreVolume2.getName());
+        Assertions.assertEquals("HDFS", restoreVolume2.getType());
+        Assertions.assertEquals("hdfs://127.0.0.1:9000/sr/test/", restoreVolume2.getLocation());
+
+        // onLoad() should have chosen snapshot_storage_volume for clusterSnapshot
+        Assertions.assertSame(snapshotVolume, clusterSnapshot.getStorageVolume());
+    }
 }

@@ -37,11 +37,13 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public class RestoreClusterSnapshotMgr {
     private static final Logger LOG = LogManager.getLogger(RestoreClusterSnapshotMgr.class);
 
     private static RestoreClusterSnapshotMgr instance;
+    
 
     private ClusterSnapshotConfig config;
     private boolean oldStartWithIncompleteMeta;
@@ -80,6 +82,14 @@ public class RestoreClusterSnapshotMgr {
         return self.config;
     }
 
+    public static boolean isExternalSnapshot() {
+        RestoreClusterSnapshotMgr self = instance;
+        if (self == null || self.config.getClusterSnapshot() == null) {
+            return false;
+        }
+        return self.config.getClusterSnapshot().isExternalSnapshot();
+    }
+
     public static void finishRestoring() throws StarRocksException {
         RestoreClusterSnapshotMgr self = instance;
         if (self == null) {
@@ -90,6 +100,7 @@ public class RestoreClusterSnapshotMgr {
             self.updateFrontends();
             self.updateComputeNodes();
             self.updateStorageVolumes();
+            self.disableAutomatedSnapshot();
         } finally {
             self.rollbackConfig();
             instance = null;
@@ -237,6 +248,24 @@ public class RestoreClusterSnapshotMgr {
     }
 
     private void updateStorageVolumes() throws StarRocksException {
+        if (isExternalSnapshot()) {
+            ClusterSnapshotConfig.StorageVolume snapshotStorageVolume = config.getSnapshotStorageVolume();
+            StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            String snapshotStorageVolumeName = StorageVolumeMgr.BASE_STORAGE_VOLUME;
+            if (storageVolumeMgr.getStorageVolumeByName(snapshotStorageVolumeName) == null) {
+                LOG.info("Create snapshot storage volume {}", snapshotStorageVolumeName);
+                storageVolumeMgr.createStorageVolume(snapshotStorageVolumeName, snapshotStorageVolume.getType(),
+                        Collections.singletonList(snapshotStorageVolume.getLocation()), snapshotStorageVolume.getProperties(), 
+                        Optional.of(true), snapshotStorageVolume.getComment());
+            } else {
+                LOG.info("Replace snapshot storage volume {}", snapshotStorageVolumeName);
+                storageVolumeMgr.replaceStorageVolume(snapshotStorageVolumeName, snapshotStorageVolume.getType(),
+                        Collections.singletonList(snapshotStorageVolume.getLocation()), snapshotStorageVolume.getProperties(), 
+                        snapshotStorageVolume.getComment(), "");
+            }
+            storageVolumeMgr.updateBaseStorageVolumeName(snapshotStorageVolumeName);
+        }
+
         List<ClusterSnapshotConfig.StorageVolume> storageVolumes = config.getStorageVolumes();
         if (storageVolumes == null) {
             return;
@@ -247,14 +276,26 @@ public class RestoreClusterSnapshotMgr {
         try {
             StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
             for (ClusterSnapshotConfig.StorageVolume storageVolume : storageVolumes) {
+                if (storageVolume.getName().equalsIgnoreCase(StorageVolumeMgr.BASE_STORAGE_VOLUME)) {
+                    continue;
+                }
                 LOG.info("Update storage volume {}", storageVolume.getName());
                 List<String> locations = storageVolume.getLocation() == null ? null
                         : Collections.singletonList(storageVolume.getLocation());
+                String baseStorageVolumeName = "";
+                if (isExternalSnapshot()) {
+                    baseStorageVolumeName = StorageVolumeMgr.BASE_STORAGE_VOLUME;
+                }
                 storageVolumeMgr.replaceStorageVolume(storageVolume.getName(), storageVolume.getType(),
-                        locations, storageVolume.getProperties(), storageVolume.getComment());
+                        locations, storageVolume.getProperties(), storageVolume.getComment(), baseStorageVolumeName);
             }
         } finally {
             com.staros.util.Config.STARMGR_REPLACE_FILESTORE_ENABLED = oldValue;
         }
+    }
+
+    private void disableAutomatedSnapshot() {
+        ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+        clusterSnapshotMgr.setAutomatedSnapshotOff();
     }
 }

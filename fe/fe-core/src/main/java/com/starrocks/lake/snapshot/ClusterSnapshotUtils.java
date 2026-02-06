@@ -45,6 +45,10 @@ public class ClusterSnapshotUtils {
         }
 
         StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getStorageVolumeBySnapshotJob(job);
+        // storage volume may be deleted.
+        if (sv == null) {
+            return;
+        }
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
         HdfsUtil.deletePath(snapshotImagePath, sv.getProperties());
     }

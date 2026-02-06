@@ -49,6 +49,9 @@ public class ClusterSnapshotConfig {
         @JsonProperty("storage_volume_name")
         private String storageVolumeName;
 
+        @JsonProperty("snapshot_scope")
+        private String snapshotScope;
+
         private StorageVolume storageVolume;
 
         public String getClusterSnapshotPath() {
@@ -73,6 +76,18 @@ public class ClusterSnapshotConfig {
 
         public void setStorageVolume(StorageVolume storageVolume) {
             this.storageVolume = storageVolume;
+        }
+
+        public String getSnapshotScope() {
+            return snapshotScope;
+        }
+
+        public void setSnapshotScope(String snapshotScope) {
+            this.snapshotScope = snapshotScope;
+        }
+
+        public boolean isExternalSnapshot() {
+            return snapshotScope != null && snapshotScope.equalsIgnoreCase("external");
         }
     }
 
@@ -277,6 +292,11 @@ public class ClusterSnapshotConfig {
     @JsonProperty("cluster_snapshot")
     private ClusterSnapshot clusterSnapshot;
 
+    // the storage volume for storing snapshot data, and external cluster snapshot will use 
+    // this storage volume as base storage volume
+    @JsonProperty("snapshot_storage_volume")
+    private StorageVolume snapshotStorageVolume;
+
     @JsonProperty("frontends")
     private List<Frontend> frontends;
 
@@ -288,6 +308,10 @@ public class ClusterSnapshotConfig {
 
     public ClusterSnapshot getClusterSnapshot() {
         return clusterSnapshot;
+    }
+
+    public StorageVolume getSnapshotStorageVolume() {
+        return snapshotStorageVolume;
     }
 
     public List<Frontend> getFrontends() {
@@ -304,18 +328,37 @@ public class ClusterSnapshotConfig {
 
     private void onLoad() {
         if (clusterSnapshot != null) {
-            Preconditions.checkNotNull(storageVolumes,
-                    "Storage volume " + clusterSnapshot.getStorageVolumeName() + " not found");
+            if (clusterSnapshot.isExternalSnapshot()) {
+                Preconditions.checkNotNull(snapshotStorageVolume,
+                        "Snapshot storage volume not found");
+                String snapshotLocation = snapshotStorageVolume.getLocation();
+                Preconditions.checkNotNull(snapshotLocation,
+                        "Snapshot storage volume location not found");
+                Preconditions.checkNotNull(storageVolumes,
+                            "Storage volume " + clusterSnapshot.getStorageVolumeName() + " not found");
+                for (StorageVolume storageVolume : storageVolumes) {
+                    String volumeLocation = storageVolume.getLocation();
+                    Preconditions.checkNotNull(volumeLocation,
+                                "Storage volume location not found");
+                    Preconditions.checkState(!snapshotLocation.equalsIgnoreCase(volumeLocation),
+                            "Snapshot storage volume and storage volume " + storageVolume.getName() +
+                            " have the same location: %s", snapshotLocation);
+                }
+                clusterSnapshot.setStorageVolume(snapshotStorageVolume);
+            } else {
+                Preconditions.checkNotNull(storageVolumes,
+                        "Storage volume " + clusterSnapshot.getStorageVolumeName() + " not found");
 
-            StorageVolume storageVolume = storageVolumes.stream()
-                    .filter(sv -> sv.getName().equals(clusterSnapshot.getStorageVolumeName()))
-                    .findFirst()
-                    .orElse(null);
+                StorageVolume storageVolume = storageVolumes.stream()
+                        .filter(sv -> sv.getName().equals(clusterSnapshot.getStorageVolumeName()))
+                        .findFirst()
+                        .orElse(null);
 
-            Preconditions.checkNotNull(storageVolume,
-                    "Storage volume " + clusterSnapshot.getStorageVolumeName() + " not found");
+                Preconditions.checkNotNull(storageVolume,
+                            "Storage volume " + clusterSnapshot.getStorageVolumeName() + " not found");
 
-            clusterSnapshot.setStorageVolume(storageVolume);
+                clusterSnapshot.setStorageVolume(storageVolume);
+            }
         }
     }
 

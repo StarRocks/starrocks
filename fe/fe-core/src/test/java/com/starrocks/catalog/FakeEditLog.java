@@ -64,6 +64,7 @@ import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
 import com.starrocks.persist.ClusterSnapshotLog;
+import com.starrocks.persist.ClusterSnapshotRestoredVersionLog;
 import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
@@ -952,6 +953,11 @@ public class FakeEditLog extends MockUp<EditLog> {
 
     @Mock
     public void logClusterSnapshotLog(ClusterSnapshotLog info, WALApplier walApplier) {
+        apply(walApplier, info);
+    }
+
+    @Mock
+    public void logClusterSnapshotRestoredVersion(ClusterSnapshotRestoredVersionLog info, WALApplier walApplier) {
         apply(walApplier, info);
     }
 

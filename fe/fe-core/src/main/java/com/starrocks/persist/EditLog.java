@@ -346,26 +346,24 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
-                    ChangeMaterializedViewRefreshSchemeLog log =
-                            (ChangeMaterializedViewRefreshSchemeLog) journal.data();
+                    ChangeMaterializedViewRefreshSchemeLog log = (ChangeMaterializedViewRefreshSchemeLog) journal
+                            .data();
                     globalStateMgr.getAlterJobMgr().replayChangeMaterializedViewRefreshScheme(log);
                     break;
                 }
                 case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES: {
-                    ModifyTablePropertyOperationLog log =
-                            (ModifyTablePropertyOperationLog) journal.data();
+                    ModifyTablePropertyOperationLog log = (ModifyTablePropertyOperationLog) journal.data();
                     globalStateMgr.getLocalMetastore().replayAlterMaterializedViewProperties(log);
                     break;
                 }
                 case OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS: {
-                    AlterMaterializedViewStatusLog log =
-                            (AlterMaterializedViewStatusLog) journal.data();
+                    AlterMaterializedViewStatusLog log = (AlterMaterializedViewStatusLog) journal.data();
                     globalStateMgr.getAlterJobMgr().replayAlterMaterializedViewStatus(log);
                     break;
                 }
                 case OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS: {
-                    AlterMaterializedViewBaseTableInfosLog log =
-                            (AlterMaterializedViewBaseTableInfosLog) journal.data();
+                    AlterMaterializedViewBaseTableInfosLog log = (AlterMaterializedViewBaseTableInfosLog) journal
+                            .data();
                     globalStateMgr.getAlterJobMgr().replayAlterMaterializedViewBaseTableInfos(log);
                     break;
                 }
@@ -512,7 +510,8 @@ public class EditLog {
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
                     DropFrontendInfo dropFrontendInfo = (DropFrontendInfo) journal.data();
                     globalStateMgr.getNodeMgr().replayDropFrontend(dropFrontendInfo);
-                    if (dropFrontendInfo.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
+                    if (dropFrontendInfo.getNodeName()
+                            .equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
                         throw new JournalInconsistentException("current fe "
                                 + dropFrontendInfo.getNodeName() + " is removed. will exit");
                     }
@@ -566,7 +565,8 @@ public class EditLog {
                 }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
                     final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.data();
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .replayUpsertTransactionStateBatch(stateBatch);
                     LOG.debug("opcode: {}, txn ids: {}", opCode, stateBatch.getTxnIds());
                     break;
                 }
@@ -665,8 +665,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_LOAD_JOB_V2: {
-                    com.starrocks.load.loadv2.LoadJob loadJob =
-                            (com.starrocks.load.loadv2.LoadJob) journal.data();
+                    com.starrocks.load.loadv2.LoadJob loadJob = (com.starrocks.load.loadv2.LoadJob) journal.data();
                     globalStateMgr.getLoadMgr().replayCreateLoadJob(loadJob);
                     break;
                 }
@@ -726,8 +725,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_UPDATE_TASK_RUN: {
-                    final TaskRunStatusChange statusChange =
-                            (TaskRunStatusChange) journal.data();
+                    final TaskRunStatusChange statusChange = (TaskRunStatusChange) journal.data();
                     globalStateMgr.getTaskManager().replayUpdateTaskRun(statusChange);
                     break;
                 }
@@ -797,14 +795,15 @@ public class EditLog {
                 case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 case OperationType.OP_MODIFY_FLAT_JSON_CONFIG:
                 case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
-                    ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
-                            (ModifyTablePropertyOperationLog) journal.data();
-                    globalStateMgr.getLocalMetastore().replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
+                    ModifyTablePropertyOperationLog modifyTablePropertyOperationLog = (ModifyTablePropertyOperationLog) journal
+                            .data();
+                    globalStateMgr.getLocalMetastore().replayModifyTableProperty(opCode,
+                            modifyTablePropertyOperationLog);
                     break;
                 }
                 case OperationType.OP_REPLACE_TEMP_PARTITION: {
-                    ReplacePartitionOperationLog replaceTempPartitionLog =
-                            (ReplacePartitionOperationLog) journal.data();
+                    ReplacePartitionOperationLog replaceTempPartitionLog = (ReplacePartitionOperationLog) journal
+                            .data();
                     globalStateMgr.getLocalMetastore().replayReplaceTempPartition(replaceTempPartitionLog);
                     break;
                 }
@@ -903,7 +902,8 @@ public class EditLog {
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddBasicStatsMeta(basicStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // The follower replays the stats meta log, indicating that the master has
+                    // re-completed
                     // statistic, and the follower's should refresh cache here.
                     // We don't need to refresh statistics when checkpointing
                     if (!GlobalStateMgr.isCheckpointThread()) {
@@ -937,7 +937,8 @@ public class EditLog {
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddHistogramStatsMeta(histogramStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // The follower replays the stats meta log, indicating that the master has
+                    // re-completed
                     // statistic, and the follower's should expire cache here.
                     // We don't need to refresh statistics when checkpointing
                     if (!GlobalStateMgr.isCheckpointThread()) {
@@ -963,7 +964,8 @@ public class EditLog {
                             globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
                             if (!GlobalStateMgr.isCheckpointThread()) {
                                 globalStateMgr.getStatisticStorage().expireHistogramStatistics(
-                                        histogramStatsMeta.getTableId(), Lists.newArrayList(histogramStatsMeta.getColumn()));
+                                        histogramStatsMeta.getTableId(),
+                                        Lists.newArrayList(histogramStatsMeta.getColumn()));
                             }
                         }
                     }
@@ -982,7 +984,8 @@ public class EditLog {
                     MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveMultiColumnStatsMeta(multiColumnStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getStatisticStorage().expireMultiColumnStatistics(multiColumnStatsMeta.getTableId());
+                        globalStateMgr.getStatisticStorage()
+                                .expireMultiColumnStatistics(multiColumnStatsMeta.getTableId());
                     }
                     break;
                 }
@@ -1002,7 +1005,8 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // The follower replays the stats meta log, indicating that the master has
+                    // re-completed
                     // statistic, and the follower's should refresh cache here.
                     // We don't need to refresh statistics when checkpointing
                     if (!GlobalStateMgr.isCheckpointThread()) {
@@ -1027,7 +1031,8 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // The follower replays the stats meta log, indicating that the master has
+                    // re-completed
                     // statistic, and the follower's should expire cache here.
                     // We don't need to refresh statistics when checkpointing
                     if (!GlobalStateMgr.isCheckpointThread()) {
@@ -1050,9 +1055,10 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
-                    ModifyTableColumnOperationLog modifyTableColumnOperationLog =
-                            (ModifyTableColumnOperationLog) journal.data();
-                    globalStateMgr.getLocalMetastore().replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+                    ModifyTableColumnOperationLog modifyTableColumnOperationLog = (ModifyTableColumnOperationLog) journal
+                            .data();
+                    globalStateMgr.getLocalMetastore().replayModifyHiveTableColumn(opCode,
+                            modifyTableColumnOperationLog);
                     break;
                 }
                 case OperationType.OP_MODIFY_COLUMN_COMMENT: {
@@ -1169,25 +1175,28 @@ public class EditLog {
                     break;
                 }
                 case OperationTypeEPack.OP_APPLY_MASKING_POLICY: {
-                    ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo = (ApplyOrRevokeMaskingPolicyLog) journal.data();
+                    ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo = (ApplyOrRevokeMaskingPolicyLog) journal
+                            .data();
                     globalStateMgr.getSecurityPolicyManager().registerMaskingPolicyContext(applyMaskingPolicyInfo);
                     break;
                 }
                 case OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY: {
-                    ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo =
-                            (ApplyOrRevokeRowAccessPolicyLog) journal.data();
+                    ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo = (ApplyOrRevokeRowAccessPolicyLog) journal
+                            .data();
                     globalStateMgr.getSecurityPolicyManager().registerRowAccessPolicyContext(applyRowAccessPolicyInfo);
                     break;
                 }
                 case OperationTypeEPack.OP_REVOKE_MASKING_POLICY: {
-                    ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo = (ApplyOrRevokeMaskingPolicyLog) journal.data();
+                    ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo = (ApplyOrRevokeMaskingPolicyLog) journal
+                            .data();
                     globalStateMgr.getSecurityPolicyManager().replayRevokeMaskingPolicyContext(applyMaskingPolicyInfo);
                     break;
                 }
                 case OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY: {
-                    ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo =
-                            (ApplyOrRevokeRowAccessPolicyLog) journal.data();
-                    globalStateMgr.getSecurityPolicyManager().replayRevokeRowAccessPolicyContext(applyRowAccessPolicyInfo);
+                    ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo = (ApplyOrRevokeRowAccessPolicyLog) journal
+                            .data();
+                    globalStateMgr.getSecurityPolicyManager()
+                            .replayRevokeRowAccessPolicyContext(applyRowAccessPolicyInfo);
                     break;
                 }
                 case OperationType.OP_MV_JOB_STATE: {
@@ -1292,17 +1301,20 @@ public class EditLog {
                 }
                 case OperationType.OP_DELETE_REPLICATION_JOB: {
                     ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.data();
-                    globalStateMgr.getReplicationMgr().replayDeleteReplicationJob(replicationJobLog.getReplicationJob());
+                    globalStateMgr.getReplicationMgr()
+                            .replayDeleteReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
                 case OperationTypeEPack.OP_CREATE_FAILOVER_GROUP: {
                     CreateFailoverGroupLog createFailoverGroupLog = (CreateFailoverGroupLog) journal.data();
-                    globalStateMgr.getFailoverGroupMgr().replayCreateFailoverGroup(createFailoverGroupLog.getFailoverGroup());
+                    globalStateMgr.getFailoverGroupMgr()
+                            .replayCreateFailoverGroup(createFailoverGroupLog.getFailoverGroup());
                     break;
                 }
                 case OperationTypeEPack.OP_DROP_FAILOVER_GROUP: {
                     DropFailoverGroupLog dropFailoverGroupLog = (DropFailoverGroupLog) journal.data();
-                    globalStateMgr.getFailoverGroupMgr().replayDropFailoverGroup(dropFailoverGroupLog.getFailoverGroupId());
+                    globalStateMgr.getFailoverGroupMgr()
+                            .replayDropFailoverGroup(dropFailoverGroupLog.getFailoverGroupId());
                     break;
                 }
                 case OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP: {
@@ -1351,6 +1363,11 @@ public class EditLog {
                     globalStateMgr.getClusterSnapshotMgr().replayLog(log);
                     break;
                 }
+                case OperationType.OP_CLUSTER_SNAPSHOT_RESTORED_VERSION: {
+                    ClusterSnapshotRestoredVersionLog log = (ClusterSnapshotRestoredVersionLog) journal.data();
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr().replayLog(log);
+                    break;
+                }
                 case OperationType.OP_ADD_SQL_QUERY_BLACK_LIST: {
                     SqlBlackListPersistInfo addBlacklistRequest = (SqlBlackListPersistInfo) journal.data();
                     GlobalStateMgr.getCurrentState().getSqlBlackList()
@@ -1363,8 +1380,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_SQL_DIGEST_BLACK_LIST: {
-                    SqlDigestBlackListPersistInfo addBlacklistRequest =
-                            (SqlDigestBlackListPersistInfo) journal.data();
+                    SqlDigestBlackListPersistInfo addBlacklistRequest = (SqlDigestBlackListPersistInfo) journal.data();
                     GlobalStateMgr.getCurrentState().getSqlDigestBlackList().put(addBlacklistRequest.digest);
                     break;
                 }
@@ -1399,7 +1415,8 @@ public class EditLog {
                 }
                 case OperationType.OP_DROP_GROUP_PROVIDER: {
                     GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
-                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                            .replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
@@ -1441,8 +1458,8 @@ public class EditLog {
                 }
             }
         } catch (Exception e) {
-            JournalInconsistentException exception =
-                    new JournalInconsistentException(opCode, "failed to load journal type " + opCode);
+            JournalInconsistentException exception = new JournalInconsistentException(opCode,
+                    "failed to load journal type " + opCode);
             exception.initCause(e);
             throw exception;
         }
@@ -1496,7 +1513,8 @@ public class EditLog {
             throw new LeaderTransferException();
         }
 
-        // do not check whether global state mgr is leader when writing star mgr journal,
+        // do not check whether global state mgr is leader when writing star mgr
+        // journal,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(op == OperationType.OP_STARMGR || GlobalStateMgr.getCurrentState().isLeader(),
@@ -1516,8 +1534,10 @@ public class EditLog {
         JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 
         /*
-         * for historical reasons, logJsonObject is not allowed to raise Exception, which is really unreasonable to me.
-         * This PR will continue to swallow exception and retry till the end of the world like before.
+         * for historical reasons, logJsonObject is not allowed to raise Exception,
+         * which is really unreasonable to me.
+         * This PR will continue to swallow exception and retry till the end of the
+         * world like before.
          * Hope some day we'll fix it.
          */
         // 2. put to queue
@@ -1551,7 +1571,8 @@ public class EditLog {
                     Thread.sleep(1000);
                 }
                 // return true if JournalWriter wrote log successfully
-                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such
+                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now
+                // because on such
                 // scenario JournalWriter will simply exit the whole process
                 result = task.get();
                 break;
@@ -1567,7 +1588,8 @@ public class EditLog {
             }
         }
 
-        // for now if journal writer fails, it will exit directly, so this property should always be true.
+        // for now if journal writer fails, it will exit directly, so this property
+        // should always be true.
         Preconditions.checkState(result);
         if (MetricRepo.hasInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
@@ -1685,7 +1707,8 @@ public class EditLog {
     }
 
     public void logDisablePartitionRecovery(long partitionId, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId), walApplier);
+        logJsonObject(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId),
+                walApplier);
     }
 
     public void logDisableTableRecovery(List<Long> tableIds, WALApplier walApplier) {
@@ -2002,7 +2025,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, info, walApplier);
     }
 
-    public void logModifyBaseCompactionForbiddenTimeRanges(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
+    public void logModifyBaseCompactionForbiddenTimeRanges(ModifyTablePropertyOperationLog info,
+            WALApplier walApplier) {
         logJsonObject(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info, walApplier);
     }
 
@@ -2083,7 +2107,8 @@ public class EditLog {
     }
 
     public void logRemoveBasicStatsMetaBatch(List<BasicStatsMeta> metas, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, new BatchRemoveBasicStatsMetaLog(metas), walApplier);
+        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, new BatchRemoveBasicStatsMetaLog(metas),
+                walApplier);
     }
 
     public void logAddHistogramStatsMeta(HistogramStatsMeta meta, WALApplier walApplier) {
@@ -2239,8 +2264,8 @@ public class EditLog {
     }
 
     public void logDropPolicy(PolicyName policyName, DbUID db, Policy policy) {
-        DropPolicyLog dropPolicyLog =
-                new DropPolicyLog(policy.getPolicyType(), policy.getPolicyId(), db, policyName.getName());
+        DropPolicyLog dropPolicyLog = new DropPolicyLog(policy.getPolicyType(), policy.getPolicyId(), db,
+                policyName.getName());
         logJsonObject(OperationTypeEPack.OP_DROP_POLICY, dropPolicyLog);
     }
 
@@ -2410,6 +2435,10 @@ public class EditLog {
 
     public void logClusterSnapshotLog(ClusterSnapshotLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info, walApplier);
+    }
+
+    public void logClusterSnapshotRestoredVersion(ClusterSnapshotRestoredVersionLog info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CLUSTER_SNAPSHOT_RESTORED_VERSION, info, walApplier);
     }
 
     public void logCreateSPMBaseline(BaselinePlan.Info info, WALApplier walApplier) {
