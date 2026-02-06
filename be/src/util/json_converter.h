@@ -18,7 +18,7 @@
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 #include "types/timestamp_value.h"
 #ifdef __APPLE__
 #include "simdjson.h"

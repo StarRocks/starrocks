@@ -38,9 +38,9 @@
 
 #include "base/string/slice.h"
 #include "base/types/int256.h"
-#include "runtime/decimalv2_value.h"
 #include "storage/collection.h"
 #include "storage/olap_common.h"
+#include "types/decimalv2_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

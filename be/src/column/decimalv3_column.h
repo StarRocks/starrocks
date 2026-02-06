@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <runtime/decimalv3.h>
+#include <types/decimalv3.h>
 
 #include "base/decimal_types.h"
 #include "column/column.h"

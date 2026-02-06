@@ -26,9 +26,9 @@
 #include "base/string/slice.h"
 #include "common/status.h"
 #include "io/formatted_output_stream.h"
-#include "runtime/decimalv2_value.h"
-#include "runtime/time_types.h"
 #include "types/date_value.hpp"
+#include "types/decimalv2_value.h"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {

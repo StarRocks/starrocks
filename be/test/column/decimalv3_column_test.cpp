@@ -23,7 +23,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 
 namespace starrocks {
 

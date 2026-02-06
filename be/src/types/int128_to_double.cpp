@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/int128_to_double.h"
+#include "types/int128_to_double.h"
 
 #include <glog/logging.h>
 
 #include <climits>
 #include <cstdint>
 
-#include "integer_overflow_arithmetics.h"
+#include "types/integer_overflow_arithmetics.h"
 namespace starrocks {
 double __wrap___floattidf(__int128 a) {
     typedef double dst_t;

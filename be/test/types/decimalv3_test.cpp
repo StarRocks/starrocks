@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 
 #include <gtest/gtest.h>
 
+#include <iostream>
 #include <string>
 #include <tuple>
 #include <vector>
 
 #include "base/types/int128.h"
-#include "util/logging.h"
 namespace starrocks {
 
 class TestDecimalV3 : public ::testing::Test {};

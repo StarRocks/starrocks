@@ -19,7 +19,7 @@
 #include "column/type_traits.h"
 #include "common/config.h"
 #include "exprs/table_function/table_function.h"
-#include "runtime/integer_overflow_arithmetics.h"
+#include "types/integer_overflow_arithmetics.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

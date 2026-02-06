@@ -20,7 +20,7 @@
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/datetime_value.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

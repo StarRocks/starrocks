@@ -18,6 +18,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
+#include "util/hash_util.hpp"
 #include "util/thread.h"
 
 namespace starrocks {

@@ -20,8 +20,7 @@
 
 #include "base/string/slice.h"
 #include "base/types/uint24.h"
-#include "runtime/time_types.h"
-#include "util/hash_util.hpp"
+#include "types/time_types.h"
 
 namespace starrocks {
 class TimestampValue;

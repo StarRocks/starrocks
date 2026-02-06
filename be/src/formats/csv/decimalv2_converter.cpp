@@ -17,7 +17,7 @@
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
-#include "runtime/decimalv2_value.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks::csv {
 

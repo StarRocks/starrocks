@@ -19,7 +19,7 @@
 #include "base/types/uint24.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "runtime/decimalv2_value.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks {
 class ColumnVisitorMutable {

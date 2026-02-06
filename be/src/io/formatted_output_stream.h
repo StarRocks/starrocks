@@ -18,8 +18,8 @@
 
 #include "base/utility/mysql_global.h"
 #include "fmt/compile.h"
-#include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
+#include "types/decimalv2_value.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks::io {

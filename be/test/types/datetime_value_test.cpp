@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/datetime_value.h"
+#include "types/datetime_value.h"
 
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
@@ -42,7 +42,6 @@
 #include "base/testutil/assert.h"
 #include "base/time/timezone_utils.h"
 #include "common/logging.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

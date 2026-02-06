@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/decimalv2_value.h"
+#include "types/decimalv2_value.h"
 
 #include <fmt/format.h>
 
@@ -42,7 +42,7 @@
 
 #include "base/container/raw_container.h"
 #include "base/string/string_parser.hpp"
-#include "runtime/int128_arithmetics_x86_64.h"
+#include "types/int128_arithmetics_x86_64.h"
 
 namespace starrocks {
 

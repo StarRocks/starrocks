@@ -29,7 +29,7 @@
 #include "column/object_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
-#include "runtime/time_types.h"
+#include "types/time_types.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {

@@ -17,9 +17,9 @@
 #include "exec/schema_scanner.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

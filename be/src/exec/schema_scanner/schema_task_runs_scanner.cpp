@@ -17,8 +17,8 @@
 #include "base/time/timezone_utils.h"
 #include "exec/schema_scanner.h"
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 

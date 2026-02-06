@@ -26,7 +26,7 @@
 #include "base/decimal_types.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/guard.h"
-#include "runtime/integer_overflow_arithmetics.h"
+#include "types/integer_overflow_arithmetics.h"
 
 typedef unsigned __int128 uint128_t;
 

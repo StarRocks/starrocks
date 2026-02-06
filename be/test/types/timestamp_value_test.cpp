@@ -17,10 +17,8 @@
 
 #define private public
 
-#include "butil/time.h"
-#include "column/fixed_length_column.h"
-#include "runtime/time_types.h"
 #include "types/date_value.hpp"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {

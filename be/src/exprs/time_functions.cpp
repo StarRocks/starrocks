@@ -36,9 +36,9 @@ typedef unsigned long ulong;
 #include "base/time/timezone_hsscan.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.

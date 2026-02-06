@@ -15,16 +15,20 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
 ADD_BE_LIB(TypesCore
+    decimalv2_value.cpp
+    int128_to_double.cpp
     logical_type.cpp
+    date_value.cpp
+    datetime_value.cpp
+    time_types.cpp
+    timestamp_value.cpp
 )
 
 ADD_BE_LIB(Types
     bitmap_value.cpp
-    date_value.cpp
     hll.cpp
     hll_sketch.cpp
     logical_type_size.cpp
-    timestamp_value.cpp
     checker/type_checker.cpp
     checker/type_checker_xml_loader.cpp
     type_checker_manager.cpp

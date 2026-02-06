@@ -32,7 +32,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
@@ -43,6 +42,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
+#include "types/time_types.h"
 #include "util/logging.h"
 
 namespace starrocks {

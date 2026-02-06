@@ -40,9 +40,9 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 #include "types/bitmap_value.h"
+#include "types/time_types.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {

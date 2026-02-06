@@ -20,7 +20,7 @@
 #include <boost/uuid/uuid_io.hpp>
 
 #include "base/testutil/assert.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 #include "types/timestamp_value.h"
 #include "util/url_coding.h"
 

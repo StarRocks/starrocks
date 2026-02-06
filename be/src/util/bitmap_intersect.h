@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "runtime/datetime_value.h"
 #include "types/bitmap_value.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 

@@ -20,6 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h" // for PlanNodeId
+#include "util/hash_util.hpp"
 
 namespace starrocks {
 

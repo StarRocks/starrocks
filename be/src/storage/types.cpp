@@ -42,10 +42,7 @@
 #include "base/utility/mem_util.hpp"
 #include "base/utility/mysql_global.h"
 #include "gutil/strings/numbers.h"
-#include "runtime/datetime_value.h"
-#include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"
-#include "runtime/time_types.h"
 #include "runtime/types.h"
 #include "storage/array_type_info.h"
 #include "storage/collection.h"
@@ -58,6 +55,9 @@
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/type_traits.h"
 #include "types/date_value.hpp"
+#include "types/datetime_value.h"
+#include "types/decimalv2_value.h"
+#include "types/time_types.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {

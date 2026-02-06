@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/datetime_value.h"
+#include "types/datetime_value.h"
 
 #include <cctz/civil_time.h>
 #include <cctz/time_zone.h>
@@ -45,6 +45,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "base/status.h"
 #include "base/time/timezone_utils.h"
 #include "gutil/strings/fastmem.h"
 

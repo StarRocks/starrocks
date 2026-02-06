@@ -23,7 +23,7 @@
 #include "butil/time.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 
 namespace starrocks {
 

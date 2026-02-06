@@ -13,7 +13,6 @@ set(EXEC_FILES
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp
         ./column/copied_datum_test.cpp
-        ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
@@ -23,7 +22,6 @@ set(EXEC_FILES
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
-        ./column/timestamp_value_test.cpp
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
@@ -289,9 +287,6 @@ set(EXEC_FILES
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
-        ./runtime/datetime_value_test.cpp
-        ./runtime/decimalv2_value_test.cpp
-        ./runtime/decimalv3_test.cpp
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp

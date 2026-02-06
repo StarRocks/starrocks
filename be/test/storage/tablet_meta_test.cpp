@@ -38,7 +38,7 @@
 
 #include <string>
 
-#include "runtime/decimalv2_value.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks {
 
