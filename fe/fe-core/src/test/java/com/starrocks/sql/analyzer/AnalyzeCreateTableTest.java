@@ -399,8 +399,45 @@ public class AnalyzeCreateTableTest {
                         + "(k1 int, k2 int, k3 int) partition by (k1)");
         analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
                         + "(k1 int, k2 int, k3 int) partition by (k3)");
-        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
                         + "(k1 int, k2 int, k3 int, k4 int) partition by (k2, k3)");
+
+        // Test PARTITION BY single column
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int) partition by k2");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int) partition by (k2)");
+
+        // Test PARTITION BY multiple columns
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int, k3 int) partition by k2, k3");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int, k3 int) partition by (k2, k3)");
+
+        // Test PARTITION BY three columns
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int, k3 int, k4 int) partition by k2, k3, k4");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int, k3 int, k4 int) partition by (k2, k3, k4)");
+
+        // Test PARTITION BY with partition transforms
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 date) partition by year(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 date) partition by month(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 date) partition by day(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 datetime) partition by year(k2), bucket(k1, 5)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int) partition by bucket(k1, 10), bucket(k2, 10)");
+
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 datetime) partition by (year(k2), bucket(k1, 5))");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int) partition by (bucket(k1, 10), bucket(k2, 10))");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, k2 int, k3 string) partition by (bucket(k1, 10), bucket(k2, 10), truncate(k3, 3))");
 
         AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
