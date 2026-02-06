@@ -105,15 +105,18 @@ public:
 
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                    const TExecPlanFragmentParams& unique_request);
-    Status execute(ExecEnv* exec_env);
+    Status execute(ExecEnv* exec_env, bool need_to_submit = true);
 
+    Status submit();
     static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                                  TExecPlanFragmentResult* response);
 
+    // used for parallel prepare
     Status prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request);
-    void _fail_cleanup(bool fragment_has_registed);
+    void clean_up_when_success();
 
 private:
+    void _fail_cleanup(bool fragment_has_registed);
     uint32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     uint32_t _calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     int _calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;
@@ -142,6 +145,9 @@ private:
     QueryContext* _query_ctx = nullptr;
     FragmentContextPtr _fragment_ctx = nullptr;
     workgroup::WorkGroupPtr _wg = nullptr;
+
+    // fragment/driver prepare all successes
+    bool _all_prepared = false;
 };
 } // namespace pipeline
 } // namespace starrocks
