@@ -166,7 +166,6 @@ EXECUTE expire_snapshots(
 
 - Description: The timestamp before which snapshots will be removed. If not specified, files older than 5 days (from the current time) will be removed by default. Format: 'YYYY-MM-DD HH:MM:SS'.
 - Type: DATETIME
-- Default: An empty value (which indicates 5 days from the current time)
 - Required: No
 
 ##### `retain_last`
@@ -209,14 +208,12 @@ EXECUTE remove_orphan_files(
 
 - Description: The timestamp before which orphan files will be removed. If not specified, files older than 7 days (from the current time) will be removed by default. Format: 'YYYY-MM-DD HH:MM:SS'.
 - Type: DATETIME
-- Default: An empty value (which indicates 7 days from the current time)
 - Required: No
 
 ##### `location`
 
 - Description: The directory from which you want to remove orphan files. It must be a sub-directory of the table location. If not specified, the table location will be used by default.
 - Type: STRING
-- Default: An empty string (which indicates the table location)
 - Required: No
 
 #### Example
