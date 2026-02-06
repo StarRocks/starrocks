@@ -1012,9 +1012,7 @@ public class DefaultCoordinator extends Coordinator {
         try {
             dealStatusToTryRetry(copyStatus);
         } catch (StarRocksException e) {
-            if (null == resultBatch || null == resultBatch.getQueryStatistics() ||
-                    null == resultBatch.getQueryStatistics().statsItems ||
-                    resultBatch.getQueryStatistics().statsItems.isEmpty()) {
+            if (null == resultBatch || null == resultBatch.getQueryStatistics()) {
                 throw e;
             } else {
                 resultBatch.setStatus(copyStatus);
