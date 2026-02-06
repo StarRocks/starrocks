@@ -78,6 +78,7 @@ import com.starrocks.http.rest.HealthAction;
 import com.starrocks.http.rest.HttpSSLContextLoader;
 import com.starrocks.http.rest.IdleAction;
 import com.starrocks.http.rest.LoadAction;
+import com.starrocks.http.rest.MemoryUsageAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.MigrationAction;
@@ -222,6 +223,7 @@ public class HttpServer {
         ShowMetaInfoAction.registerAction(controller);
         ShowProcAction.registerAction(controller);
         ShowRuntimeInfoAction.registerAction(controller);
+        MemoryUsageAction.registerAction(controller);
         GetLogFileAction.registerAction(controller);
         TriggerAction.registerAction(controller);
         GetSmallFileAction.registerAction(controller);

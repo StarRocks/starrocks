@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -51,6 +52,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -83,7 +86,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 import static java.lang.Math.max;
 
-public class CatalogRecycleBin extends FrontendDaemon implements Writable {
+public class CatalogRecycleBin extends FrontendDaemon implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
     // erase meta at least after MIN_ERASE_LATENCY milliseconds
     // to avoid erase log ahead of drop log
@@ -1379,5 +1382,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToPartition.remove(partitionId);
         idToRecycleTime.remove(partitionId);
         enableEraseLater.remove(partitionId);
+    }
+
+    @Override
+    public synchronized Map<String, Long> estimateCount() {
+        return ImmutableMap.<String, Long>builder()
+                .put("Database", (long) idToDatabase.size())
+                .put("Table", (long) idToTableInfo.size())
+                .put("Partition", (long) idToPartition.size())
+                .put("AsyncDeletePartition", (long) asyncDeleteForPartitions.size())
+                .put("AsyncDeleteTable", (long) asyncDeleteForTables.size())
+                .build();
+    }
+
+    @Override
+    public synchronized long estimateSize() {
+        return Estimator.estimate(idToDatabase, 20) +
+                Estimator.estimate(idToTableInfo.rowMap(), 20) +
+                Estimator.estimate(idToPartition, 20) +
+                Estimator.estimate(idToRecycleTime, 20);
     }
 }
