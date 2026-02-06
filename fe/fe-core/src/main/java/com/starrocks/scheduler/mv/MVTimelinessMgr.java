@@ -14,7 +14,6 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvRefreshArbiter;
@@ -22,12 +21,9 @@ import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.memory.MemoryTrackable;
 
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Manage the timeliness of materialized view according to the MVChangeEvent across multiple queries.
@@ -41,8 +37,6 @@ import java.util.stream.Collectors;
  * TODO: we can track more mv/base table's changes to update the timeliness info in the future.
  */
 public class MVTimelinessMgr implements MemoryTrackable {
-    private static final int MEMORY_META_SAMPLES = 10;
-
     // materialized view -> MvUpdateInfo
     private final Map<MaterializedView, MvUpdateInfo> mvTimelinessMap = Maps.newConcurrentMap();
 
@@ -93,14 +87,5 @@ public class MVTimelinessMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return Map.of("mvTimelinessMap", (long) mvTimelinessMap.size());
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> mvTimelinessMapSamples = mvTimelinessMap.values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(mvTimelinessMapSamples, (long) mvTimelinessMap.size()));
     }
 }

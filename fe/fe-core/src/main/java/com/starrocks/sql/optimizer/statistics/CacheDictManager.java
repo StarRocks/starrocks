@@ -18,7 +18,6 @@ import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -29,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
@@ -438,32 +438,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = new ArrayList<>();
-        dictStatistics.asMap().values().stream().findAny().ifPresent(future -> {
-            if (future.isDone()) {
-                try {
-                    future.get().ifPresent(samples::add);
-                } catch (Exception e) {
-                    LOG.warn("get samples failed", e);
-                }
-            }
-        });
-
-        return Lists.newArrayList(Pair.create(samples, (long) dictStatistics.asMap().size()));
-    }
-
-    private List<ColumnDict> getSamplesForMemoryTracker() {
-        List<ColumnDict> result = new ArrayList<>();
-        dictStatistics.asMap().values().stream().findAny().ifPresent(future -> {
-            if (future.isDone()) {
-                try {
-                    future.get().ifPresent(result::add);
-                } catch (Exception e) {
-                    LOG.warn("get samples failed", e);
-                }
-            }
-        });
-        return result;
+    public long estimateSize() {
+        return Estimator.estimate(dictStatistics.asMap(), 20);
     }
 }

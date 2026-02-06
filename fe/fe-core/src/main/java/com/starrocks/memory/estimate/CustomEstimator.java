@@ -12,21 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.memory;
+package com.starrocks.memory.estimate;
 
-import com.google.common.collect.ImmutableMap;
-import com.starrocks.qe.QueryDetailQueue;
-
-import java.util.Map;
-
-public class QueryTracker implements MemoryTrackable {
-    @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryDetail", QueryDetailQueue.getTotalQueriesCount());
-    }
-
-    @Override
-    public long estimateSize() {
-        return QueryDetailQueue.estimateSize();
-    }
+/**
+ * Interface for custom memory estimators.
+ * Implement this interface to provide specialized memory estimation
+ * for specific object types that require custom handling.
+ */
+@FunctionalInterface
+public interface CustomEstimator {
+    /**
+     * Estimate the memory size of the given object.
+     *
+     * @param obj the object to estimate
+     * @return the estimated memory size in bytes
+     */
+    long estimate(Object obj);
 }

@@ -48,6 +48,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -204,6 +205,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * column names can change, but the column ID of a specific column will never change.
      * Use case-insensitive tree map, because the column name is case-insensitive in the system.
      */
+    @IgnoreMemoryTrack
     protected Map<String, Column> nameToColumn;
     protected Map<ColumnId, Column> idToColumn;
 
