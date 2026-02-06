@@ -14,7 +14,7 @@
 
 #include <cstdint>
 
-#include "simd/multi_version.h"
+#include "base/simd/multi_version.h"
 
 namespace starrocks {
 

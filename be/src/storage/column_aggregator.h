@@ -17,9 +17,9 @@
 #include <memory>
 #include <vector>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 

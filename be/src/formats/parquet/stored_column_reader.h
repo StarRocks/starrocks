@@ -19,6 +19,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/simd/simd.h"
 #include "column/vectorized_fwd.h"
 #include "column_reader.h"
 #include "common/config.h"
@@ -29,7 +30,6 @@
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "simd/simd.h"
 #include "storage/range.h"
 
 namespace tparquet {

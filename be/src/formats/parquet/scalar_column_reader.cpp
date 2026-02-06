@@ -14,6 +14,8 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "base/simd/gather.h"
+#include "base/simd/simd.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
@@ -23,8 +25,6 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/types.h"
-#include "simd/gather.h"
-#include "simd/simd.h"
 #include "statistics_helper.h"
 
 namespace starrocks::parquet {

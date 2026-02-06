@@ -17,10 +17,10 @@
 
 #include "exec/stream/aggregate/stream_aggregator.h"
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "exec/stream/state/mem_state_table.h"
 #include "runtime/current_thread.h"
-#include "simd/simd.h"
 
 namespace starrocks::stream {
 

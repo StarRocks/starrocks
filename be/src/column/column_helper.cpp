@@ -24,6 +24,7 @@
 #include <arm_neon.h>
 #endif
 
+#include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -34,7 +35,6 @@
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/decimalv2_value.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"

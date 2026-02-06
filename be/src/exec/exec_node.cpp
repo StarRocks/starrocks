@@ -39,6 +39,7 @@
 
 #include <sstream>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
@@ -84,7 +85,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
 

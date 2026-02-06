@@ -14,6 +14,7 @@
 
 #include "column/append_with_mask.h"
 
+#include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/const_column.h"
@@ -23,7 +24,6 @@
 #include "column/object_column.h"
 #include "column/struct_column.h"
 #include "column/variant_column.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

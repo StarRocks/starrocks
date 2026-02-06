@@ -24,13 +24,13 @@
 #include <cstring>
 #include <limits>
 
+#include "base/simd/simd.h"
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "util/raw_container.h"

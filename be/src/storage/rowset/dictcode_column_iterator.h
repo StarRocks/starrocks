@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/simd/gather.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -23,7 +24,6 @@
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/types.h"
-#include "simd/gather.h"
 #include "storage/range.h"
 #include "storage/rowset/column_iterator_decorator.h"
 #include "storage/rowset/scalar_column_iterator.h"

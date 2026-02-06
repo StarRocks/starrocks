@@ -14,6 +14,7 @@
 
 #include "runtime/global_dict/parser.h"
 
+#include "base/simd/gather.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
@@ -34,7 +35,6 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "simd/gather.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

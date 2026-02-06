@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -32,7 +33,6 @@
 #include "gen_cpp/Metrics_types.h"
 #include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 

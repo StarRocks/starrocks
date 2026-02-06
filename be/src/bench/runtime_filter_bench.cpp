@@ -16,10 +16,10 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/simd/simd.h"
 #include "bench_util.h"
 #include "column/column_helper.h"
 #include "exprs/runtime_filter.h"
-#include "simd/simd.h"
 #include "util/time.h"
 
 namespace starrocks {

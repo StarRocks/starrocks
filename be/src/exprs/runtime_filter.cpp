@@ -14,7 +14,7 @@
 
 #include "exprs/runtime_filter.h"
 
-#include "simd/simd.h"
+#include "base/simd/simd.h"
 #include "types/logical_type_infra.h"
 
 namespace starrocks {

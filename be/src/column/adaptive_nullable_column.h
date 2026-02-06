@@ -16,9 +16,9 @@
 
 #include <fmt/format.h>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

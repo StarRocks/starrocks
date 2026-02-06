@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
@@ -26,7 +27,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

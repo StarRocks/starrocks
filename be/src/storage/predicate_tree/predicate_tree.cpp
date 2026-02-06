@@ -14,8 +14,8 @@
 
 #include "storage/predicate_tree/predicate_tree.hpp"
 
+#include "base/simd/simd.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

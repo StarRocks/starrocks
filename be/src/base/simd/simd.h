@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
 #include <vector>
 
-#include "column/column.h"
 #ifdef __SSE2__
 #include <emmintrin.h>
 #elif defined(__ARM_NEON) && defined(__aarch64__)

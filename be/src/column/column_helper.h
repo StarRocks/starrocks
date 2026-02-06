@@ -19,13 +19,13 @@
 
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 

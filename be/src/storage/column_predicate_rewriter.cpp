@@ -19,6 +19,7 @@
 #include <limits>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/datum.h"
@@ -33,7 +34,6 @@
 #include "gutil/casts.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/miscs.h"
-#include "simd/simd.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"

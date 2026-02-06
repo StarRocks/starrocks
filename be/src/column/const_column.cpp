@@ -16,9 +16,9 @@
 
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "simd/simd.h"
 #include "util/coding.h"
 
 namespace starrocks {

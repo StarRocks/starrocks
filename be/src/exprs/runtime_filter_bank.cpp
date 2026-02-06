@@ -20,6 +20,7 @@
 #include <memory>
 #include <thread>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/agg_in_runtime_filter.h"
@@ -35,7 +36,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/failpoint/fail_point.h"

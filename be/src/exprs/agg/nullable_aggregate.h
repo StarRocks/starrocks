@@ -25,6 +25,7 @@
 
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -32,7 +33,6 @@
 #include "exprs/agg/maxmin.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
