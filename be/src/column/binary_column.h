@@ -77,9 +77,7 @@ public:
         }
     }
 
-    // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase(const BinaryColumnBase<T>& rhs)
-            : _bytes(rhs._bytes), _offsets(rhs._offsets), _resource(rhs._resource), _immuable_container(*this) {}
+    DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
@@ -87,12 +85,6 @@ public:
               _offsets(std::move(rhs._offsets)),
               _resource(std::move(rhs._resource)),
               _immuable_container(*this) {}
-
-    BinaryColumnBase<T>& operator=(const BinaryColumnBase<T>& rhs) {
-        BinaryColumnBase<T> tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     BinaryColumnBase<T>& operator=(BinaryColumnBase<T>&& rhs) noexcept {
         BinaryColumnBase<T> tmp(std::move(rhs));
@@ -300,6 +292,12 @@ public:
     }
 
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
 
     MutableColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;

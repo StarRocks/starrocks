@@ -178,7 +178,8 @@ private:
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column_raw_ptr());
             auto src_null_data = src_nullable_column->immutable_null_column_data();
             auto dest_column_mut = NullableColumn::create(
-                    ArrayColumn::create(std::move(dest_column_data), UInt32Column::create(src_data_column->offsets())),
+                    ArrayColumn::create(std::move(dest_column_data),
+                                        UInt32Column::static_pointer_cast(src_data_column->offsets_column()->clone())),
                     NullColumn::create());
 
             auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column_mut.get());
@@ -203,7 +204,8 @@ private:
         } else {
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_column.get());
             auto dest_column_mut =
-                    ArrayColumn::create(std::move(dest_column_data), UInt32Column::create(src_data_column->offsets()));
+                    ArrayColumn::create(std::move(dest_column_data),
+                                        UInt32Column::static_pointer_cast(src_data_column->offsets_column()->clone()));
 
             auto* dest_data_column = down_cast<ArrayColumn*>(dest_column_mut.get());
             for (size_t i = 0; i < chunk_size; i++) {
@@ -1607,7 +1609,7 @@ private:
             auto nullable = down_cast<NullableColumn*>(array_column->as_mutable_raw_ptr());
 
             array_col = down_cast<ArrayColumn*>(nullable->data_column_raw_ptr());
-            array_null = NullColumn::create(*nullable->null_column());
+            array_null = NullColumn::static_pointer_cast(nullable->null_column()->clone());
         } else {
             array_col = down_cast<ArrayColumn*>(array_column->as_mutable_raw_ptr());
             array_null = NullColumn::create(array_column->size(), 0);

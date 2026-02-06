@@ -200,7 +200,7 @@ private:
             array_col = down_cast<const ArrayColumn*>(const_column->data_column().get());
 
             auto element = array_col->elements_column();
-            auto offsets = UInt32Column::create(array_col->offsets());
+            auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));
@@ -208,10 +208,10 @@ private:
         } else if (array->is_nullable()) {
             const auto* nullable = down_cast<const NullableColumn*>(array.get());
             array_col = down_cast<const ArrayColumn*>(nullable->data_column_raw_ptr());
-            NullColumnPtr array_null = NullColumn::create(*nullable->null_column());
+            NullColumnPtr array_null = NullColumn::static_pointer_cast(nullable->null_column()->clone());
 
             auto element = array_col->elements_column();
-            auto offsets = UInt32Column::create(array_col->offsets());
+            auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));
@@ -219,7 +219,7 @@ private:
         } else {
             array_col = down_cast<const ArrayColumn*>(array.get());
             auto element = array_col->elements_column();
-            auto offsets = UInt32Column::create(array_col->offsets());
+            auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));

@@ -20,7 +20,6 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-
 namespace starrocks {
 
 /// If an ArrayColumn is nullable, it will be nested as follows:
@@ -44,16 +43,9 @@ public:
 
     ArrayColumn(MutableColumnPtr&& elements, MutableColumnPtr&& offsets);
 
-    ArrayColumn(const ArrayColumn& rhs)
-            : _elements(rhs._elements->clone()), _offsets(OffsetColumn::static_pointer_cast(rhs._offsets->clone())) {}
+    DISALLOW_COPY(ArrayColumn);
 
     ArrayColumn(ArrayColumn&& rhs) noexcept : _elements(std::move(rhs._elements)), _offsets(std::move(rhs._offsets)) {}
-
-    ArrayColumn& operator=(const ArrayColumn& rhs) {
-        ArrayColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     ArrayColumn& operator=(ArrayColumn&& rhs) noexcept {
         ArrayColumn tmp(std::move(rhs));
@@ -64,7 +56,6 @@ public:
     static Ptr create(const ColumnPtr& elements, const ColumnPtr& offsets) {
         return ArrayColumn::create(elements->as_mutable_ptr(), offsets->as_mutable_ptr());
     }
-    static Ptr create(const ArrayColumn& rhs) { return Base::create(rhs); }
 
     template <typename... Args>
     requires(IsMutableColumns<Args...>::value) static MutablePtr create(Args&&... args) {
@@ -139,6 +130,12 @@ public:
     uint32_t serialize_size(size_t idx) const override;
 
     MutableColumnPtr clone_empty() const override;
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 

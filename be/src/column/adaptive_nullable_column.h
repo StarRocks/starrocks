@@ -19,7 +19,6 @@
 #include "base/simd/simd.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
-
 namespace starrocks {
 
 // NullableColumn has two columns: data column and null column. Based on the data, we classify null column into four types:
@@ -84,15 +83,9 @@ public:
 
     State state() { return _state; }
 
-    AdaptiveNullableColumn(const AdaptiveNullableColumn& rhs) { CHECK(false) << "unimplemented"; }
+    DISALLOW_COPY(AdaptiveNullableColumn);
 
     AdaptiveNullableColumn(AdaptiveNullableColumn&& rhs) noexcept { CHECK(false) << "unimplemented"; }
-
-    AdaptiveNullableColumn& operator=(const AdaptiveNullableColumn& rhs) {
-        AdaptiveNullableColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     AdaptiveNullableColumn& operator=(AdaptiveNullableColumn&& rhs) noexcept {
         AdaptiveNullableColumn tmp(std::move(rhs));
@@ -361,6 +354,11 @@ public:
 
     MutableColumnPtr clone_empty() const override {
         return NullableColumn::create(_data_column->clone_empty(), _null_column->clone_empty());
+    }
+
+    MutableColumnPtr clone() const override {
+        materialized_nullable();
+        return create(_data_column->clone(), _null_column->clone());
     }
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,

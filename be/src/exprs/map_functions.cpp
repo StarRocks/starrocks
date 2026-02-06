@@ -158,7 +158,8 @@ StatusOr<ColumnPtr> MapFunctions::map_keys(FunctionContext* context, const Colum
     auto arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
     const auto* col_map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
     const auto& map_keys = col_map->keys_column();
-    auto map_keys_array = ArrayColumn::create(std::move(*map_keys).mutate(), UInt32Column::create(col_map->offsets()));
+    auto map_keys_array = ArrayColumn::create(std::move(*map_keys).mutate(),
+                                              UInt32Column::static_pointer_cast(col_map->offsets_column()->clone()));
 
     if (arg0->has_null()) {
         return NullableColumn::create(
@@ -177,8 +178,8 @@ StatusOr<ColumnPtr> MapFunctions::map_values(FunctionContext* context, const Col
 
     const auto* col_map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
     const auto& map_values = col_map->values_column();
-    auto map_values_array =
-            ArrayColumn::create(std::move(*map_values).mutate(), UInt32Column::create(col_map->offsets()));
+    auto map_values_array = ArrayColumn::create(std::move(*map_values).mutate(),
+                                                UInt32Column::static_pointer_cast(col_map->offsets_column()->clone()));
 
     if (arg0->has_null()) {
         return NullableColumn::create(
@@ -214,7 +215,8 @@ StatusOr<ColumnPtr> MapFunctions::map_entries(FunctionContext* context, const Co
 
     auto null_column = NullColumn::create(struct_column->size(), 0);
     auto nullable_struct = NullableColumn::create(std::move(struct_column), std::move(null_column));
-    auto result_array = ArrayColumn::create(std::move(nullable_struct), UInt32Column::create(col_map->offsets()));
+    auto result_array = ArrayColumn::create(std::move(nullable_struct),
+                                            UInt32Column::static_pointer_cast(col_map->offsets_column()->clone()));
 
     if (arg0->has_null()) {
         return NullableColumn::create(

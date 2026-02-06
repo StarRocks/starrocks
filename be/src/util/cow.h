@@ -354,9 +354,7 @@ public:
         return MutablePtr(new Derived(std::forward<std::initializer_list<T>>(arg)));
     }
 
-    typename AncestorBaseType::MutablePtr clone() const override {
-        return typename AncestorBaseType::MutablePtr(new Derived(down_cast<const Derived&>(*this)));
-    }
+    typename AncestorBaseType::MutablePtr clone() const override = 0;
 
     // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
     static Ptr static_pointer_cast(const BasePtr& ptr) {

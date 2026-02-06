@@ -17,7 +17,6 @@
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/fixed_length_column.h"
-
 namespace starrocks {
 class StructColumn final : public CowFactory<ColumnFactory<Column, StructColumn>, StructColumn> {
     friend class CowFactory<ColumnFactory<Column, StructColumn>, StructColumn>;
@@ -32,12 +31,8 @@ public:
     StructColumn(MutableColumns&& fields, std::vector<std::string> field_names);
     StructColumn(const Columns& fields);
     StructColumn(const Columns& fields, std::vector<std::string> field_names);
-    StructColumn(const StructColumn& rhs) {
-        for (const auto& field : rhs._fields) {
-            _fields.emplace_back(field->clone());
-        }
-        _field_names = rhs._field_names;
-    }
+    DISALLOW_COPY(StructColumn);
+
     StructColumn(StructColumn&& rhs) noexcept
             : _fields(std::move(rhs._fields)), _field_names(std::move(rhs._field_names)) {}
 
@@ -121,6 +116,12 @@ public:
     uint32_t serialize_size(size_t idx) const override;
 
     MutableColumnPtr clone_empty() const override;
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 

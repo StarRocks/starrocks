@@ -15,9 +15,23 @@
 #include <base/simd/gather.h>
 #include <column/column.h>
 #include <column/column_helper.h>
+#include <column/column_view/column_view.h>
 #include <column/column_view/column_view_base.h>
 
 namespace starrocks {
+
+MutableColumnPtr ColumnViewBase::clone() const {
+    auto copy = ColumnView::create(ColumnPtr(_default_column->clone()), _concat_rows_limit, _concat_bytes_limit);
+    auto* c = static_cast<ColumnViewBase*>(copy.get());
+    c->_habitats = _habitats;
+    c->_num_rows = _num_rows;
+    c->_tasks = _tasks;
+    c->_habitat_idx = _habitat_idx;
+    c->_row_idx = _row_idx;
+    c->_concat_column = _concat_column;
+    return copy;
+}
+
 size_t ColumnViewBase::container_memory_usage() const {
     if (_concat_column) {
         return _concat_column->container_memory_usage();

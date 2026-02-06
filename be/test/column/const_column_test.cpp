@@ -170,18 +170,18 @@ PARALLEL_TEST(ConstColumnTest, test_copy_constructor) {
 
     ASSERT_EQ(100, c1->size());
 
-    auto c2(*c1);
-    ASSERT_EQ(100, c2.size());
-    ASSERT_EQ(1, c2.data_column()->use_count());
+    auto c2 = ConstColumn::static_pointer_cast(c1->clone());
+    ASSERT_EQ(100, c2->size());
+    ASSERT_EQ(1, c2->data_column()->use_count());
     for (int i = 0; i < 100; i++) {
-        ASSERT_EQ(1, c2.get(i).get_int32());
+        ASSERT_EQ(1, c2->get(i).get_int32());
     }
 
     c1->reset_column();
-    ASSERT_EQ(100, c2.size());
-    ASSERT_EQ(1, c2.data_column()->use_count());
+    ASSERT_EQ(100, c2->size());
+    ASSERT_EQ(1, c2->data_column()->use_count());
     for (int i = 0; i < 100; i++) {
-        ASSERT_EQ(1, c2.get(i).get_int32());
+        ASSERT_EQ(1, c2->get(i).get_int32());
     }
 }
 
@@ -217,8 +217,7 @@ PARALLEL_TEST(ConstColumnTest, test_copy_assignment) {
 
     ASSERT_EQ(100, c1->size());
 
-    auto c2 = create_const_column(100, 1);
-    *c2 = *c1;
+    auto c2 = ConstColumn::static_pointer_cast(c1->clone());
 
     ASSERT_EQ(100, c2->size());
     ASSERT_EQ(1, c2->data_column()->use_count());

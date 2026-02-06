@@ -20,7 +20,6 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-
 namespace starrocks {
 
 class MapColumn final : public CowFactory<ColumnFactory<Column, MapColumn>, MapColumn> {
@@ -32,19 +31,10 @@ public:
 
     MapColumn(MutableColumnPtr&& keys, MutableColumnPtr&& values, MutableColumnPtr&& offsets);
 
-    MapColumn(const MapColumn& rhs)
-            : _keys(rhs._keys->clone()),
-              _values(rhs._values->clone()),
-              _offsets(UInt32Column::static_pointer_cast(rhs._offsets->clone())) {}
+    DISALLOW_COPY(MapColumn);
 
     MapColumn(MapColumn&& rhs) noexcept
             : _keys(std::move(rhs._keys)), _values(std::move(rhs._values)), _offsets(std::move(rhs._offsets)) {}
-
-    MapColumn& operator=(const MapColumn& rhs) {
-        MapColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     MapColumn& operator=(MapColumn&& rhs) noexcept {
         MapColumn tmp(std::move(rhs));
@@ -55,8 +45,6 @@ public:
     static Ptr create(const ColumnPtr& keys, const ColumnPtr& values, const ColumnPtr& offsets) {
         return MapColumn::create(keys->as_mutable_ptr(), values->as_mutable_ptr(), offsets->as_mutable_ptr());
     }
-
-    static Ptr create(const MapColumn& rhs) { return Base::create(rhs); }
 
     static Ptr create(MapColumn&& rhs) { return Base::create(std::move(rhs)); }
 
@@ -129,6 +117,12 @@ public:
     uint32_t serialize_size(size_t idx) const override;
 
     MutableColumnPtr clone_empty() const override;
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 

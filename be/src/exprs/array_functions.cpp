@@ -335,7 +335,7 @@ private:
 
         // element: [1,2]; target: NULL
         if (targets->only_null() && !nullable_element) {
-            return ArrayColumn::create(array);
+            return array.clone();
         }
 
         // Expand Only-Null column.
@@ -1249,7 +1249,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
 
         const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[0].get());
         array_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
-        null_result = NullColumn::create(*src_nullable_column->null_column());
+        null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
     } else {
         array_column = down_cast<const ArrayColumn*>(src_column.get());
     }
@@ -1264,7 +1264,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
         if (null_result) {
             null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
         } else {
-            null_result = NullColumn::create(*src_nullable_column->null_column());
+            null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
         }
     } else {
         offset_column = down_cast<const Int64Column*>(
@@ -1283,7 +1283,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
             if (null_result) {
                 null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
             } else {
-                null_result = NullColumn::create(*src_nullable_column->null_column());
+                null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
             }
         } else {
             length_column = down_cast<const Int64Column*>(
@@ -1724,7 +1724,7 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
     NullColumnPtr null_result = nullptr;
     if (repeat_count_column->is_nullable()) {
         const auto* nullable_repeat_count_column = down_cast<const NullableColumn*>(repeat_count_column.get());
-        null_result = NullColumn::create(*nullable_repeat_count_column->null_column());
+        null_result = NullColumn::static_pointer_cast(nullable_repeat_count_column->null_column()->clone());
     }
 
     if (null_result) {
@@ -1754,7 +1754,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
 
         const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[0].get());
         array_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
-        null_result = NullColumn::create(*src_nullable_column->null_column());
+        null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
     } else {
         array_column = down_cast<const ArrayColumn*>(src_column.get());
     }
@@ -1770,7 +1770,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         if (null_result) {
             null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
         } else {
-            null_result = NullColumn::create(*src_nullable_column->null_column());
+            null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
         }
     } else {
         count_column = down_cast<const Int32Column*>(

@@ -65,18 +65,18 @@ PARALLEL_TEST(NullableColumnTest, test_copy_constructor) {
     c0->append_datum((int32_t)2);
     c0->append_datum((int32_t)3);
 
-    NullableColumn c1(*c0);
+    auto c1 = NullableColumn::static_pointer_cast(c0->clone());
     c0->reset_column();
 
-    ASSERT_EQ(4, c1.size());
-    ASSERT_TRUE(c1.data_column()->use_count() == 1);
-    ASSERT_TRUE(c1.null_column()->use_count() == 1);
-    ASSERT_EQ(4, c1.data_column()->size());
-    ASSERT_EQ(4, c1.null_column()->size());
-    ASSERT_TRUE(c1.get(0).is_null());
-    ASSERT_EQ(1, c1.get(1).get_int32());
-    ASSERT_EQ(2, c1.get(2).get_int32());
-    ASSERT_EQ(3, c1.get(3).get_int32());
+    ASSERT_EQ(4, c1->size());
+    ASSERT_TRUE(c1->data_column()->use_count() == 1);
+    ASSERT_TRUE(c1->null_column()->use_count() == 1);
+    ASSERT_EQ(4, c1->data_column()->size());
+    ASSERT_EQ(4, c1->null_column()->size());
+    ASSERT_TRUE(c1->get(0).is_null());
+    ASSERT_EQ(1, c1->get(1).get_int32());
+    ASSERT_EQ(2, c1->get(2).get_int32());
+    ASSERT_EQ(3, c1->get(3).get_int32());
 }
 
 // NOLINTNEXTLINE
@@ -110,19 +110,18 @@ PARALLEL_TEST(NullableColumnTest, test_copy_assignment) {
     c0->append_datum((int32_t)2);
     c0->append_datum((int32_t)3);
 
-    NullableColumn c1(Int32Column::create(), NullColumn::create());
-    c1 = *c0;
+    auto c1 = NullableColumn::static_pointer_cast(c0->clone());
     c0->reset_column();
 
-    ASSERT_EQ(4, c1.size());
-    ASSERT_TRUE(c1.data_column()->use_count() == 1);
-    ASSERT_TRUE(c1.null_column()->use_count() == 1);
-    ASSERT_EQ(4, c1.data_column()->size());
-    ASSERT_EQ(4, c1.null_column()->size());
-    ASSERT_TRUE(c1.get(0).is_null());
-    ASSERT_EQ(1, c1.get(1).get_int32());
-    ASSERT_EQ(2, c1.get(2).get_int32());
-    ASSERT_EQ(3, c1.get(3).get_int32());
+    ASSERT_EQ(4, c1->size());
+    ASSERT_TRUE(c1->data_column()->use_count() == 1);
+    ASSERT_TRUE(c1->null_column()->use_count() == 1);
+    ASSERT_EQ(4, c1->data_column()->size());
+    ASSERT_EQ(4, c1->null_column()->size());
+    ASSERT_TRUE(c1->get(0).is_null());
+    ASSERT_EQ(1, c1->get(1).get_int32());
+    ASSERT_EQ(2, c1->get(2).get_int32());
+    ASSERT_EQ(3, c1->get(3).get_int32());
 }
 
 // NOLINTNEXTLINE
@@ -134,18 +133,17 @@ PARALLEL_TEST(NullableColumnTest, test_move_assignment) {
     c0->append_datum((int32_t)2);
     c0->append_datum((int32_t)3);
 
-    NullableColumn c1(Int32Column::create(), NullColumn::create());
-    c1 = *c0;
+    auto c1 = NullableColumn::static_pointer_cast(c0->clone());
 
-    ASSERT_EQ(4, c1.size());
-    ASSERT_TRUE(c1.data_column()->use_count() == 1);
-    ASSERT_TRUE(c1.null_column()->use_count() == 1);
-    ASSERT_EQ(4, c1.data_column()->size());
-    ASSERT_EQ(4, c1.null_column()->size());
-    ASSERT_TRUE(c1.get(0).is_null());
-    ASSERT_EQ(1, c1.get(1).get_int32());
-    ASSERT_EQ(2, c1.get(2).get_int32());
-    ASSERT_EQ(3, c1.get(3).get_int32());
+    ASSERT_EQ(4, c1->size());
+    ASSERT_TRUE(c1->data_column()->use_count() == 1);
+    ASSERT_TRUE(c1->null_column()->use_count() == 1);
+    ASSERT_EQ(4, c1->data_column()->size());
+    ASSERT_EQ(4, c1->null_column()->size());
+    ASSERT_TRUE(c1->get(0).is_null());
+    ASSERT_EQ(1, c1->get(1).get_int32());
+    ASSERT_EQ(2, c1->get(2).get_int32());
+    ASSERT_EQ(3, c1->get(3).get_int32());
 }
 
 // NOLINTNEXTLINE

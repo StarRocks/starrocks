@@ -64,16 +64,7 @@ public:
               _concat_rows_limit(concat_rows_limit),
               _concat_bytes_limit(concat_bytes_limit) {}
 
-    ColumnViewBase(const ColumnViewBase& that)
-            : _default_column(that._default_column->clone()),
-              _concat_rows_limit(that._concat_rows_limit),
-              _concat_bytes_limit(that._concat_bytes_limit),
-              _habitats(that._habitats),
-              _num_rows(that._num_rows),
-              _tasks(that._tasks),
-              _habitat_idx(that._habitat_idx),
-              _row_idx(that._row_idx),
-              _concat_column(that._concat_column) {}
+    DISALLOW_COPY(ColumnViewBase);
 
     ColumnViewBase(ColumnViewBase&&) = delete;
     void append_default() override;
@@ -112,7 +103,7 @@ public:
                                                bool& has_null) override {
         NOT_SUPPORT();
     }
-    MutablePtr clone() const override { NOT_SUPPORT(); }
+    MutablePtr clone() const override;
     uint32_t serialize_size(size_t idx) const override { NOT_SUPPORT(); }
     size_t filter_range(const Filter& filter, size_t from, size_t to) override { NOT_SUPPORT(); }
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override {
