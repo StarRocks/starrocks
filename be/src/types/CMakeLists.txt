@@ -25,7 +25,6 @@ ADD_BE_LIB(Types
     hll.cpp
     hll_sketch.cpp
     logical_type_size.cpp
-    large_int_value.cpp
     map_type_info.cpp
     struct_type_info.cpp
     timestamp_value.cpp

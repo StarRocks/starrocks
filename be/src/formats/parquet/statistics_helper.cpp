@@ -17,6 +17,7 @@
 #include <string>
 
 #include "base/simd/simd.h"
+#include "base/types/int128.h"
 #include "base/types/uint24.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
@@ -33,7 +34,6 @@
 #include "storage/column_predicate.h"
 #include "storage/types.h"
 #include "types/date_value.h"
-#include "types/large_int_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {
@@ -153,7 +153,7 @@ void translate_to_string_value(const ColumnPtr& col, size_t i, std::string& valu
                                          std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>) {
                         value = std::to_string(arg);
                     } else if constexpr (std::is_same_v<T, int128_t>) {
-                        value = LargeIntValue::to_string(arg);
+                        value = int128_to_string(arg);
                     } else {
                         // not supported, and should be denied in can_be_used_for_statistics_filter
                         DCHECK(false) << "Unsupported type";

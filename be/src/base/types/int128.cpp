@@ -12,30 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "base/types/int128.h"
 
-#include <cstddef>
-#include <istream>
-#include <ostream>
 #include <string>
 
-#include "base/utility/integer_util.h"
+#include "base/hash/hash_util.hpp"
+#include "base/string/string_parser.hpp"
 
 namespace starrocks {
 
-using int128_t = __int128;
-using uint128_t = unsigned __int128;
-
-inline std::string int128_to_string(__int128 value) {
-    return integer_to_string<__int128>(value);
+std::istream& operator>>(std::istream& is, __int128& value) {
+    std::string str;
+    is >> str;
+    StringParser::ParseResult result;
+    value = StringParser::string_to_int<__int128>(str.c_str(), str.size(), &result);
+    if (result != StringParser::PARSE_SUCCESS) {
+        is.setstate(std::ios_base::failbit);
+    }
+    return is;
 }
 
-inline std::ostream& operator<<(std::ostream& os, __int128 const& value) {
-    return os << int128_to_string(value);
+std::size_t hash_value(__int128 const& value) {
+    return HashUtil::hash(&value, sizeof(value), 0);
 }
-
-std::istream& operator>>(std::istream& is, __int128& value);
-
-std::size_t hash_value(__int128 const& value);
 
 } // namespace starrocks

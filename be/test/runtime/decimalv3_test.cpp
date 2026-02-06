@@ -20,7 +20,7 @@
 #include <tuple>
 #include <vector>
 
-#include "types/large_int_value.h"
+#include "base/types/int128.h"
 #include "util/logging.h"
 namespace starrocks {
 

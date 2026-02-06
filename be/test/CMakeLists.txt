@@ -300,7 +300,6 @@ set(EXEC_FILES
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/local_tablets_channel_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
-        ./runtime/large_int_value_test.cpp
         ./runtime/load_channel_test.cpp
         ./runtime/load_channel_mgr_test.cpp
         ./runtime/memory/mem_chunk_allocator_test.cpp

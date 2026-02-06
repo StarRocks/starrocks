@@ -19,6 +19,7 @@
 #include <array>
 
 #include "base/container/raw_container.h"
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -29,7 +30,6 @@
 #include "exprs/expr.h"
 #include "runtime/time_types.h"
 #include "runtime/types.h"
-#include "types/large_int_value.h"
 
 namespace starrocks {
 
@@ -317,7 +317,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
             s.resize(n);
             return s;
         } else if constexpr (lt_is_largeint<LT>) {
-            return LargeIntValue::to_string(datum);
+            return int128_to_string(datum);
         } else if constexpr (lt_is_decimal<LT>) {
             return DecimalV3Cast::to_string<StarRocksCppType>(datum, precision, scale);
         } else if constexpr (lt_is_json<LT>) {
