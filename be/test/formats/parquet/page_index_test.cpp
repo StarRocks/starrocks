@@ -661,8 +661,9 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
     std::vector<TExpr> t_conjuncts;
-    // id > 2, this triggers page index filtering
-    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 2, &t_conjuncts);
+    // id > 2
+    // this triggers page index filtering
+    ParquetUTBase::append_bigint_conjunct(TExprOpcode::GT, 0, 2, &t_conjuncts);
 
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
@@ -694,5 +695,4 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     }
     EXPECT_GT(total_row_nums, 0);
 }
-
 } // namespace starrocks::parquet
