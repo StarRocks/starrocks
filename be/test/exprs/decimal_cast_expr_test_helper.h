@@ -25,8 +25,8 @@
 #include "column/nullable_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "runtime/time_types.h"
 #include "types/logical_type.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 

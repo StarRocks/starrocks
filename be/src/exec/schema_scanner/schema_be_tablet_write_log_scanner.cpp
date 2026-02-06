@@ -17,9 +17,9 @@
 #include "column/column_helper.h"
 #include "column/datum.h"
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

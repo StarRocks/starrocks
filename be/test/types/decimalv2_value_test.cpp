@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/decimalv2_value.h"
+#include "types/decimalv2_value.h"
 
 #include <gtest/gtest.h>
 

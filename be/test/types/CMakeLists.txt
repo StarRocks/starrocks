@@ -14,7 +14,12 @@
 
 set(TYPES_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    date_value_test.cpp
+    decimalv2_value_test.cpp
+    decimalv3_test.cpp
+    datetime_value_test.cpp
     logical_type_test.cpp
+    timestamp_value_test.cpp
 )
 
 set(TYPES_TEST_LINK_LIBS

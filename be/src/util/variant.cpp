@@ -26,7 +26,7 @@
 
 #include "absl/container/inlined_vector.h"
 #include "common/statusor.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 #include "types/timestamp_value.h"
 #include "util/url_coding.h"
 

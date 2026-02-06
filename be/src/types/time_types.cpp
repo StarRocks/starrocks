@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/time_types.h"
+#include "types/time_types.h"
 
 #include <string>
 

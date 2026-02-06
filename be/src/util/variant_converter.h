@@ -19,9 +19,9 @@
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
-#include "runtime/time_types.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
 #include "util/variant.h"
 

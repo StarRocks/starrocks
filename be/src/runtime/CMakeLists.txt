@@ -28,7 +28,6 @@ set(RUNTIME_FILES
     sender_queue.cpp
     data_stream_sender.cpp
     multi_cast_data_stream_sink.cpp
-    datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
     exec.cpp
@@ -40,7 +39,6 @@ set(RUNTIME_FILES
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
-    decimalv2_value.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
@@ -87,7 +85,6 @@ set(RUNTIME_FILES
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     tablets_channel.cpp
-    time_types.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
     global_dict/parser.cpp
@@ -107,7 +104,6 @@ set(RUNTIME_FILES
     dictionary_cache_sink.cpp
     type_pack.cpp
     customized_result_writer.cpp
-    int128_to_double.cpp
     diagnose_daemon.cpp
     load_fail_point.cpp
     logconfig.cpp

@@ -26,10 +26,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/tablet_info.h"
-#include "runtime/decimalv2_value.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks {
 

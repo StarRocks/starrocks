@@ -17,7 +17,7 @@
 #endif
 
 #include <base/decimal_types.h>
-#include <runtime/decimalv3.h>
+#include <types/decimalv3.h>
 #include <types/logical_type.h>
 
 #include <cmath>

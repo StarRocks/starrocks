@@ -16,7 +16,7 @@
 
 #include "base/string/string_parser.hpp"
 #include "formats/avro/cpp/utils.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 #include "util/numeric_types.h"
 
 namespace starrocks::avrocpp {

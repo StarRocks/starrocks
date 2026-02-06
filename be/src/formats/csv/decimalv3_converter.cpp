@@ -16,7 +16,7 @@
 
 #include "column/decimalv3_column.h"
 #include "common/logging.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 
 namespace starrocks::csv {
 

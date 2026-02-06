@@ -41,11 +41,11 @@
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/time_types.h"
 #include "runtime/types.h"
 #include "storage/olap_common.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks::parquet {

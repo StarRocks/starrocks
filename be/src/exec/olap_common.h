@@ -51,10 +51,10 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "storage/olap_tuple.h"
 #include "types/date_value.hpp"
+#include "types/datetime_value.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {

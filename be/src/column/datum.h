@@ -24,7 +24,7 @@
 #include "base/types/int96.h"
 #include "base/types/uint24.h"
 #include "common/overloaded.h"
-#include "runtime/decimalv2_value.h"
+#include "types/decimalv2_value.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {
