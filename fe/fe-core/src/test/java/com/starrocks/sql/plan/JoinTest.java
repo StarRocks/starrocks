@@ -3450,7 +3450,8 @@ public class JoinTest extends PlanTestBase {
         assertContainsIgnoreColRefs(plan, "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: coalesce('cccc', CAST(1: v1 AS VARCHAR)) = '1'");
+                "     PREDICATES: " +
+                "coalesce(if(CAST(1: v1 AS VARCHAR(1048576)) = 'cccc', 'cccc', NULL), CAST(1: v1 AS VARCHAR)) = '1'");
     }
 
     @Test
