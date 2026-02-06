@@ -32,9 +32,6 @@ void ensure_global_env() {
 static MemTracker* shared_tracker() {
     // Root has no limit to avoid accidental limit hits.
     static MemTracker root_tracker(1024 * 1024 * 1024, "mem_tracker_bench_root");
-    // Child tracker is the one the benchmark exercises.
-    // static MemTracker bench_tracker(1024 * 1024 * 1024, "mem_tracker_bench_child", &root_tracker);
-    // return &bench_tracker;
     return &root_tracker;
 }
 

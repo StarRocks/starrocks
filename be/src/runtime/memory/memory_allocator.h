@@ -17,7 +17,7 @@
 #include <concepts>
 #include <cstdlib>
 
-#include "common/compiler_util.h"
+#include "base/compiler_util.h"
 
 namespace starrocks::memory {
 
