@@ -47,17 +47,17 @@
 #include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
 #include "runtime/types.h"
+#include "storage/array_type_info.h"
 #include "storage/collection.h"
 #include "storage/convert_helper.h"
 #include "storage/decimal_type_info.h"
+#include "storage/map_type_info.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
+#include "storage/struct_type_info.h"
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/type_traits.h"
-#include "types/array_type_info.h"
 #include "types/date_value.hpp"
-#include "types/map_type_info.h"
-#include "types/struct_type_info.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {

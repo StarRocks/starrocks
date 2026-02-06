@@ -41,7 +41,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "storage/types.h"
-#include "types/array_type_info.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
