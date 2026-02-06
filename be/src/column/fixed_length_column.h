@@ -33,7 +33,7 @@ public:
 
     FixedLengthColumn(const size_t n, const ValueType x) : SuperClass(n, x) {}
 
-    DISALLOW_COPY(FixedLengthColumn<T>);
+    DISALLOW_COPY_TEMPLATE(FixedLengthColumn, FixedLengthColumn<T>);
 
     MutableColumnPtr clone_empty() const override { return this->create(); }
 

@@ -58,7 +58,7 @@ public:
 
     FixedLengthColumnBase(const size_t n, const ValueType x) : _data(n, x) {}
 
-    DISALLOW_COPY(FixedLengthColumnBase<T>);
+    DISALLOW_COPY_TEMPLATE(FixedLengthColumnBase, FixedLengthColumnBase<T>);
 
     // Only used as a underlying type for other column type(i.e. DecimalV3Column), C++
     // is weak to implement delegation for composite type like golang, so we have to use

@@ -103,7 +103,7 @@ public:
                                                bool& has_null) override {
         NOT_SUPPORT();
     }
-    MutablePtr clone() const override { NOT_SUPPORT(); }
+    MutablePtr clone() const override;
     uint32_t serialize_size(size_t idx) const override { NOT_SUPPORT(); }
     size_t filter_range(const Filter& filter, size_t from, size_t to) override { NOT_SUPPORT(); }
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override {

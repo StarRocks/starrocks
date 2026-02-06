@@ -36,7 +36,7 @@ public:
     DecimalV3Column(int precision, int scale);
     DecimalV3Column(int precision, int scale, size_t num_rows);
 
-    DISALLOW_COPY(DecimalV3Column<DecimalType<T>>);
+    DISALLOW_COPY_TEMPLATE(DecimalV3Column, DecimalV3Column<DecimalType<T>>);
 
     bool is_decimal() const override;
     bool is_numeric() const override;

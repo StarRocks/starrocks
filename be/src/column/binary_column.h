@@ -77,7 +77,7 @@ public:
         }
     }
 
-    DISALLOW_COPY(BinaryColumnBase<T>);
+    DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
