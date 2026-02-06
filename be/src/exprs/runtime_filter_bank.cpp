@@ -23,6 +23,7 @@
 #include "base/simd/simd.h"
 #include "base/time/time.h"
 #include "column/column.h"
+#include "common/system/cpu_info.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/agg_in_runtime_filter.h"
 #include "exprs/dictmapping_expr.h"

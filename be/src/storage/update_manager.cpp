@@ -20,6 +20,7 @@
 
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
+#include "common/system/cpu_info.h"
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"

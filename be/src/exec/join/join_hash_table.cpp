@@ -20,6 +20,7 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "common/system/cpu_info.h"
 #include "exec/hash_join_node.h"
 #include "exec/join/join_hash_map_method.h"
 #include "exec/join/join_key_constructor.h"

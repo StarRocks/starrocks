@@ -47,6 +47,7 @@
 #include "cache/mem_cache/page_cache.h"
 #include "common/configbase.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "exec/workgroup/scan_executor.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"

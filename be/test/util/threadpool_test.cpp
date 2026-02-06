@@ -45,6 +45,7 @@
 #include "base/utility/scoped_cleanup.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "gutil/atomicops.h"
 #include "gutil/port.h"
 #include "gutil/ref_counted.h"

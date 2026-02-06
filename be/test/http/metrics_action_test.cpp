@@ -37,6 +37,7 @@
 #include <gtest/gtest.h>
 
 #include "base/metrics.h"
+#include "common/config.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "http/http_response.h"

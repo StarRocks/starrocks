@@ -36,6 +36,7 @@
 
 #include <memory>
 
+#include "common/system/cpu_info.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 
