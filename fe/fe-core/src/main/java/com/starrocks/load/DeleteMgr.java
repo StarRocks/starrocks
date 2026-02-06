@@ -113,11 +113,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-<<<<<<< HEAD
-=======
 import java.util.ArrayList;
-import java.util.Collections;
->>>>>>> 2a6fbeaae3 ([Enhancement] Introduce utils for FE memory estimation (#68287))
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;

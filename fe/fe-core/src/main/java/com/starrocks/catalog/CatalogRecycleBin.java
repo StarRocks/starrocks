@@ -1363,37 +1363,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     public static long getMinEraseLatency() {
         return MIN_ERASE_LATENCY;
     }
-<<<<<<< HEAD
-=======
-
-    // for test
-    protected void clear() {
-        idToDatabase.clear();
-        idToTableInfo.clear();
-        nameToTableInfo.clear();
-        idToPartition.clear();
-        idToRecycleTime.clear();
-        enableEraseLater.clear();
-        asyncDeleteForPartitions.clear();
-        asyncDeleteForTables.clear();
-    }
-
-    // for test
-    protected void setPartitionInfo(long partitionId, RecyclePartitionInfo partitionInfo) {
-        idToPartition.put(partitionId, partitionInfo);
-    }
-
-    // for test
-    protected void setDeleteFutureForPartition(RecyclePartitionInfo partitionInfo, CompletableFuture<Boolean> future) {
-        asyncDeleteForPartitions.put(partitionInfo, future);
-    }
-
-    // for test
-    public void removePartitionFromRecycleBin(long partitionId) {
-        idToPartition.remove(partitionId);
-        idToRecycleTime.remove(partitionId);
-        enableEraseLater.remove(partitionId);
-    }
 
     @Override
     public synchronized Map<String, Long> estimateCount() {
@@ -1413,5 +1382,4 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                 Estimator.estimate(idToPartition, 20) +
                 Estimator.estimate(idToRecycleTime, 20);
     }
->>>>>>> 2a6fbeaae3 ([Enhancement] Introduce utils for FE memory estimation (#68287))
 }

@@ -212,14 +212,9 @@ public class OlapTable extends Table {
 
     // index id -> index meta
     @SerializedName(value = "indexIdToMeta")
-<<<<<<< HEAD
     protected Map<Long, MaterializedIndexMeta> indexIdToMeta = Maps.newHashMap();
     // index name -> index id
-=======
-    protected Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newHashMap();
-    // index name -> index meta id, not change the SerializedName for compatibility
     @IgnoreMemoryTrack
->>>>>>> 2a6fbeaae3 ([Enhancement] Introduce utils for FE memory estimation (#68287))
     @SerializedName(value = "indexNameToId")
     protected Map<String, Long> indexNameToId = Maps.newHashMap();
 

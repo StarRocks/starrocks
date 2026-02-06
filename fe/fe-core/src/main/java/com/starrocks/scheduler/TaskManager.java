@@ -31,11 +31,7 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
-<<<<<<< HEAD
-=======
 import com.starrocks.memory.estimate.Estimator;
-import com.starrocks.persist.AlterTaskInfo;
->>>>>>> 2a6fbeaae3 ([Enhancement] Introduce utils for FE memory estimation (#68287))
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;

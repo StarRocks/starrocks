@@ -36,11 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
-<<<<<<< HEAD
-=======
 import com.starrocks.memory.estimate.ShallowMemory;
-import com.starrocks.sql.ast.ReplicaStatus;
->>>>>>> 2a6fbeaae3 ([Enhancement] Introduce utils for FE memory estimation (#68287))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
