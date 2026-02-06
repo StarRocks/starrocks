@@ -1375,8 +1375,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
-        buildLakeCompactionMaxParallel();
-        buildEnableStatisticCollectOnFirstLoad();
-        buildTableQueryTimeout();
+        // NOTE: new properties should not be built here, just add SerializedName to the field.
     }
 }
