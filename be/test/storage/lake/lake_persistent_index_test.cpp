@@ -345,6 +345,8 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
         index->prepare(EditVersion(i, 0), 0);
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         ASSERT_OK(index->flush_memtable(true));
+        // Wait for async flush to complete if any
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 
