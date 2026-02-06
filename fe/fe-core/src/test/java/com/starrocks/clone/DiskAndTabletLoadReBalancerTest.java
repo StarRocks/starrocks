@@ -40,6 +40,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BackendBalanceState;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
@@ -54,6 +55,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class DiskAndTabletLoadReBalancerTest {
 
@@ -778,5 +780,71 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertEquals((Long) pathHash14, pathHash);
         lState.addUsedCapacity(pathHash14, 2 * tabletDataSize);
         Assertions.assertEquals((Long) pathHash13, lState.getLowestLoadPath());
+    }
+
+    /**
+     * Test that demonstrates why Double.compare is necessary for NaN handling.
+     * Manual comparisons with NaN always return false, which can violate
+     * Comparator transitivity contract. Double.compare handles NaN consistently.
+     */
+    @Test
+    public void testDoubleCompareHandlesNaNCorrectly() {
+        double nan = Double.NaN;
+        double normal = 0.5;
+
+        // Manual comparisons with NaN always return false - this is problematic for Comparators
+        Assertions.assertFalse(nan > normal);
+        Assertions.assertFalse(nan < normal);
+        Assertions.assertFalse(nan == normal);
+        Assertions.assertFalse(Math.abs(nan - normal) < 1e-6);
+
+        // Double.compare handles NaN consistently (NaN is considered greater than any other value)
+        // This ensures Comparator transitivity is maintained
+        Assertions.assertTrue(Double.compare(nan, normal) > 0);
+        Assertions.assertTrue(Double.compare(normal, nan) < 0);
+        Assertions.assertEquals(0, Double.compare(nan, nan));
+    }
+
+    /**
+     * Test sorting with multiple NaN values to verify Comparator transitivity.
+     * This test ensures that sorting a list containing multiple NaN values
+     * does not throw IllegalArgumentException due to transitivity violation.
+     */
+    @Test
+    public void testSortingWithMultipleNaNValues() {
+        Map<Long, Pair<Long, Long>> diskCapMap = Maps.newHashMap();
+        // Multiple backends with zero capacity (all produce NaN)
+        diskCapMap.put(1L, Pair.create(0L, 0L));  // NaN
+        diskCapMap.put(2L, Pair.create(0L, 0L));  // NaN
+        diskCapMap.put(3L, Pair.create(1000L, 500L));  // 0.5
+        diskCapMap.put(4L, Pair.create(1000L, 300L));  // 0.3
+        diskCapMap.put(5L, Pair.create(0L, 0L));  // NaN
+
+        DiskAndTabletLoadReBalancer.DiskBalanceChecker checker =
+                new DiskAndTabletLoadReBalancer.DiskBalanceChecker(diskCapMap);
+
+        List<Pair<Long, Set<Long>>> tablets = new ArrayList<>();
+        tablets.add(Pair.create(1L, com.google.common.collect.Sets.newHashSet(100L)));
+        tablets.add(Pair.create(2L, com.google.common.collect.Sets.newHashSet(200L)));
+        tablets.add(Pair.create(3L, com.google.common.collect.Sets.newHashSet(300L)));
+        tablets.add(Pair.create(4L, com.google.common.collect.Sets.newHashSet(400L)));
+        tablets.add(Pair.create(5L, com.google.common.collect.Sets.newHashSet(500L)));
+
+        // Sort multiple times to increase chance of hitting transitivity issues
+        for (int i = 0; i < 10; i++) {
+            Assertions.assertDoesNotThrow(() -> {
+                tablets.sort((t1, t2) -> {
+                    if (t1.second.size() != t2.second.size()) {
+                        return t2.second.size() - t1.second.size();
+                    } else {
+                        double percent1 = checker.getDiskUsedPercent(t1.first);
+                        double percent2 = checker.getDiskUsedPercent(t2.first);
+                        return Double.compare(percent2, percent1);
+                    }
+                });
+            });
+        }
+
+        Assertions.assertEquals(5, tablets.size());
     }
 }
