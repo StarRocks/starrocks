@@ -3954,6 +3954,62 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterDataCacheEnable(Database db, OlapTable table,
+                                      Map<String, String> properties,
+                                      List<Runnable> appliers) throws DdlException {
+        // The caller (AlterJobExecutor.visitModifyTablePropertiesClause) must hold
+        // the db write lock to prevent concurrent partition additions/drops while
+        // we iterate over the partition list and update DataCacheInfo.
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+
+        boolean isEnable;
+        try {
+            isEnable = PropertyAnalyzer.analyzeDataCacheEnable(properties);
+        } catch (AnalysisException ex) {
+            throw new DdlException(ex.getMessage());
+        }
+
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new DdlException("Property 'datacache.enable' is only supported for cloud native tables");
+        }
+
+        // Collect partitions that need shard group update
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        Collection<Partition> partitions = table.getPartitions();
+        List<Partition> partitionsToUpdateShardGroup = new ArrayList<>();
+
+        for (Partition partition : partitions) {
+            DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+            if (dataCacheInfo == null || isEnable != dataCacheInfo.isEnabled()) {
+                partitionsToUpdateShardGroup.add(partition);
+            }
+        }
+
+        // Call StarOS to update shard groups BEFORE persisting
+        if (!partitionsToUpdateShardGroup.isEmpty()) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .updateShardGroup(partitionsToUpdateShardGroup, isEnable);
+        }
+
+        // Add applier for table property + partition DataCacheInfo updates.
+        // Note: We do NOT write a separate OP_BATCH_MODIFY_PARTITION log here.
+        // The partition-level DataCacheInfo is derived from the table property during
+        // replay of OP_ALTER_TABLE_PROPERTIES (see replayModifyTableProperty), ensuring
+        // atomicity — a single edit log entry covers both table and partition state.
+        appliers.add(() -> {
+            // Update table property
+            table.setDataCacheEnable(isEnable);
+
+            // Update partition DataCacheInfo in memory
+            for (Partition partition : partitions) {
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                boolean asyncWriteBack = dataCacheInfo != null && dataCacheInfo.isAsyncWriteBack();
+                partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(isEnable, asyncWriteBack));
+            }
+        });
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3993,6 +4049,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            alterDataCacheEnable(db, table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -4437,6 +4496,22 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 } else if (opCode == OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
                     GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
                             tableId, tableProperty.getBaseCompactionForbiddenTimeRanges());
+                } else if (opCode == OperationType.OP_ALTER_TABLE_PROPERTIES) {
+                    // When datacache.enable is changed at the table level, also update all
+                    // partition-level DataCacheInfo to match. This ensures atomicity: a single
+                    // OP_ALTER_TABLE_PROPERTIES log entry covers both table and partition state.
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)
+                            && olapTable.isCloudNativeTableOrMaterializedView()) {
+                        boolean dataCacheEnable = Boolean.parseBoolean(
+                                properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE));
+                        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                        for (Partition partition : olapTable.getPartitions()) {
+                            DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                            boolean asyncWriteBack = dataCacheInfo != null && dataCacheInfo.isAsyncWriteBack();
+                            partitionInfo.setDataCacheInfo(partition.getId(),
+                                    new DataCacheInfo(dataCacheEnable, asyncWriteBack));
+                        }
+                    }
                 }
             }
         } catch (Exception ex) {
