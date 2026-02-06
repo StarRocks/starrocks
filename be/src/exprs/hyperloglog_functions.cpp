@@ -14,13 +14,13 @@
 
 #include "exprs/hyperloglog_functions.h"
 
+#include "base/phmap/phmap.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/object_column.h"
 #include "exprs/function_context.h"
 #include "exprs/unary_function.h"
 #include "types/hll.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

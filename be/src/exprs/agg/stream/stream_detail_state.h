@@ -15,9 +15,9 @@
 
 #include <type_traits>
 
+#include "base/phmap/phmap.h"
 #include "column/column.h"
 #include "column/type_traits.h"
-#include "util/phmap/phmap.h"
 namespace starrocks {
 
 template <LogicalType LT, typename = guard::Guard>

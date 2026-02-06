@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include "base/phmap/phmap.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/sorting/sort_permute.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors.h"
 #include "storage/range.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::pipeline {
 

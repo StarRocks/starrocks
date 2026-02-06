@@ -41,6 +41,8 @@
 #include <utility>
 
 #include "base/hash/xxh3.h"
+#include "base/phmap/btree.h"
+#include "base/phmap/phmap.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "base/string/utf8.h"
@@ -52,8 +54,6 @@
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/phmap/btree.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

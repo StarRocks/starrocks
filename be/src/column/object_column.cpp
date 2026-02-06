@@ -14,6 +14,7 @@
 
 #include "column/object_column.h"
 
+#include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
@@ -22,7 +23,6 @@
 #include "util/json.h"
 #include "util/mysql_row_buffer.h"
 #include "util/percentile_value.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

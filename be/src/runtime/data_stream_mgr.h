@@ -41,6 +41,7 @@
 #include <set>
 #include <shared_mutex>
 
+#include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
@@ -50,7 +51,6 @@
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
-#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace google::protobuf {

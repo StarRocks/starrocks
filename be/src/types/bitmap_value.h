@@ -48,13 +48,13 @@
 #include <utility>
 
 #include "base/coding.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_fwd_decl.h"
 #include "base/string/slice.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "types/bitmap_value_detail.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 

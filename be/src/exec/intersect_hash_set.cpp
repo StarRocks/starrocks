@@ -14,9 +14,9 @@
 
 #include "exec/intersect_hash_set.h"
 
+#include "base/phmap/phmap_dump.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/exec_node.h"
-#include "util/phmap/phmap_dump.h"
 
 namespace starrocks {
 template <typename HashSet>

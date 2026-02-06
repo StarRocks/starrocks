@@ -22,11 +22,11 @@
 #include <string>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "util/countdown_latch.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 struct BackendInfo;

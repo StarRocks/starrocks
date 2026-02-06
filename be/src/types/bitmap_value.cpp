@@ -35,11 +35,11 @@
 #include "types/bitmap_value.h"
 
 #include "base/container/raw_container.h"
+#include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/memory/column_allocator.h"
 #include "types/bitmap_value_detail.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

@@ -30,6 +30,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -40,7 +41,6 @@
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "util/block_split_bloom_filter.h"
-#include "util/phmap/phmap.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {

@@ -38,10 +38,10 @@
 #include <map>
 
 #include "base/coding.h"
+#include "base/phmap/phmap.h"
 #include "base/simd/multi_version.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
-#include "util/phmap/phmap.h"
 
 using std::map;
 using std::nothrow;

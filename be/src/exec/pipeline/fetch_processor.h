@@ -20,6 +20,7 @@
 
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/container/raw_container.h"
+#include "base/phmap/phmap.h"
 #include "bthread/mutex.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
@@ -29,7 +30,6 @@
 #include "exec/pipeline/lookup_request.h"
 #include "exec/sorting/sort_permute.h"
 #include "runtime/descriptors.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::pipeline {
 

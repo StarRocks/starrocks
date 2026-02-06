@@ -16,10 +16,10 @@
 
 #include <memory>
 
+#include "base/phmap/phmap.h"
 #include "column/column.h"
 #include "common/global_types.h"
 #include "runtime/runtime_state.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 class RuntimeState;

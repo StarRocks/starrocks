@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "base/phmap/phmap.h"
 #include "common/global_types.h"
 #include "exec/exec_node.h"
 #include "runtime/descriptors.h"
 #include "runtime/lookup_stream_mgr.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 class LookUpDispatcher;

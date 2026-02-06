@@ -341,7 +341,6 @@ set(EXEC_FILES
         ./types/variant_value_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
-        ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/base85_test.cpp
         ./util/bitmap_test.cpp

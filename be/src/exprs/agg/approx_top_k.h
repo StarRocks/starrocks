@@ -16,6 +16,7 @@
 
 #include <type_traits>
 
+#include "base/phmap/phmap.h"
 #include "column/array_column.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -26,7 +27,6 @@
 #include "exprs/agg/aggregate_traits.h"
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

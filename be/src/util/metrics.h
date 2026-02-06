@@ -50,10 +50,10 @@
 #include <utility>
 
 #include "base/concurrency/spinlock.h"
+#include "base/phmap/phmap.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "util/core_local.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

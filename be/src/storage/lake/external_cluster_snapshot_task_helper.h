@@ -18,10 +18,10 @@
 #include <string>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::lake {
 
