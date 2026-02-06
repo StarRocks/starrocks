@@ -19,14 +19,11 @@ ADD_BE_LIB(TypesCore
 )
 
 ADD_BE_LIB(Types
-    array_type_info.cpp
     bitmap_value.cpp
     date_value.cpp
     hll.cpp
     hll_sketch.cpp
     logical_type_size.cpp
-    map_type_info.cpp
-    struct_type_info.cpp
     timestamp_value.cpp
     checker/type_checker.cpp
     checker/type_checker_xml_loader.cpp

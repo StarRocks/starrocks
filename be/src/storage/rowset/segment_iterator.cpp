@@ -31,6 +31,7 @@
 #include "gutil/stl_util.h"
 #include "io/shared_buffered_input_stream.h"
 #include "segment_options.h"
+#include "storage/array_type_info.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/column_or_predicate.h"
@@ -65,7 +66,6 @@
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "storage/virtual_column_utils.h"
-#include "types/array_type_info.h"
 #include "types/logical_type.h"
 #include "util/starrocks_metrics.h"
 

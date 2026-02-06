@@ -22,6 +22,7 @@ add_subdirectory(rowset)
 set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
+    array_type_info.cpp
     decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
@@ -33,6 +34,7 @@ set(STORAGE_FILES
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
+    map_type_info.cpp
     publish_version_manager.cpp
     olap_common.cpp
     olap_define.cpp
@@ -64,6 +66,7 @@ set(STORAGE_FILES
     tablet_updates.cpp
     txn_manager.cpp
     types.cpp
+    struct_type_info.cpp
     update_manager.cpp
     utils.cpp
     compaction_utils.cpp
