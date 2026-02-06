@@ -241,7 +241,7 @@ TEST_F(PersistentIndexLoadExecutorTest, test_submit_task_many_times) {
 
 TEST_F(PersistentIndexLoadExecutorTest, test_non_pk_tablet) {
     // non pk tablet
-    auto tablet = std::make_shared<Tablet>();
+    auto tablet = std::make_shared<Tablet>(DUP_KEYS);
     auto tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->set_tablet_id(10000);
     tablet->set_tablet_meta(tablet_meta);
