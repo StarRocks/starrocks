@@ -418,6 +418,7 @@
                         "integrations/BI_integrations/Hex",
                         "integrations/BI_integrations/Querybook",
                         "integrations/BI_integrations/QuickBI",
+                        "integrations/BI_integrations/Rill",
                         "integrations/BI_integrations/Tableau_Desktop",
                         "integrations/BI_integrations/Metabase"
                     ]
