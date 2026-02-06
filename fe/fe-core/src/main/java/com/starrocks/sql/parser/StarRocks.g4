@@ -2862,6 +2862,7 @@ partitionDesc
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
     | PARTITION BY partitionExpr (',' partitionExpr)*
+    | PARTITION BY '(' partitionExpr (',' partitionExpr)* ')'
     ;
 
 listPartitionDesc
