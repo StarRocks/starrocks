@@ -378,18 +378,17 @@ public class CachingMvPlanContextBuilder {
             return;
         }
 
-        submitAsyncTask("MVCacheContextLoad-" + mv.getName(), () -> {
-            try {
-                loadMVAstCache(mv);
+        try {
+            // load mv ast cache synchronously
+            loadMVAstCache(mv);
 
-                CompletableFuture<List<MvPlanContext>> future = loadMVPlanCache(mv);
-                future.whenComplete((ignored, e) -> MV_PLAN_CACHE_LOAD_IN_FLIGHT.remove(mvId));
-            } catch (Throwable t) {
-                MV_PLAN_CACHE_LOAD_IN_FLIGHT.remove(mvId);
-                throw t;
-            }
-            return null;
-        });
+            CompletableFuture<List<MvPlanContext>> future = loadMVPlanCache(mv);
+            future.whenComplete((ignored, e) -> MV_PLAN_CACHE_LOAD_IN_FLIGHT.remove(mvId));
+        } catch (Throwable e) {
+            LOG.warn("loadMVAstCache failed: {}", mv.getName(), e);
+        } finally {
+            MV_PLAN_CACHE_LOAD_IN_FLIGHT.remove(mvId);
+        }
     }
 
     public void triggerPendingMVPlanCacheLoads() {
