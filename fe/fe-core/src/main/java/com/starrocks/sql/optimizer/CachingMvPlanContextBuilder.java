@@ -373,7 +373,7 @@ public class CachingMvPlanContextBuilder {
 
         // if mv is already in cache, no need to load again, just return directly.
         long mvId = mv.getId();
-        if (!MV_PLAN_CACHE_LOAD_IN_FLIGHT.add(mvId) || contains(mv)){
+        if (!MV_PLAN_CACHE_LOAD_IN_FLIGHT.add(mvId)) {
             LOG.debug("Skip duplicate mv plan cache load: {}", mv.getName());
             return;
         }
