@@ -45,12 +45,12 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -436,11 +436,21 @@ public class ExportMgr implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("ExportJob", (long) idToJob.size());
+        readLock();
+        try {
+            return ImmutableMap.of("ExportJob", (long) idToJob.size());
+        } finally {
+            readUnlock();
+        }
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return Lists.newArrayList(Pair.create(new ArrayList<>(idToJob.values()), (long) idToJob.size()));
+    public long estimateSize() {
+        readLock();
+        try {
+            return Estimator.estimate(idToJob, 20);
+        } finally {
+            readUnlock();
+        }
     }
 }

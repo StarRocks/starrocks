@@ -22,12 +22,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -42,6 +42,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
@@ -55,6 +56,7 @@ import org.apache.spark.util.SizeEstimator;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -70,8 +72,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
-    private static final int MEMORY_META_SAMPLES = 10;
-    private static final int MEMORY_FILE_SAMPLES = 100;
     private static final int MEMORY_SNAPSHOT_SIZE = 2048; // approx memory size of one snapshot object without manifests
     private static final int MEMORY_MANIFEST_SIZE = 1024; // approx memory size of one manifest object in snapshot
     private static final int MEMORY_DATA_FILE_SIZE = 1536; // approx memory size of one data file in manifest
@@ -584,49 +584,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return ans;
     }
 
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        Pair<List<Object>, Long> dbSamples = Pair.create(databases.asMap().values()
-                        .stream()
-                        .limit(MEMORY_META_SAMPLES)
-                        .collect(Collectors.toList()),
-                databases.estimatedSize());
-
-        List<List<String>> partitionNames = getAllCachedPartitionNames();
-        List<Object> partitions = partitionNames
-                .stream()
-                .flatMap(List::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long partitionTotal = partitionNames
-                .stream()
-                .mapToLong(List::size)
-                .sum();
-        Pair<List<Object>, Long> partitionSamples = Pair.create(partitions, partitionTotal);
-
-        List<Object> dataFiles = dataFileCache.asMap().values()
-                .stream().flatMap(Set::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long dataFilesTotal = dataFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum();
-        Pair<List<Object>, Long> dataFileSamples = Pair.create(dataFiles, dataFilesTotal);
-
-        List<Object> deleteFiles = deleteFileCache.asMap().values()
-                .stream().flatMap(Set::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long deleteFilesTotal = deleteFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum();
-        Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFiles, deleteFilesTotal);
-
-        return Lists.newArrayList(dbSamples, partitionSamples, dataFileSamples, deleteFileSamples);
-    }
-
     public static long estimatePartitionDataInBytes(PartitionData pd) {
         if (pd == null) {
             return 0L;
@@ -684,7 +641,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return size;
     }
 
-    @Override
     public Map<String, Long> estimateCount() {
         Map<String, Long> counter = new HashMap<>();
         List<List<String>> partitionNames = getAllCachedPartitionNames();
@@ -707,6 +663,81 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .mapToLong(Set::size)
                 .sum());
         return counter;
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(tables.asMap(), 10) +
+                Estimator.estimate(databases.asMap(), 10) +
+                estimateDataFileCacheSize() +
+                estimateDeleteFileCacheSize() + Estimator.estimate(metaFileCacheMap, 10);
+    }
+
+    private long estimateDataFileCacheSize() {
+        int cnt = dataFileCache.asMap().size();
+        long size = Estimator.estimate(dataFileCache.asMap().keySet(), cnt);
+        for (Set<DataFile> files : dataFileCache.asMap().values()) {
+            if (files.isEmpty()) {
+                continue;
+            }
+            StructLike like = files.iterator().next().partition();
+            if (like instanceof PartitionData partitionData) {
+                // all files using the same PartitionData schema, so ignore it in estimation
+                org.apache.avro.Schema schema = partitionData.getSchema();
+                Set<Class<?>> ignoreClass = new HashSet<>();
+                ignoreClass.add(schema.getClass());
+                size += Estimator.estimate(files, 10, ignoreClass);
+                size += Estimator.estimate(schema, 10);
+            } else {
+                size += Estimator.estimate(files, 10);
+            }
+        }
+        return size;
+    }
+
+    private long estimateDeleteFileCacheSize() {
+        int cnt = deleteFileCache.asMap().size();
+        // Estimate size of keys
+        long size = Estimator.estimate(deleteFileCache.asMap().keySet(), cnt);
+
+        // Count total delete files across all cache entries
+        long totalDeleteFiles = deleteFileCache.asMap().values().stream()
+                .mapToLong(Set::size)
+                .sum();
+
+        if (totalDeleteFiles == 0) {
+            return size;
+        }
+
+        // Sample up to 100 DeleteFiles evenly distributed
+        int sampleTarget = (int) Math.min(100, totalDeleteFiles);
+        long step = totalDeleteFiles / sampleTarget;
+        List<DeleteFile> samples = new ArrayList<>(sampleTarget);
+        long index = 0;
+        long nextSampleIndex = 0;
+
+        outer:
+        for (Set<DeleteFile> files : deleteFileCache.asMap().values()) {
+            for (DeleteFile file : files) {
+                if (index == nextSampleIndex) {
+                    samples.add(file);
+                    nextSampleIndex += step;
+                    if (samples.size() >= sampleTarget) {
+                        break outer;
+                    }
+                }
+                index++;
+            }
+        }
+
+        // Estimate all samples at once, then calculate average and extrapolate
+        if (!samples.isEmpty()) {
+            long sampleTotalSize = Estimator.estimate(samples, samples.size());
+            long avgSize = sampleTotalSize / samples.size();
+            size += avgSize * totalDeleteFiles;
+        }
+
+        return size;
     }
 
     private long countSnapshotsSafe(Table table) {

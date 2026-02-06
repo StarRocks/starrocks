@@ -46,7 +46,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.LogBuilder;
@@ -56,6 +55,7 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -106,7 +106,6 @@ import java.util.stream.Collectors;
  */
 public class LoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
-    private static final int MEMORY_JOB_SAMPLES = 10;
 
     private final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
     private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
@@ -866,12 +865,8 @@ public class LoadMgr implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = idToLoadJob.values()
-                .stream()
-                .limit(MEMORY_JOB_SAMPLES)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(samples, (long) idToLoadJob.size()));
+    public long estimateSize() {
+        return Estimator.estimate(idToLoadJob, 20);
     }
 
     public Map<Long, Long> getRunningLoadCount() {

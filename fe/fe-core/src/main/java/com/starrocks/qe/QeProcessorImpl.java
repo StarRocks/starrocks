@@ -35,16 +35,15 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
@@ -74,7 +73,6 @@ import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
 
 public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
-    private static final int MEMORY_QUERY_SAMPLES = 10;
     private final Map<TUniqueId, QueryInfo> coordinatorMap = Maps.newConcurrentMap();
     private final Map<TUniqueId, Long> monitorQueryMap = Maps.newConcurrentMap();
 
@@ -326,17 +324,13 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = coordinatorMap.values()
-                .stream()
-                .limit(MEMORY_QUERY_SAMPLES)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(samples, (long) coordinatorMap.size()));
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
     }
 
     @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
+    public long estimateSize() {
+        return Estimator.estimate(coordinatorMap, 20);
     }
 
     public static final class QueryInfo {

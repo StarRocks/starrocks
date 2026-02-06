@@ -80,6 +80,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
@@ -146,20 +147,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class ReportHandler extends Daemon implements MemoryTrackable {
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
-            List<Pair<List<Object>, Long>> result = new ArrayList<>();
-            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
-                result.add(Pair.create(taskMap.values()
-                        .stream()
-                        .limit(1)
-                        .collect(Collectors.toList()),
-                        (long) taskMap.size()));
-            }
-            return result;
-        }
-    }
 
     @Override
     public Map<String, Long> estimateCount() {
@@ -170,6 +157,17 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             }
             long queueSize = (long) reportQueue.size() + (long) resourceReportQueue.size();
             return ImmutableMap.of("PendingTask", count, "ReportQueue", queueSize);
+        }
+    }
+
+    @Override
+    public long estimateSize() {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
+            long size = 0;
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                size += Estimator.estimate(taskMap, 20);
+            }
+            return size;
         }
     }
 

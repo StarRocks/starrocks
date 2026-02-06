@@ -70,7 +70,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
@@ -79,6 +78,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -113,6 +113,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+import java.util.Collections;
+>>>>>>> 2a6fbeaae3 ([Enhancement] Introduce utils for FE memory estimation (#68287))
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -786,13 +791,41 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = dbToDeleteInfos.values()
-                .stream()
-                .filter(infos -> !infos.isEmpty())
-                .map(infos -> infos.stream().findAny().get())
-                .collect(Collectors.toList());
-        long size = dbToDeleteInfos.values().stream().mapToInt(List::size).sum();
-        return Lists.newArrayList(Pair.create(samples, size));
+    public long estimateSize() {
+        long size = Estimator.estimate(idToDeleteJob, 20);
+
+        long totalInfos = dbToDeleteInfos.values().stream()
+                .mapToLong(List::size)
+                .sum();
+
+        if (totalInfos > 0) {
+            int sampleTarget = (int) Math.min(20, totalInfos);
+            long step = totalInfos / sampleTarget;
+            List<MultiDeleteInfo> samples = new ArrayList<>(sampleTarget);
+            long index = 0;
+            long nextSampleIndex = 0;
+
+            outer:
+            for (List<MultiDeleteInfo> infos : dbToDeleteInfos.values()) {
+                for (MultiDeleteInfo info : infos) {
+                    if (index == nextSampleIndex) {
+                        samples.add(info);
+                        nextSampleIndex += step;
+                        if (samples.size() >= sampleTarget) {
+                            break outer;
+                        }
+                    }
+                    index++;
+                }
+            }
+
+            if (!samples.isEmpty()) {
+                long sampleTotalSize = Estimator.estimate(samples, samples.size());
+                long avgSize = sampleTotalSize / samples.size();
+                size += avgSize * totalInfos;
+            }
+        }
+
+        return size;
     }
 }

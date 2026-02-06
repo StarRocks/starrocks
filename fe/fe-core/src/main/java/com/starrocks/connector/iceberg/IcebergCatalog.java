@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
@@ -246,10 +245,6 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     default Map<String, Long> estimateCount() {
         return new HashMap<>();
-    }
-
-    default List<Pair<List<Object>, Long>> getSamples() {
-        return new ArrayList<>();
     }
 
     // --------------- partition APIs ---------------

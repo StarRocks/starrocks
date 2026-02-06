@@ -46,6 +46,7 @@ import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
@@ -193,6 +194,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     private Coordinator coord;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPAddress;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPPort;
+    @IgnoreMemoryTrack
     private OlapTable table;
     private long taskDeadlineMs;
     private boolean isCommitting;

@@ -16,9 +16,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
@@ -332,15 +330,6 @@ public class TaskRunManager implements MemoryTrackable {
         return ImmutableMap.of("PendingTaskRun", validPendingCount,
                 "RunningTaskRun", (long) taskRunScheduler.getRunningTaskCount(),
                 "HistoryTaskRun", taskRunHistory.getTaskRunCount());
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> taskRunSamples = taskRunHistory.getSamplesForMemoryTracker();
-        long size = taskRunScheduler.getPendingQueueCount()
-                + taskRunScheduler.getRunningTaskCount()
-                + taskRunHistory.getTaskRunCount();
-        return Lists.newArrayList(Pair.create(taskRunSamples, size));
     }
 
     /**
