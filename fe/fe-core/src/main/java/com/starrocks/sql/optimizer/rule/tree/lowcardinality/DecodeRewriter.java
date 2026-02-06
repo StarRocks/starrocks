@@ -69,6 +69,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.supportLowCardinality;
+
 /*
  * Rewrite the whole plan using the dict column by from bottom-up
  */
@@ -359,8 +361,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             }
 
             // merge stage is different from update stage
-            if (FunctionSet.MAX.equals(aggFn.getFnName()) || FunctionSet.MIN.equals(aggFn.getFnName())
-                    || FunctionSet.ANY_VALUE.equals(aggFn.getFnName())) {
+            if (supportLowCardinality(aggFn.getType())) {
                 ColumnRefOperator newAggRef = context.stringRefToDictRefMap.getOrDefault(aggRef, aggRef);
                 aggregations.put(newAggRef, context.stringExprToDictExprMap.get(aggFn).cast());
                 inputStringRefs.union(aggRef.getId());
