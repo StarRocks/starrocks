@@ -14,6 +14,7 @@
 
 #include "meta_file.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "base/coding.h"
@@ -34,6 +35,39 @@
 
 namespace starrocks::lake {
 
+uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
+    DCHECK_GE(segment_pos, 0);
+    if (segment_pos < 0) {
+        return 0;
+    }
+    if (segment_pos < rowset_meta.segment_metas_size()) {
+        const auto& segment_meta = rowset_meta.segment_metas(segment_pos);
+        if (segment_meta.has_segment_idx()) {
+            return segment_meta.segment_idx();
+        }
+    }
+    return static_cast<uint32_t>(segment_pos);
+}
+
+uint32_t get_max_segment_idx(const RowsetMetadataPB& rowset_meta) {
+    uint32_t max_idx = 0;
+    for (int i = 0; i < rowset_meta.segments_size(); ++i) {
+        max_idx = std::max(max_idx, get_segment_idx(rowset_meta, i));
+    }
+    return max_idx;
+}
+
+uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta) {
+    if (rowset_meta.segments_size() == 0) {
+        return 1;
+    }
+    return get_max_segment_idx(rowset_meta) + 1;
+}
+
+uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
+    return rowset_meta.id() + get_segment_idx(rowset_meta, segment_pos);
+}
+
 static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
@@ -41,6 +75,18 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     // Do not include crc32c_gen_version in cache key
     cache_key_pb.mutable_delvec_page()->clear_crc32c_gen_version();
     return cache_key_pb.SerializeAsString();
+}
+
+// Collect rssids that belong to this rowset.
+// Rowset without segments still occupies one rssid (rowset.id()) for delete-file operation.
+static void collect_rowset_rssids(const RowsetMetadataPB& rowset_meta, std::unordered_set<uint32_t>* rssids) {
+    if (rowset_meta.segments_size() == 0) {
+        rssids->insert(rowset_meta.id());
+        return;
+    }
+    for (int i = 0; i < rowset_meta.segments_size(); ++i) {
+        rssids->insert(get_rssid(rowset_meta, i));
+    }
 }
 
 MetaFileBuilder::MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata)
@@ -141,7 +187,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         del_file_with_rid.set_name(op_write.dels(i));
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // For now, op_offset is always max segment's id
-        del_file_with_rid.set_op_offset(std::max(op_write.rowset().segments_size(), 1) - 1);
+        del_file_with_rid.set_op_offset(get_max_segment_idx(*rowset));
         if (op_write.del_encryption_metas_size() > 0) {
             CHECK(op_write.del_encryption_metas_size() == op_write.dels_size())
                     << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
@@ -151,7 +197,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
     // if rowset don't contain segment files, still inc next_rowset_id
-    _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
+    _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
     // collect trash files
     for (const auto& orphan_file : orphan_files) {
         DCHECK(is_segment(orphan_file.name()));
@@ -181,21 +227,14 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
 
 // delete from protobuf Map and return deleted count
 template <typename T>
-static int delete_from_protobuf_map(T* protobuf_map, const std::vector<std::pair<uint32_t, uint32_t>>& delete_sid_range,
+static int delete_from_protobuf_map(T* protobuf_map, const std::unordered_set<uint32_t>& delete_sids,
                                     const std::function<void(const T&)>& gc_func) {
     // collect item that had been deleted.
     T gc_map;
     int erase_cnt = 0;
     auto it = protobuf_map->begin();
     while (it != protobuf_map->end()) {
-        bool need_del = false;
-        for (const auto& range : delete_sid_range) {
-            if (it->first >= range.first && it->first <= range.second) {
-                need_del = true;
-                break;
-            }
-        }
-        if (need_del) {
+        if (delete_sids.contains(it->first)) {
             gc_map[it->first] = it->second;
             it = protobuf_map->erase(it);
             erase_cnt++;
@@ -311,7 +350,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                                            uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
     // delete input rowsets
     std::stringstream del_range_ss;
-    std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
+    std::unordered_set<uint32_t> delete_delvec_sids;
     struct Finder {
         uint32_t id;
         bool operator()(const uint32_t rowid) const { return rowid == id; }
@@ -331,13 +370,16 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                                       Finder{it->id()});
         if (search_it != op_compaction.input_rowsets().end()) {
             // find it
-            delete_delvec_sid_range.emplace_back(it->id(), it->id() + std::max(it->segments_size(), 1) - 1);
+            std::unordered_set<uint32_t> rowset_rssids;
+            collect_rowset_rssids(*it, &rowset_rssids);
+            for (uint32_t rssid : rowset_rssids) {
+                delete_delvec_sids.insert(rssid);
+                del_range_ss << rssid << " ";
+            }
             // Collect del files.
             _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
             _tablet_meta->mutable_compaction_inputs()->Add(std::move(*it));
             it = _tablet_meta->mutable_rowsets()->erase(it);
-            del_range_ss << "[" << delete_delvec_sid_range.back().first << "," << delete_delvec_sid_range.back().second
-                         << "] ";
             deleted_input_rowset_cnt++;
         } else {
             it++;
@@ -359,11 +401,11 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     auto delvecs = _tablet_meta->mutable_delvec_meta()->mutable_delvecs();
     using T_DELVEC = std::decay_t<decltype(*delvecs)>;
     int delvec_erase_cnt =
-            delete_from_protobuf_map<T_DELVEC>(delvecs, delete_delvec_sid_range, [](const T_DELVEC& gc_map) {});
+            delete_from_protobuf_map<T_DELVEC>(delvecs, delete_delvec_sids, [](const T_DELVEC& gc_map) {});
     // delete dcg by input rowsets
     auto dcgs = _tablet_meta->mutable_dcg_meta()->mutable_dcgs();
     using T_DCG = std::decay_t<decltype(*dcgs)>;
-    int dcg_erase_cnt = delete_from_protobuf_map<T_DCG>(dcgs, delete_delvec_sid_range, [&](const T_DCG& gc_map) {
+    int dcg_erase_cnt = delete_from_protobuf_map<T_DCG>(dcgs, delete_delvec_sids, [&](const T_DCG& gc_map) {
         for (const auto& each : gc_map) {
             const auto& dcg = each.second;
             for (int i = 0; i < dcg.column_files_size(); ++i) {
@@ -400,7 +442,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
         for (const auto& each : collect_del_files) {
             rowset->add_del_files()->CopyFrom(each);
         }
-        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
+        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
         has_output_rowset = true;
         output_rowset_id = rowset->id();
     }
@@ -460,7 +502,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
     for (int i = 0; i < _tablet_meta->rowsets_size(); i++) {
         auto* mutable_rowset = _tablet_meta->mutable_rowsets(i);
         for (int j = 0; j < mutable_rowset->segments_size(); j++) {
-            segment_id_to_rowset[mutable_rowset->id() + j] = mutable_rowset;
+            segment_id_to_rowset[mutable_rowset->id() + get_segment_idx(*mutable_rowset, j)] = mutable_rowset;
         }
     }
     // If there are pending rowsets that have not been finalized (batch_apply scenario),
@@ -470,7 +512,8 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
     if (_pending_rowset_data.rowset_pb.segments_size() > 0) {
         uint32_t pending_rowset_id = _tablet_meta->next_rowset_id();
         for (int j = 0; j < _pending_rowset_data.rowset_pb.segments_size(); j++) {
-            segment_id_to_rowset[pending_rowset_id + j] = &_pending_rowset_data.rowset_pb;
+            segment_id_to_rowset[pending_rowset_id + get_segment_idx(_pending_rowset_data.rowset_pb, j)] =
+                    &_pending_rowset_data.rowset_pb;
         }
     }
     // For test purpose, we can set recover flag to test recover mode.
@@ -798,6 +841,13 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segments_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
+        int first_segment_metas_size = _pending_rowset_data.rowset_pb.segment_metas_size();
+        for (int i = 0; i < _pending_rowset_data.rowset_pb.segments_size(); i++) {
+            if (i >= first_segment_metas_size) {
+                _pending_rowset_data.rowset_pb.add_segment_metas();
+            }
+            _pending_rowset_data.rowset_pb.mutable_segment_metas(i)->set_segment_idx(get_segment_idx(rowset_pb, i));
+        }
     } else {
         // Merge segments
         for (int i = 0; i < rowset_pb.segments_size(); i++) {
@@ -816,8 +866,13 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
             _pending_rowset_data.rowset_pb.add_shared_segments(rowset_pb.shared_segments(i));
         }
         // Merge segment metadatas
-        for (int i = 0; i < rowset_pb.segment_metas_size(); i++) {
-            _pending_rowset_data.rowset_pb.add_segment_metas()->CopyFrom(rowset_pb.segment_metas(i));
+        for (int i = 0; i < rowset_pb.segments_size(); i++) {
+            auto* segment_meta = _pending_rowset_data.rowset_pb.add_segment_metas();
+            if (i < rowset_pb.segment_metas_size()) {
+                segment_meta->CopyFrom(rowset_pb.segment_metas(i));
+            }
+            // Remap segment_idx to the merged rowset's local segment id space.
+            segment_meta->set_segment_idx(_pending_rowset_data.assigned_segment_idx + get_segment_idx(rowset_pb, i));
         }
     }
 
@@ -835,8 +890,8 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     _pending_rowset_data.del_encryption_metas.insert(_pending_rowset_data.del_encryption_metas.end(),
                                                      del_encryption_metas.begin(), del_encryption_metas.end());
 
-    // Track cumulative number of segments already added when batch applying multiple opwrites.
-    _pending_rowset_data.assigned_segment_id += rowset_pb.segments_size();
+    // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
+    _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
 }
 
 void MetaFileBuilder::set_final_rowset() {
@@ -872,7 +927,7 @@ void MetaFileBuilder::set_final_rowset() {
         del_file_with_rid.set_name(_pending_rowset_data.dels[i]);
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // For now, op_offset is always max segment's id
-        del_file_with_rid.set_op_offset(std::max(rowset->segments_size(), 1) - 1);
+        del_file_with_rid.set_op_offset(get_max_segment_idx(*rowset));
         if (i < _pending_rowset_data.del_encryption_metas.size()) {
             del_file_with_rid.set_encryption_meta(_pending_rowset_data.del_encryption_metas[i]);
         }
@@ -880,7 +935,7 @@ void MetaFileBuilder::set_final_rowset() {
     }
 
     // If rowset doesn't contain segment files, still increment next_rowset_id
-    _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
+    _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
 
     // Collect orphan files
     for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
