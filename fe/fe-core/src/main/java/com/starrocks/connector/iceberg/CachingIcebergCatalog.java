@@ -36,6 +36,7 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
@@ -69,17 +70,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
-<<<<<<< HEAD
-    private static final int MEMORY_META_SAMPLES = 10;
-    private static final int MEMORY_FILE_SAMPLES = 100;
     private static final int MEMORY_SNAPSHOT_SIZE = 1536; // approx memory size of one snapshot object without manifests
     private static final int MEMORY_MANIFEST_SIZE = 512; // approx memory size of one manifest object in snapshot
-=======
-    private static final int MEMORY_SNAPSHOT_SIZE = 2048; // approx memory size of one snapshot object without manifests
-    private static final int MEMORY_MANIFEST_SIZE = 1024; // approx memory size of one manifest object in snapshot
-    private static final int MEMORY_DATA_FILE_SIZE = 1536; // approx memory size of one data file in manifest
-    private static final int MEMORY_PARTITION_DATA_SIZE = 768; // approx memory size of one partition data in data file
->>>>>>> 2a6fbeaae3 ([Enhancement] Introduce utils for FE memory estimation (#68287))
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
@@ -607,110 +599,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return ans;
     }
 
-<<<<<<< HEAD
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        Pair<List<Object>, Long> dbSamples = Pair.create(databases.asMap().values()
-                        .stream()
-                        .limit(MEMORY_META_SAMPLES)
-                        .collect(Collectors.toList()),
-                databases.estimatedSize());
-
-        List<List<String>> partitionNames = getAllCachedPartitionNames();
-        List<Object> partitions = partitionNames
-                .stream()
-                .flatMap(List::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long partitionTotal = partitionNames
-                .stream()
-                .mapToLong(List::size)
-                .sum();
-        Pair<List<Object>, Long> partitionSamples = Pair.create(partitions, partitionTotal);
-
-        List<Object> dataFiles = dataFileCache.asMap().values()
-                .stream().flatMap(Set::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long dataFilesTotal = dataFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum();
-        Pair<List<Object>, Long> dataFileSamples = Pair.create(dataFiles, dataFilesTotal);
-
-        List<Object> deleteFiles = deleteFileCache.asMap().values()
-                .stream().flatMap(Set::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long deleteFilesTotal = deleteFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum();
-        Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFiles, deleteFilesTotal);
-
-        return Lists.newArrayList(dbSamples, partitionSamples, dataFileSamples, deleteFileSamples);
-    }
-
-    @Override
-=======
-    public static long estimatePartitionDataInBytes(PartitionData pd) {
-        if (pd == null) {
-            return 0L;
-        }
-        long size = MEMORY_PARTITION_DATA_SIZE;
-        size += 64L * pd.size(); // estimate an object as 64Byte in partition data objects
-        return size;
-    }
-    /**
-     * Roughly estimates the payload size (in bytes) of the statistics carried on a content file.
-     */
-    public static long estimateDataFileSizeInBytes(ContentFile<?> file) {
-        if (file == null) {
-            return 0L;
-        }
-
-        long size = MEMORY_DATA_FILE_SIZE;
-
-        size += sizeOfLongMap(file.columnSizes());
-        size += sizeOfLongMap(file.valueCounts());
-        size += sizeOfLongMap(file.nullValueCounts());
-        size += sizeOfLongMap(file.nanValueCounts());
-        size += sizeOfByteBufferMap(file.lowerBounds());
-        size += sizeOfByteBufferMap(file.upperBounds());
-        if (file.keyMetadata() != null) {
-            size += file.keyMetadata().remaining();
-        }
-        if (file.partition() instanceof PartitionData) {
-            size += estimatePartitionDataInBytes((PartitionData) file.partition());
-        }
-        return size;
-    }
-
-    private static long sizeOfLongMap(Map<Integer, Long> map) {
-        if (map == null || map.isEmpty()) {
-            return 0L;
-        }
-
-        return 1L * map.size() * (Integer.BYTES + Long.BYTES);
-    }
-
-    private static long sizeOfByteBufferMap(Map<Integer, ByteBuffer> map) {
-        if (map == null || map.isEmpty()) {
-            return 0L;
-        }
-
-        long size = 0L;
-        for (Map.Entry<Integer, ByteBuffer> entry : map.entrySet()) {
-            size += Integer.BYTES; // key
-            ByteBuffer buffer = entry.getValue();
-            if (buffer != null) {
-                size += buffer.remaining();
-            }
-        }
-        return size;
-    }
-
->>>>>>> 2a6fbeaae3 ([Enhancement] Introduce utils for FE memory estimation (#68287))
     public Map<String, Long> estimateCount() {
         Map<String, Long> counter = new HashMap<>();
         List<List<String>> partitionNames = getAllCachedPartitionNames();
