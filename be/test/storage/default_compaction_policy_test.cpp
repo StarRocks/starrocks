@@ -294,7 +294,9 @@ protected:
 };
 
 TEST_F(DefaultCompactionPolicyTest, test_init_succeeded) {
+    create_tablet_schema(DUP_KEYS);
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
+    tablet_meta->set_tablet_schema(_tablet_schema);
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     init_compaction_context(tablet);
     ASSERT_FALSE(compact(tablet).ok());
