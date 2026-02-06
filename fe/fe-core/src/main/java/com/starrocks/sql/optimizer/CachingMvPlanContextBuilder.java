@@ -365,14 +365,15 @@ public class CachingMvPlanContextBuilder {
      * Load all mv related plan contexts asynchronously and put it into cache.
      */
     public void triggerLoadMVPlanCacheAsync(MaterializedView mv) {
-        if (!GlobalStateMgr.getCurrentState().isReady()) {
+        if (mv == null || !GlobalStateMgr.getCurrentState().isReady()) {
             LOG.debug("Skip loading mv plan context before catalog ready: {}", mv.getName());
             MV_PLAN_CACHE_PENDING.put(mv.getId(), mv);
             return;
         }
 
+        // if mv is already in cache, no need to load again, just return directly.
         long mvId = mv.getId();
-        if (!MV_PLAN_CACHE_LOAD_IN_FLIGHT.add(mvId)) {
+        if (!MV_PLAN_CACHE_LOAD_IN_FLIGHT.add(mvId) || contains(mv)){
             LOG.debug("Skip duplicate mv plan cache load: {}", mv.getName());
             return;
         }
@@ -380,6 +381,7 @@ public class CachingMvPlanContextBuilder {
         submitAsyncTask("MVCacheContextLoad-" + mv.getName(), () -> {
             try {
                 loadMVAstCache(mv);
+
                 CompletableFuture<List<MvPlanContext>> future = loadMVPlanCache(mv);
                 future.whenComplete((ignored, e) -> MV_PLAN_CACHE_LOAD_IN_FLIGHT.remove(mvId));
             } catch (Throwable t) {
@@ -392,13 +394,18 @@ public class CachingMvPlanContextBuilder {
 
     public void triggerPendingMVPlanCacheLoads() {
         if (!GlobalStateMgr.getCurrentState().isReady()) {
+            LOG.warn("Skip loading pending mv plan context before catalog ready");
             return;
         }
         if (MV_PLAN_CACHE_PENDING.isEmpty()) {
             return;
         }
+        long startTime = System.currentTimeMillis();
+        LOG.info("Trigger loading {} pending mv plan caches", MV_PLAN_CACHE_PENDING.size());
         MV_PLAN_CACHE_PENDING.values().forEach(this::triggerLoadMVPlanCacheAsync);
         MV_PLAN_CACHE_PENDING.clear();
+        LOG.info("Finish triggering pending mv plan caches, costs: {}ms",
+                System.currentTimeMillis() - startTime);
     }
 
     /**

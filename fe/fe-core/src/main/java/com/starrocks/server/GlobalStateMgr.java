@@ -1381,6 +1381,11 @@ public class GlobalStateMgr {
         resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
         keyMgr.initDefaultMasterKey();
 
+        // trigger actions after transferring to leader
+        triggerOnTransferToLeader();
+    }
+
+    private void triggerOnTransferToLeader() {
         try {
             // trigger to load mv's plan cache async
             CachingMvPlanContextBuilder.getInstance().triggerPendingMVPlanCacheLoads();
