@@ -15,12 +15,12 @@
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
 
 #include "agent/master_info.h"
+#include "base/metrics.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 

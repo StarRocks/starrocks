@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/metrics.h"
 #include "base/time/time.h"
 #include "common/config.h"
 #include "common/system/cpu_info.h"
@@ -27,7 +28,6 @@
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::workgroup {

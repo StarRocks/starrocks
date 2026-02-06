@@ -25,9 +25,11 @@ set(BASE_TEST_FILES
     concurrency/limit_setter_test.cpp
     concurrency/countdown_latch_test.cpp
     concurrency/shared_mutex_test.cpp
+    concurrency/core_local_test.cpp
     container/heap_test.cpp
     container/priority_queue_test.cpp
     coding_test.cpp
+    core_local_counter_test.cpp
     decimal/decimal_types_test.cpp
     types/decimal12_test.cpp
     types/int128_test.cpp
@@ -36,6 +38,7 @@ set(BASE_TEST_FILES
     types/int96_test.cpp
     phmap_test.cpp
     crypto/md5_test.cpp
+    metrics_test.cpp
     hash/hash_util_test.cpp
     json/easy_json-test.cpp
     path/file_util_test.cpp

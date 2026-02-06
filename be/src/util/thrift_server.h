@@ -40,8 +40,8 @@
 #include <thread>
 #include <unordered_map>
 
+#include "base/metrics.h"
 #include "common/status.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 // Utility class for all Thrift servers. Runs a TNonblockingServer(default) or a

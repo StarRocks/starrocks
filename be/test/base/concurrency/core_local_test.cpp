@@ -15,16 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/core_local.h"
+#include "base/concurrency/core_local.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <ctime>
 #include <thread>
 
 #include "base/concurrency/stopwatch.hpp"
-#include "common/logging.h"
+#include "base/logging.h"
 
 namespace starrocks {
 

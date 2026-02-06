@@ -351,8 +351,6 @@ set(EXEC_FILES
         ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
-        ./util/core_local_test.cpp
-        ./util/core_local_counter_test.cpp
         ./util/cpu_info_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
@@ -364,7 +362,6 @@ set(EXEC_FILES
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
         ./util/mysql_row_buffer_test.cpp
-        ./util/new_metrics_test.cpp
         ./util/parse_util_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp

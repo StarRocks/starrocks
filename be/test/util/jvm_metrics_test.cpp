@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "udf/java/java_udf.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 

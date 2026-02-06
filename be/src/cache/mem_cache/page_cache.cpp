@@ -36,10 +36,10 @@
 
 #include <malloc.h>
 
+#include "base/metrics.h"
 #include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
 #include "util/lru_cache.h"
-#include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

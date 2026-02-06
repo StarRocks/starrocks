@@ -309,6 +309,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
         }
     }
     config::enable_metric_calculator = false;
+    metrics->set_collect_hook_enabled(true);
     metrics->collect(&visitor);
     ASSERT_STREQ("1025", lookup_metric->to_string().c_str());
     ASSERT_STREQ("1", hit_metric->to_string().c_str());

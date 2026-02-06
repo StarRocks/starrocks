@@ -18,7 +18,7 @@
 #include <memory>
 #include <string>
 
-#include "util/metrics.h"
+#include "base/metrics.h"
 
 namespace starrocks {
 

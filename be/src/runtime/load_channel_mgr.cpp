@@ -40,6 +40,7 @@
 #include <memory>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "common/system/cpu_info.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/closure_guard.h"

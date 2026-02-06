@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "base/metrics.h"
 #include "common/status.h"
 #include "jni.h"
 #include "udf/java/java_udf.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 

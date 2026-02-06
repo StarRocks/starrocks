@@ -16,8 +16,8 @@
 
 #include <mutex>
 
+#include "base/metrics.h"
 #include "gen_cpp/InternalService_types.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 class MetricRegistry;

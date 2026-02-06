@@ -42,8 +42,8 @@
 #include <unordered_map>
 
 #include "base/concurrency/spinlock.h"
+#include "base/metrics.h"
 #include "common/status.h"
-#include "util/metrics.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

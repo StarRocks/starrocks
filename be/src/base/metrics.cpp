@@ -32,13 +32,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/metrics.h"
+#include "base/metrics.h"
 
 #include <mutex>
 
 namespace starrocks {
 
 MetricLabels MetricLabels::EmptyLabels;
+
+void MetricRegistry::set_collect_hook_enabled(bool enabled) {
+    _collect_hook_enabled.store(enabled, std::memory_order_release);
+}
+
+bool MetricRegistry::collect_hook_enabled() const {
+    return _collect_hook_enabled.load(std::memory_order_acquire);
+}
 
 std::ostream& operator<<(std::ostream& os, MetricType type) {
     switch (type) {

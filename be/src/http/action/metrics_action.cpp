@@ -26,12 +26,12 @@
 
 #include <string>
 
+#include "base/metrics.h"
 #include "common/config.h"
 #include "common/tracer.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 
 #ifdef USE_STAROS
