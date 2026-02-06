@@ -172,7 +172,6 @@ EXECUTE expire_snapshots(
 
 - Description: The maximum number of most recent snapshots to retain. The less recent snapshots will be removed when this threshold is reached. If not specified, only one snapshot will be retained by default.
 - Type: Integer
-- Default: 1
 - Required: No
 
 #### Example
