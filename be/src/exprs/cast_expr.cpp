@@ -29,6 +29,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/types/int128.h"
 #include "base/utility/mysql_global.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -49,7 +50,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/hll.h"
-#include "types/large_int_value.h"
 #include "types/logical_type.h"
 #include "util/date_func.h"
 #include "util/json.h"
@@ -212,8 +212,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         if (overflow || value.is_null()) {
             if constexpr (AllowThrowException) {
                 if constexpr (FromType == TYPE_LARGEINT) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType,
-                                                             LargeIntValue::to_string(viewer.value(row)));
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, int128_to_string(viewer.value(row)));
                 } else {
                     THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
                 }
@@ -455,9 +454,9 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
     if (result) {
         std::stringstream ss;
         if constexpr (std::is_same_v<Type, __int128_t>) {
-            ss << LargeIntValue::to_string(value) << " conflict with range of "
-               << "(" << LargeIntValue::to_string((Type)std::numeric_limits<ResultType>::lowest()) << ", "
-               << LargeIntValue::to_string((Type)std::numeric_limits<ResultType>::max()) << ")";
+            ss << int128_to_string(value) << " conflict with range of "
+               << "(" << int128_to_string((Type)std::numeric_limits<ResultType>::lowest()) << ", "
+               << int128_to_string((Type)std::numeric_limits<ResultType>::max()) << ")";
         } else {
             ss << value << " conflict with range of "
                << "(" << (Type)std::numeric_limits<ResultType>::lowest() << ", "

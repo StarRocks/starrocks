@@ -41,11 +41,11 @@
 #include <cstdio>
 #include <type_traits>
 
+#include "base/types/int128.h"
 #include "base/types/int256.h"
 #include "base/utility/mysql_global.h"
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
-#include "types/large_int_value.h"
 
 namespace starrocks {
 
@@ -125,7 +125,7 @@ void MysqlRowBuffer::push_number_binary_format(T data) {
         int8store(buff, data);
         _data.append(buff, 8);
     } else if constexpr (std::is_same_v<T, __int128>) {
-        std::string value = LargeIntValue::to_string(data);
+        std::string value = int128_to_string(data);
         _push_string_normal(value.data(), value.size());
     } else if constexpr (std::is_same_v<T, int256_t>) {
         std::string value = data.to_string();

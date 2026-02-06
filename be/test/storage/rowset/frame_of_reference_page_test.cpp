@@ -38,6 +38,7 @@
 
 #include <memory>
 
+#include "base/types/int128.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "gutil/int128.h"
@@ -46,7 +47,6 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "types/large_int_value.h"
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;

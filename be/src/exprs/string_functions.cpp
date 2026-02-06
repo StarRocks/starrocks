@@ -41,6 +41,7 @@
 #include "base/container/raw_container.h"
 #include "base/crypto/sm3.h"
 #include "base/string/utf8.h"
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -60,7 +61,6 @@
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
-#include "types/large_int_value.h"
 #include "util/utf8_encoding.h"
 
 namespace starrocks {

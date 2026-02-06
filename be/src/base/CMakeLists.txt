@@ -27,6 +27,7 @@ ADD_BE_LIB(Base
   hash/hash_util.cpp
   hash/murmur_hash3.cpp
   types/decimal12.cpp
+  types/int128.cpp
   types/int256.cpp
   types/int96.cpp
   json/easy_json.cc

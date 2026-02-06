@@ -18,6 +18,7 @@
 #include <mutex>
 
 #include "base/hash/xxh3.h"
+#include "base/types/int128.h"
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
@@ -31,7 +32,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
-#include "types/large_int_value.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 

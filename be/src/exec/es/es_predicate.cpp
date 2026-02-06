@@ -41,6 +41,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/types/int128.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
@@ -53,7 +54,6 @@
 #include "exprs/in_const_predicate.hpp"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "types/large_int_value.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
@@ -127,7 +127,7 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
                     } else if constexpr (std::is_same_v<T, Slice>) {
                         res = std::string(arg.data, arg.size);
                     } else if constexpr (std::is_same_v<T, __int128_t>) {
-                        res = LargeIntValue::to_string(arg);
+                        res = int128_to_string(arg);
                     } else {
                         res = std::to_string(arg);
                     }

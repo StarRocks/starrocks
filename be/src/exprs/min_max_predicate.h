@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include "base/types/int128.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/expr.h"
 #include "exprs/runtime_filter.h"
-#include "types/large_int_value.h"
 
 namespace starrocks {
 template <LogicalType Type>

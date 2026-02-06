@@ -20,6 +20,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/function_helper.h"
@@ -27,7 +28,6 @@
 #include "exprs/string_functions.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "types/large_int_value.h"
 
 namespace starrocks {
 

@@ -18,6 +18,7 @@
 
 #include <limits>
 #include <sstream>
+#include <string>
 
 namespace starrocks {
 
@@ -25,10 +26,9 @@ constexpr __int128 kMaxInt128 = ~((__int128)0x01 << 127);
 constexpr __int128 kMinInt128 = ((__int128)0x01 << 127);
 
 TEST(Int128Test, ToString) {
-    EXPECT_EQ(LargeIntValue::to_string(static_cast<__int128>(std::numeric_limits<int64_t>::max())),
-              "9223372036854775807");
-    EXPECT_EQ(LargeIntValue::to_string(kMaxInt128), "170141183460469231731687303715884105727");
-    EXPECT_EQ(LargeIntValue::to_string(kMinInt128), "-170141183460469231731687303715884105728");
+    EXPECT_EQ(int128_to_string(static_cast<__int128>(std::numeric_limits<int64_t>::max())), "9223372036854775807");
+    EXPECT_EQ(int128_to_string(kMaxInt128), "170141183460469231731687303715884105727");
+    EXPECT_EQ(int128_to_string(kMinInt128), "-170141183460469231731687303715884105728");
 }
 
 TEST(Int128Test, StreamOutput) {
@@ -49,6 +49,35 @@ TEST(Int128Test, StreamOutput) {
         std::stringstream ss;
         ss << kMinInt128;
         EXPECT_EQ(ss.str(), "-170141183460469231731687303715884105728");
+    }
+}
+
+TEST(Int128Test, StreamInput) {
+    {
+        std::string str("1024");
+        std::stringstream ss;
+        ss << str;
+        __int128 v = 0;
+        ss >> v;
+        ASSERT_EQ(v, 1024);
+    }
+
+    {
+        std::string str("170141183460469231731687303715884105727");
+        std::stringstream ss;
+        ss << str;
+        __int128 v = 0;
+        ss >> v;
+        ASSERT_TRUE(v == kMaxInt128);
+    }
+
+    {
+        std::string str("-170141183460469231731687303715884105728");
+        std::stringstream ss;
+        ss << str;
+        __int128 v = 0;
+        ss >> v;
+        ASSERT_TRUE(v == kMinInt128);
     }
 }
 

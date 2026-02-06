@@ -16,10 +16,10 @@
 
 #include <optional>
 
+#include "base/types/int128.h"
 #include "gtest/gtest.h"
 #include "gutil/port.h"
 #include "types/constexpr.h"
-#include "types/large_int_value.h"
 
 namespace starrocks {
 
@@ -142,10 +142,10 @@ TEST_F(MysqlRowBufferTest, test_basic) {
     ASSERT_EQ("18446744073709551615", data.value());
 
     data = decode_mysql_row(&s);
-    ASSERT_EQ(LargeIntValue::to_string(starrocks::MIN_INT128), data.value());
+    ASSERT_EQ(int128_to_string(starrocks::MIN_INT128), data.value());
 
     data = decode_mysql_row(&s);
-    ASSERT_EQ(LargeIntValue::to_string(starrocks::MAX_INT128), data.value());
+    ASSERT_EQ(int128_to_string(starrocks::MAX_INT128), data.value());
 
     ASSERT_EQ("", s);
 }
