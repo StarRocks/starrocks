@@ -38,7 +38,7 @@
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);

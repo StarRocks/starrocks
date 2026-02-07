@@ -40,7 +40,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(global_runtime_filter_sync_B);

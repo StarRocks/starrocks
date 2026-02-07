@@ -32,7 +32,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/metadata_util.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
 

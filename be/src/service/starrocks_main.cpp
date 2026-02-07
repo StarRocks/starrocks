@@ -70,7 +70,7 @@
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"

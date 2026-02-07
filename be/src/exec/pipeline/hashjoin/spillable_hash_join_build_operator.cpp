@@ -33,7 +33,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "tablet_updates_test.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks {
 

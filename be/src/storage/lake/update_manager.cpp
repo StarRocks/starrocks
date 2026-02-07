@@ -43,7 +43,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {

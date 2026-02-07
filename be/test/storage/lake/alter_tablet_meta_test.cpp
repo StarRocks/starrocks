@@ -24,7 +24,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log_applier.h"
 #include "test_util.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks::lake {
 

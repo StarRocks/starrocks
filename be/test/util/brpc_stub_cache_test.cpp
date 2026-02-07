@@ -21,7 +21,7 @@
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks {
 

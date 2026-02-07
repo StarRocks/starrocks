@@ -65,7 +65,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/ratelimit.h"
 #include "util/starrocks_metrics.h"
 

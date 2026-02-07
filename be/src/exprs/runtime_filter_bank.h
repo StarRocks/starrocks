@@ -36,7 +36,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 struct RuntimeMembershipFilterBuildParam;

@@ -63,7 +63,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT

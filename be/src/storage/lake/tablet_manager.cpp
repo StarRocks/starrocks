@@ -54,7 +54,7 @@
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/trace.h"
 
 // TODO: Eliminate the explicit dependency on staros worker

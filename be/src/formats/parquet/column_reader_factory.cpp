@@ -20,7 +20,7 @@
 #include "formats/parquet/utils.h"
 #include "formats/utils.h"
 #include "runtime/types.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks::parquet {
 

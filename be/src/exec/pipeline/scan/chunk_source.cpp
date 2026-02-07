@@ -20,7 +20,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(scan_chunk_sleep_after_read);

@@ -26,7 +26,7 @@
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks {
 DECLARE_FAIL_POINT(agg_hash_set_bad_alloc);

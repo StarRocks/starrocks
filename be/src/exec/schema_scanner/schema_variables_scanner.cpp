@@ -17,7 +17,7 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(schema_scan_rpc_failed);

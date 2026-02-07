@@ -87,7 +87,7 @@
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "util/arrow/row_batch.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
 #include "util/thrift_util.h"
 #include "util/time_guard.h"

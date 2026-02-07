@@ -22,7 +22,7 @@
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/counting_allocator.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/stack_util.h"
 
 #ifndef BE_TEST

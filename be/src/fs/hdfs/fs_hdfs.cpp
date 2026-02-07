@@ -28,7 +28,7 @@
 #include "runtime/file_result_writer.h"
 #include "service/backend_options.h"
 #include "udf/java/utils.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/hdfs_util.h"
 
 using namespace fmt::literals;

@@ -45,7 +45,7 @@
 #include "storage/update_manager.h"
 #include "util/crc32c.h"
 #include "util/debug_util.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {

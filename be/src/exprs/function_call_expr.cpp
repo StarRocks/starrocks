@@ -31,7 +31,7 @@
 #include "runtime/user_function_cache.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 namespace starrocks {
 

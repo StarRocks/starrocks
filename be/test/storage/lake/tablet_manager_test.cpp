@@ -36,7 +36,7 @@
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "util/bthreads/util.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/filesystem_util.h"
 
 // NOTE: intend to put the following header to the end of the include section

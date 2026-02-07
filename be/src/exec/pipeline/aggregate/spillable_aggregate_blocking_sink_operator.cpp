@@ -28,7 +28,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 DEFINE_FAIL_POINT(spill_always_streaming);
 DEFINE_FAIL_POINT(spill_always_selection_streaming);

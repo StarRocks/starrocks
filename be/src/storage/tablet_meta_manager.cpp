@@ -63,7 +63,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
 #include "util/debug_util.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/url_coding.h"
 
 namespace starrocks {

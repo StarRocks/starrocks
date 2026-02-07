@@ -52,7 +52,7 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 #include "util/logging.h"
 #include "util/threadpool.h"
 
