@@ -29,6 +29,7 @@
 
 #include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/utils.h"
@@ -58,7 +59,6 @@
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

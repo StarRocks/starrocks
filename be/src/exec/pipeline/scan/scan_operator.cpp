@@ -14,9 +14,8 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
-#include <util/time.h>
-
 #include "base/concurrency/race_detect.h"
+#include "base/time/time.h"
 #include "column/chunk.h"
 #include "common/status.h"
 #include "common/statusor.h"

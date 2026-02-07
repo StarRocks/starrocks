@@ -37,6 +37,7 @@
 #include <memory>
 #include <set>
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "fmt/format.h"
 #include "fs/fs_util.h"
@@ -62,7 +63,6 @@
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/time.h"
 
 namespace starrocks {
 

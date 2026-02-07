@@ -17,10 +17,10 @@
 #include <gtest/gtest.h>
 
 #include "base/simd/simd.h"
+#include "base/time/time.h"
 #include "bench_util.h"
 #include "column/column_helper.h"
 #include "exprs/runtime_filter.h"
-#include "util/time.h"
 
 namespace starrocks {
 

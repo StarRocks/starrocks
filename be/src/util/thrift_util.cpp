@@ -40,9 +40,9 @@
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TSocket.h>
 
+#include "base/time/monotime.h"
 #include "gen_cpp/Types_types.h"
 #include "util/hash_util.hpp"
-#include "util/monotime.h"
 #include "util/thrift_server.h"
 
 // TCompactProtocol requires some #defines to work right.  They also define UNLIKLEY

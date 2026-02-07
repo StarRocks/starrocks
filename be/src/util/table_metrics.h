@@ -20,8 +20,8 @@
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/phmap/phmap.h"
 #include "base/phmap/phmap_base.h"
+#include "base/time/time.h"
 #include "util/metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 

@@ -18,10 +18,10 @@
 #include <sstream>
 #include <vector>
 
+#include "base/time/time.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/time.h"
 
 namespace starrocks {
 

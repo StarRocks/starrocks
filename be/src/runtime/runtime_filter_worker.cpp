@@ -20,6 +20,7 @@
 #include <random>
 #include <utility>
 
+#include "base/time/time.h"
 #include "common/config.h"
 #include "exec/hash_join_node.h"
 #include "exec/pipeline/query_context.h"
@@ -35,7 +36,6 @@
 #include "util/brpc_stub_cache.h"
 #include "util/internal_service_recoverable_stub.h"
 #include "util/thread.h"
-#include "util/time.h"
 #include "util/time_guard.h"
 
 namespace starrocks {

@@ -33,17 +33,20 @@
 // under the License.
 //
 
-#include "util/timezone_utils.h"
+#include "base/time/timezone_utils.h"
 
 #include <cctz/time_zone.h>
+#include <re2/re2.h>
 
 #include <charconv>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "base/logging.h"
 #include "base/phmap/phmap.h"
-#include "glog/logging.h"
+#include "base/time/timezone_hsscan.h"
 
 namespace starrocks {
 
@@ -60,7 +63,7 @@ void TimezoneUtils::init_time_zones() {
     // timezone cache list
     // We cannot add a time zone to the cache that contains both daylight saving time and winter time
     static std::vector<std::string> timezones = {
-#include "timezone.dat"
+#include "base/time/timezone_data/timezone.dat"
     };
     for (const auto& timezone : timezones) {
         cctz::time_zone ctz;
@@ -83,7 +86,7 @@ void TimezoneUtils::init_time_zones() {
     // other cached timezone
     // only cache CCTZ, won't caculate offsets
     static std::vector<std::string> other_timezones = {
-#include "othertimezone.dat"
+#include "base/time/timezone_data/othertimezone.dat"
     };
     for (const auto& timezone : other_timezones) {
         cctz::time_zone ctz;

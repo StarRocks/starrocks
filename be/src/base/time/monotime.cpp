@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/monotime.h"
+#include "base/time/monotime.h"
 
 #include <sys/time.h>
 
 #include <limits>
 
-#include "common/logging.h"
+#include "base/logging.h"
 #include "gutil/sysinfo.h"
 
 namespace starrocks {

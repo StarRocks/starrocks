@@ -16,9 +16,9 @@
 
 #include <chrono>
 
+#include "base/time/time.h"
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
-#include "util/time.h"
 
 namespace starrocks::lake {
 

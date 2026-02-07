@@ -15,8 +15,8 @@
 #include "util/table_metrics.h"
 
 #include "base/phmap/btree.h"
+#include "base/time/time.h"
 #include "common/config.h"
-#include "util/time.h"
 
 namespace starrocks {
 

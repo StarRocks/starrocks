@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/time/time.h"
 #include "common/config.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/mem_tracker_manager.h"
@@ -28,7 +29,6 @@
 #include "util/cpu_info.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks::workgroup {
 

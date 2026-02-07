@@ -14,11 +14,11 @@
 
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 
+#include "base/time/timezone_utils.h"
 #include "exec/schema_scanner.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 

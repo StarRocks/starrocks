@@ -50,6 +50,9 @@
 
 #include <csignal>
 
+#include "base/time/monotime.h"
+#include "base/time/time.h"
+#include "base/time/timezone_utils.h"
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
@@ -66,13 +69,10 @@
 #include "util/mem_info.h"
 #include "util/memory_lock.h"
 #include "util/misc.h"
-#include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_util.h"
-#include "util/time.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");

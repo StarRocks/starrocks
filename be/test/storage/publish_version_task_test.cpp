@@ -23,6 +23,8 @@
 #include "base/concurrency/await.h"
 #include "base/path/file_util.h"
 #include "base/testutil/assert.h"
+#include "base/time/time.h"
+#include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
@@ -53,8 +55,6 @@
 #include "util/logging.h"
 #include "util/mem_info.h"
 #include "util/threadpool.h"
-#include "util/time.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 

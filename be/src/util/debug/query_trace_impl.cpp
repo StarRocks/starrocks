@@ -17,12 +17,12 @@
 #include <mutex>
 #include <utility>
 
+#include "base/time/time.h"
 #include "common/config.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "fmt/printf.h"
 #include "io/fd_output_stream.h" // write trace to file
 #include "util/debug/query_trace.h"
-#include "util/time.h"
 
 namespace starrocks::debug {
 

@@ -19,8 +19,8 @@
 #include <future>
 #include <optional>
 
+#include "base/time/time.h"
 #include "gutil/macros.h"
-#include "util/time.h"
 
 namespace starrocks::bthreads {
 

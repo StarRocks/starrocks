@@ -41,6 +41,8 @@ set(BASE_TEST_FILES
     string/memcmp_test.cpp
     string/slice_test.cpp
     string/utf8_check_test.cpp
+    time/monotime_test.cpp
+    time/timezone_utils_test.cpp
     utility/scoped_cleanup_test.cpp
     uuid/uuid_generator_test.cpp
     status_test.cpp

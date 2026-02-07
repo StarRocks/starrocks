@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
 #include "common/logging.h"
@@ -33,7 +34,6 @@
 #include "storage/tablet_schema.h"
 #include "types/logical_type_infra.h"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 

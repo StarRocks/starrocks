@@ -26,9 +26,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/time/time.h"
 #include "common/config.h"
 #include "common/statusor.h"
-#include "util/time.h"
 
 namespace starrocks {
 

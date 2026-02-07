@@ -41,6 +41,7 @@
 #include <queue>
 #include <set>
 
+#include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
@@ -52,7 +53,6 @@
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
-#include "util/time.h"
 
 namespace starrocks {
 

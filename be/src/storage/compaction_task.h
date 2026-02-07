@@ -19,6 +19,7 @@
 #include <sstream>
 #include <vector>
 
+#include "base/time/time.h"
 #include "column/column_access_path.h"
 #include "storage/background_task.h"
 #include "storage/compaction_utils.h"
@@ -27,7 +28,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "util/runtime_profile.h"
-#include "util/time.h"
 
 namespace starrocks {
 

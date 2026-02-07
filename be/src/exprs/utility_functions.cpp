@@ -30,6 +30,8 @@
 #include <limits>
 #include <random>
 
+#include "base/time/monotime.h"
+#include "base/time/time.h"
 #include "base/uuid/uuid_generator.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -47,10 +49,8 @@
 #include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
 #include "util/cidr.h"
-#include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
 
 namespace starrocks {
 

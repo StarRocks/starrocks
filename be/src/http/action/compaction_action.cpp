@@ -38,6 +38,7 @@
 #include <sstream>
 #include <string>
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -61,7 +62,6 @@
 #include "storage/tablet_updates.h"
 #include "util/json_util.h"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 

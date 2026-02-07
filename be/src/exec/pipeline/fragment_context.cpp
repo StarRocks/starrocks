@@ -21,6 +21,7 @@
 #include <mutex>
 #include <thread>
 
+#include "base/time/time.h"
 #include "common/logging.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
@@ -39,7 +40,6 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks::pipeline {

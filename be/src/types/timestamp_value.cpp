@@ -14,9 +14,9 @@
 
 #include "types/timestamp_value.h"
 
+#include "base/time/time.h"
+#include "base/time/timezone_utils.h"
 #include "runtime/time_types.h"
-#include "util/time.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 TimestampValue TimestampValue::MAX_TIMESTAMP_VALUE{timestamp::MAX_TIMESTAMP};

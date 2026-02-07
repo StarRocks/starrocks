@@ -18,6 +18,7 @@
 #include <rapidjson/document.h>
 
 #include "base/testutil/assert.h"
+#include "base/time/monotime.h"
 #include "brpc/controller.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -26,7 +27,6 @@
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 #include "util/bthreads/executor.h"
-#include "util/monotime.h"
 #include "util/threadpool.h"
 
 namespace starrocks {

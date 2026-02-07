@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "base/time/timezone_utils.h"
 #include "common/config.h"
 #include "fs/fs_s3.h"
 #include "runtime/exec_env.h"
@@ -28,7 +29,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_define.h"
 #include "util/mem_info.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks::lake {
 

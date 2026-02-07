@@ -66,7 +66,6 @@ set(UTIL_FILES
   url_coding.cpp
   mysql_row_buffer.cpp
   filesystem_util.cc
-  time.cpp
 # coding_util.cpp
   cidr.cpp
   core_local.cpp
@@ -75,12 +74,10 @@ set(UTIL_FILES
   string_util.cpp
   thrift_rpc_helper.cpp
   frame_of_reference_coding.cpp
-  monotime.cpp
   thread.cpp
   threadpool.cpp
   trace.cpp
   trace_metrics.cpp
-  timezone_utils.cpp
   int96.cpp
   hdfs_util.cpp
   gc_helper.cpp
