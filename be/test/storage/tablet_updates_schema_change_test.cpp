@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "tablet_updates_test.h"
 #include "base/failpoint/fail_point.h"
+#include "tablet_updates_test.h"
 
 namespace starrocks {
 

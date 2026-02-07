@@ -20,8 +20,8 @@
 #include <base/testutil/assert.h>
 #include <gtest/gtest.h>
 
-#include "runtime/exec_env.h"
 #include "base/failpoint/fail_point.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
