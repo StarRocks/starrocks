@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/function_context.h"
 #include "exprs/percentile_functions.h"
 #include "runtime/types.h"
 #include "types/hll.h"

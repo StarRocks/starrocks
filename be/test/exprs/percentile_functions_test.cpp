@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "exprs/function_context.h"
 #include "types/percentile_value.h"
 
 namespace starrocks {
