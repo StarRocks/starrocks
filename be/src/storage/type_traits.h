@@ -36,11 +36,11 @@
 
 #include <cstdint>
 
+#include "base/int256.h"
 #include "base/string/slice.h"
 #include "runtime/decimalv2_value.h"
 #include "storage/collection.h"
 #include "storage/olap_common.h"
-#include "types/int256.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

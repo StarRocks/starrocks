@@ -20,6 +20,7 @@
 #include "base/bit/bit_util.h"
 #include "base/coding.h"
 #include "base/container/raw_container.h"
+#include "base/int256.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "column/column.h"
@@ -29,7 +30,6 @@
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
-#include "types/int256.h"
 
 #ifdef __AVX2__
 #include <immintrin.h>

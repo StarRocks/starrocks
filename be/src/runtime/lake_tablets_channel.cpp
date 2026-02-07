@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/concurrency/bthread_shared_mutex.h"
+#include "base/concurrency/countdown_latch.h"
 #include "column/chunk.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
@@ -43,7 +44,6 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/compression/block_compression.h"
-#include "util/countdown_latch.h"
 #include "util/runtime_profile.h"
 #include "util/stack_trace_mutex.h"
 #include "util/starrocks_metrics.h"

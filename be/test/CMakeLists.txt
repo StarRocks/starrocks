@@ -334,8 +334,6 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
-        ./types/int256_test.cpp
-        ./types/int256_arithmetic_test.cpp
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp 
         ./types/variant_value_test.cpp
@@ -355,7 +353,6 @@ set(EXEC_FILES
         ./util/cidr_test.cpp
         ./util/core_local_test.cpp
         ./util/core_local_counter_test.cpp
-        ./util/countdown_latch_test.cpp
         ./util/cpu_info_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp

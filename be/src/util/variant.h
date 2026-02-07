@@ -24,8 +24,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/decimal_types.h"
 #include "common/status.h"
-#include "util/decimal_types.h"
 
 namespace starrocks {
 

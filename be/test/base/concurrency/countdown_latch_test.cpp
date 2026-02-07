@@ -15,16 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/countdown_latch.h"
+#include "base/concurrency/countdown_latch.h"
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <functional>
+#include <thread>
 
 #include "base/time/monotime.h"
-#include "gutil/ref_counted.h"
-#include "util/thread.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -39,21 +38,20 @@ static void decrement_latch(CountDownLatch* latch, int amount) {
 // Tests that we can decrement the latch by arbitrary amounts, as well
 // as 1 by one.
 TEST(TestCountDownLatch, TestLatch) {
-    std::unique_ptr<ThreadPool> pool;
-    ASSERT_TRUE(ThreadPoolBuilder("cdl-test").set_max_threads(1).build(&pool).ok());
-
     CountDownLatch latch(1000);
 
     // Decrement the count by 1 in another thread, this should not fire the
     // latch.
-    ASSERT_TRUE(pool->submit_func([capture0 = &latch] { return decrement_latch(capture0, 1); }).ok());
+    std::thread decrement_once([&] { decrement_latch(&latch, 1); });
+    decrement_once.join();
     ASSERT_FALSE(latch.wait_for(MonoDelta::FromMilliseconds(200)));
     ASSERT_EQ(999, latch.count());
 
     // Now decrement by 1000 this should decrement to 0 and fire the latch
     // (even though 1000 is one more than the current count).
-    ASSERT_TRUE(pool->submit_func([capture0 = &latch] { return decrement_latch(capture0, 1000); }).ok());
+    std::thread decrement_all([&] { decrement_latch(&latch, 1000); });
     latch.wait();
+    decrement_all.join();
     ASSERT_EQ(0, latch.count());
 }
 
@@ -61,13 +59,12 @@ TEST(TestCountDownLatch, TestLatch) {
 // continue.
 TEST(TestCountDownLatch, TestResetToZero) {
     CountDownLatch cdl(100);
-    scoped_refptr<Thread> t;
-    ASSERT_TRUE(Thread::create("test", "cdl-test", &CountDownLatch::wait, &cdl, &t).ok());
+    std::thread waiter([&] { cdl.wait(); });
 
     // Sleep for a bit until it's likely the other thread is waiting on the latch.
-    SleepFor(MonoDelta::FromMilliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
     cdl.reset(0);
-    t->join();
+    waiter.join();
 }
 
 } // namespace starrocks

@@ -18,6 +18,7 @@
 
 #include <random>
 
+#include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
@@ -38,7 +39,6 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "util/countdown_latch.h"
 
 namespace starrocks::lake {
 

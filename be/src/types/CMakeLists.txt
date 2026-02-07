@@ -28,6 +28,5 @@ ADD_BE_LIB(Types
     checker/type_checker.cpp
     checker/type_checker_xml_loader.cpp
     type_checker_manager.cpp
-    int256.cpp
     variant_value.cpp
 )

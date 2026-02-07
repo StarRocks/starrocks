@@ -41,10 +41,10 @@
 #include <cstdio>
 #include <type_traits>
 
+#include "base/int256.h"
 #include "base/utility/mysql_global.h"
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
-#include "types/int256.h"
 #include "types/large_int_value.h"
 
 namespace starrocks {

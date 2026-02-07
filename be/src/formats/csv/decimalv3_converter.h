@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "base/decimal_types.h"
 #include "formats/csv/converter.h"
-#include "util/decimal_types.h"
 
 namespace starrocks::csv {
 

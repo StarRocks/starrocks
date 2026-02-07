@@ -45,9 +45,9 @@
 #include <thread>
 #include <utility>
 
+#include "base/concurrency/countdown_latch.h"
 #include "common/status.h"
 #include "gutil/ref_counted.h"
-#include "util/countdown_latch.h"
 
 namespace starrocks {
 
