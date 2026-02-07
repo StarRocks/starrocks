@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/url_coding.h"
+#include "base/url_coding.h"
 
 #include <curl/curl.h>
 

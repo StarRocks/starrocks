@@ -14,7 +14,7 @@
 
 #include "util/variant_converter.h"
 
-#include "util/variant.h"
+#include "types/variant.h"
 
 namespace starrocks {
 

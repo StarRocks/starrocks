@@ -26,9 +26,9 @@
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/constexpr.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/variant_value.h"
-#include "util/json.h"
 
 namespace starrocks {
 

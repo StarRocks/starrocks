@@ -33,7 +33,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 

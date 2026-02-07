@@ -57,7 +57,7 @@
 // https://github.com/tdunning/t-digest/blob/07b8f2ca2be8d0a9f04df2feadad5ddc1bb73c88/docs/t-digest-paper/histo.pdf.
 // https://github.com/derrickburns/tdigest
 
-#include "util/tdigest.h"
+#include "types/tdigest.h"
 
 #include <algorithm>
 #include <cmath>
@@ -66,8 +66,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/orlp/pdqsort.h"
 #include "common/logging.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 

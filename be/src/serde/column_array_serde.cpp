@@ -36,10 +36,10 @@
 #include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/variant_value.h"
 #include "util/compression/compression_headers.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
 
 namespace starrocks::serde {
 namespace {

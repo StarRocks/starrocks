@@ -39,9 +39,7 @@ set(UTIL_FILES
   download_util.cpp
   hash_util.hpp
   json_util.cpp
-  json.cpp
   json_flattener.cpp
-  json_converter.cpp
   starrocks_metrics.cpp
   metrics/file_scan_metrics.cpp
   misc.cpp
@@ -58,7 +56,6 @@ set(UTIL_FILES
   table_metrics.cpp
   system_metrics.cpp
   url_parser.cpp
-  url_coding.cpp
   mysql_row_buffer.cpp
   filesystem_util.cc
 # coding_util.cpp
@@ -75,7 +72,6 @@ set(UTIL_FILES
   hdfs_util.cpp
   gc_helper.cpp
   lru_cache.cpp
-  tdigest.cpp
   debug/query_trace_impl.cpp
   stack_trace_mutex.cpp
   bthreads/future.h
@@ -90,7 +86,6 @@ set(UTIL_FILES
   jvm_metrics.cpp
   llm_cache.cpp
   llm_query_service.cpp
-  variant.cpp
 )
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")

@@ -33,9 +33,9 @@
 #include "types/datetime_value.h"
 #include "types/decimalv2_value.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/timestamp_value.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
 #include "util/stack_util.h"
 
 namespace starrocks {

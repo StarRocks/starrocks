@@ -59,11 +59,11 @@
 
 #pragma once
 
+#include <limits>
 #include <queue>
 #include <vector>
 
 #include "base/string/slice.h"
-#include "exprs/function_context.h"
 
 namespace starrocks {
 

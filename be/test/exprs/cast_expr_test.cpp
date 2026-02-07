@@ -33,10 +33,10 @@
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "types/datetime_value.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/time_types.h"
 #include "types/timestamp_value.h"
-#include "util/json.h"
 
 namespace starrocks {
 

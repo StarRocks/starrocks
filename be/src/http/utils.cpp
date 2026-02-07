@@ -38,6 +38,7 @@
 #include <sys/stat.h>
 
 #include "base/path/path_util.h"
+#include "base/url_coding.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/utils.h"
@@ -45,7 +46,6 @@
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 

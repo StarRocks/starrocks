@@ -30,7 +30,7 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
-#include "util/json.h"
+#include "types/json_value.h"
 #include "util/llm_cache.h"
 
 namespace starrocks {

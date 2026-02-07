@@ -18,7 +18,7 @@
 #include "column/column_helper.h"
 #include "runtime/global_variables.h"
 #include "types/logical_type_infra.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 

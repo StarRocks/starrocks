@@ -46,12 +46,12 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/coding.h"
 #include "base/phmap/phmap.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/string/slice.h"
-#include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "types/bitmap_value_detail.h"
@@ -176,7 +176,27 @@ public:
     std::string to_string() const;
 
     // Append values to array
-    void to_array(Buffer<int64_t>* array) const;
+    template <typename Alloc>
+    void to_array(std::vector<int64_t, Alloc>* array) const {
+        switch (_type) {
+        case EMPTY:
+            break;
+        case SINGLE:
+            array->emplace_back(_sv);
+            break;
+        case BITMAP: {
+            size_t cur_size = array->size();
+            array->resize(cur_size + _bitmap->cardinality());
+            _bitmap->toUint64Array(reinterpret_cast<uint64_t*>((*array).data()) + cur_size);
+            break;
+        }
+        case SET:
+            array->reserve(array->size() + _set->size());
+            auto iter = array->insert(array->end(), _set->begin(), _set->end());
+            std::sort(iter, array->end());
+            break;
+        }
+    }
 
     size_t serialize(uint8_t* dst) const;
 

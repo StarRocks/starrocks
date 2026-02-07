@@ -49,9 +49,9 @@
 #include "gutil/casts.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_reader.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
-#include "util/json.h"
 #include "util/json_converter.h"
 #include "util/runtime_profile.h"
 

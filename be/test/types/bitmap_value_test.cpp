@@ -19,10 +19,9 @@
 #include <cstdint>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "base/coding.h"
-#include "column/vectorized_fwd.h"
-#include "runtime/memory/column_allocator.h"
 #include "types/bitmap_value_detail.h"
 
 namespace starrocks {
@@ -720,23 +719,23 @@ TEST_F(BitmapValueTest, bitmap_to_string) {
 }
 
 TEST_F(BitmapValueTest, bitmap_to_array) {
-    Buffer<int64_t> array_1;
+    std::vector<int64_t> array_1;
     _empty_bitmap.to_array(&array_1);
     ASSERT_EQ(array_1.size(), 0);
 
-    Buffer<int64_t> array_2;
+    std::vector<int64_t> array_2;
     _single_bitmap.to_array(&array_2);
     ASSERT_EQ(array_2.size(), 1);
     ASSERT_EQ(array_2[0], 0);
 
-    Buffer<int64_t> array_3;
+    std::vector<int64_t> array_3;
     _medium_bitmap.to_array(&array_3);
     ASSERT_EQ(array_3.size(), 14);
     for (size_t i = 0; i < 14; i++) {
         ASSERT_EQ(array_3[i], i);
     }
 
-    Buffer<int64_t> array_4;
+    std::vector<int64_t> array_4;
     _large_bitmap.to_array(&array_4);
     ASSERT_EQ(array_4.size(), 64);
     for (size_t i = 0; i < 64; i++) {
@@ -744,7 +743,7 @@ TEST_F(BitmapValueTest, bitmap_to_array) {
     }
 
     // append multi times
-    Buffer<int64_t> array_5;
+    std::vector<int64_t> array_5;
     _large_bitmap.to_array(&array_5);
     ASSERT_EQ(array_5.size(), 64);
 

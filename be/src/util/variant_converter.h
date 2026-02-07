@@ -23,7 +23,7 @@
 #include "types/logical_type.h"
 #include "types/time_types.h"
 #include "types/timestamp_value.h"
-#include "util/variant.h"
+#include "types/variant.h"
 
 namespace starrocks {
 

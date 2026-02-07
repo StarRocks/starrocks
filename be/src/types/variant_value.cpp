@@ -14,14 +14,10 @@
 
 #include "types/variant_value.h"
 
-#include <arrow/util/endian.h>
-
-#include <boost/uuid/uuid_io.hpp>
 #include <cstring>
+#include <sstream>
 #include <string>
 #include <string_view>
-
-#include "util/variant.h"
 
 namespace starrocks {
 

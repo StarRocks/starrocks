@@ -31,7 +31,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_aggregator.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 

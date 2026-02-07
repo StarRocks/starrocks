@@ -39,7 +39,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil/column_test_helper.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 

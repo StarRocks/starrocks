@@ -16,10 +16,10 @@
 
 #include "column/binary_column.h"
 #include "column/json_column.h"
+#include "common/simdjson_util.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
-#include "util/simdjson_util.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 

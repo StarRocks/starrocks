@@ -49,7 +49,7 @@
 #include "storage/struct_type_info.h"
 #include "storage/types.h"
 #include "types/decimalv3.h"
-#include "util/json.h"
+#include "types/json_value.h"
 #include "util/json_converter.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"

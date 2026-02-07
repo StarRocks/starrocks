@@ -15,6 +15,7 @@
 #include "connector/utils.h"
 
 #include "arrow/util/decimal.h"
+#include "base/url_coding.h"
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
 #include "column/column.h"
@@ -23,7 +24,6 @@
 #include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
-#include "util/url_coding.h"
 
 namespace starrocks::connector {
 

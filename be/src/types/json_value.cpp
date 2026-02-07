@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/json.h"
+#include "types/json_value.h"
 
 #include <algorithm>
 #include <cctype>
 #include <string>
 #include <vector>
 
-#include "common/status.h"
-#include "common/statusor.h"
-#include "util/json_converter.h"
+#include "base/status.h"
+#include "base/statusor.h"
+#include "types/json_value_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 

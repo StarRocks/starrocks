@@ -25,6 +25,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/aggregate_traits.h"
+#include "exprs/function_context.h"
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
 

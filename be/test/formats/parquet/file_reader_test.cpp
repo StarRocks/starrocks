@@ -50,8 +50,8 @@
 #include "runtime/types.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
+#include "types/variant.h"
 #include "util/thrift_util.h"
-#include "util/variant.h"
 #include "util/variant_encoder.h"
 
 namespace starrocks::parquet {

@@ -14,19 +14,22 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#ifdef __APPLE__
+#include "simdjson.h"
+#else
+#include "simdjson/ondemand.h"
+#endif
+
+#include "common/statusor.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
-// A chunk of continuous memory.
-// Almost all files depend on this struct, and each modification
-// will result in recompilation of all files. So, we put it in a
-// file to keep this file simple and infrequently changed.
-struct MemChunk {
-    uint8_t* data = nullptr;
-    size_t size;
-    int core_id;
-};
+using SimdJsonValue = simdjson::ondemand::value;
+using SimdJsonObject = simdjson::ondemand::object;
+
+// Convert SIMD-JSON object/value to a JsonValue.
+StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value);
+StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value);
 
 } // namespace starrocks

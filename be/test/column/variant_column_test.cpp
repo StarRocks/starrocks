@@ -18,8 +18,8 @@
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "types/logical_type.h"
+#include "types/variant.h"
 #include "types/variant_value.h"
-#include "util/variant.h"
 
 namespace starrocks {
 

@@ -14,15 +14,15 @@
 
 #include <fs/fs.h>
 #include <gtest/gtest.h>
-#include <util/variant.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
 #include "base/testutil/assert.h"
+#include "base/url_coding.h"
 #include "types/decimalv3.h"
 #include "types/timestamp_value.h"
-#include "util/url_coding.h"
+#include "types/variant.h"
 
 namespace starrocks::parquet {
 

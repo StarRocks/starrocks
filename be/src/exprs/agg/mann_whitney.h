@@ -32,8 +32,8 @@
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "gutil/casts.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 
 namespace starrocks {
 

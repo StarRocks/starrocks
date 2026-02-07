@@ -49,8 +49,8 @@
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 #include "util/runtime_profile.h"
 #include "util/table_metrics.h"
 

@@ -327,10 +327,8 @@ set(EXEC_FILES
         ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
-        ./types/bitmap_value_test.cpp
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp 
-        ./types/variant_value_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
@@ -361,7 +359,6 @@ set(EXEC_FILES
         ./util/runtime_profile_test.cpp
         ./base/raw_container_test.cpp
         ./util/string_util_test.cpp
-        ./util/tdigest_test.cpp
         ./util/thread_test.cpp
         ./util/threadpool_test.cpp
         ./util/thrift_customize_test.cpp
@@ -382,7 +379,6 @@ set(EXEC_FILES
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
-        ./util/url_coding_test.cpp
         ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc

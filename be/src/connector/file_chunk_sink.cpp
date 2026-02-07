@@ -16,6 +16,7 @@
 
 #include <future>
 
+#include "base/url_coding.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
@@ -25,7 +26,6 @@
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "util/compression/compression_utils.h"
-#include "util/url_coding.h"
 #include "utils.h"
 
 namespace starrocks::connector {

@@ -20,7 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/percentile_cont.h"
 #include "types/logical_type.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 

@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "tdigest.h"
+#include "types/tdigest.h"
 
 namespace starrocks {
 class PercentileValue {
