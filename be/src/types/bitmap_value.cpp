@@ -38,7 +38,6 @@
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/memory/column_allocator.h"
 #include "types/bitmap_value_detail.h"
 
 namespace starrocks {
@@ -867,28 +866,6 @@ std::string BitmapValue::to_string() const {
         break;
     }
     return ss.str();
-}
-
-// Append values to array
-void BitmapValue::to_array(Buffer<int64_t>* array) const {
-    switch (_type) {
-    case EMPTY:
-        break;
-    case SINGLE:
-        array->emplace_back(_sv);
-        break;
-    case BITMAP: {
-        size_t cur_size = array->size();
-        array->resize(cur_size + _bitmap->cardinality());
-        _bitmap->toUint64Array((uint64_t*)(*array).data() + cur_size);
-        break;
-    }
-    case SET:
-        array->reserve(array->size() + _set->size());
-        auto iter = array->insert(array->end(), _set->begin(), _set->end());
-        std::sort(iter, array->end());
-        break;
-    }
 }
 
 size_t BitmapValue::serialize(uint8_t* dst) const {

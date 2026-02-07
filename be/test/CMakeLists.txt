@@ -327,7 +327,6 @@ set(EXEC_FILES
         ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
-        ./types/bitmap_value_test.cpp
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp 
         ./types/variant_value_test.cpp

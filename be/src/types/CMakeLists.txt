@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
 ADD_BE_LIB(TypesCore
+    bitmap_value.cpp
     decimalv2_value.cpp
     int128_to_double.cpp
     hll.cpp
@@ -26,7 +27,6 @@ ADD_BE_LIB(TypesCore
 )
 
 ADD_BE_LIB(Types
-    bitmap_value.cpp
     hll_sketch.cpp
     logical_type_size.cpp
     checker/type_checker.cpp

@@ -14,6 +14,7 @@
 
 set(TYPES_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    bitmap_value_test.cpp
     date_value_test.cpp
     decimalv2_value_test.cpp
     decimalv3_test.cpp
