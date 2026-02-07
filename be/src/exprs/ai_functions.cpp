@@ -23,7 +23,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "http/http_client.h"
-#include "util/json.h"
+#include "types/json_value.h"
 #include "util/json_converter.h"
 #include "util/json_flattener.h"
 #include "util/llm_cache.h"

@@ -22,7 +22,7 @@
 #include "exprs/percentile_functions.h"
 #include "runtime/types.h"
 #include "types/hll.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 

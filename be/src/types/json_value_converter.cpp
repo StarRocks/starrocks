@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/json_converter.h"
+#include "types/json_value_converter.h"
 
+#include <sstream>
+
+#include "base/string/string_parser.hpp"
+#include "common/simdjson_util.h"
 #include "gutil/strings/substitute.h"
 #include "simdjson.h"
-#include "util/json.h"
-#include "util/simdjson_util.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 

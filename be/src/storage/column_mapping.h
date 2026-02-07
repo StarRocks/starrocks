@@ -41,8 +41,8 @@
 #include "gen_cpp/Exprs_types.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 

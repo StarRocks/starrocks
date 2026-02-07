@@ -32,9 +32,9 @@
 #include "exprs/function_context.h"
 #include "runtime/types.h"
 #include "testutil/init_test_env.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 

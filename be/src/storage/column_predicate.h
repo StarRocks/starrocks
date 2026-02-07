@@ -33,8 +33,8 @@
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
 #include "types/decimalv3.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 
 class Roaring;
 

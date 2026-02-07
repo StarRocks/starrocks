@@ -17,7 +17,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 class PercentileFunctionsTest : public ::testing::Test {

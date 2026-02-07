@@ -16,9 +16,9 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/fixed_length_column.h"
+#include "common/simdjson_util.h"
 #include "gutil/strings/substitute.h"
 #include "util/numeric_types.h"
-#include "util/simdjson_util.h"
 
 namespace starrocks {
 

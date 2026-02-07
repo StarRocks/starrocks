@@ -20,7 +20,7 @@
 #include "column/column_builder.h"
 #include "exprs/overflow.h"
 #include "types/decimalv3.h"
-#include "util/variant.h"
+#include "types/variant.h"
 
 namespace starrocks {
 

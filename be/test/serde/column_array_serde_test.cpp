@@ -30,9 +30,9 @@
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/variant.h"
 #include "util/hash_util.hpp"
-#include "util/json.h"
-#include "util/variant.h"
 
 namespace starrocks::serde {
 

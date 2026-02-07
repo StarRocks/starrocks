@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <future>
 
+#include "base/url_coding.h"
 #include "column/column_helper.h"
 #include "column/datum.h"
 #include "connector/async_flush_stream_poller.h"
@@ -34,7 +35,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
-#include "util/url_coding.h"
 #include "utils.h"
 
 namespace starrocks::connector {

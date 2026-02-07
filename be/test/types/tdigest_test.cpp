@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/tdigest.h"
+#include "types/tdigest.h"
 
 #include <gtest/gtest.h>
 

@@ -29,7 +29,7 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/types.h"
-#include "util/json.h"
+#include "types/json_value.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {

@@ -25,7 +25,7 @@
 #include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
-#include "util/variant.h"
+#include "types/variant.h"
 
 namespace starrocks {
 

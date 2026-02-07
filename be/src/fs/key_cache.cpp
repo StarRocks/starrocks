@@ -16,6 +16,7 @@
 
 #include "agent/master_info.h"
 #include "base/metrics.h"
+#include "base/url_coding.h"
 #include "base/utility/defer_op.h"
 #include "fs/encrypt_file.h"
 #include "gen_cpp/FrontendService.h"
@@ -24,7 +25,6 @@
 #include "runtime/client_cache.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 

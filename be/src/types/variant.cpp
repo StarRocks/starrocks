@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "types/variant.h"
+
 #include <arrow/util/endian.h>
 #include <fmt/format.h>
 #include <glog/logging.h>
-#include <util/variant.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -25,10 +26,10 @@
 #include <string_view>
 
 #include "absl/container/inlined_vector.h"
+#include "base/url_coding.h"
 #include "common/statusor.h"
 #include "types/decimalv3.h"
 #include "types/timestamp_value.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 

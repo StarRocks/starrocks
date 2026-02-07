@@ -17,15 +17,15 @@
 #include <algorithm>
 #include <concepts>
 
+#include "base/orlp/pdqsort.h"
 #include "column/german_string.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
+#include "types/json_value.h"
 #include "types/timestamp_value.h"
-#include "util/json.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 

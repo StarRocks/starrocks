@@ -41,7 +41,7 @@
 #include "runtime/types.h"
 #include "storage/types.h"
 #include "types/time_types.h"
-#include "util/variant.h"
+#include "types/variant.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {

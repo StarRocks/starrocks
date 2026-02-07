@@ -46,8 +46,8 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {

@@ -21,8 +21,8 @@
 #include "column/column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 
 namespace starrocks {
 

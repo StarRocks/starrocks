@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/orlp/pdqsort.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exec/sorting/sort_permute.h"
@@ -24,7 +25,6 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/orlp/pdqsort.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
