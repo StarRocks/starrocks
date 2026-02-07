@@ -14,6 +14,7 @@
 
 #pragma once
 
+<<<<<<<< HEAD:be/src/base/failpoint/fail_point.h
 #ifdef FIU_ENABLE
 
 #include <condition_variable>
@@ -194,3 +195,6 @@ bool init_failpoint_from_conf(const std::string& conf_file);
 #define FAIL_POINT_TRIGGER_RETURN_ERROR(NAME)
 #define FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(NAME, status, stmt, default_stmt) status = default_stmt
 #endif
+========
+#include "base/failpoint/fail_point.h"
+>>>>>>>> 8b017de8f7 ([Refactor] Move HLL to TypeCore):be/src/util/failpoint/fail_point.h
