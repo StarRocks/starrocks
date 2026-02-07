@@ -18,6 +18,7 @@ set(TYPES_TEST_FILES
     decimalv2_value_test.cpp
     decimalv3_test.cpp
     datetime_value_test.cpp
+    hll_test.cpp
     logical_type_test.cpp
     timestamp_value_test.cpp
 )

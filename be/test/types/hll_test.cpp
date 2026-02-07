@@ -19,14 +19,57 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+
+#include "base/hash/hash_util.hpp"
 #include "base/string/slice.h"
-#include "util/failpoint/fail_point.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
+namespace {
+
+constexpr size_t kHllRegisterAlignment = 4096;
+bool g_hll_allocate_fail = false;
+
+bool test_register_allocate(size_t size, void* /*ctx*/, MemChunk* chunk) {
+    if (g_hll_allocate_fail) {
+        chunk->data = nullptr;
+        chunk->size = 0;
+        chunk->core_id = -1;
+        return false;
+    }
+    void* ptr = nullptr;
+    if (posix_memalign(&ptr, kHllRegisterAlignment, size) != 0) {
+        return false;
+    }
+    chunk->data = static_cast<uint8_t*>(ptr);
+    chunk->size = size;
+    chunk->core_id = -1;
+    return true;
+}
+
+void free_with_stdlib(const MemChunk& chunk, void* /*ctx*/) {
+    std::free(chunk.data);
+}
+
+class ScopedHllAllocateFail {
+public:
+    ScopedHllAllocateFail() { g_hll_allocate_fail = true; }
+    ~ScopedHllAllocateFail() { g_hll_allocate_fail = false; }
+};
+
+} // namespace
+
 class TestHll : public testing::Test {
 public:
+    static void SetUpTestSuite() {
+        HyperLogLog::RegistersAllocator allocator;
+        allocator.allocate = test_register_allocate;
+        allocator.free = free_with_stdlib;
+        Status st = HyperLogLog::set_registers_allocator(allocator);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+    }
+
     ~TestHll() override = default;
 };
 
@@ -206,7 +249,7 @@ TEST_F(TestHll, InvalidPtr) {
 }
 
 TEST_F(TestHll, AllocateFail) {
-    // prepare a FULL HLL (will allocate registers) with failpoint disabled
+    // prepare a FULL HLL with test allocator first.
     HyperLogLog full_hll;
     for (int i = 0; i < 64 * 1024; ++i) {
         full_hll.update(hash(64 * 1024 + i));
@@ -215,11 +258,7 @@ TEST_F(TestHll, AllocateFail) {
     int len = full_hll.serialize(buf);
     ASSERT_EQ(HLL_REGISTERS_COUNT + 1, len);
 
-    auto* fp = failpoint::FailPointRegistry::GetInstance()->get("mem_chunk_allocator_allocate_fail");
-    ASSERT_NE(fp, nullptr);
-    PFailPointTriggerMode mode;
-    mode.set_mode(FailPointTriggerModeType::ENABLE);
-    fp->setMode(mode);
+    ScopedHllAllocateFail scoped_fail;
 
     // copy construction should throw when allocation fails
     ASSERT_THROW(static_cast<void>(HyperLogLog(full_hll)), std::bad_alloc);
@@ -245,9 +284,6 @@ TEST_F(TestHll, AllocateFail) {
     // deserialize should fail gracefully and leave object empty
     HyperLogLog hll_after_fail(Slice((char*)buf, len));
     EXPECT_EQ(0, hll_after_fail.estimate_cardinality());
-
-    mode.set_mode(FailPointTriggerModeType::DISABLE);
-    fp->setMode(mode);
 }
 
 } // namespace starrocks

@@ -26,6 +26,7 @@ ADD_BE_LIB(Base
   hash/crc32c_sse_simd.cpp
   hash/hash_util.cpp
   hash/murmur_hash3.cpp
+  failpoint/fail_point.cpp
   types/decimal12.cpp
   types/int128.cpp
   types/int256.cpp
