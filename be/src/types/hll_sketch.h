@@ -20,9 +20,9 @@
 #include <memory>
 #include <string>
 
+#include "common/mem_chunk.h"
 #include "datasketches/hll.hpp"
 #include "runtime/memory/counting_allocator.h"
-#include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 
 namespace starrocks {

@@ -40,6 +40,7 @@
 
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "base/string/slice.h"
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
@@ -63,7 +64,6 @@
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
-#include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT

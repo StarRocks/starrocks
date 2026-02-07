@@ -460,7 +460,6 @@ SET(DW_TEST_FILES
     ./storage/file_utils_test.cpp
     ./storage/fixed_fifo_cache_test.cpp
     ./storage/get_use_pk_index_test.cpp
-    ./storage/hll_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp

@@ -14,13 +14,13 @@
 
 #include "exec/pipeline/scan/chunk_source.h"
 
+#include "base/failpoint/fail_point.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(scan_chunk_sleep_after_read);

@@ -17,14 +17,15 @@
 #ifdef FIU_ENABLE
 
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <semaphore>
 #include <shared_mutex>
 #include <unordered_map>
 
-#include "common/status.h"
-#include "common/statusor.h"
+#include "base/status.h"
+#include "base/statusor.h"
 #include "fiu/fiu-control.h"
 #include "fiu/fiu.h"
 #include "gen_cpp/internal_service.pb.h"

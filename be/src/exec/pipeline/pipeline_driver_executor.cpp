@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "agent/master_info.h"
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
@@ -24,7 +25,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
-#include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/time_guard.h"

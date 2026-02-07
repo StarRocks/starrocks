@@ -78,7 +78,6 @@ set(UTIL_FILES
   tdigest.cpp
   debug/query_trace_impl.cpp
   stack_trace_mutex.cpp
-  failpoint/fail_point.cpp
   bthreads/future.h
   bthreads/future_impl.cpp
   debug_action.cpp

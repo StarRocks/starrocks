@@ -20,6 +20,7 @@
 
 #include <random>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "column/chunk.h"
@@ -47,7 +48,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::lake {
 

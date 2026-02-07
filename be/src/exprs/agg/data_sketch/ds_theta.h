@@ -18,8 +18,8 @@
 #include <string>
 
 #include "base/string/slice.h"
+#include "common/mem_chunk.h"
 #include "runtime/memory/counting_allocator.h"
-#include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 
 //  enum flags { IS_BIG_ENDIAN, IS_READ_ONLY, IS_EMPTY, IS_COMPACT, IS_ORDERED };

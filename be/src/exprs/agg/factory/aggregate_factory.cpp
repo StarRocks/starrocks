@@ -16,12 +16,12 @@
 
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "types/logical_type.h"
 #include "udf/java/java_function_fwd.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 

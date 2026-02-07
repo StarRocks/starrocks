@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
 #include "common/config.h"
 #include "exec/capture_version_node.h"
@@ -48,7 +49,6 @@
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
-#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/uid_util.h"
 

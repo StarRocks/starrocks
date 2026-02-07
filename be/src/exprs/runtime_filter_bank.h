@@ -20,6 +20,7 @@
 #include <set>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/failpoint/fail_point.h"
 #include "column/column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -36,7 +37,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 struct RuntimeMembershipFilterBuildParam;

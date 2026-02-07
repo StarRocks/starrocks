@@ -18,6 +18,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "common/logging.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
@@ -28,7 +29,6 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
-#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

@@ -14,13 +14,13 @@
 
 #include "formats/parquet/column_reader_factory.h"
 
+#include "base/failpoint/fail_point.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
 #include "formats/utils.h"
 #include "runtime/types.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::parquet {
 

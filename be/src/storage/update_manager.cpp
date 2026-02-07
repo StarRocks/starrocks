@@ -18,6 +18,7 @@
 #include <memory>
 #include <numeric>
 
+#include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
 #include "common/system/cpu_info.h"
@@ -32,7 +33,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/failpoint/fail_point.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

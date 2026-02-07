@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
@@ -30,7 +31,6 @@
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "types/hll.h"
-#include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
 #include "util/json.h"
 #include "util/variant.h"

@@ -17,6 +17,7 @@
 #include <cstdlib>
 
 #include "base/coding.h"
+#include "base/failpoint/fail_point.h"
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
@@ -33,7 +34,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 

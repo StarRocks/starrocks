@@ -16,6 +16,7 @@
 
 #include <random>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"
@@ -23,7 +24,6 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/txn_manager.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 

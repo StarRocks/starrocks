@@ -34,8 +34,13 @@
 
 #include "types/hll.h"
 
+#include <atomic>
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <map>
+#include <mutex>
 
 #include "base/coding.h"
 #include "base/phmap/phmap.h"
@@ -44,11 +49,77 @@
 #include "gutil/strings/substitute.h"
 
 using std::map;
-using std::nothrow;
 using std::string;
-using std::stringstream;
 
 namespace starrocks {
+
+namespace {
+
+constexpr size_t kHllRegisterAlignment = 4096;
+
+std::atomic<int64_t> g_hll_default_allocator_live_registers{0};
+
+bool default_register_allocate(size_t size, void* /*ctx*/, MemChunk* chunk) {
+    void* ptr = nullptr;
+    if (posix_memalign(&ptr, kHllRegisterAlignment, size) != 0) {
+        return false;
+    }
+    g_hll_default_allocator_live_registers.fetch_add(1, std::memory_order_relaxed);
+    chunk->data = static_cast<uint8_t*>(ptr);
+    chunk->size = size;
+    chunk->core_id = -1;
+    return true;
+}
+
+void default_register_free(const MemChunk& chunk, void* /*ctx*/) {
+    auto old_live_count = g_hll_default_allocator_live_registers.fetch_sub(1, std::memory_order_relaxed);
+    DCHECK_GT(old_live_count, 0);
+    std::free(chunk.data);
+}
+
+HyperLogLog::RegistersAllocator g_hll_allocator{default_register_allocate, default_register_free, nullptr};
+std::once_flag g_hll_allocator_set_once;
+
+bool has_live_default_registers() {
+    return g_hll_default_allocator_live_registers.load(std::memory_order_relaxed) != 0;
+}
+
+} // namespace
+
+Status HyperLogLog::set_registers_allocator(RegistersAllocator allocator) {
+    if (allocator.allocate == nullptr || allocator.free == nullptr) {
+        return Status::InvalidArgument("hll registers allocator requires both allocate and free callbacks");
+    }
+    if (has_live_default_registers()) {
+        return Status::ResourceBusy("hll default allocator has live register chunks");
+    }
+    bool did_register = false;
+    std::call_once(g_hll_allocator_set_once, [&] {
+        g_hll_allocator = allocator;
+        did_register = true;
+    });
+    if (!did_register) {
+        return Status::AlreadyExist("hll registers allocator is already registered");
+    }
+    return Status::OK();
+}
+
+bool HyperLogLog::_allocate_registers(size_t size) {
+    DCHECK_EQ(_registers.data, nullptr);
+
+    if (!g_hll_allocator.allocate(size, g_hll_allocator.ctx, &_registers)) {
+        return false;
+    }
+    DCHECK_NE(_registers.data, nullptr);
+    DCHECK_EQ(_registers.size, size);
+    return true;
+}
+
+void HyperLogLog::_free_registers() {
+    DCHECK_NE(_registers.data, nullptr);
+    g_hll_allocator.free(_registers, g_hll_allocator.ctx);
+    _registers.data = nullptr;
+}
 
 std::string HyperLogLog::empty() {
     std::string buf;
@@ -59,7 +130,7 @@ std::string HyperLogLog::empty() {
 
 HyperLogLog::HyperLogLog(const HyperLogLog& other) : _type(other._type), _hash_set(other._hash_set) {
     if (other._registers.data != nullptr) {
-        if (UNLIKELY(!MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers))) {
+        if (UNLIKELY(!_allocate_registers(HLL_REGISTERS_COUNT))) {
             throw std::bad_alloc();
         }
         DCHECK_NE(_registers.data, nullptr);
@@ -74,12 +145,11 @@ HyperLogLog& HyperLogLog::operator=(const HyperLogLog& other) {
         this->_hash_set = other._hash_set;
 
         if (_registers.data != nullptr) {
-            MemChunkAllocator::free(_registers);
-            _registers.data = nullptr;
+            _free_registers();
         }
 
         if (other._registers.data != nullptr) {
-            if (UNLIKELY(!MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers))) {
+            if (UNLIKELY(!_allocate_registers(HLL_REGISTERS_COUNT))) {
                 throw std::bad_alloc();
             }
             DCHECK_NE(_registers.data, nullptr);
@@ -103,7 +173,7 @@ HyperLogLog& HyperLogLog::operator=(HyperLogLog&& other) noexcept {
         this->_hash_set = std::move(other._hash_set);
 
         if (_registers.data != nullptr) {
-            MemChunkAllocator::free(_registers);
+            _free_registers();
         }
         _registers = other._registers;
 
@@ -127,7 +197,7 @@ HyperLogLog::HyperLogLog(const Slice& src) {
 HyperLogLog::~HyperLogLog() {
     if (_registers.data != nullptr) {
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
-        MemChunkAllocator::free(_registers);
+        _free_registers();
     }
 }
 
@@ -136,7 +206,7 @@ HyperLogLog::~HyperLogLog() {
 void HyperLogLog::_convert_explicit_to_register() {
     DCHECK(_type == HLL_DATA_EXPLICIT) << "_type(" << _type << ") should be explicit(" << HLL_DATA_EXPLICIT << ")";
     DCHECK_EQ(_registers.data, nullptr);
-    if (UNLIKELY(!MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers))) {
+    if (UNLIKELY(!_allocate_registers(HLL_REGISTERS_COUNT))) {
         throw std::bad_alloc();
     }
     DCHECK_NE(_registers.data, nullptr);
@@ -232,7 +302,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             DCHECK_EQ(_registers.data, nullptr);
-            if (UNLIKELY(!MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers))) {
+            if (UNLIKELY(!_allocate_registers(HLL_REGISTERS_COUNT))) {
                 throw std::bad_alloc();
             }
             DCHECK_NE(_registers.data, nullptr);
@@ -431,7 +501,7 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     }
     case HLL_DATA_SPARSE: {
         DCHECK_EQ(_registers.data, nullptr);
-        if (UNLIKELY(!MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers))) {
+        if (UNLIKELY(!_allocate_registers(HLL_REGISTERS_COUNT))) {
             return false;
         }
         DCHECK_NE(_registers.data, nullptr);
@@ -452,7 +522,7 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     }
     case HLL_DATA_FULL: {
         DCHECK_EQ(_registers.data, nullptr);
-        if (UNLIKELY(!MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers))) {
+        if (UNLIKELY(!_allocate_registers(HLL_REGISTERS_COUNT))) {
             return false;
         }
         DCHECK_NE(_registers.data, nullptr);

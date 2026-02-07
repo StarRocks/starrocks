@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -27,7 +28,6 @@
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
 #include "types/logical_type_infra.h"
-#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
 

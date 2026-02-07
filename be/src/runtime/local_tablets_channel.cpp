@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
 #include "base/string/faststring.h"
 #include "column/chunk.h"
 #include "common/statusor.h"
@@ -52,7 +53,6 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/disposable_closure.h"
-#include "util/failpoint/fail_point.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

@@ -20,6 +20,7 @@
 #include <exception>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
@@ -28,7 +29,6 @@
 #include "runtime/file_result_writer.h"
 #include "service/backend_options.h"
 #include "udf/java/utils.h"
-#include "util/failpoint/fail_point.h"
 #include "util/hdfs_util.h"
 
 using namespace fmt::literals;

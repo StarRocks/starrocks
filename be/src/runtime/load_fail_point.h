@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 #ifdef FIU_ENABLE
 #include "gen_cpp/internal_service.pb.h"

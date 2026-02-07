@@ -19,6 +19,7 @@
 #include <mutex>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -26,7 +27,6 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
-#include "util/failpoint/fail_point.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {

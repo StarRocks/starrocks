@@ -14,9 +14,10 @@
 
 #ifdef FIU_ENABLE
 
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 #include <filesystem>
+#include <unordered_set>
 #include <utility>
 
 #include "fmt/format.h"

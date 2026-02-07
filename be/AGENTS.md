@@ -184,6 +184,11 @@ Use `#pragma once` instead of traditional include guards:
 - **Allowed deps only**: `be/src/common` may depend on `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
 - **No other BE modules**: do not include headers from `util/*`, `runtime/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, etc.
 
+### typecore (`TypesCore` target)
+- **Allowed deps only**: code compiled into `TypesCore` (for example, selected files under `be/src/types`) may only depend on `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
+- **No higher-level BE deps**: do not include headers from `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, etc.
+- **UT constraint**: keep `TypesCore` unit tests in `types_test` and avoid introducing `Util`/`Runtime` link requirements unless a dedicated integration test is used.
+
 ## Common Patterns
 
 ### Status and StatusOr
