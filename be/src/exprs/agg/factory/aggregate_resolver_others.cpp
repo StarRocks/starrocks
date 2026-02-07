@@ -82,6 +82,22 @@ void AggregateFuncResolver::register_others() {
     add_aggregate_mapping_variadic<TYPE_DATE, TYPE_DATE, PercentileState<TYPE_DATE>>(
             "percentile_cont", false, AggregateFactory::MakePercentileContAggregateFunction<TYPE_DATE>());
 
+    // percentile_cont(decimal_value, decimal_rate) -> decimal_value
+    // The rate can use a different precision/scale than the value, as long as both are DECIMALV3 with the same
+    // underlying width (DECIMAL32/64/128/256), so that the aggregator can interpret the rate as a rational number.
+    add_aggregate_mapping_variadic<TYPE_DECIMAL32, TYPE_DECIMAL32, PercentileDecimalRateState<TYPE_DECIMAL32>>(
+            "percentile_cont", false,
+            AggregateFactory::MakePercentileContDecimalRateAggregateFunction<TYPE_DECIMAL32>());
+    add_aggregate_mapping_variadic<TYPE_DECIMAL64, TYPE_DECIMAL64, PercentileDecimalRateState<TYPE_DECIMAL64>>(
+            "percentile_cont", false,
+            AggregateFactory::MakePercentileContDecimalRateAggregateFunction<TYPE_DECIMAL64>());
+    add_aggregate_mapping_variadic<TYPE_DECIMAL128, TYPE_DECIMAL128, PercentileDecimalRateState<TYPE_DECIMAL128>>(
+            "percentile_cont", false,
+            AggregateFactory::MakePercentileContDecimalRateAggregateFunction<TYPE_DECIMAL128>());
+    add_aggregate_mapping_variadic<TYPE_DECIMAL256, TYPE_DECIMAL256, PercentileDecimalRateState<TYPE_DECIMAL256>>(
+            "percentile_cont", false,
+            AggregateFactory::MakePercentileContDecimalRateAggregateFunction<TYPE_DECIMAL256>());
+
     for (auto type : sortable_types()) {
         type_dispatch_all(type, PercentileDiscDispatcher(), this);
     }
