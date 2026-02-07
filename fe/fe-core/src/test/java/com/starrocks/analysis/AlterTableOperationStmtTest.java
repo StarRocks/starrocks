@@ -343,9 +343,11 @@ public class AlterTableOperationStmtTest {
 
         ExpireSnapshotsProcedure expireProc = ExpireSnapshotsProcedure.getInstance();
         Assertions.assertEquals("expire_snapshots", expireProc.getProcedureName());
-        Assertions.assertEquals(1, expireProc.getArguments().size());
+        Assertions.assertEquals(2, expireProc.getArguments().size());
         Assertions.assertEquals("older_than", expireProc.getArguments().get(0).getName());
         Assertions.assertFalse(expireProc.getArguments().get(0).isRequired());
+        Assertions.assertEquals("retain_last", expireProc.getArguments().get(1).getName());
+        Assertions.assertFalse(expireProc.getArguments().get(1).isRequired());
 
         FastForwardProcedure fastForwardProc = FastForwardProcedure.getInstance();
         Assertions.assertEquals("fast_forward", fastForwardProc.getProcedureName());
@@ -353,7 +355,11 @@ public class AlterTableOperationStmtTest {
 
         RemoveOrphanFilesProcedure removeOrphanProc = RemoveOrphanFilesProcedure.getInstance();
         Assertions.assertEquals("remove_orphan_files", removeOrphanProc.getProcedureName());
-        Assertions.assertEquals(1, removeOrphanProc.getArguments().size());
+        Assertions.assertEquals(2, removeOrphanProc.getArguments().size());
+        Assertions.assertEquals("older_than", removeOrphanProc.getArguments().get(0).getName());
+        Assertions.assertFalse(removeOrphanProc.getArguments().get(0).isRequired());
+        Assertions.assertEquals("location", removeOrphanProc.getArguments().get(1).getName());
+        Assertions.assertFalse(removeOrphanProc.getArguments().get(1).isRequired());
 
         RewriteDataFilesProcedure rewriteProc = RewriteDataFilesProcedure.getInstance();
         Assertions.assertEquals("rewrite_data_files", rewriteProc.getProcedureName());
