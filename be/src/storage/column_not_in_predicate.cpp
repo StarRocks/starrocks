@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "base/simd/simd.h"
+#include "base/string/string_parser.hpp"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
@@ -22,7 +23,6 @@
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

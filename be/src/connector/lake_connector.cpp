@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "base/string/string_parser.hpp"
 #include "column/column_access_path.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
@@ -33,7 +34,6 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "util/starrocks_metrics.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks::connector {
 

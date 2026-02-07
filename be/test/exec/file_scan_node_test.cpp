@@ -18,13 +18,13 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/connector_scan_node.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
 
 //TODO: test multi thread
 //TODO: test runtime filter

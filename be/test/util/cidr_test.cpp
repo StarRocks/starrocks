@@ -24,7 +24,7 @@
 #include <iostream>
 
 #include "common/configbase.h"
-#include "util/cpu_info.h"
+#include "common/system/cpu_info.h"
 #include "util/logging.h"
 
 namespace starrocks {

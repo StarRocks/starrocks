@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/cpu_info.h"
+#include "common/system/cpu_info.h"
 
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
 /* GCC-compatible compiler, targeting x86/x86-64 */
@@ -66,24 +66,24 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <system_error>
 
 #include "base/path/file_util.h"
+#include "base/string/string_parser.hpp"
 #include "base/system/errno.h"
 #include "common/config.h"
-#include "common/env_config.h"
 #include "common/logging.h"
-#include "fs/fs_util.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/pretty_printer.h"
-#include "util/string_parser.hpp"
 
 using boost::algorithm::contains;
 using boost::algorithm::trim;
 
 using std::max;
+using std::string;
 
 DECLARE_bool(abort_on_config_error);
 DEFINE_int32(num_cores, 0,
@@ -103,29 +103,25 @@ bool CpuInfo::is_cgroup_with_cpuset_ = false;
 bool CpuInfo::is_cgroup_with_cpu_quota_ = false;
 int CpuInfo::max_num_numa_nodes_;
 std::unique_ptr<int[]> CpuInfo::core_to_numa_node_;
-std::vector<vector<int>> CpuInfo::numa_node_to_cores_;
+std::vector<std::vector<int>> CpuInfo::numa_node_to_cores_;
 std::vector<size_t> CpuInfo::cpuset_cores_;
 std::set<size_t> CpuInfo::offline_cores_;
 std::vector<int> CpuInfo::numa_node_core_idx_;
 std::vector<long> CpuInfo::cache_sizes;
 std::vector<long> CpuInfo::cache_line_sizes;
 
-static struct {
-    string name;
-    int64_t flag;
-} flag_mappings[] = {
-        {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
-        {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
-        {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
-};
+const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
+    static const std::vector<FlagMapping> mappings = {
+            {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
+            {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
+            {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
+    };
+    return mappings;
+}
 
-// Helper function to parse for hardware flags.
-// values contains a list of space-seperated flags.  check to see if the flags we
-// care about are present.
-// Returns a bitmap of flags.
-int64_t ParseCPUFlags(const string& values) {
+int64_t CpuInfo::_parse_cpu_flags(const string& values) {
     int64_t flags = 0;
-    for (auto& flag_mapping : flag_mappings) {
+    for (const auto& flag_mapping : _flag_mappings()) {
         if (contains(values, flag_mapping.name)) {
             flags |= flag_mapping.flag;
         }
@@ -153,7 +149,7 @@ void CpuInfo::init() {
             trim(name);
             trim(value);
             if (name.compare("flags") == 0) {
-                hardware_flags_ |= ParseCPUFlags(value);
+                hardware_flags_ |= _parse_cpu_flags(value);
             } else if (name.compare("cpu MHz") == 0) {
                 // Every core will report a different speed.  We'll take the max, assuming
                 // that when impala is running, the core will not be in a lower power state.
@@ -198,13 +194,10 @@ void CpuInfo::init() {
     // Print a warning if something is wrong with sched_getcpu().
 #ifdef HAVE_SCHED_GETCPU
     if (sched_getcpu() == -1) {
-        LOG(WARNING) << "Kernel does not support sched_getcpu(). Performance may be impacted.";
+        std::cerr << "Kernel does not support sched_getcpu(). Performance may be impacted.";
     }
 #else
-#ifndef __APPLE__
-    LOG(WARNING) << "Built on a system without sched_getcpu() support. Performance may"
-                 << " be impacted.";
-#endif
+    std::cerr << "Built on a system without sched_getcpu() support. Performance may be impacted.";
 #endif
 
     _init_numa();
@@ -296,7 +289,8 @@ std::vector<size_t> CpuInfo::parse_cpus(const std::string& cpus_str) {
 }
 
 void CpuInfo::_init_num_cores_with_cgroup() {
-    bool running_in_docker = fs::path_exist("/.dockerenv");
+    std::error_code ec;
+    bool running_in_docker = std::filesystem::exists("/.dockerenv", ec);
     if (!running_in_docker) {
         return;
     }
@@ -444,65 +438,6 @@ void CpuInfo::_get_cache_info(long cache_sizes[NUM_CACHE_LEVELS], long cache_lin
 #endif
 }
 
-std::string CpuInfo::debug_string() {
-    DCHECK(initialized_);
-    std::stringstream stream;
-    long cache_sizes[NUM_CACHE_LEVELS];
-    long cache_line_sizes[NUM_CACHE_LEVELS];
-    _get_cache_info(cache_sizes, cache_line_sizes);
-
-    string L1 =
-            strings::Substitute("L1 Cache: $0 (Line: $1)", PrettyPrinter::print(cache_sizes[L1_CACHE], TUnit::BYTES),
-                                PrettyPrinter::print(cache_line_sizes[L1_CACHE], TUnit::BYTES));
-    string L2 =
-            strings::Substitute("L2 Cache: $0 (Line: $1)", PrettyPrinter::print(cache_sizes[L2_CACHE], TUnit::BYTES),
-                                PrettyPrinter::print(cache_line_sizes[L2_CACHE], TUnit::BYTES));
-    string L3 =
-            strings::Substitute("L3 Cache: $0 (Line: $1)", PrettyPrinter::print(cache_sizes[L3_CACHE], TUnit::BYTES),
-                                PrettyPrinter::print(cache_line_sizes[L3_CACHE], TUnit::BYTES));
-    stream << "Cpu Info:" << std::endl
-           << "  Model: " << model_name_ << std::endl
-           << "  Cores: " << num_cores_ << std::endl
-           << "  Max Possible Cores: " << max_num_cores_ << std::endl
-           << "  " << L1 << std::endl
-           << "  " << L2 << std::endl
-           << "  " << L3 << std::endl
-           << "  Hardware Supports:" << std::endl;
-    for (auto& flag_mapping : flag_mappings) {
-        if (is_supported(flag_mapping.flag)) {
-            stream << "    " << flag_mapping.name << std::endl;
-        }
-    }
-    stream << "  Numa Nodes: " << max_num_numa_nodes_ << std::endl;
-    stream << "  Numa Nodes of Cores:";
-    for (int core = 0; core < max_num_cores_; ++core) {
-        stream << " " << core << "->" << core_to_numa_node_[core] << " |";
-    }
-    stream << std::endl;
-
-    auto print_cores = [&stream](const std::string& title, const auto& cores) {
-        stream << "  " << title << ": ";
-        if (cores.empty()) {
-            stream << "None";
-        } else {
-            bool is_first = true;
-            for (const int core : cores) {
-                if (!is_first) {
-                    stream << ",";
-                }
-                is_first = false;
-                stream << core;
-            }
-        }
-        stream << std::endl;
-    };
-
-    print_cores("Cores from CGroup CPUSET", cpuset_cores_);
-    print_cores("Offline Cores", offline_cores_);
-
-    return stream.str();
-}
-
 std::vector<size_t> CpuInfo::get_core_ids() {
     std::vector<size_t> core_ids;
     if (!cpuset_cores_.empty()) {
@@ -520,7 +455,7 @@ std::vector<size_t> CpuInfo::get_core_ids() {
 
 std::vector<std::string> CpuInfo::unsupported_cpu_flags_from_current_env() {
     std::vector<std::string> unsupported_flags;
-    for (auto& flag_mapping : flag_mappings) {
+    for (const auto& flag_mapping : _flag_mappings()) {
         if (!is_supported(flag_mapping.flag)) {
             // AVX is skipped due to there is no condition compile flags for it
             // case CpuInfo::AVX:

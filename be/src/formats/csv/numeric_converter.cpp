@@ -14,8 +14,8 @@
 
 #include "formats/csv/numeric_converter.h"
 
+#include "base/string/string_parser.hpp"
 #include "column/fixed_length_column.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks::csv {
 

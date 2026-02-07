@@ -30,14 +30,12 @@ set(UTIL_FILES
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
-  cpu_info.cpp
   cpu_usage_info.cpp
   cpu_util.cpp
   crc32c.cpp
   date_func.cpp
   dynamic_util.cpp
   debug_util.cpp
-  disk_info.cpp
   download_util.cpp
   hash_util.hpp
   json_util.cpp
@@ -45,7 +43,6 @@ set(UTIL_FILES
   json_flattener.cpp
   json_converter.cpp
   starrocks_metrics.cpp
-  mem_info.cpp
   metrics.cpp
   metrics/file_scan_metrics.cpp
   misc.cpp
@@ -55,7 +52,6 @@ set(UTIL_FILES
 # perf-counters.cpp
   runtime_profile.cpp
   static_asserts.cpp
-  string_parser.cpp
   thrift_util.cpp
   thrift_client.cpp
   thrift_server.cpp

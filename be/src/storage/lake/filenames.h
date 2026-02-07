@@ -19,9 +19,9 @@
 #include <optional>
 #include <string_view>
 
+#include "base/string/string_parser.hpp"
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/strings/util.h"
-#include "util/string_parser.hpp"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {

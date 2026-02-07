@@ -19,8 +19,8 @@
 
 #include <filesystem>
 
+#include "common/system/cpu_info.h"
 #include "runtime/exec_env.h"
-#include "util/cpu_info.h"
 
 #define private public // hack complier
 #define protected public

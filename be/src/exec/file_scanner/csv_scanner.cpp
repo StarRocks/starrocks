@@ -15,6 +15,7 @@
 #include "exec/file_scanner/csv_scanner.h"
 
 #include "base/string/slice.h"
+#include "base/string/string_parser.hpp"
 #include "base/string/utf8_check.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
@@ -22,7 +23,6 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

@@ -28,6 +28,7 @@
 #include <worker.h>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "fs/encrypt_file.h"
@@ -43,7 +44,6 @@
 #include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
 #include "util/lru_cache.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

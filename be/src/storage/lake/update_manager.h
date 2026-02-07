@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "common/system/mem_info.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
@@ -25,7 +26,6 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/lake/update_compaction_state.h"
 #include "util/dynamic_cache.h"
-#include "util/mem_info.h"
 #include "util/parse_util.h"
 #include "util/threadpool.h"
 

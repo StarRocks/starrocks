@@ -22,9 +22,9 @@
 #include <sstream>
 
 #include "base/utility/template_util.h"
+#include "common/system/cpu_info.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/strings/join.h"
-#include "util/cpu_info.h"
 
 /// Truncate a double to offset decimal places.
 #define DOUBLE_TRUNCATE(val, offset) floor(val* pow(10, offset)) / pow(10, offset)

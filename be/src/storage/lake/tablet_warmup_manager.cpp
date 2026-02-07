@@ -23,6 +23,7 @@
 #include <chrono>
 
 #include "agent/master_info.h"
+#include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
@@ -32,7 +33,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
-#include "util/string_parser.hpp"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
 

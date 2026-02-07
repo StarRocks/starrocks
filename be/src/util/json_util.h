@@ -42,8 +42,8 @@
 
 #include "base/utility/template_util.h"
 #include "column/vectorized_fwd.h"
+#include "common/pretty_printer.h"
 #include "common/status.h"
-#include "util/pretty_printer.h"
 
 namespace starrocks {
 

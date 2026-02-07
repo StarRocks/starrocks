@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "common/system/mem_info.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
@@ -24,7 +25,6 @@
 #include "storage/primary_index.h"
 #include "storage/update_manager.h"
 #include "util/dynamic_cache.h"
-#include "util/mem_info.h"
 #include "util/parse_util.h"
 #include "util/threadpool.h"
 

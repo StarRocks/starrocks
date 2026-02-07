@@ -14,11 +14,11 @@
 
 #include "numeric_column.h"
 
+#include "base/string/string_parser.hpp"
 #include "column/fixed_length_column.h"
 #include "gutil/strings/substitute.h"
 #include "util/numeric_types.h"
 #include "util/simdjson_util.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

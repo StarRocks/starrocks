@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "util/string_parser.hpp"
+#include "base/string/string_parser.hpp"
 
 namespace starrocks {
 

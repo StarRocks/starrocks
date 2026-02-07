@@ -42,9 +42,9 @@
 #include <utility>
 
 #include "common/object_pool.h"
+#include "common/pretty_printer.h"
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
-#include "util/pretty_printer.h"
 
 namespace starrocks {
 

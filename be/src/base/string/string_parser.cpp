@@ -15,15 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "string_parser.hpp"
-
-#include "types/constexpr.h"
+#include "base/string/string_parser.hpp"
 
 namespace starrocks {
 
 template <>
 __int128 StringParser::numeric_limits<__int128>(bool negative) {
-    return negative ? MIN_INT128 : MAX_INT128;
+    return negative ? INT128_MIN : INT128_MAX;
 }
 
 } // namespace starrocks

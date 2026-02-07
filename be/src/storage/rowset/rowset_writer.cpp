@@ -44,6 +44,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/pretty_printer.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
@@ -65,7 +66,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/type_utils.h"
-#include "util/pretty_printer.h"
 
 namespace starrocks {
 

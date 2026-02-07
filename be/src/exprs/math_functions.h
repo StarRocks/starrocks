@@ -16,6 +16,7 @@
 
 #include <cmath>
 
+#include "base/string/string_parser.hpp"
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -24,7 +25,6 @@
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/unary_function.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

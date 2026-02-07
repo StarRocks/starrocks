@@ -16,6 +16,7 @@
 #include <functional>
 #include <vector>
 
+#include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "common/object_pool.h"
@@ -27,7 +28,6 @@
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
 #include "util/bloom_filter.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 class BloomFilter;

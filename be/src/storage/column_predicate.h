@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "column/type_traits.h"
@@ -34,7 +35,6 @@
 #include "storage/zone_map_detail.h"
 #include "types/logical_type.h"
 #include "util/json.h"
-#include "util/string_parser.hpp"
 
 class Roaring;
 

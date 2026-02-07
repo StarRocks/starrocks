@@ -115,6 +115,14 @@ public:
     static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
 
 private:
+    struct FlagMapping {
+        std::string name;
+        int64_t flag;
+    };
+
+    static const std::vector<FlagMapping>& _flag_mappings();
+    static int64_t _parse_cpu_flags(const std::string& values);
+
     static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
 
     /// Initialize NUMA-related state - called from Init();

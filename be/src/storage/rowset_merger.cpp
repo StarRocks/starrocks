@@ -18,6 +18,7 @@
 #include <queue>
 
 #include "column/binary_column.h"
+#include "common/pretty_printer.h"
 #include "gutil/stl_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
@@ -28,7 +29,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet.h"
 #include "storage/union_iterator.h"
-#include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

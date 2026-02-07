@@ -21,7 +21,7 @@
 
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "util/cpu_info.h"
+#include "common/system/cpu_info.h"
 
 namespace starrocks {
 

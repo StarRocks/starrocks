@@ -14,6 +14,7 @@
 
 #include "nullable_column.h"
 
+#include "base/string/string_parser.hpp"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/nullable_column.h"
@@ -23,7 +24,6 @@
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
 #include "util/simdjson_util.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

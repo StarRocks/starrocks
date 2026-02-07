@@ -36,7 +36,7 @@
 
 #include <gtest/gtest.h>
 
-#include "util/cpu_info.h"
+#include "common/system/cpu_info.h"
 
 namespace starrocks {
 

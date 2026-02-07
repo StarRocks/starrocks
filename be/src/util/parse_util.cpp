@@ -36,7 +36,7 @@
 
 #include <fmt/format.h>
 
-#include "util/string_parser.hpp"
+#include "base/string/string_parser.hpp"
 
 namespace starrocks {
 
