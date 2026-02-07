@@ -30,9 +30,9 @@
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "types/type_descriptor.h"
 #include "util/value_generator.h"
 
 namespace starrocks {

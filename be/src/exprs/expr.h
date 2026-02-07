@@ -45,7 +45,7 @@
 #include "exprs/function_context.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

@@ -21,8 +21,8 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

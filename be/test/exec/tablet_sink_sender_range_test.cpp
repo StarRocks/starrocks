@@ -24,7 +24,7 @@
 #include "column/type_traits.h"
 #include "exec/range_tablet_sink_sender.h"
 #include "exec/tablet_info.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

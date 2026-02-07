@@ -40,7 +40,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 class RuntimeFilter;

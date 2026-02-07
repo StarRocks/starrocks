@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
-#include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 

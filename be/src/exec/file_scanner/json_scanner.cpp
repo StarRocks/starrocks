@@ -35,7 +35,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

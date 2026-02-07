@@ -37,9 +37,9 @@
 #include "exprs/column_ref.h"
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "testutil/column_test_helper.h"
 #include "types/json_value.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

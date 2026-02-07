@@ -37,7 +37,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #include "util/runtime_profile.h"
 #ifdef __cplusplus
 extern "C" {

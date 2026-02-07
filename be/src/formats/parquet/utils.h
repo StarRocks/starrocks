@@ -17,7 +17,7 @@
 #include "base/container/raw_container.h"
 #include "gen_cpp/parquet_types.h"
 #include "gen_cpp/types.pb.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace parquet {
 class FileMetaData;

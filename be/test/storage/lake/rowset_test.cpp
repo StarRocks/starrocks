@@ -26,7 +26,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/lake/metacache.h"
@@ -39,6 +38,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 

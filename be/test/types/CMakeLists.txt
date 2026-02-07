@@ -22,6 +22,7 @@ set(TYPES_TEST_FILES
     hll_test.cpp
     json_value_test.cpp
     logical_type_test.cpp
+    type_descriptor_test.cpp
     tdigest_test.cpp
     timestamp_value_test.cpp
     variant_value_test.cpp

@@ -14,7 +14,7 @@
 
 #include "column/column_helper.h"
 
-#include <runtime/types.h>
+#include "types/type_descriptor.h"
 
 #ifdef __x86_64__
 #include <immintrin.h>

@@ -12,35 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/types.cpp
+#include "types/type_descriptor.h"
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-#include "runtime/types.h"
-
+#include <algorithm>
 #include <ostream>
+#include <sstream>
 
 #include "base/decimal_types.h"
 #include "base/string/slice.h"
 #include "gutil/strings/substitute.h"
-#include "storage/array_type_info.h"
-#include "storage/types.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
 
@@ -293,32 +273,6 @@ bool TypeDescriptor::support_groupby() const {
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
            type != TYPE_VARIANT;
-}
-
-TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
-    LogicalType ftype = type_info->type();
-
-    bool is_array = false;
-    if (ftype == TYPE_ARRAY) {
-        is_array = true;
-        type_info = get_item_type_info(type_info).get();
-        ftype = type_info->type();
-    }
-
-    LogicalType ltype = scalar_field_type_to_logical_type(ftype);
-    DCHECK(ltype != TYPE_UNKNOWN);
-    int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
-    int precision = type_info->precision();
-    int scale = type_info->scale();
-    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, len, precision, scale);
-
-    if (is_array) {
-        TypeDescriptor arr;
-        arr.type = TYPE_ARRAY;
-        arr.children.emplace_back(ret);
-        return arr;
-    }
-    return ret;
 }
 
 /// Returns the size of a slot for this type.

@@ -26,7 +26,7 @@
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::connector {
 

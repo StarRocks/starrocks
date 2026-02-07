@@ -25,7 +25,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

@@ -26,7 +26,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/memory/mem_hook_allocator.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

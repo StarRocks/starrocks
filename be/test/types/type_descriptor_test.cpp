@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "types/type_descriptor.h"
+
 #include <tuple>
 
 #include "gtest/gtest.h"
-#include "runtime/types.h"
 
 namespace starrocks {
 

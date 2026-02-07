@@ -30,11 +30,11 @@
 #include "column/type_traits.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
-#include "runtime/types.h"
 #include "testutil/init_test_env.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/percentile_value.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

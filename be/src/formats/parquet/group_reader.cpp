@@ -41,8 +41,8 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/types.h"
 #include "storage/chunk_helper.h"
+#include "types/type_descriptor.h"
 #include "util/runtime_profile.h"
 #include "utils.h"
 
