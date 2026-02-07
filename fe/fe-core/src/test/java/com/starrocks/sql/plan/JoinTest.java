@@ -441,6 +441,16 @@ public class JoinTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: v1 = 4: v1\n" +
                 "  |  other predicates: coalesce(1: v1, 4: v1) = 3");
 
+        sql = "select v1 from t0 full outer join (select 1 as v1 from t1) t1 using(v1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "coalesce(1: v1, CAST(7: expr AS BIGINT)");
+
+        sql = "select v1 from t0 full outer join (select 1 as v1 from t1) t1 using(v1) " +
+                "full outer join (select 9 as v1 from t1) t2 using(v1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "join op: FULL OUTER JOIN");
+        assertContains(plan, "coalesce(8: v1, CAST(12: expr AS BIGINT)");
+
         sql = "select v5, v6 from t1 full outer join test_using a using(v5, v6) full outer join test_using b using(v5, v6)";
         plan = getFragmentPlan(sql);
         assertContains(plan, "9:Project\n" +
