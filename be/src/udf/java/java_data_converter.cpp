@@ -30,8 +30,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/type_traits.h"
 

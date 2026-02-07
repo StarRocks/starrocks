@@ -29,7 +29,7 @@
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #include "udf/python/env.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/utils.h"

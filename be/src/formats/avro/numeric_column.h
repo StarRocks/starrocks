@@ -19,7 +19,7 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -31,12 +31,12 @@
 #include "gutil/casts.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_iterator_decorator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/json_flattener.h"
 #include "util/runtime_profile.h"
 

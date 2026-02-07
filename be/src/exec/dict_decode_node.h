@@ -23,7 +23,7 @@
 #include "exec/olap_common.h"
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/parser.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

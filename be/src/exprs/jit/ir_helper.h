@@ -20,7 +20,7 @@
 
 #include "column/type_traits.h"
 #include "common/statusor.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

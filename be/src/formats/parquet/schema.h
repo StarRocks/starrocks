@@ -25,7 +25,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/parquet_types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 

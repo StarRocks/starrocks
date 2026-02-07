@@ -21,7 +21,7 @@
 #include "common/global_types.h"
 #include "common/statusor.h"
 #include "gen_cpp/Exprs_types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

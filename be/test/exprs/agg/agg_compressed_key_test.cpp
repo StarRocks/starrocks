@@ -18,8 +18,8 @@
 #include "common/object_pool.h"
 #include "exec/aggregator.h"
 #include "exprs/literal.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

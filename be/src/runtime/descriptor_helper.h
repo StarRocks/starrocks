@@ -21,7 +21,7 @@
 
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

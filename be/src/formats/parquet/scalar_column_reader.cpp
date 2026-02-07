@@ -24,8 +24,8 @@
 #include "gutil/casts.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/global_dict/dict_column.h"
-#include "runtime/types.h"
 #include "statistics_helper.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 

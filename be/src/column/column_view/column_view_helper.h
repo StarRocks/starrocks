@@ -16,7 +16,7 @@
 #include <optional>
 
 #include "column/column.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 namespace starrocks {
 struct ColumnViewHelper {
     static std::optional<MutableColumnPtr> create_column_view(const TypeDescriptor& type_desc, bool nullable,

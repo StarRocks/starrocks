@@ -36,7 +36,7 @@
 
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

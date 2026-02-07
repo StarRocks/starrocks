@@ -20,7 +20,6 @@
 #include "column/datum_convert.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
-#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -41,6 +40,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {

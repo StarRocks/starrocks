@@ -20,7 +20,7 @@
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
 #include "formats/utils.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 

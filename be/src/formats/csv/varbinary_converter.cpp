@@ -23,7 +23,7 @@
 #include "exprs/base64.h"
 #include "gutil/strings/escaping.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 

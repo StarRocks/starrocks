@@ -16,8 +16,8 @@
 
 #include "column/column_helper.h"
 #include "column/column_view/column_view.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 static bool should_use_view(LogicalType ltype) {

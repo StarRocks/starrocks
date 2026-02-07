@@ -17,8 +17,8 @@
 #include "column/copied_datum.h"
 #include "column/datum_convert.h"
 #include "fmt/format.h"
-#include "runtime/types.h"
 #include "storage/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

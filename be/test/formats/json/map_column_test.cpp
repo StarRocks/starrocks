@@ -18,7 +18,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

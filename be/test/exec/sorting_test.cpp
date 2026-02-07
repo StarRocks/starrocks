@@ -37,8 +37,8 @@
 #include "exprs/expr_context.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

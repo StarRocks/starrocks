@@ -52,9 +52,9 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
+#include "types/type_descriptor.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif

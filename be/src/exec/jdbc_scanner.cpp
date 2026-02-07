@@ -26,9 +26,9 @@
 #include "exprs/clone_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
 #include "types/type_checker_manager.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks {

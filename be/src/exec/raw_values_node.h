@@ -16,7 +16,7 @@
 
 #include "exec/exec_node.h"
 #include "exec/pipeline/set/raw_values_source_operator.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

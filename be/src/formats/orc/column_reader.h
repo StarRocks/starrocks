@@ -24,8 +24,8 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "formats/orc/orc_mapping.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

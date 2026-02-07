@@ -22,7 +22,7 @@
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::serde {
 

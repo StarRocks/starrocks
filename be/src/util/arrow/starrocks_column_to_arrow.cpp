@@ -28,8 +28,8 @@
 #include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
-#include "runtime/types.h"
 #include "types/time_types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

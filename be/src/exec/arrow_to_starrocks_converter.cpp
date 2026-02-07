@@ -38,9 +38,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/value_generator.h"
 
 namespace starrocks {

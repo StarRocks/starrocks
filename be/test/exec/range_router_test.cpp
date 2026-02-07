@@ -29,8 +29,8 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
 #include "storage/type_utils.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

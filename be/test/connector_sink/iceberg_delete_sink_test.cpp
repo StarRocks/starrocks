@@ -35,8 +35,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "testutil/column_test_helper.h"
+#include "types/type_descriptor.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::connector {

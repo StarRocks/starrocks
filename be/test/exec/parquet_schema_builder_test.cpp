@@ -18,7 +18,7 @@
 
 #include "parquet/schema.h"
 #include "parquet/types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

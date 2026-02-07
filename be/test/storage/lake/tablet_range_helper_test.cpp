@@ -19,8 +19,8 @@
 
 #include "base/testutil/assert.h"
 #include "gen_cpp/AgentService_types.h"
-#include "runtime/types.h"
 #include "storage/tablet_schema.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 

@@ -15,8 +15,6 @@
 #pragma once
 
 // NOTE: This file is included by a large number of files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
-#include <runtime/types.h>
-
 #include <utility>
 
 #include "base/simd/simd.h"
@@ -28,6 +26,7 @@
 #include "gutil/cpu.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 struct TypeDescriptor;

@@ -34,8 +34,8 @@
 #include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
 #include "runtime/sorted_chunks_merger.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

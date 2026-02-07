@@ -30,11 +30,11 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
-#include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/types.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 

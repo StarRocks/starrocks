@@ -28,8 +28,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "testutil/desc_tbl_helper.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
