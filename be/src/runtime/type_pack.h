@@ -14,7 +14,7 @@
 
 #pragma once
 #include "base/string/faststring.h"
-#include "column/datum.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 namespace starrocks {
 typedef void (*PackFunc)(faststring*, const Datum&);

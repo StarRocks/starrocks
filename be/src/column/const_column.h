@@ -15,10 +15,10 @@
 #pragma once
 
 #include "column/column.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

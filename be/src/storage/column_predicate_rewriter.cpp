@@ -22,7 +22,6 @@
 #include "base/simd/simd.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -39,6 +38,7 @@
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

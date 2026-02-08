@@ -15,10 +15,10 @@
 #include "storage/decimal_type_info.h"
 
 #include "base/utility/guard.h"
-#include "column/datum.h"
 #include "gutil/casts.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
+#include "types/datum.h"
 #include "types/decimalv3.h"
 
 namespace starrocks {

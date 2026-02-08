@@ -20,7 +20,6 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -32,6 +31,7 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "types/datum.h"
 #include "types/decimalv3.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"

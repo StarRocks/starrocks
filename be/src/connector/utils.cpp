@@ -20,10 +20,10 @@
 #include "column/chunk_extra_data.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
-#include "column/datum.h"
 #include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
+#include "types/datum.h"
 
 namespace starrocks::connector {
 

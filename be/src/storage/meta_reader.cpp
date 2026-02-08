@@ -22,7 +22,6 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "runtime/global_dict/config.h"
@@ -32,6 +31,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/utils.h"
 #include "storage/virtual_column_utils.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

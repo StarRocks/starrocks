@@ -20,10 +20,10 @@
 #include <string>
 #include <vector>
 
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/memory/column_allocator.h"
 #include "storage/rowset/common.h"
+#include "types/datum.h"
 #include "util/logging.h"
 
 namespace starrocks {

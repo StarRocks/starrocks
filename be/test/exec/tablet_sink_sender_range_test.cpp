@@ -18,12 +18,12 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/type_traits.h"
 #include "exec/range_tablet_sink_sender.h"
 #include "exec/tablet_info.h"
+#include "types/datum.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
