@@ -27,7 +27,6 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -39,6 +38,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/memory/memory_resource.h"
 #include "thrift/protocol/TJSONProtocol.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

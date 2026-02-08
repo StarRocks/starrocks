@@ -18,7 +18,6 @@
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -28,6 +27,7 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "glog/logging.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

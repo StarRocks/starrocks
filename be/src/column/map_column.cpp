@@ -19,7 +19,6 @@
 
 #include "column/column_helper.h"
 #include "column/column_view/column_view.h"
-#include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -27,6 +26,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
+#include "types/datum.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {

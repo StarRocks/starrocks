@@ -16,9 +16,9 @@
 
 #include "base/string/faststring.h"
 #include "base/utility/meta_macro.h"
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "gutil/strings/substitute.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

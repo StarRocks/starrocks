@@ -16,9 +16,9 @@
 
 #include <vector>
 
-#include "column/datum.h"
 #include "column/schema.h"
 #include "storage/short_key_index.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

@@ -23,11 +23,11 @@
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 #include "udf/java/java_udf.h"
 

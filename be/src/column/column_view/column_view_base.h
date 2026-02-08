@@ -14,7 +14,7 @@
 
 #pragma once
 #include <column/column.h>
-#include <column/datum.h>
+#include <types/datum.h>
 
 #include "util/cow.h"
 

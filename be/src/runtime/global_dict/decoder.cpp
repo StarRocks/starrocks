@@ -19,13 +19,13 @@
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/types.h"
+#include "types/datum.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

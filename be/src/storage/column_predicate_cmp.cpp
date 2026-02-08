@@ -18,7 +18,6 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
-#include "column/datum.h"
 #include "common/object_pool.h"
 #include "olap_type_infra.h"
 #include "storage/column_predicate.h"
@@ -27,6 +26,7 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "types/datum.h"
 #include "util/bloom_filter.h"
 
 namespace starrocks {

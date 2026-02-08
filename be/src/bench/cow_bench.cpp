@@ -21,10 +21,10 @@
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

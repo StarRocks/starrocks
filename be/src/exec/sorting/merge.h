@@ -20,11 +20,11 @@
 #include <utility>
 
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
+#include "types/datum.h"
 
 namespace starrocks {
 // SortedRun represents part of sorted chunk, specified by the range

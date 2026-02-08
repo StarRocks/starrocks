@@ -26,7 +26,6 @@ add_library(Column STATIC
         append_with_mask.cpp
         column_viewer.cpp
         const_column.cpp
-        datum.cpp
         datum_convert.cpp
         datum_tuple.cpp
         field.cpp

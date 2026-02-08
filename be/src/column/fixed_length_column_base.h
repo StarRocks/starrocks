@@ -20,9 +20,9 @@
 #include "base/container/raw_container.h"
 #include "column/column.h"
 #include "column/container_resource.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "types/datum.h"
 namespace starrocks {
 
 template <typename T>

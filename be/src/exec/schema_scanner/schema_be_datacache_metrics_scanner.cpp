@@ -16,9 +16,9 @@
 
 #include "agent/master_info.h"
 #include "cache/datacache.h"
-#include "column/datum.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "types/datum.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"

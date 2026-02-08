@@ -19,10 +19,10 @@
 #include <memory>
 
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "column/schema.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
+#include "types/datum.h"
 
 using namespace std;
 

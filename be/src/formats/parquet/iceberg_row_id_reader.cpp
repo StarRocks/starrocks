@@ -16,9 +16,9 @@
 
 #include <limits>
 
-#include "column/datum.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "storage/range.h"
+#include "types/datum.h"
 
 namespace starrocks::parquet {
 

@@ -15,11 +15,11 @@
 #include "exec/schema_scanner/schema_be_tablet_write_log_scanner.h"
 
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "types/datetime_value.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

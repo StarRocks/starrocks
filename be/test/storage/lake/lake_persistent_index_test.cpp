@@ -20,7 +20,6 @@
 #include "base/testutil/sync_point.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
@@ -28,6 +27,7 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/record_predicate/column_hash_is_congruent.h"
 #include "test_util.h"
+#include "types/datum.h"
 
 namespace starrocks::lake {
 
