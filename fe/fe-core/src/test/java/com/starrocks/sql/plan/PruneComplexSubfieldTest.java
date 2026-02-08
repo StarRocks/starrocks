@@ -1294,4 +1294,40 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
     }
+
+    @Test
+    public void testJsonQuotedBracketPath() throws Exception {
+        // Quoted field names containing brackets should be treated as literal field names,
+        // not as array indexing. Previously, "bar[0]" was incorrectly parsed as field "bar"
+        // with array index [0], causing path truncation and performance regression.
+        String sql = "select get_json_int(j1, '$.foo.\"bar[0]\".baz') from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "/j1/foo/\"bar[0]\"/baz");
+
+        sql = "select get_json_string(j1, '$.foo.\"arr[1][2]\".next') from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "/j1/foo/\"arr[1][2]\"/next");
+    }
+
+    @Test
+    public void testJsonQuotedDotPath() throws Exception {
+        // Quoted field names containing dots should be treated as literal field names.
+        // Previously, "my.inner.term" was correctly extracted but then incorrectly
+        // flagged as "invalid json path" during query execution.
+        String sql = "select get_json_string(j1, '$.foo.\"my.inner.term\".baz') from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "/j1/foo/\"my.inner.term\"/baz");
+    }
+
+    @Test
+    public void testJsonMixedQuotedAndUnquotedPaths() throws Exception {
+        // Test that quoted and unquoted paths can coexist in the same query
+        String sql = "select " +
+                "get_json_int(j1, '$.a.\"b.c\".d'), " +
+                "get_json_string(j1, '$.a.\"b[0]\".e') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "/j1/a/\"b.c\"");
+        assertContains(plan, "/j1/a/\"b[0]\"");
+    }
 }

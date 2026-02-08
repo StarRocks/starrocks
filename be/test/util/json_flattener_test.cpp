@@ -645,4 +645,153 @@ INSTANTIATE_TEST_SUITE_P(JsonBoolExtractionCases, JsonBoolExtractionTest,
                                            std::make_tuple(R"({"bool_field": "1"})", true),
                                            std::make_tuple(R"({"bool_field": "0"})", false)));
 
+TEST(JsonFlatPathTest, SplitPathQuoted) {
+    // Normal unquoted path
+    {
+        auto [k, n] = JsonFlatPath::split_path("a.b.c");
+        EXPECT_EQ(k, "a");
+        EXPECT_EQ(n, "b.c");
+    }
+
+    // Quoted key containing dots
+    {
+        auto [k, n] = JsonFlatPath::split_path("\"my.inner.term\".baz");
+        EXPECT_EQ(k, "\"my.inner.term\"");
+        EXPECT_EQ(n, "baz");
+    }
+
+    // Quoted key containing brackets
+    {
+        auto [k, n] = JsonFlatPath::split_path("\"bar[0]\".next");
+        EXPECT_EQ(k, "\"bar[0]\"");
+        EXPECT_EQ(n, "next");
+    }
+
+    // Quoted key only, no remainder
+    {
+        auto [k, n] = JsonFlatPath::split_path("\"a.b\"");
+        EXPECT_EQ(k, "\"a.b\"");
+        EXPECT_TRUE(n.empty());
+    }
+
+    // Multiple quoted segments
+    {
+        auto [k, n] = JsonFlatPath::split_path("\"x.y\".\"p.q\".r");
+        EXPECT_EQ(k, "\"x.y\"");
+        EXPECT_EQ(n, "\"p.q\".r");
+    }
+
+    // Empty path
+    {
+        auto [k, n] = JsonFlatPath::split_path("");
+        EXPECT_TRUE(k.empty());
+        EXPECT_TRUE(n.empty());
+    }
+
+    // Simple path without dots
+    {
+        auto [k, n] = JsonFlatPath::split_path("simple");
+        EXPECT_EQ(k, "simple");
+        EXPECT_TRUE(n.empty());
+    }
+
+    // Quoted key followed by unquoted path
+    {
+        auto [k, n] = JsonFlatPath::split_path("\"a.b\".c.d");
+        EXPECT_EQ(k, "\"a.b\"");
+        EXPECT_EQ(n, "c.d");
+    }
+
+    // Unquoted prefix followed by quoted key
+    {
+        auto [k, n] = JsonFlatPath::split_path("foo.\"bar.baz\"");
+        EXPECT_EQ(k, "foo");
+        EXPECT_EQ(n, "\"bar.baz\"");
+    }
+
+    // Unmatched quote: treat whole path as key
+    {
+        auto [k, n] = JsonFlatPath::split_path("\"unclosed");
+        EXPECT_EQ(k, "\"unclosed");
+        EXPECT_TRUE(n.empty());
+    }
+}
+
+TEST(JsonFlatPathTest, NormalizeFromPathQuoted) {
+    // Verify that normalize_from_path correctly builds the path tree
+    // when paths contain quoted segments (as produced by FE).
+
+    // Simple unquoted path
+    {
+        auto root = std::make_shared<JsonFlatPath>();
+        auto* leaf = JsonFlatPath::normalize_from_path("a.b.c", root.get());
+        EXPECT_NE(leaf, nullptr);
+        // root -> a -> b -> c
+        EXPECT_EQ(root->children.size(), 1);
+        EXPECT_TRUE(root->children.count("a"));
+        auto* a = root->children["a"].get();
+        EXPECT_EQ(a->children.size(), 1);
+        EXPECT_TRUE(a->children.count("b"));
+        auto* b = a->children["b"].get();
+        EXPECT_EQ(b->children.size(), 1);
+        EXPECT_TRUE(b->children.count("c"));
+        EXPECT_EQ(leaf, b->children["c"].get());
+    }
+
+    // Quoted key with dots: foo."my.inner.term".baz
+    // Should create: root -> foo -> "my.inner.term" -> baz
+    // NOT: root -> foo -> my -> inner -> term -> baz
+    {
+        auto root = std::make_shared<JsonFlatPath>();
+        auto* leaf = JsonFlatPath::normalize_from_path("foo.\"my.inner.term\".baz", root.get());
+        EXPECT_NE(leaf, nullptr);
+        EXPECT_EQ(root->children.size(), 1);
+        EXPECT_TRUE(root->children.count("foo"));
+        auto* foo = root->children["foo"].get();
+        EXPECT_EQ(foo->children.size(), 1);
+        // The key in the map should be the quoted form
+        EXPECT_TRUE(foo->children.count("\"my.inner.term\""));
+        auto* inner = foo->children["\"my.inner.term\""].get();
+        EXPECT_EQ(inner->children.size(), 1);
+        EXPECT_TRUE(inner->children.count("baz"));
+        EXPECT_EQ(leaf, inner->children["baz"].get());
+    }
+
+    // Quoted key with brackets: foo."bar[0]".next
+    // Should create: root -> foo -> "bar[0]" -> next
+    {
+        auto root = std::make_shared<JsonFlatPath>();
+        auto* leaf = JsonFlatPath::normalize_from_path("foo.\"bar[0]\".next", root.get());
+        EXPECT_NE(leaf, nullptr);
+        EXPECT_EQ(root->children.size(), 1);
+        auto* foo = root->children["foo"].get();
+        EXPECT_EQ(foo->children.size(), 1);
+        EXPECT_TRUE(foo->children.count("\"bar[0]\""));
+        auto* bar = foo->children["\"bar[0]\""].get();
+        EXPECT_EQ(bar->children.size(), 1);
+        EXPECT_TRUE(bar->children.count("next"));
+        EXPECT_EQ(leaf, bar->children["next"].get());
+    }
+
+    // Multiple quoted segments
+    {
+        auto root = std::make_shared<JsonFlatPath>();
+        auto* leaf = JsonFlatPath::normalize_from_path("\"a.b\".\"c.d\"", root.get());
+        EXPECT_NE(leaf, nullptr);
+        EXPECT_EQ(root->children.size(), 1);
+        EXPECT_TRUE(root->children.count("\"a.b\""));
+        auto* ab = root->children["\"a.b\""].get();
+        EXPECT_EQ(ab->children.size(), 1);
+        EXPECT_TRUE(ab->children.count("\"c.d\""));
+        EXPECT_EQ(leaf, ab->children["\"c.d\""].get());
+    }
+
+    // Empty path returns root
+    {
+        auto root = std::make_shared<JsonFlatPath>();
+        auto* result = JsonFlatPath::normalize_from_path("", root.get());
+        EXPECT_EQ(result, root.get());
+    }
+}
+
 } // namespace starrocks
