@@ -51,6 +51,7 @@ import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregateInfo;
@@ -1630,6 +1631,28 @@ public class PlanFragmentBuilder {
                 }
                 icebergScanNode.setupScanRangeLocations(
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
+
+                // Classify predicates into pushed/non-pushed for EXPLAIN output
+                ScalarOperator icebergPred = icebergScanNode.getIcebergJobPlanningPredicate();
+                if (icebergPred != null) {
+                    List<ScalarOperator> ops = Utils.extractConjuncts(icebergPred);
+                    IcebergTable icebergTable = icebergScanNode.getIcebergTable();
+                    ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                            new ScalarOperatorToIcebergExpr.IcebergContext(
+                                    icebergTable.getNativeTable().schema().asStruct());
+                    ScalarOperatorToIcebergExpr.ConvertResult convertResult =
+                            new ScalarOperatorToIcebergExpr().convertWithDetails(ops, icebergContext);
+                    HDFSScanNodePredicates scanNodePreds = icebergScanNode.getScanNodePredicates();
+                    for (ScalarOperator pushed : convertResult.getPushedOperators()) {
+                        scanNodePreds.getPushedConjuncts()
+                                .add(ScalarOperatorToExpr.buildExecExpression(pushed, formatterContext));
+                    }
+                    for (ScalarOperator failed : convertResult.getFailedOperators()) {
+                        scanNodePreds.getNonPushedConjuncts()
+                                .add(ScalarOperatorToExpr.buildExecExpression(failed, formatterContext));
+                    }
+                }
+
                 if (!isEqDeleteScan) {
                     HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                     prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);

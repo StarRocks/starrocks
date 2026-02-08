@@ -38,6 +38,11 @@ public class HDFSScanNodePredicates {
     // nonPartitionConjuncts contains non-partition filters, and will be sent to backend.
     private final List<Expr> nonPartitionConjuncts = Lists.newArrayList();
 
+    // Predicates that were successfully pushed down to the connector (e.g. Iceberg).
+    private final List<Expr> pushedConjuncts = Lists.newArrayList();
+    // Predicates that failed to push down, evaluated by backend.
+    private final List<Expr> nonPushedConjuncts = Lists.newArrayList();
+
     // List of conjuncts for min/max values that are used to skip data when scanning Parquet files.
     private final List<Expr> minMaxConjuncts = new ArrayList<>();
     private TupleDescriptor minMaxTuple;
@@ -76,6 +81,14 @@ public class HDFSScanNodePredicates {
 
     public List<Expr> getNonPartitionConjuncts() {
         return nonPartitionConjuncts;
+    }
+
+    public List<Expr> getPushedConjuncts() {
+        return pushedConjuncts;
+    }
+
+    public List<Expr> getNonPushedConjuncts() {
+        return nonPushedConjuncts;
     }
 
     public List<Expr> getMinMaxConjuncts() {

@@ -1083,6 +1083,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
                     icebergTable.getNativeTable().schema().asStruct());
             Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+
             baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
         }
 

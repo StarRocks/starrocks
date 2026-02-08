@@ -100,43 +100,72 @@ import static org.apache.iceberg.expressions.Expressions.startsWith;
 public class ScalarOperatorToIcebergExpr {
     private static final Logger LOG = LogManager.getLogger(ScalarOperatorToIcebergExpr.class);
 
+    public static class ConvertResult {
+        private final Expression icebergExpression;
+        private final List<ScalarOperator> pushedOperators;
+        private final List<ScalarOperator> failedOperators;
+
+        public ConvertResult(Expression icebergExpression, List<ScalarOperator> pushedOperators,
+                             List<ScalarOperator> failedOperators) {
+            this.icebergExpression = icebergExpression;
+            this.pushedOperators = pushedOperators;
+            this.failedOperators = failedOperators;
+        }
+
+        public Expression getIcebergExpression() {
+            return icebergExpression;
+        }
+
+        public List<ScalarOperator> getPushedOperators() {
+            return pushedOperators;
+        }
+
+        public List<ScalarOperator> getFailedOperators() {
+            return failedOperators;
+        }
+    }
+
     public Expression convert(List<ScalarOperator> operators, IcebergContext context) {
-        return convert(operators, context, false);
+        return convertWithDetails(operators, context).getIcebergExpression();
     }
 
     public Expression convertStrict(List<ScalarOperator> operators, IcebergContext context) {
-        return convert(operators, context, true);
+        ConvertResult result = convertWithDetails(operators, context);
+        if (!result.getFailedOperators().isEmpty()) {
+            LOG.debug("Strict mode: {} operators failed to convert", result.getFailedOperators().size());
+            return null;
+        }
+        return result.getIcebergExpression();
     }
 
-    public Expression convert(List<ScalarOperator> operators, IcebergContext context, boolean strict) {
+    public ConvertResult convertWithDetails(List<ScalarOperator> operators, IcebergContext context) {
         IcebergExprVisitor visitor = new IcebergExprVisitor();
         List<Expression> expressions = Lists.newArrayList();
+        List<ScalarOperator> pushedOperators = Lists.newArrayList();
+        List<ScalarOperator> failedOperators = Lists.newArrayList();
         for (ScalarOperator operator : operators) {
             Expression filterExpr = operator.accept(visitor, context);
-            if (filterExpr == null) {
-                if (strict) {
-                    LOG.debug("Strict mode: cannot convert operator {}", operator.debugString());
-                    return null;
+            if (filterExpr != null) {
+                try {
+                    Binder.bind(context.getSchema(), filterExpr, false);
+                    expressions.add(filterExpr);
+                    pushedOperators.add(operator);
+                } catch (ValidationException e) {
+                    LOG.error("binding to the table schema failed, cannot be pushed down scanOperator: {}",
+                            operator.debugString());
+                    failedOperators.add(operator);
                 }
-                continue;
-            }
-
-            try {
-                Binder.bind(context.getSchema(), filterExpr, false);
-                expressions.add(filterExpr);
-            } catch (ValidationException e) {
-                if (strict) {
-                    LOG.debug("Strict mode: bind failed, {}", operator.debugString());
-                    return null;
-                }
-                LOG.error("binding to the table schema failed, cannot be pushed down scanOperator: {}",
+            } else {
+                LOG.warn("Failed to convert predicate to Iceberg expression, cannot be pushed down: {}",
                         operator.debugString());
+                failedOperators.add(operator);
             }
         }
 
         LOG.debug("Number of predicates pushed down / Total number of predicates: {}/{}",
                 expressions.size(), operators.size());
-        return expressions.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
+        Expression icebergExpression = expressions.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
+        return new ConvertResult(icebergExpression, pushedOperators, failedOperators);
     }
 
     public static class IcebergContext {
@@ -445,10 +474,10 @@ public class ScalarOperatorToIcebergExpr {
                         //In iceberg transform expr, the decimal's scale will influence the result, like truncate and bucket...
                         //For column value 123.40 and const value 123.4, column = value should be true
                         //But in iceberg transform, 123.40 and 123.4 are not the same, and the partition may be pruned incorretly.
-                        return operator.getDecimal().setScale(((Types.DecimalType) context).scale(), 
+                        return operator.getDecimal().setScale(((Types.DecimalType) context).scale(),
                                 RoundingMode.HALF_UP);
                     } else {
-                        return operator.getDecimal().setScale(((ScalarType) operator.getType()).getScalarScale(), 
+                        return operator.getDecimal().setScale(((ScalarType) operator.getType()).getScalarScale(),
                                 RoundingMode.HALF_UP);
                     }
                 case HLL:

@@ -309,7 +309,17 @@ public class IcebergScanNode extends ScanNode {
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
-        if (!conjuncts.isEmpty()) {
+        if (!scanNodePredicates.getPushedConjuncts().isEmpty()
+                || !scanNodePredicates.getNonPushedConjuncts().isEmpty()) {
+            if (!scanNodePredicates.getPushedConjuncts().isEmpty()) {
+                output.append(prefix).append("PREDICATES: ").append(
+                        explainExpr(scanNodePredicates.getPushedConjuncts())).append("\n");
+            }
+            if (!scanNodePredicates.getNonPushedConjuncts().isEmpty()) {
+                output.append(prefix).append("NON-PUSHED PREDICATES: ").append(
+                        explainExpr(scanNodePredicates.getNonPushedConjuncts())).append("\n");
+            }
+        } else if (!conjuncts.isEmpty()) {
             output.append(prefix).append("PREDICATES: ").append(
                     explainExpr(conjuncts)).append("\n");
         }
