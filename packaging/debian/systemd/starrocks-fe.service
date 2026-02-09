@@ -6,10 +6,9 @@ After=network.target
 Type=simple
 User=starrocks
 Group=starrocks
+RuntimeDirectory=starrocks
 Environment="STARROCKS_HOME=/usr/lib/starrocks/fe"
-Environment="PID_DIR=/var/run/starrocks"
-# We force daemonize 0 so systemd can track the process correctly
-ExecStart=/usr/lib/starrocks/fe/bin/start_fe.sh --conf_dir /etc/starrocks/fe --daemonize 0
+ExecStart=/usr/lib/starrocks/fe/bin/start_fe.sh
 Restart=on-failure
 LimitNOFILE=65536
 
