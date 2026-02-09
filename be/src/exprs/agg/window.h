@@ -14,6 +14,7 @@
 
 #pragma once
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -112,7 +113,17 @@ class ValueWindowFunction : public WindowFunction<State> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
-    void get_values_helper(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
+    template <typename ColumnType>
+    static inline auto get_row_ref(const ColumnType* column, size_t row) {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            return ColumnHelper::get_binary_slice(column, row);
+        } else {
+            return AggDataTypeTraits<LT>::get_row_ref(*column, row);
+        }
+    }
+
+    template <typename InputColumnType>
+    void do_get_values_helper(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
         DCHECK_GT(end, start);
         DCHECK(dst->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(dst);
@@ -128,10 +139,17 @@ public:
             }
 
             Column* data_column = nullable_column->data_column_raw_ptr();
-            auto* column = down_cast<InputColumnType*>(data_column);
             auto& value = AggregateFunctionStateHelper<State>::data(state).value;
-            for (size_t i = start; i < end; ++i) {
-                AggDataTypeTraits<LT>::append_value(column, value);
+            auto* column = down_cast<InputColumnType*>(data_column);
+            if constexpr (lt_is_string_or_binary<LT>) {
+                auto slice = AggDataTypeTraits<LT>::get_ref(value);
+                for (size_t i = start; i < end; ++i) {
+                    column->append(slice);
+                }
+            } else {
+                for (size_t i = start; i < end; ++i) {
+                    AggDataTypeTraits<LT>::append_value(column, value);
+                }
             }
         } else {
             /// The dst column has been resized.
@@ -148,6 +166,17 @@ public:
                 AggDataTypeTraits<LT>::assign_value(column, i, value);
             }
         }
+    }
+
+    void get_values_helper(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            const Column* data_column = ColumnHelper::get_data_column(dst);
+            if (data_column->is_large_binary()) {
+                do_get_values_helper<LargeBinaryColumn>(state, dst, start, end);
+                return;
+            }
+        }
+        do_get_values_helper<InputColumnType>(state, dst, start, end);
     }
 };
 
@@ -417,15 +446,10 @@ template <LogicalType LT, bool ignoreNulls, typename T = RunTimeCppType<LT>, typ
 class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValueState<LT>, T> {
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
 
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
-        this->data(state).is_null = false;
-        this->data(state).has_value = false;
-    }
-
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const override {
+    template <typename InputColumnType>
+    void do_update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state,
+                                                 const Column** columns, int64_t peer_group_start,
+                                                 int64_t peer_group_end, int64_t frame_start, int64_t frame_end) const {
         // For cases like: rows between 2 preceding and 1 preceding
         // If frame_start ge frame_end, means the frame is empty
         if (frame_start >= frame_end) {
@@ -452,9 +476,29 @@ class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValue
             const auto* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).has_value = true;
-            AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
+            AggDataTypeTraits<LT>::assign_value(this->data(state).value, this->get_row_ref(column, value_index));
         }
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).value = {};
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                do_update_batch_single_state_with_frame<LargeBinaryColumn>(ctx, state, columns, peer_group_start,
+                                                                           peer_group_end, frame_start, frame_end);
+                return;
+            }
+        }
+        do_update_batch_single_state_with_frame<InputColumnType>(ctx, state, columns, peer_group_start, peer_group_end,
+                                                                 frame_start, frame_end);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -477,15 +521,10 @@ template <LogicalType LT, bool ignoreNulls, typename T = RunTimeCppType<LT>>
 class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueState<LT, ignoreNulls>, T> {
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
 
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
-        this->data(state).is_null = false;
-        this->data(state).has_value = false;
-    }
-
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const override {
+    template <typename InputColumnType>
+    void do_update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state,
+                                                 const Column** columns, int64_t peer_group_start,
+                                                 int64_t peer_group_end, int64_t frame_start, int64_t frame_end) const {
         if (frame_start >= frame_end) {
             if (!this->data(state).has_value) {
                 this->data(state).is_null = true;
@@ -507,9 +546,29 @@ class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueSt
             const auto* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).has_value = true;
-            AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
+            AggDataTypeTraits<LT>::assign_value(this->data(state).value, this->get_row_ref(column, value_index));
         }
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).value = {};
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                do_update_batch_single_state_with_frame<LargeBinaryColumn>(ctx, state, columns, peer_group_start,
+                                                                           peer_group_end, frame_start, frame_end);
+                return;
+            }
+        }
+        do_update_batch_single_state_with_frame<InputColumnType>(ctx, state, columns, peer_group_start, peer_group_end,
+                                                                 frame_start, frame_end);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -548,53 +607,10 @@ template <LogicalType LT, bool ignoreNulls, bool isLag, typename T = RunTimeCppT
 class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<LT, ignoreNulls>, T> {
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
 
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
-        this->data(state).is_null = false;
-
-        // get offset
-        const Column* arg1 = args[1].get();
-        DCHECK(arg1->is_constant());
-        const auto* offset_column = down_cast<const ConstColumn*>(arg1);
-        if (offset_column->is_nullable()) {
-            this->data(state).offset = 0;
-        } else {
-            this->data(state).offset = ColumnHelper::get_const_value<LogicalType::TYPE_BIGINT>(arg1);
-        }
-
-        // get default value
-        const Column* arg2 = args[2].get();
-        DCHECK(arg2 != nullptr);
-
-        if (arg2->is_constant()) {
-            this->data(state).default_value_is_constant = true;
-            const auto* default_column = down_cast<const ConstColumn*>(arg2);
-            if (default_column->is_nullable()) {
-                this->data(state).default_is_null = true;
-            } else {
-                if constexpr (lt_is_array<LT>) {
-                    const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
-                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
-                                                        AggDataTypeTraits<LT>::get_row_ref(*column, 0));
-                } else {
-                    auto value = ColumnHelper::get_const_value<LT>(arg2);
-                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
-                }
-            }
-        } else {
-            this->data(state).default_value_is_constant = false;
-            this->data(state).default_is_null = false;
-        }
-
-        if constexpr (ignoreNulls) {
-            this->data(state).target_not_null_index = INT64_MIN;
-            this->data(state).non_null_count = 0;
-        }
-    }
-
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const override {
+    template <typename InputColumnType>
+    void do_update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state,
+                                                 const Column** columns, int64_t peer_group_start,
+                                                 int64_t peer_group_end, int64_t frame_start, int64_t frame_end) const {
         // for lead/lag, [peer_group_start, peer_group_end] equals to [partition_start, partition_end]
         // when lead/lag called, the whole partitoin's data has already been here, so we can just check all the way to the begining or the end
         if constexpr (ignoreNulls) {
@@ -703,11 +719,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                             current_row < static_cast<int64_t>(def_col->size())) {
                             this->data(state).is_null = def_col->is_null(static_cast<size_t>(current_row));
                             if (!this->data(state).is_null) {
-                                const auto* column =
-                                        down_cast<const InputColumnType*>(ColumnHelper::get_data_column(def_col));
-                                AggDataTypeTraits<LT>::assign_value(
-                                        this->data(state).value,
-                                        AggDataTypeTraits<LT>::get_row_ref(*column, current_row));
+                                const Column* def_data_column = ColumnHelper::get_data_column(def_col);
+                                const auto* column = down_cast<const InputColumnType*>(def_data_column);
+                                AggDataTypeTraits<LT>::assign_value(this->data(state).value,
+                                                                    this->get_row_ref(column, current_row));
                             }
                         } else {
                             this->data(state).is_null = true;
@@ -718,8 +733,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
                 const auto* column = down_cast<const InputColumnType*>(data_column);
                 this->data(state).is_null = false;
-                AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                    AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
+                AggDataTypeTraits<LT>::assign_value(this->data(state).value, this->get_row_ref(column, value_index));
             }
         } else {
             // frame_start < peer_group_start is for lag function
@@ -746,11 +760,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                         current_row_index < static_cast<int64_t>(def_col->size())) {
                         this->data(state).is_null = def_col->is_null(static_cast<size_t>(current_row_index));
                         if (!this->data(state).is_null) {
-                            const auto* column =
-                                    down_cast<const InputColumnType*>(ColumnHelper::get_data_column(def_col));
-                            AggDataTypeTraits<LT>::assign_value(
-                                    this->data(state).value,
-                                    AggDataTypeTraits<LT>::get_row_ref(*column, current_row_index));
+                            const Column* def_data_column = ColumnHelper::get_data_column(def_col);
+                            const auto* column = down_cast<const InputColumnType*>(def_data_column);
+                            AggDataTypeTraits<LT>::assign_value(this->data(state).value,
+                                                                this->get_row_ref(column, current_row_index));
                         }
                     } else {
                         this->data(state).is_null = true;
@@ -763,12 +776,70 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 this->data(state).is_null = false;
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
                 const auto* column = down_cast<const InputColumnType*>(data_column);
-                AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                    AggDataTypeTraits<LT>::get_row_ref(*column, frame_end - 1));
+                AggDataTypeTraits<LT>::assign_value(this->data(state).value, this->get_row_ref(column, frame_end - 1));
             } else {
                 this->data(state).is_null = true;
             }
         }
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).value = {};
+        this->data(state).is_null = false;
+
+        // get offset
+        const Column* arg1 = args[1].get();
+        DCHECK(arg1->is_constant());
+        const auto* offset_column = down_cast<const ConstColumn*>(arg1);
+        if (offset_column->is_nullable()) {
+            this->data(state).offset = 0;
+        } else {
+            this->data(state).offset = ColumnHelper::get_const_value<LogicalType::TYPE_BIGINT>(arg1);
+        }
+
+        // get default value
+        const Column* arg2 = args[2].get();
+        DCHECK(arg2 != nullptr);
+
+        if (arg2->is_constant()) {
+            this->data(state).default_value_is_constant = true;
+            const auto* default_column = down_cast<const ConstColumn*>(arg2);
+            if (default_column->is_nullable()) {
+                this->data(state).default_is_null = true;
+            } else {
+                if constexpr (lt_is_array<LT>) {
+                    const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
+                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
+                                                        AggDataTypeTraits<LT>::get_row_ref(*column, 0));
+                } else {
+                    auto value = ColumnHelper::get_const_value<LT>(arg2);
+                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+                }
+            }
+        } else {
+            this->data(state).default_value_is_constant = false;
+            this->data(state).default_is_null = false;
+        }
+
+        if constexpr (ignoreNulls) {
+            this->data(state).target_not_null_index = INT64_MIN;
+            this->data(state).non_null_count = 0;
+        }
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                do_update_batch_single_state_with_frame<LargeBinaryColumn>(ctx, state, columns, peer_group_start,
+                                                                           peer_group_end, frame_start, frame_end);
+                return;
+            }
+        }
+        do_update_batch_single_state_with_frame<InputColumnType>(ctx, state, columns, peer_group_start, peer_group_end,
+                                                                 frame_start, frame_end);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -795,6 +866,34 @@ class SessionNumberWindowFunction final : public WindowFunction<AllocateSessionS
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
+    template <typename InputColumnType>
+    void do_update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state,
+                                                 const Column** columns, int64_t peer_group_start,
+                                                 int64_t peer_group_end, int64_t frame_start, int64_t frame_end) const {
+        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+        const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+
+        DCHECK(frame_start < frame_end);
+        if (frame_start > frame_end) {
+            return;
+        }
+
+        auto delta = this->data(state).delta;
+        size_t current_row = frame_end - 1;
+        if (columns[0]->is_null(current_row)) {
+            this->data(state).is_null = true;
+        } else {
+            auto current_value = ValueWindowFunction<LT, AllocateSessionState<LT>, T>::get_row_ref(column, current_row);
+            if (this->data(state).has_value && current_value - this->data(state).last_not_null_value > delta) {
+                this->data(state).session_id++;
+            }
+            this->data(state).is_null = false;
+            this->data(state).last_not_null_value =
+                    ValueWindowFunction<LT, AllocateSessionState<LT>, T>::get_row_ref(column, frame_start);
+        }
+        this->data(state).has_value = true;
+    }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).session_id = 1;
         this->data(state).last_not_null_value = {};
@@ -811,27 +910,16 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
-
-        DCHECK(frame_start < frame_end);
-        if (frame_start > frame_end) {
-            return;
-        }
-
-        auto delta = this->data(state).delta;
-        size_t current_row = frame_end - 1;
-        if (columns[0]->is_null(current_row)) {
-            this->data(state).is_null = true;
-        } else {
-            auto current_value = AggDataTypeTraits<LT>::get_row_ref(*column, current_row);
-            if (this->data(state).has_value && current_value - this->data(state).last_not_null_value > delta) {
-                this->data(state).session_id++;
+        if constexpr (lt_is_string_or_binary<LT>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                do_update_batch_single_state_with_frame<LargeBinaryColumn>(ctx, state, columns, peer_group_start,
+                                                                           peer_group_end, frame_start, frame_end);
+                return;
             }
-            this->data(state).is_null = false;
-            this->data(state).last_not_null_value = AggDataTypeTraits<LT>::get_row_ref(*column, frame_start);
         }
-        this->data(state).has_value = true;
+        do_update_batch_single_state_with_frame<InputColumnType>(ctx, state, columns, peer_group_start, peer_group_end,
+                                                                 frame_start, frame_end);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,

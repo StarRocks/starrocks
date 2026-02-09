@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"

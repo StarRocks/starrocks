@@ -57,16 +57,14 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(columns[0]->is_binary());
+        DCHECK(columns[0]->is_binary() || columns[0]->is_large_binary());
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
+                const auto val = ColumnHelper::get_binary_slice(columns[0], row_num);
+                const auto sep = ColumnHelper::get_binary_slice(columns[1], row_num);
 
                 std::string& result = this->data(state).intermediate_string;
 
-                Slice val = column_val->get_slice(row_num);
-                Slice sep = column_sep->get_slice(row_num);
                 if (!this->data(state).initial) {
                     this->data(state).initial = true;
 
@@ -80,10 +78,9 @@ public:
                 }
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
-                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
                 std::string& result = this->data(state).intermediate_string;
 
-                Slice val = column_val->get_slice(row_num);
+                Slice val = ColumnHelper::get_binary_slice(columns[0], row_num);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
 
                 if (!this->data(state).initial) {
@@ -99,10 +96,9 @@ public:
                 }
             }
         } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             std::string& result = this->data(state).intermediate_string;
 
-            Slice val = column_val->get_slice(row_num);
+            Slice val = ColumnHelper::get_binary_slice(columns[0], row_num);
             //DEFAULT sep_length.
             if (!this->data(state).initial) {
                 this->data(state).initial = true;
@@ -121,20 +117,30 @@ public:
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         if (ctx->get_num_args() > 1) {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+            const Column* column_val = ColumnHelper::get_data_column(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
-                this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() +
-                                                              column_sep->get_immutable_bytes().size());
+                const Column* column_sep = ColumnHelper::get_data_column(columns[1]);
+                auto val_bytes = column_val->is_large_binary()
+                                         ? down_cast<const LargeBinaryColumn*>(column_val)->get_immutable_bytes().size()
+                                         : down_cast<const BinaryColumn*>(column_val)->get_immutable_bytes().size();
+                auto sep_bytes = column_sep->is_large_binary()
+                                         ? down_cast<const LargeBinaryColumn*>(column_sep)->get_immutable_bytes().size()
+                                         : down_cast<const BinaryColumn*>(column_sep)->get_immutable_bytes().size();
+                this->data(state).intermediate_string.reserve(val_bytes + sep_bytes);
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
-                this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() +
-                                                              sep.get_size() * chunk_size);
+                auto val_bytes = column_val->is_large_binary()
+                                         ? down_cast<const LargeBinaryColumn*>(column_val)->get_immutable_bytes().size()
+                                         : down_cast<const BinaryColumn*>(column_val)->get_immutable_bytes().size();
+                this->data(state).intermediate_string.reserve(val_bytes + sep.get_size() * chunk_size);
             }
         } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-            this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() + 2 * chunk_size);
+            const Column* column_val = ColumnHelper::get_data_column(columns[0]);
+            auto val_bytes = column_val->is_large_binary()
+                                     ? down_cast<const LargeBinaryColumn*>(column_val)->get_immutable_bytes().size()
+                                     : down_cast<const BinaryColumn*>(column_val)->get_immutable_bytes().size();
+            this->data(state).intermediate_string.reserve(val_bytes + 2 * chunk_size);
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -167,22 +173,33 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_binary());
+        DCHECK(to->is_binary() || to->is_large_binary());
 
-        auto* column = down_cast<BinaryColumn*>(to);
-        Bytes& bytes = column->get_bytes();
+        auto* data_column = ColumnHelper::get_data_column(to);
+        Bytes* bytes = nullptr;
+        if (data_column->is_large_binary()) {
+            auto* column = down_cast<LargeBinaryColumn*>(data_column);
+            bytes = &column->get_bytes();
+        } else {
+            auto* column = down_cast<BinaryColumn*>(data_column);
+            bytes = &column->get_bytes();
+        }
 
         const std::string& value = this->data(state).intermediate_string;
 
-        size_t old_size = bytes.size();
+        size_t old_size = bytes->size();
         size_t new_size = old_size + sizeof(uint32_t) + value.size();
-        bytes.resize(new_size);
+        bytes->resize(new_size);
 
         uint32_t size_value = value.size();
-        memcpy(bytes.data() + old_size, &size_value, sizeof(uint32_t));
-        memcpy(bytes.data() + old_size + sizeof(uint32_t), value.data(), size_value);
+        memcpy(bytes->data() + old_size, &size_value, sizeof(uint32_t));
+        memcpy(bytes->data() + old_size + sizeof(uint32_t), value.data(), size_value);
 
-        column->get_offset().emplace_back(new_size);
+        if (data_column->is_large_binary()) {
+            down_cast<LargeBinaryColumn*>(data_column)->get_offset().emplace_back(new_size);
+        } else {
+            down_cast<BinaryColumn*>(data_column)->get_offset().emplace_back(new_size);
+        }
     }
 
     size_t serialize_sep_and_value(Bytes& bytes, size_t old_size, uint32_t size_value, uint32_t size_sep,
@@ -206,75 +223,126 @@ public:
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
         if (src.size() > 1) {
-            auto* dst_column = down_cast<BinaryColumn*>(dst.get());
-            Bytes& bytes = dst_column->get_bytes();
-            const auto* column_value = down_cast<const BinaryColumn*>(src[0].get());
+            auto* dst_data_column = ColumnHelper::get_data_column(dst.get());
+            Bytes* bytes = nullptr;
+            if (dst_data_column->is_large_binary()) {
+                auto* dst_column = down_cast<LargeBinaryColumn*>(dst_data_column);
+                bytes = &dst_column->get_bytes();
+            } else {
+                auto* dst_column = down_cast<BinaryColumn*>(dst_data_column);
+                bytes = &dst_column->get_bytes();
+            }
+            const Column* column_value = ColumnHelper::get_data_column(src[0].get());
             if (!src[1]->is_constant()) {
-                const auto* column_sep = down_cast<const BinaryColumn*>(src[1].get());
+                const Column* column_sep = ColumnHelper::get_data_column(src[1].get());
                 if (chunk_size > 0) {
-                    size_t old_size = bytes.size();
+                    size_t old_size = bytes->size();
                     CHECK_EQ(old_size, 0);
-                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
-                                      column_sep->get_immutable_bytes().size();
-                    bytes.resize(new_size);
-                    dst_column->get_offset().resize(chunk_size + 1);
+                    size_t value_bytes =
+                            column_value->is_large_binary()
+                                    ? down_cast<const LargeBinaryColumn*>(column_value)->get_immutable_bytes().size()
+                                    : down_cast<const BinaryColumn*>(column_value)->get_immutable_bytes().size();
+                    size_t sep_bytes =
+                            column_sep->is_large_binary()
+                                    ? down_cast<const LargeBinaryColumn*>(column_sep)->get_immutable_bytes().size()
+                                    : down_cast<const BinaryColumn*>(column_sep)->get_immutable_bytes().size();
+                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + value_bytes + sep_bytes;
+                    bytes->resize(new_size);
+                    if (dst_data_column->is_large_binary()) {
+                        down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset().resize(chunk_size + 1);
+                    } else {
+                        down_cast<BinaryColumn*>(dst_data_column)->get_offset().resize(chunk_size + 1);
+                    }
 
                     for (size_t i = 0; i < chunk_size; ++i) {
-                        auto value = column_value->get_slice(i);
-                        auto sep = column_sep->get_slice(i);
+                        auto value = ColumnHelper::get_binary_slice(column_value, i);
+                        auto sep = ColumnHelper::get_binary_slice(column_sep, i);
 
                         uint32_t size_value = value.get_size();
                         uint32_t size_sep = sep.get_size();
 
-                        old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep.get_data(),
+                        old_size = serialize_sep_and_value(*bytes, old_size, size_value, size_sep, sep.get_data(),
                                                            value.get_data());
-                        dst_column->get_offset()[i + 1] = old_size;
+                        if (dst_data_column->is_large_binary()) {
+                            down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset()[i + 1] = old_size;
+                        } else {
+                            down_cast<BinaryColumn*>(dst_data_column)->get_offset()[i + 1] = old_size;
+                        }
                     }
                 }
             } else {
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(src[1]);
                 if (chunk_size > 0) {
-                    size_t old_size = bytes.size();
+                    size_t old_size = bytes->size();
                     CHECK_EQ(old_size, 0);
-                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
-                                      chunk_size * sep.size;
-                    bytes.resize(new_size);
-                    dst_column->get_offset().resize(chunk_size + 1);
+                    size_t value_bytes =
+                            column_value->is_large_binary()
+                                    ? down_cast<const LargeBinaryColumn*>(column_value)->get_immutable_bytes().size()
+                                    : down_cast<const BinaryColumn*>(column_value)->get_immutable_bytes().size();
+                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + value_bytes + chunk_size * sep.size;
+                    bytes->resize(new_size);
+                    if (dst_data_column->is_large_binary()) {
+                        down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset().resize(chunk_size + 1);
+                    } else {
+                        down_cast<BinaryColumn*>(dst_data_column)->get_offset().resize(chunk_size + 1);
+                    }
 
                     for (size_t i = 0; i < chunk_size; ++i) {
-                        auto value = column_value->get_slice(i);
+                        auto value = ColumnHelper::get_binary_slice(column_value, i);
 
                         uint32_t size_value = value.get_size();
                         uint32_t size_sep = sep.size;
 
-                        old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep.get_data(),
+                        old_size = serialize_sep_and_value(*bytes, old_size, size_value, size_sep, sep.get_data(),
                                                            value.get_data());
-                        dst_column->get_offset()[i + 1] = old_size;
+                        if (dst_data_column->is_large_binary()) {
+                            down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset()[i + 1] = old_size;
+                        } else {
+                            down_cast<BinaryColumn*>(dst_data_column)->get_offset()[i + 1] = old_size;
+                        }
                     }
                 }
             }
         } else { //", "
-            auto* dst_column = down_cast<BinaryColumn*>(dst.get());
-            Bytes& bytes = dst_column->get_bytes();
-            const auto* column_value = down_cast<const BinaryColumn*>(src[0].get());
+            auto* dst_data_column = ColumnHelper::get_data_column(dst.get());
+            Bytes* bytes = nullptr;
+            if (dst_data_column->is_large_binary()) {
+                auto* dst_column = down_cast<LargeBinaryColumn*>(dst_data_column);
+                bytes = &dst_column->get_bytes();
+            } else {
+                auto* dst_column = down_cast<BinaryColumn*>(dst_data_column);
+                bytes = &dst_column->get_bytes();
+            }
+            const Column* column_value = ColumnHelper::get_data_column(src[0].get());
 
             if (chunk_size > 0) {
                 const char* sep = ", ";
                 const uint32_t size_sep = 2;
 
-                size_t old_size = bytes.size();
+                size_t old_size = bytes->size();
                 CHECK_EQ(old_size, 0);
-                size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
-                                  size_sep * chunk_size;
-                bytes.resize(new_size);
-                dst_column->get_offset().resize(chunk_size + 1);
+                size_t value_bytes =
+                        column_value->is_large_binary()
+                                ? down_cast<const LargeBinaryColumn*>(column_value)->get_immutable_bytes().size()
+                                : down_cast<const BinaryColumn*>(column_value)->get_immutable_bytes().size();
+                size_t new_size = 2 * chunk_size * sizeof(uint32_t) + value_bytes + size_sep * chunk_size;
+                bytes->resize(new_size);
+                if (dst_data_column->is_large_binary()) {
+                    down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset().resize(chunk_size + 1);
+                } else {
+                    down_cast<BinaryColumn*>(dst_data_column)->get_offset().resize(chunk_size + 1);
+                }
 
                 for (size_t i = 0; i < chunk_size; ++i) {
-                    auto value = column_value->get_slice(i);
+                    auto value = ColumnHelper::get_binary_slice(column_value, i);
                     uint32_t size_value = value.get_size();
 
-                    old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep, value.get_data());
-                    dst_column->get_offset()[i + 1] = old_size;
+                    old_size = serialize_sep_and_value(*bytes, old_size, size_value, size_sep, sep, value.get_data());
+                    if (dst_data_column->is_large_binary()) {
+                        down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset()[i + 1] = old_size;
+                    } else {
+                        down_cast<BinaryColumn*>(dst_data_column)->get_offset()[i + 1] = old_size;
+                    }
                 }
             }
         }
@@ -294,7 +362,7 @@ public:
 
         data = data + offset;
         size = size - offset;
-        down_cast<ResultColumnType*>(to)->append(Slice(data, size));
+        ColumnHelper::append_binary_value(to, Slice(data, size));
     }
 
     std::string get_name() const override { return "group concat"; }
@@ -593,7 +661,8 @@ public:
                 to->append_default();
             }
         });
-        if (UNLIKELY(!(ColumnHelper::get_data_column(to)->is_binary()))) {
+        if (UNLIKELY(!(ColumnHelper::get_data_column(to)->is_binary() ||
+                       ColumnHelper::get_data_column(to)->is_large_binary()))) {
             ctx->set_error(std::string("The output column of " + get_name() +
                                        " finalize_to_column() is not string, but is " + to->get_name())
                                    .c_str(),
@@ -659,21 +728,31 @@ public:
             }
         }
         // copy col_0, col_1 ... col_n row by row
-        auto* string = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+        auto* data_column = ColumnHelper::get_data_column(to);
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
         }
-        Bytes& bytes = string->get_bytes();
-        size_t offset = bytes.size();
+        Bytes* bytes = nullptr;
+        if (data_column->is_large_binary()) {
+            auto* string = down_cast<LargeBinaryColumn*>(data_column);
+            bytes = &string->get_bytes();
+        } else {
+            auto* string = down_cast<BinaryColumn*>(data_column);
+            bytes = &string->get_bytes();
+        }
+        size_t offset = bytes->size();
         size_t length = 0;
-        std::vector<BinaryColumn*> binary_cols(output_col_num);
+        std::vector<const Column*> output_data_columns(output_col_num);
         for (auto i = 0; i < output_col_num; ++i) {
-            auto tmp = ColumnHelper::get_data_column(outputs[i]->as_mutable_raw_ptr());
-            binary_cols[i] = down_cast<BinaryColumn*>(tmp);
-            length += binary_cols[i]->get_bytes().size();
+            output_data_columns[i] = ColumnHelper::get_data_column(outputs[i].get());
+            if (output_data_columns[i]->is_large_binary()) {
+                length += down_cast<const LargeBinaryColumn*>(output_data_columns[i])->get_immutable_bytes().size();
+            } else {
+                length += down_cast<const BinaryColumn*>(output_data_columns[i])->get_immutable_bytes().size();
+            }
         }
 
-        bytes.resize(offset + length);
+        bytes->resize(offset + length);
         bool overflow = false;
         size_t limit = ctx->get_group_concat_max_len() + offset;
         auto last_unique_row_id = elem_size - 1;
@@ -701,13 +780,13 @@ public:
                 if (j == last_unique_row_id && i + 1 == output_col_num) { // ignore the last separator
                     continue;
                 }
-                if (UNLIKELY(i + 1 < output_col_num && binary_cols[i]->is_null(idx))) {
+                if (UNLIKELY(i + 1 < output_col_num && output_data_columns[i]->is_null(idx))) {
                     ctx->set_error("group_concat mustn't output null", false);
                     return;
                 }
-                auto str = binary_cols[i]->get_slice(idx);
+                auto str = ColumnHelper::get_binary_slice(output_data_columns[i], idx);
                 if (offset + str.get_size() <= limit) {
-                    memcpy(bytes.data() + offset, str.get_data(), str.get_size());
+                    memcpy(bytes->data() + offset, str.get_data(), str.get_size());
                     offset += str.get_size();
                     overflow = offset == limit;
                 } else { // make the last utf8 character valid
@@ -720,15 +799,19 @@ public:
                         }
                         end = id;
                     }
-                    memcpy(bytes.data() + offset, str.get_data(), end);
+                    memcpy(bytes->data() + offset, str.get_data(), end);
                     offset += end;
                     overflow = true;
                 }
             }
         }
         state_impl.data_columns->clear(); // early release memory
-        bytes.resize(offset);
-        string->get_offset().emplace_back(offset);
+        bytes->resize(offset);
+        if (data_column->is_large_binary()) {
+            down_cast<LargeBinaryColumn*>(data_column)->get_offset().emplace_back(offset);
+        } else {
+            down_cast<BinaryColumn*>(data_column)->get_offset().emplace_back(offset);
+        }
     }
 
     std::string get_name() const override { return "group_concat2"; }

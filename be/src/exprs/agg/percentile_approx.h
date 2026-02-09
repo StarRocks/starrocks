@@ -64,8 +64,8 @@ public:
             data(state).reinit_with_compression(compression);
         }
 
-        const auto* binary_column = down_cast<const BinaryColumn*>(column);
-        Slice src = binary_column->get_slice(row_num);
+        DCHECK(column->is_binary() || column->is_large_binary());
+        Slice src = ColumnHelper::get_binary_slice(column, row_num);
         double quantile;
         memcpy(&quantile, src.data, sizeof(double));
 
@@ -81,13 +81,13 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        DCHECK(to->is_binary() || to->is_large_binary());
         size_t size = data(state).percentile->serialize_size();
-        uint8_t result[size + sizeof(double)];
+        raw::RawVector<uint8_t> result(size + sizeof(double));
         double quantile = data(state).targetQuantiles.empty() ? 0.0 : data(state).targetQuantiles[0];
-        memcpy(result, &quantile, sizeof(double));
-        data(state).percentile->serialize(result + sizeof(double));
-        auto* column = down_cast<BinaryColumn*>(to);
-        column->append(Slice(result, size + sizeof(double)));
+        memcpy(result.data(), &quantile, sizeof(double));
+        data(state).percentile->serialize(result.data() + sizeof(double));
+        ColumnHelper::append_binary_value(to, Slice(result.data(), result.size()));
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -144,24 +144,43 @@ public:
         DCHECK(src[1]->is_constant());
         const auto* const_column = down_cast<const ConstColumn*>(src[1].get());
         double quantile = const_column->get(0).get_double();
-        // result
-        BinaryColumn* result = down_cast<BinaryColumn*>(dst.get());
-        Bytes& bytes = result->get_bytes();
-        bytes.reserve(chunk_size * 20);
-        result->get_offset().resize(chunk_size + 1);
+        DCHECK(dst->is_binary() || dst->is_large_binary());
+        auto* result_column = ColumnHelper::get_data_column(dst.get());
+        Bytes* bytes = nullptr;
+        Buffer<uint32_t>* offsets = nullptr;
+        Buffer<uint64_t>* large_offsets = nullptr;
+        if (result_column->is_large_binary()) {
+            auto* result = down_cast<LargeBinaryColumn*>(result_column);
+            bytes = &result->get_bytes();
+            large_offsets = &result->get_offset();
+        } else {
+            auto* result = down_cast<BinaryColumn*>(result_column);
+            bytes = &result->get_bytes();
+            offsets = &result->get_offset();
+        }
+        bytes->reserve(chunk_size * 20);
+        if (large_offsets != nullptr) {
+            large_offsets->resize(chunk_size + 1);
+        } else {
+            offsets->resize(chunk_size + 1);
+        }
 
         // serialize percentile one by one
-        size_t old_size = bytes.size();
+        size_t old_size = bytes->size();
         for (size_t i = 0; i < chunk_size; ++i) {
             PercentileValue percentile;
             percentile.add(implicit_cast<float>(data_column->immutable_data()[i]));
 
             size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
-            bytes.resize(new_size);
-            memcpy(bytes.data() + old_size, &quantile, sizeof(double));
-            percentile.serialize(bytes.data() + old_size + sizeof(double));
+            bytes->resize(new_size);
+            memcpy(bytes->data() + old_size, &quantile, sizeof(double));
+            percentile.serialize(bytes->data() + old_size + sizeof(double));
 
-            result->get_offset()[i + 1] = new_size;
+            if (large_offsets != nullptr) {
+                (*large_offsets)[i + 1] = new_size;
+            } else {
+                (*offsets)[i + 1] = new_size;
+            }
             old_size = new_size;
         }
     }
@@ -228,15 +247,30 @@ public:
         // argument 2
         DCHECK(src[2]->is_constant());
         double quantile = src[2]->get(0).get_double();
-        // result
-        BinaryColumn* result = down_cast<BinaryColumn*>(dst.get());
-        Bytes& bytes = result->get_bytes();
-        bytes.reserve(chunk_size * 20);
-        result->get_offset().resize(chunk_size + 1);
+        DCHECK(dst->is_binary() || dst->is_large_binary());
+        auto* result_column = ColumnHelper::get_data_column(dst.get());
+        Bytes* bytes = nullptr;
+        Buffer<uint32_t>* offsets = nullptr;
+        Buffer<uint64_t>* large_offsets = nullptr;
+        if (result_column->is_large_binary()) {
+            auto* result = down_cast<LargeBinaryColumn*>(result_column);
+            bytes = &result->get_bytes();
+            large_offsets = &result->get_offset();
+        } else {
+            auto* result = down_cast<BinaryColumn*>(result_column);
+            bytes = &result->get_bytes();
+            offsets = &result->get_offset();
+        }
+        bytes->reserve(chunk_size * 20);
+        if (large_offsets != nullptr) {
+            large_offsets->resize(chunk_size + 1);
+        } else {
+            offsets->resize(chunk_size + 1);
+        }
 
         // argument 1, weight column can be int64 or const column
         // serialize percentile one by one
-        size_t old_size = bytes.size();
+        size_t old_size = bytes->size();
         if (src[1]->is_constant()) {
             int64_t weight = src[1]->get(0).get_int64();
             if (LIKELY(weight != 0)) {
@@ -245,11 +279,15 @@ public:
                     double value = data_column->immutable_data()[i];
                     percentile.add(implicit_cast<float>(value), weight);
                     size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
-                    bytes.resize(new_size);
-                    memcpy(bytes.data() + old_size, &quantile, sizeof(double));
-                    percentile.serialize(bytes.data() + old_size + sizeof(double));
+                    bytes->resize(new_size);
+                    memcpy(bytes->data() + old_size, &quantile, sizeof(double));
+                    percentile.serialize(bytes->data() + old_size + sizeof(double));
                     old_size = new_size;
-                    result->get_offset()[i + 1] = new_size;
+                    if (large_offsets != nullptr) {
+                        (*large_offsets)[i + 1] = new_size;
+                    } else {
+                        (*offsets)[i + 1] = new_size;
+                    }
                 }
             } else {
                 // TODO: optimize for empty weight but should not happen frequently
@@ -257,11 +295,15 @@ public:
                 static size_t delta_size = sizeof(double) + empty_percentile.serialize_size();
                 for (size_t i = 0; i < chunk_size; ++i) {
                     size_t new_size = old_size + delta_size;
-                    bytes.resize(new_size);
-                    memcpy(bytes.data() + old_size, &quantile, sizeof(double));
-                    empty_percentile.serialize(bytes.data() + old_size + sizeof(double));
+                    bytes->resize(new_size);
+                    memcpy(bytes->data() + old_size, &quantile, sizeof(double));
+                    empty_percentile.serialize(bytes->data() + old_size + sizeof(double));
                     old_size = new_size;
-                    result->get_offset()[i + 1] = new_size;
+                    if (large_offsets != nullptr) {
+                        (*large_offsets)[i + 1] = new_size;
+                    } else {
+                        (*offsets)[i + 1] = new_size;
+                    }
                 }
             }
         } else {
@@ -274,11 +316,15 @@ public:
                     percentile.add(implicit_cast<float>(value), weight);
                 }
                 size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
-                bytes.resize(new_size);
-                memcpy(bytes.data() + old_size, &quantile, sizeof(double));
-                percentile.serialize(bytes.data() + old_size + sizeof(double));
+                bytes->resize(new_size);
+                memcpy(bytes->data() + old_size, &quantile, sizeof(double));
+                percentile.serialize(bytes->data() + old_size + sizeof(double));
                 old_size = new_size;
-                result->get_offset()[i + 1] = new_size;
+                if (large_offsets != nullptr) {
+                    (*large_offsets)[i + 1] = new_size;
+                } else {
+                    (*offsets)[i + 1] = new_size;
+                }
             }
         }
     }
@@ -300,9 +346,9 @@ public:
             const auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[1]));
             const auto* elements = down_cast<const DoubleColumn*>(
                     ColumnHelper::get_data_column(array_column->elements_column().get()));
-            auto offsets = array_column->offsets().immutable_data();
-            size_t start = offsets[0];
-            size_t end = offsets[1];
+            auto src_offsets = array_column->offsets().immutable_data();
+            size_t start = src_offsets[0];
+            size_t end = src_offsets[1];
             DCHECK(end > start) << "Array length cannot be 0";
             auto elements_data = elements->immutable_data();
             auto sub = elements_data.subspan(start, end - start);
@@ -326,8 +372,8 @@ public:
             data(state).reinit_with_compression(compression);
         }
 
-        const auto* binary_column = down_cast<const BinaryColumn*>(column);
-        Slice src = binary_column->get_slice(row_num);
+        DCHECK(column->is_binary() || column->is_large_binary());
+        Slice src = ColumnHelper::get_binary_slice(column, row_num);
 
         // Read quantile count
         uint32_t count;
@@ -351,23 +397,23 @@ public:
 
     // Override serialize_to_column method, serialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        DCHECK(to->is_binary() || to->is_large_binary());
         size_t tdigest_size = data(state).percentile->serialize_size();
         uint32_t count = static_cast<uint32_t>(data(state).targetQuantiles.size());
         size_t total_size = sizeof(uint32_t) + count * sizeof(double) + tdigest_size;
 
-        uint8_t result[total_size];
+        raw::RawVector<uint8_t> result(total_size);
 
         // Write quantile count
-        memcpy(result, &count, sizeof(uint32_t));
+        memcpy(result.data(), &count, sizeof(uint32_t));
 
         // Write all quantiles
-        memcpy(result + sizeof(uint32_t), data(state).targetQuantiles.data(), count * sizeof(double));
+        memcpy(result.data() + sizeof(uint32_t), data(state).targetQuantiles.data(), count * sizeof(double));
 
         // Write TDigest data
-        data(state).percentile->serialize(result + sizeof(uint32_t) + count * sizeof(double));
+        data(state).percentile->serialize(result.data() + sizeof(uint32_t) + count * sizeof(double));
 
-        auto* column = down_cast<BinaryColumn*>(to);
-        column->append(Slice(result, total_size));
+        ColumnHelper::append_binary_value(to, Slice(result.data(), result.size()));
     }
 
     // Override finalize_to_column method, returns ARRAY<DOUBLE>
@@ -394,9 +440,9 @@ public:
         const auto* elements =
                 down_cast<const DoubleColumn*>(ColumnHelper::get_data_column(array_column->elements_column().get()));
 
-        auto offsets = array_column->offsets().immutable_data();
-        size_t start = offsets[0];
-        size_t end = offsets[1];
+        auto src_offsets = array_column->offsets().immutable_data();
+        size_t start = src_offsets[0];
+        size_t end = src_offsets[1];
         uint32_t count = static_cast<uint32_t>(end - start);
 
         // Extract quantiles
@@ -406,32 +452,51 @@ public:
             quantiles[i] = elements_data[start + i];
         }
 
-        // result
-        BinaryColumn* result = down_cast<BinaryColumn*>(dst.get());
-        Bytes& bytes = result->get_bytes();
+        DCHECK(dst->is_binary() || dst->is_large_binary());
+        auto* result_column = ColumnHelper::get_data_column(dst.get());
+        Bytes* bytes = nullptr;
+        Buffer<uint32_t>* offsets = nullptr;
+        Buffer<uint64_t>* large_offsets = nullptr;
+        if (result_column->is_large_binary()) {
+            auto* result = down_cast<LargeBinaryColumn*>(result_column);
+            bytes = &result->get_bytes();
+            large_offsets = &result->get_offset();
+        } else {
+            auto* result = down_cast<BinaryColumn*>(result_column);
+            bytes = &result->get_bytes();
+            offsets = &result->get_offset();
+        }
         // Calculate estimated size per row: count(4) + quantiles(8*n) + TDigest data(~16 bytes)
         // 20 = sizeof(uint32_t) + percentile.serialize_size()
         size_t estimated_size_per_row = count * sizeof(double) + 20;
-        bytes.reserve(chunk_size * estimated_size_per_row);
-        result->get_offset().resize(chunk_size + 1);
+        bytes->reserve(chunk_size * estimated_size_per_row);
+        if (large_offsets != nullptr) {
+            large_offsets->resize(chunk_size + 1);
+        } else {
+            offsets->resize(chunk_size + 1);
+        }
 
         // serialize percentile one by one
-        size_t old_size = bytes.size();
+        size_t old_size = bytes->size();
         for (size_t i = 0; i < chunk_size; ++i) {
             PercentileValue percentile;
             percentile.add(implicit_cast<float>(data_column->immutable_data()[i]));
 
             size_t new_size = old_size + sizeof(uint32_t) + count * sizeof(double) + percentile.serialize_size();
-            bytes.resize(new_size);
+            bytes->resize(new_size);
 
             // Write count
-            memcpy(bytes.data() + old_size, &count, sizeof(uint32_t));
+            memcpy(bytes->data() + old_size, &count, sizeof(uint32_t));
             // Write quantiles
-            memcpy(bytes.data() + old_size + sizeof(uint32_t), quantiles.data(), count * sizeof(double));
+            memcpy(bytes->data() + old_size + sizeof(uint32_t), quantiles.data(), count * sizeof(double));
             // Write TDigest
-            percentile.serialize(bytes.data() + old_size + sizeof(uint32_t) + count * sizeof(double));
+            percentile.serialize(bytes->data() + old_size + sizeof(uint32_t) + count * sizeof(double));
 
-            result->get_offset()[i + 1] = new_size;
+            if (large_offsets != nullptr) {
+                (*large_offsets)[i + 1] = new_size;
+            } else {
+                (*offsets)[i + 1] = new_size;
+            }
             old_size = new_size;
         }
     }
@@ -452,9 +517,9 @@ public:
             const auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[2]));
             const auto* elements = down_cast<const DoubleColumn*>(
                     ColumnHelper::get_data_column(array_column->elements_column().get()));
-            auto offsets = array_column->offsets().immutable_data();
-            size_t start = offsets[0];
-            size_t end = offsets[1];
+            auto src_offsets = array_column->offsets().immutable_data();
+            size_t start = src_offsets[0];
+            size_t end = src_offsets[1];
             DCHECK(end > start) << "Array length cannot be 0";
             auto elements_data = elements->immutable_data();
             auto sub = elements_data.subspan(start, end - start);
@@ -484,8 +549,8 @@ public:
             data(state).reinit_with_compression(compression);
         }
 
-        const auto* binary_column = down_cast<const BinaryColumn*>(column);
-        Slice src = binary_column->get_slice(row_num);
+        DCHECK(column->is_binary() || column->is_large_binary());
+        Slice src = ColumnHelper::get_binary_slice(column, row_num);
 
         // Read quantile count
         uint32_t count;
@@ -509,23 +574,23 @@ public:
 
     // Override serialize_to_column method, serialize using new format: [count(4 bytes), q1...qn(8*n bytes), TDigest_data]
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        DCHECK(to->is_binary() || to->is_large_binary());
         size_t tdigest_size = data(state).percentile->serialize_size();
         uint32_t count = static_cast<uint32_t>(data(state).targetQuantiles.size());
         size_t total_size = sizeof(uint32_t) + count * sizeof(double) + tdigest_size;
 
-        uint8_t result[total_size];
+        raw::RawVector<uint8_t> result(total_size);
 
         // Write quantile count
-        memcpy(result, &count, sizeof(uint32_t));
+        memcpy(result.data(), &count, sizeof(uint32_t));
 
         // Write all quantiles
-        memcpy(result + sizeof(uint32_t), data(state).targetQuantiles.data(), count * sizeof(double));
+        memcpy(result.data() + sizeof(uint32_t), data(state).targetQuantiles.data(), count * sizeof(double));
 
         // Write TDigest data
-        data(state).percentile->serialize(result + sizeof(uint32_t) + count * sizeof(double));
+        data(state).percentile->serialize(result.data() + sizeof(uint32_t) + count * sizeof(double));
 
-        auto* column = down_cast<BinaryColumn*>(to);
-        column->append(Slice(result, total_size));
+        ColumnHelper::append_binary_value(to, Slice(result.data(), result.size()));
     }
 
     // Override finalize_to_column method, returns ARRAY<DOUBLE>
@@ -552,9 +617,9 @@ public:
         const auto* elements =
                 down_cast<const DoubleColumn*>(ColumnHelper::get_data_column(array_column->elements_column().get()));
 
-        auto offsets = array_column->offsets().immutable_data();
-        size_t start = offsets[0];
-        size_t end = offsets[1];
+        auto src_offsets = array_column->offsets().immutable_data();
+        size_t start = src_offsets[0];
+        size_t end = src_offsets[1];
         uint32_t count = static_cast<uint32_t>(end - start);
 
         // Extract quantiles
@@ -564,18 +629,33 @@ public:
             quantiles[i] = elements_data[start + i];
         }
 
-        // result
-        BinaryColumn* result = down_cast<BinaryColumn*>(dst.get());
-        Bytes& bytes = result->get_bytes();
+        DCHECK(dst->is_binary() || dst->is_large_binary());
+        auto* result_column = ColumnHelper::get_data_column(dst.get());
+        Bytes* bytes = nullptr;
+        Buffer<uint32_t>* offsets = nullptr;
+        Buffer<uint64_t>* large_offsets = nullptr;
+        if (result_column->is_large_binary()) {
+            auto* result = down_cast<LargeBinaryColumn*>(result_column);
+            bytes = &result->get_bytes();
+            large_offsets = &result->get_offset();
+        } else {
+            auto* result = down_cast<BinaryColumn*>(result_column);
+            bytes = &result->get_bytes();
+            offsets = &result->get_offset();
+        }
         // Calculate estimated size per row: count(4) + quantiles(8*n) + TDigest data(~16 bytes)
         // 20 = sizeof(uint32_t) + percentile.serialize_size()
         size_t estimated_size_per_row = count * sizeof(double) + 20;
-        bytes.reserve(chunk_size * estimated_size_per_row);
-        result->get_offset().resize(chunk_size + 1);
+        bytes->reserve(chunk_size * estimated_size_per_row);
+        if (large_offsets != nullptr) {
+            large_offsets->resize(chunk_size + 1);
+        } else {
+            offsets->resize(chunk_size + 1);
+        }
 
         // argument 1, weight column can be int64 or const column
         // serialize percentile one by one
-        size_t old_size = bytes.size();
+        size_t old_size = bytes->size();
         if (src[1]->is_constant()) {
             int64_t weight = src[1]->get(0).get_int64();
             if (LIKELY(weight != 0)) {
@@ -586,17 +666,21 @@ public:
 
                     size_t new_size =
                             old_size + sizeof(uint32_t) + count * sizeof(double) + percentile.serialize_size();
-                    bytes.resize(new_size);
+                    bytes->resize(new_size);
 
                     // Write count
-                    memcpy(bytes.data() + old_size, &count, sizeof(uint32_t));
+                    memcpy(bytes->data() + old_size, &count, sizeof(uint32_t));
                     // Write quantiles
-                    memcpy(bytes.data() + old_size + sizeof(uint32_t), quantiles.data(), count * sizeof(double));
+                    memcpy(bytes->data() + old_size + sizeof(uint32_t), quantiles.data(), count * sizeof(double));
                     // Write TDigest
-                    percentile.serialize(bytes.data() + old_size + sizeof(uint32_t) + count * sizeof(double));
+                    percentile.serialize(bytes->data() + old_size + sizeof(uint32_t) + count * sizeof(double));
 
                     old_size = new_size;
-                    result->get_offset()[i + 1] = new_size;
+                    if (large_offsets != nullptr) {
+                        (*large_offsets)[i + 1] = new_size;
+                    } else {
+                        (*offsets)[i + 1] = new_size;
+                    }
                 }
             } else {
                 // TODO: optimize for empty weight but should not happen frequently
@@ -604,17 +688,21 @@ public:
                 size_t delta_size = sizeof(uint32_t) + count * sizeof(double) + empty_percentile.serialize_size();
                 for (size_t i = 0; i < chunk_size; ++i) {
                     size_t new_size = old_size + delta_size;
-                    bytes.resize(new_size);
+                    bytes->resize(new_size);
 
                     // Write count
-                    memcpy(bytes.data() + old_size, &count, sizeof(uint32_t));
+                    memcpy(bytes->data() + old_size, &count, sizeof(uint32_t));
                     // Write quantiles
-                    memcpy(bytes.data() + old_size + sizeof(uint32_t), quantiles.data(), count * sizeof(double));
+                    memcpy(bytes->data() + old_size + sizeof(uint32_t), quantiles.data(), count * sizeof(double));
                     // Write TDigest
-                    empty_percentile.serialize(bytes.data() + old_size + sizeof(uint32_t) + count * sizeof(double));
+                    empty_percentile.serialize(bytes->data() + old_size + sizeof(uint32_t) + count * sizeof(double));
 
                     old_size = new_size;
-                    result->get_offset()[i + 1] = new_size;
+                    if (large_offsets != nullptr) {
+                        (*large_offsets)[i + 1] = new_size;
+                    } else {
+                        (*offsets)[i + 1] = new_size;
+                    }
                 }
             }
         } else {
@@ -628,17 +716,21 @@ public:
                 }
 
                 size_t new_size = old_size + sizeof(uint32_t) + count * sizeof(double) + percentile.serialize_size();
-                bytes.resize(new_size);
+                bytes->resize(new_size);
 
                 // Write count
-                memcpy(bytes.data() + old_size, &count, sizeof(uint32_t));
+                memcpy(bytes->data() + old_size, &count, sizeof(uint32_t));
                 // Write quantiles
-                memcpy(bytes.data() + old_size + sizeof(uint32_t), quantiles.data(), count * sizeof(double));
+                memcpy(bytes->data() + old_size + sizeof(uint32_t), quantiles.data(), count * sizeof(double));
                 // Write TDigest
-                percentile.serialize(bytes.data() + old_size + sizeof(uint32_t) + count * sizeof(double));
+                percentile.serialize(bytes->data() + old_size + sizeof(uint32_t) + count * sizeof(double));
 
                 old_size = new_size;
-                result->get_offset()[i + 1] = new_size;
+                if (large_offsets != nullptr) {
+                    (*large_offsets)[i + 1] = new_size;
+                } else {
+                    (*offsets)[i + 1] = new_size;
+                }
             }
         }
     }

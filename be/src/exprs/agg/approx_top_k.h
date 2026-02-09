@@ -282,8 +282,8 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
-        DCHECK(column->is_binary());
-        Slice bytes = column->get(row_num).get_slice();
+        DCHECK(column->is_binary() || column->is_large_binary());
+        Slice bytes = ColumnHelper::get_binary_slice(column, row_num);
 
         size_t start = 0;
         int64_t null_count;
@@ -328,26 +328,36 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         init_state_if_necessary(ctx, state);
-        const auto* column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[0]));
-        const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, row_num);
-        this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
+        if constexpr (IsSlice<CppType>) {
+            const auto value = ColumnHelper::get_binary_slice(columns[0], row_num);
+            this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
+        } else {
+            const auto* column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[0]));
+            const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, row_num);
+            this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
+        }
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_binary());
-        serialize_state(this->data(state), down_cast<BinaryColumn*>(to));
+        DCHECK(to->is_binary() || to->is_large_binary());
+        auto* data_column = ColumnHelper::get_data_column(to);
+        if (data_column->is_large_binary()) {
+            serialize_state(this->data(state), down_cast<LargeBinaryColumn*>(data_column));
+        } else {
+            serialize_state(this->data(state), down_cast<BinaryColumn*>(data_column));
+        }
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
         const auto kv = get_k_and_counter_num(ctx);
-        DCHECK(dst->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
+        DCHECK(dst->is_binary() || dst->is_large_binary());
+        auto* dst_data_column = ColumnHelper::get_data_column(dst.get());
 
         if (src[0]->is_nullable()) {
             auto* src_nullable_column = down_cast<const NullableColumn*>(src[0].get());
-            const auto* src_column = down_cast<const InputColumnType*>(src_nullable_column->data_column().get());
-            const auto src_data = GetContainer<LT>::get_data(src_column);
+            const Column* src_data_column = ColumnHelper::get_data_column(src_nullable_column->data_column().get());
+            const auto src_data = GetContainer<LT>::get_data(src_data_column);
 
             ApproxTopKState<LT> state;
             for (size_t i = 0; i < src_nullable_column->size(); ++i) {
@@ -357,23 +367,32 @@ public:
                 } else {
                     state.template process<false>(ctx->mem_pool(), src_data[i], 1, false);
                 }
-                serialize_state(state, dst_column);
+                if (dst_data_column->is_large_binary()) {
+                    serialize_state(state, down_cast<LargeBinaryColumn*>(dst_data_column));
+                } else {
+                    serialize_state(state, down_cast<BinaryColumn*>(dst_data_column));
+                }
             }
         } else {
-            auto* src_column = down_cast<const InputColumnType*>(src[0].get());
+            const Column* src_data_column = ColumnHelper::get_data_column(src[0].get());
+            const auto src_data = GetContainer<LT>::get_data(src_data_column);
 
             ApproxTopKState<LT> state;
-            const auto imm_data = GetContainer<LT>::get_data(src_column);
-            size_t size = imm_data.size();
+            size_t size = src_data.size();
             for (size_t i = 0; i < size; ++i) {
                 state.reset(kv.first, kv.second);
-                state.template process<false>(ctx->mem_pool(), imm_data[i], 1, false);
-                serialize_state(state, dst_column);
+                state.template process<false>(ctx->mem_pool(), src_data[i], 1, false);
+                if (dst_data_column->is_large_binary()) {
+                    serialize_state(state, down_cast<LargeBinaryColumn*>(dst_data_column));
+                } else {
+                    serialize_state(state, down_cast<BinaryColumn*>(dst_data_column));
+                }
             }
         }
     }
 
-    void serialize_state(const ApproxTopKState<LT>& state, BinaryColumn* dst) const {
+    template <typename BinaryColumnType>
+    void serialize_state(const ApproxTopKState<LT>& state, BinaryColumnType* dst) const {
         Bytes& bytes = dst->get_bytes();
 
         const size_t old_size = bytes.size();
@@ -451,10 +470,17 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const auto* column = down_cast<const InputColumnType*>(columns[0]);
-        for (size_t i = frame_start; i < frame_end; i++) {
-            const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
-            this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
+        if constexpr (IsSlice<CppType>) {
+            for (size_t i = frame_start; i < frame_end; i++) {
+                const auto value = ColumnHelper::get_binary_slice(columns[0], i);
+                this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
+            }
+        } else {
+            const auto* column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[0]));
+            for (size_t i = frame_start; i < frame_end; i++) {
+                const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
+                this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
+            }
         }
     }
 

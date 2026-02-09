@@ -415,10 +415,11 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         if constexpr (IsSlice<T>) {
-            this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
+            auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
+            this->data(state).update(ctx->mem_pool(), slice);
         } else {
+            const auto* column = down_cast<const ColumnType*>(columns[0]);
             const auto immutable_data = column->immutable_data();
             this->data(state).update(immutable_data[row_num]);
         }
@@ -429,7 +430,6 @@ public:
     // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         auto& agg_state = this->data(state);
 
         struct CacheEntry {
@@ -437,28 +437,42 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto container_data = GetContainer<LT>::get_data(column);
-        for (size_t i = 0; i < chunk_size; ++i) {
-            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
-            cache[i] = CacheEntry{hash_value};
-        }
-        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
-        size_t prefetch_index = 16;
-
-        MemPool* mem_pool = ctx->mem_pool();
-        for (size_t i = 0; i < chunk_size; ++i) {
-            if (prefetch_index < chunk_size) {
-                agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
-                prefetch_index++;
+        auto build_and_update = [&](const auto& container_data) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+                cache[i] = CacheEntry{hash_value};
             }
-            agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+            size_t prefetch_index = 16;
+
+            MemPool* mem_pool = ctx->mem_pool();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (prefetch_index < chunk_size) {
+                    agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
+                    prefetch_index++;
+                }
+                agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            }
+        };
+
+        if constexpr (IsSlice<T>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                const auto& container_data = down_cast<const LargeBinaryColumn*>(data_column)->get_proxy_data();
+                build_and_update(container_data);
+            } else {
+                const auto& container_data = down_cast<const BinaryColumn*>(data_column)->get_proxy_data();
+                build_and_update(container_data);
+            }
+        } else {
+            const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
+            const auto container_data = GetContainer<LT>::get_data(column);
+            build_and_update(container_data);
         }
     }
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
-
         // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
         // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
         // exploit cache locality further, but I don't see much steady performance gain by doing that.
@@ -468,30 +482,45 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto container_data = GetContainer<LT>::get_data(column);
-        for (size_t i = 0; i < chunk_size; ++i) {
-            AggDataPtr state = states[i] + state_offset;
-            auto& agg_state = this->data(state);
-            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
-            cache[i] = CacheEntry{&agg_state, hash_value};
-        }
-        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
-        size_t prefetch_index = 16;
-
-        MemPool* mem_pool = ctx->mem_pool();
-        for (size_t i = 0; i < chunk_size; ++i) {
-            if (prefetch_index < chunk_size) {
-                cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
-                prefetch_index++;
+        auto build_and_update = [&](const auto& container_data) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                AggDataPtr state = states[i] + state_offset;
+                auto& agg_state = this->data(state);
+                size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+                cache[i] = CacheEntry{&agg_state, hash_value};
             }
-            cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+            size_t prefetch_index = 16;
+
+            MemPool* mem_pool = ctx->mem_pool();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (prefetch_index < chunk_size) {
+                    cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
+                    prefetch_index++;
+                }
+                cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            }
+        };
+
+        if constexpr (IsSlice<T>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                const auto& container_data = down_cast<const LargeBinaryColumn*>(data_column)->get_proxy_data();
+                build_and_update(container_data);
+            } else {
+                const auto& container_data = down_cast<const BinaryColumn*>(data_column)->get_proxy_data();
+                build_and_update(container_data);
+            }
+        } else {
+            const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
+            const auto container_data = GetContainer<LT>::get_data(column);
+            build_and_update(container_data);
         }
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        DCHECK(column->is_binary());
-        const auto* input_column = down_cast<const BinaryColumn*>(column);
-        Slice slice = input_column->get_slice(row_num);
+        DCHECK(column->is_binary() || column->is_large_binary());
+        const auto slice = ColumnHelper::get_binary_slice(column, row_num);
         if constexpr (IsSlice<T>) {
             this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
         } else {
@@ -509,49 +538,101 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        auto* column = down_cast<BinaryColumn*>(to);
-        size_t old_size = column->get_bytes().size();
-        size_t new_size = old_size + this->data(state).serialize_size();
-        column->get_bytes().resize(new_size);
-        this->data(state).serialize(column->get_bytes().data() + old_size);
-        column->get_offset().emplace_back(new_size);
+        DCHECK(to->is_binary() || to->is_large_binary());
+        Column* data_column = ColumnHelper::get_data_column(to);
+        size_t old_size = 0;
+        if (data_column->is_large_binary()) {
+            auto* column = down_cast<LargeBinaryColumn*>(data_column);
+            old_size = column->get_bytes().size();
+            size_t new_size = old_size + this->data(state).serialize_size();
+            column->get_bytes().resize(new_size);
+            this->data(state).serialize(column->get_bytes().data() + old_size);
+            column->get_offset().emplace_back(new_size);
+        } else {
+            auto* column = down_cast<BinaryColumn*>(data_column);
+            old_size = column->get_bytes().size();
+            size_t new_size = old_size + this->data(state).serialize_size();
+            column->get_bytes().resize(new_size);
+            this->data(state).serialize(column->get_bytes().data() + old_size);
+            column->get_offset().emplace_back(new_size);
+        }
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        DCHECK(dst->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
-        Bytes& bytes = dst_column->get_bytes();
-
-        const auto* src_column = down_cast<const ColumnType*>(src[0].get());
-        if constexpr (IsSlice<T>) {
-            bytes.reserve(chunk_size * (sizeof(uint32_t) + src_column->get_slice(0).size));
+        DCHECK(dst->is_binary() || dst->is_large_binary());
+        Column* dst_data_column = ColumnHelper::get_data_column(dst.get());
+        Bytes* bytes = nullptr;
+        if (dst_data_column->is_large_binary()) {
+            auto* dst_column = down_cast<LargeBinaryColumn*>(dst_data_column);
+            bytes = &dst_column->get_bytes();
+            dst_column->get_offset().resize(chunk_size + 1);
         } else {
-            bytes.reserve(chunk_size * sizeof(T));
+            auto* dst_column = down_cast<BinaryColumn*>(dst_data_column);
+            bytes = &dst_column->get_bytes();
+            dst_column->get_offset().resize(chunk_size + 1);
         }
-        dst_column->get_offset().resize(chunk_size + 1);
 
-        size_t old_size = bytes.size();
-        for (size_t i = 0; i < chunk_size; ++i) {
-            if constexpr (IsSlice<T>) {
-                Slice key = src_column->get_slice(i);
-                size_t new_size = old_size + key.size + sizeof(uint32_t);
-                bytes.resize(new_size);
+        const Column* src_data_column = ColumnHelper::get_data_column(src[0].get());
+        if constexpr (IsSlice<T>) {
+            if (src_data_column->is_large_binary()) {
+                const auto* src_column = down_cast<const LargeBinaryColumn*>(src_data_column);
+                bytes->reserve(chunk_size * (sizeof(uint32_t) + src_column->get_slice(0).size));
+                size_t old_size = bytes->size();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    Slice key = src_column->get_slice(i);
+                    size_t new_size = old_size + key.size + sizeof(uint32_t);
+                    bytes->resize(new_size);
 
-                auto size = (uint32_t)key.size;
-                memcpy(bytes.data() + old_size, &size, sizeof(uint32_t));
-                old_size += sizeof(uint32_t);
-                memcpy(bytes.data() + old_size, key.data, key.size);
-                old_size += key.size;
-                dst_column->get_offset()[i + 1] = new_size;
+                    auto size = (uint32_t)key.size;
+                    memcpy(bytes->data() + old_size, &size, sizeof(uint32_t));
+                    old_size += sizeof(uint32_t);
+                    memcpy(bytes->data() + old_size, key.data, key.size);
+                    old_size += key.size;
+                    if (dst_data_column->is_large_binary()) {
+                        down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset()[i + 1] = new_size;
+                    } else {
+                        down_cast<BinaryColumn*>(dst_data_column)->get_offset()[i + 1] = new_size;
+                    }
+                }
             } else {
+                const auto* src_column = down_cast<const BinaryColumn*>(src_data_column);
+                bytes->reserve(chunk_size * (sizeof(uint32_t) + src_column->get_slice(0).size));
+                size_t old_size = bytes->size();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    Slice key = src_column->get_slice(i);
+                    size_t new_size = old_size + key.size + sizeof(uint32_t);
+                    bytes->resize(new_size);
+
+                    auto size = (uint32_t)key.size;
+                    memcpy(bytes->data() + old_size, &size, sizeof(uint32_t));
+                    old_size += sizeof(uint32_t);
+                    memcpy(bytes->data() + old_size, key.data, key.size);
+                    old_size += key.size;
+                    if (dst_data_column->is_large_binary()) {
+                        down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset()[i + 1] = new_size;
+                    } else {
+                        down_cast<BinaryColumn*>(dst_data_column)->get_offset()[i + 1] = new_size;
+                    }
+                }
+            }
+        } else {
+            const auto* src_column = down_cast<const ColumnType*>(src_data_column);
+            bytes->reserve(chunk_size * sizeof(T));
+
+            size_t old_size = bytes->size();
+            for (size_t i = 0; i < chunk_size; ++i) {
                 T key = src_column->immutable_data()[i];
 
                 size_t new_size = old_size + sizeof(T);
-                bytes.resize(new_size);
-                memcpy(bytes.data() + old_size, &key, sizeof(T));
+                bytes->resize(new_size);
+                memcpy(bytes->data() + old_size, &key, sizeof(T));
 
-                dst_column->get_offset()[i + 1] = new_size;
+                if (dst_data_column->is_large_binary()) {
+                    down_cast<LargeBinaryColumn*>(dst_data_column)->get_offset()[i + 1] = new_size;
+                } else {
+                    down_cast<BinaryColumn*>(dst_data_column)->get_offset()[i + 1] = new_size;
+                }
                 old_size = new_size;
             }
         }
@@ -632,15 +713,13 @@ public:
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
             const auto off = array_column->offsets().immutable_data();
-            const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
             for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
                 if (!column->is_null(i)) {
-                    agg_state.update(mem_pool, binary_column->get_slice(i));
+                    agg_state.update(mem_pool, ColumnHelper::get_binary_slice(column, i));
                 }
             }
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(*data_column);
-            agg_state.update(mem_pool, binary_column.get_slice(row_num));
+            agg_state.update(mem_pool, ColumnHelper::get_binary_slice(data_column, row_num));
         }
 
         agg_state.update_over_limit();
@@ -653,8 +732,7 @@ public:
             return;
         }
 
-        const auto* input_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
-        Slice slice = input_column->get_slice(row_num);
+        const auto slice = ColumnHelper::get_binary_slice(column, row_num);
 
         this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
 
@@ -665,15 +743,25 @@ public:
         auto& agg_state = this->data(state);
 
         auto serialize = [=](const DictMergeState& dict_state) {
-            auto* column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+            auto* data_column = ColumnHelper::get_data_column(to);
             if (to->is_nullable()) {
                 down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
             }
-            size_t old_size = column->get_bytes().size();
-            size_t new_size = old_size + dict_state.serialize_size();
-            column->get_bytes().resize(new_size);
-            dict_state.serialize(column->get_bytes().data() + old_size);
-            column->get_offset().emplace_back(new_size);
+            if (data_column->is_large_binary()) {
+                auto* column = down_cast<LargeBinaryColumn*>(data_column);
+                size_t old_size = column->get_bytes().size();
+                size_t new_size = old_size + dict_state.serialize_size();
+                column->get_bytes().resize(new_size);
+                dict_state.serialize(column->get_bytes().data() + old_size);
+                column->get_offset().emplace_back(new_size);
+            } else {
+                auto* column = down_cast<BinaryColumn*>(data_column);
+                size_t old_size = column->get_bytes().size();
+                size_t new_size = old_size + dict_state.serialize_size();
+                column->get_bytes().resize(new_size);
+                dict_state.serialize(column->get_bytes().data() + old_size);
+                column->get_offset().emplace_back(new_size);
+            }
         };
 
         if (agg_state.over_limit) {
@@ -699,7 +787,7 @@ public:
             std::vector<int32_t> dict_ids;
             dict_ids.resize(agg_state.set.size());
 
-            auto* binary_column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+            auto* data_column = ColumnHelper::get_data_column(to);
             if (to->is_nullable()) {
                 down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
             }
@@ -725,15 +813,29 @@ public:
 
             std::string result_value = apache::thrift::ThriftJSONString(tglobal_dict);
 
-            size_t old_size = binary_column->get_bytes().size();
-            size_t new_size = old_size + result_value.size();
+            if (data_column->is_large_binary()) {
+                auto* binary_column = down_cast<LargeBinaryColumn*>(data_column);
+                size_t old_size = binary_column->get_bytes().size();
+                size_t new_size = old_size + result_value.size();
 
-            auto& data = binary_column->get_bytes();
-            data.resize(old_size + new_size);
+                auto& data = binary_column->get_bytes();
+                data.resize(old_size + new_size);
 
-            memcpy(data.data() + old_size, result_value.data(), result_value.size());
+                memcpy(data.data() + old_size, result_value.data(), result_value.size());
 
-            binary_column->get_offset().emplace_back(new_size);
+                binary_column->get_offset().emplace_back(new_size);
+            } else {
+                auto* binary_column = down_cast<BinaryColumn*>(data_column);
+                size_t old_size = binary_column->get_bytes().size();
+                size_t new_size = old_size + result_value.size();
+
+                auto& data = binary_column->get_bytes();
+                data.resize(old_size + new_size);
+
+                memcpy(data.data() + old_size, result_value.data(), result_value.size());
+
+                binary_column->get_offset().emplace_back(new_size);
+            }
         };
 
         if (agg_state.over_limit) {
@@ -840,10 +942,10 @@ struct TFusedMultiDistinctFunction final
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const InputColumn*>(columns[0]);
-        if constexpr (IsSlice<T>) {
-            this->data(state).update(column->get_slice(row_num));
+        if constexpr (lt_is_string_or_binary<LT>) {
+            this->data(state).update(ColumnHelper::get_binary_slice(columns[0], row_num));
         } else {
+            const auto* column = down_cast<const InputColumn*>(columns[0]);
             const auto immutable_data = column->immutable_data();
             this->data(state).update(immutable_data[row_num]);
         }
@@ -852,12 +954,12 @@ struct TFusedMultiDistinctFunction final
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const auto* column = down_cast<const InputColumn*>(columns[0]);
-        if constexpr (IsSlice<T>) {
+        if constexpr (lt_is_string_or_binary<LT>) {
             for (auto i = frame_start; i < frame_end; ++i) {
-                this->data(state).update(column->get_slice(i));
+                this->data(state).update(ColumnHelper::get_binary_slice(columns[0], i));
             }
         } else {
+            const auto* column = down_cast<const InputColumn*>(columns[0]);
             const auto* data = column->immutable_data().data();
             for (size_t i = frame_start; i < frame_end; ++i) {
                 this->data(state).update(data[i]);

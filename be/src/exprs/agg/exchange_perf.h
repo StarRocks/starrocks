@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
@@ -96,7 +97,7 @@ public:
             DCHECK(to->is_numeric());
             down_cast<Int64Column*>(to)->append(this->data(state).bytes);
         } else if (PerfType == SPEED) {
-            DCHECK(to->is_binary());
+            DCHECK(to->is_binary() || to->is_large_binary());
             int64_t elapsed_time = MonotonicNanos() - this->data(state).start_time;
             double speed = 0;
             if (elapsed_time > 0) {
@@ -111,8 +112,7 @@ public:
             std::string res = "exchange " + std::to_string(this->data(state).bytes) + " bytes in " +
                               std::to_string(elapsed_time * 1.0 / NANOS_PER_SEC) +
                               " s, speed = " + fmt::format("{:.4f} ", speed) + unit;
-            auto* column = down_cast<BinaryColumn*>(to);
-            column->append(Slice(res));
+            ColumnHelper::append_binary_value(to, Slice(res));
         }
     }
 

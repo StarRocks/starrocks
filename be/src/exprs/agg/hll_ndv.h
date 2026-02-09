@@ -51,12 +51,12 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         uint64_t value = 0;
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
 
         if constexpr (lt_is_string_or_binary<LT>) {
-            Slice s = column->get_slice(row_num);
+            Slice s = ColumnHelper::get_binary_slice(columns[0], row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
+            const auto* column = down_cast<const ColumnType*>(columns[0]);
             const auto v = column->immutable_data();
             value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
         }
@@ -69,12 +69,10 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
-
         if constexpr (lt_is_string_or_binary<LT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
-                Slice s = column->get_slice(i);
+                Slice s = ColumnHelper::get_binary_slice(columns[0], i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
 
                 if (value != 0) {
@@ -83,6 +81,7 @@ public:
             }
         } else {
             uint64_t value = 0;
+            const auto* column = down_cast<const ColumnType*>(columns[0]);
             const auto v = column->immutable_data();
             for (size_t i = frame_start; i < frame_end; ++i) {
                 value = HashUtil::murmur_hash64A(&v[i], sizeof(v[i]), HashUtil::MURMUR_SEED);
@@ -95,10 +94,10 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        DCHECK(column->is_binary());
+        DCHECK(column->is_binary() || column->is_large_binary());
 
-        const auto* hll_column = down_cast<const BinaryColumn*>(column);
-        HyperLogLog hll(hll_column->get(row_num).get_slice());
+        const auto slice = ColumnHelper::get_binary_slice(column, row_num);
+        HyperLogLog hll(slice);
         int64_t prev_memory = this->data(state).mem_usage();
         this->data(state).merge(hll);
         ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
@@ -117,33 +116,43 @@ public:
 
     void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                              Column* to) const override {
-        DCHECK(to->is_binary());
+        DCHECK(to->is_binary() || to->is_large_binary());
 
-        auto* column = down_cast<BinaryColumn*>(to);
+        auto* data_column = ColumnHelper::get_data_column(to);
         size_t size = this->data(state).max_serialized_size();
         uint8_t result[size];
 
         size = this->data(state).serialize(result);
-        column->append(Slice(result, size));
+        ColumnHelper::append_binary_value(data_column, Slice(result, size));
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        const auto* column = down_cast<const ColumnType*>(src[0].get());
-        auto* result = down_cast<BinaryColumn*>(dst.get());
+        const Column* input_column = ColumnHelper::get_data_column(src[0].get());
+        Column* result = ColumnHelper::get_data_column(dst.get());
 
-        Bytes& bytes = result->get_bytes();
-        bytes.reserve(chunk_size * 10);
-        result->get_offset().resize(chunk_size + 1);
+        Bytes* bytes = nullptr;
+        if (result->is_large_binary()) {
+            auto* binary = down_cast<LargeBinaryColumn*>(result);
+            bytes = &binary->get_bytes();
+            binary->get_offset().resize(chunk_size + 1);
+        } else {
+            auto* binary = down_cast<BinaryColumn*>(result);
+            bytes = &binary->get_bytes();
+            binary->get_offset().resize(chunk_size + 1);
+        }
 
-        size_t old_size = bytes.size();
+        bytes->reserve(chunk_size * 10);
+
+        size_t old_size = bytes->size();
         uint64_t value = 0;
         for (size_t i = 0; i < chunk_size; ++i) {
             HyperLogLog hll;
             if constexpr (lt_is_string_or_binary<LT>) {
-                Slice s = column->get_slice(i);
+                Slice s = ColumnHelper::get_binary_slice(input_column, i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {
+                const auto* column = down_cast<const ColumnType*>(input_column);
                 auto v = column->immutable_data()[i];
                 value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
             }
@@ -152,10 +161,14 @@ public:
             }
 
             size_t new_size = old_size + hll.max_serialized_size();
-            bytes.resize(new_size);
-            hll.serialize(bytes.data() + old_size);
+            bytes->resize(new_size);
+            hll.serialize(bytes->data() + old_size);
 
-            result->get_offset()[i + 1] = new_size;
+            if (result->is_large_binary()) {
+                down_cast<LargeBinaryColumn*>(result)->get_offset()[i + 1] = new_size;
+            } else {
+                down_cast<BinaryColumn*>(result)->get_offset()[i + 1] = new_size;
+            }
             old_size = new_size;
         }
     }

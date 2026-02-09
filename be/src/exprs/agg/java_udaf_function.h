@@ -49,6 +49,11 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const final {
         // TODO merge
+        const Column* input_data_column = ColumnHelper::get_data_column(column);
+        if (input_data_column->is_large_binary()) {
+            ctx->set_error("java udaf serialize does not support large binary column");
+            return;
+        }
         const BinaryColumn* input_column = nullptr;
         if (column->is_nullable()) {
             auto* null_column = down_cast<const NullableColumn*>(column);
@@ -76,6 +81,10 @@ public:
         // TODO serialize
         if (to->is_nullable()) {
             auto* null_column = down_cast<NullableColumn*>(to);
+            if (null_column->data_column_raw_ptr()->is_large_binary()) {
+                ctx->set_error("java udaf serialize does not support large binary column");
+                return;
+            }
             null_column->null_column_raw_ptr()->append(DATUM_NOT_NULL);
             column = down_cast<BinaryColumn*>(null_column->data_column_raw_ptr());
         } else {
@@ -278,9 +287,12 @@ public:
         RETURN_IF_UNLIKELY_NULL(state_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, state_array);
 
-        // prepare buffer
-        auto serialized_column =
-                ColumnHelper::get_binary_column(const_cast<Column*>(ColumnHelper::get_data_column(column)));
+        const Column* input_column = ColumnHelper::get_data_column(column);
+        if (input_column->is_large_binary()) {
+            ctx->set_error("java udaf merge does not support large binary column");
+            return;
+        }
+        auto* serialized_column = ColumnHelper::get_binary_column(const_cast<Column*>(input_column));
 
         auto& serialized_bytes = serialized_column->get_bytes();
         const auto& offsets = serialized_column->get_offset();

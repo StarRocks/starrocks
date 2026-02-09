@@ -54,13 +54,14 @@ public:
         _init_if_needed(state);
 
         uint64_t value = 0;
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const Column* column = ColumnHelper::get_data_column(columns[0]);
 
         if constexpr (lt_is_string_or_binary<LT>) {
-            Slice s = column->get_slice(row_num);
+            Slice s = ColumnHelper::get_binary_slice(column, row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
-            const auto v = column->immutable_data();
+            const auto* typed = down_cast<const ColumnType*>(column);
+            const auto v = typed->immutable_data();
             value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
         }
         update_state(ctx, state, value);
@@ -71,11 +72,11 @@ public:
                                               int64_t frame_end) const override {
         // init state if needed
         _init_if_needed(state);
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const Column* column = ColumnHelper::get_data_column(columns[0]);
         if constexpr (lt_is_string_or_binary<LT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
-                Slice s = column->get_slice(i);
+                Slice s = ColumnHelper::get_binary_slice(column, i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
                 if (value != 0) {
                     update_state(ctx, state, value);
@@ -83,7 +84,8 @@ public:
             }
         } else {
             uint64_t value = 0;
-            const auto v = column->immutable_data();
+            const auto* typed = down_cast<const ColumnType*>(column);
+            const auto v = typed->immutable_data();
             for (size_t i = frame_start; i < frame_end; ++i) {
                 value = HashUtil::murmur_hash64A(&v[i], sizeof(v[i]), HashUtil::MURMUR_SEED);
 
@@ -100,9 +102,8 @@ public:
         auto* mem_usage = &(this->data(state).memory_usage);
         int64_t prev_memory = *mem_usage;
 
-        DCHECK(column->is_binary());
-        const BinaryColumn* theta_column = down_cast<const BinaryColumn*>(column);
-        auto slice = theta_column->get_slice(row_num);
+        DCHECK(column->is_binary() || column->is_large_binary());
+        const auto slice = ColumnHelper::get_binary_slice(column, row_num);
         DataSketchesTheta theta(slice, mem_usage);
         this->data(state).theta_sketch->merge(theta);
 
@@ -124,34 +125,43 @@ public:
 
     void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                              Column* to) const override {
-        DCHECK(to->is_binary());
-        auto* column = down_cast<BinaryColumn*>(to);
+        DCHECK(to->is_binary() || to->is_large_binary());
+        auto* data_column = ColumnHelper::get_data_column(to);
         if (UNLIKELY(this->data(state).theta_sketch == nullptr)) {
-            column->append_default();
+            data_column->append_default();
         } else {
             size_t size = this->data(state).theta_sketch->serialize_size();
             uint8_t result[size];
             size = this->data(state).theta_sketch->serialize(result);
-            column->append(Slice(result, size));
+            ColumnHelper::append_binary_value(data_column, Slice(result, size));
         }
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        const ColumnType* input = down_cast<const ColumnType*>(src[0].get());
-        auto* result = down_cast<BinaryColumn*>(dst.get());
+        const Column* input = ColumnHelper::get_data_column(src[0].get());
+        Column* result = ColumnHelper::get_data_column(dst.get());
 
-        Bytes& bytes = result->get_bytes();
-        result->get_offset().resize(chunk_size + 1);
+        Bytes* bytes = nullptr;
+        if (result->is_large_binary()) {
+            auto* binary = down_cast<LargeBinaryColumn*>(result);
+            bytes = &binary->get_bytes();
+            binary->get_offset().resize(chunk_size + 1);
+        } else {
+            auto* binary = down_cast<BinaryColumn*>(result);
+            bytes = &binary->get_bytes();
+            binary->get_offset().resize(chunk_size + 1);
+        }
 
-        size_t old_size = bytes.size();
+        size_t old_size = bytes->size();
         uint64_t value = 0;
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (lt_is_string_or_binary<LT>) {
-                Slice s = input->get_slice(i);
+                Slice s = ColumnHelper::get_binary_slice(input, i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {
-                auto v = input->immutable_data()[i];
+                const auto* typed = down_cast<const ColumnType*>(input);
+                auto v = typed->immutable_data()[i];
                 value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
             }
 
@@ -160,10 +170,14 @@ public:
             theta.update(value);
 
             size_t new_size = old_size + theta.serialize_size();
-            bytes.resize(new_size);
-            theta.serialize(bytes.data() + old_size);
+            bytes->resize(new_size);
+            theta.serialize(bytes->data() + old_size);
 
-            result->get_offset()[i + 1] = new_size;
+            if (result->is_large_binary()) {
+                down_cast<LargeBinaryColumn*>(result)->get_offset()[i + 1] = new_size;
+            } else {
+                down_cast<BinaryColumn*>(result)->get_offset()[i + 1] = new_size;
+            }
             old_size = new_size;
         }
     }
