@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/memory/tracked_allocator.h"
-
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -22,6 +20,7 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/tracked_allocator.h"
 
 namespace starrocks::memory {
 

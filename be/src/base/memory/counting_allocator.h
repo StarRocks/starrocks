@@ -25,8 +25,10 @@ namespace starrocks::memory {
 
 template <typename C>
 concept Counter = requires(C counter, int64_t delta) {
-    { counter.add(delta) } -> std::same_as<void>;
-    { counter.value() } -> std::convertible_to<int64_t>;
+    { counter.add(delta) }
+    ->std::same_as<void>;
+    { counter.value() }
+    ->std::convertible_to<int64_t>;
 };
 
 struct IntCounter {

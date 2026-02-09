@@ -14,10 +14,10 @@
 
 #include "base/memory/jemalloc_allocator.h"
 
+#include <jemalloc/jemalloc.h>
+
 #include <cstdlib>
 #include <cstring>
-
-#include <jemalloc/jemalloc.h>
 
 #include "base/compiler_util.h"
 #include "gutil/strings/fastmem.h"
