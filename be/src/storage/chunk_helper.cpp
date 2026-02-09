@@ -254,13 +254,13 @@ struct ColumnPtrBuilder {
         };
 
         if constexpr (ftype == TYPE_ARRAY) {
-            auto elements = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
+            auto elements = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(0)));
             auto offsets = UInt32Column::create();
             auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
             return NullableIfNeed(std::move(array));
         } else if constexpr (ftype == TYPE_MAP) {
-            auto keys = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
-            auto values = NullableColumn::wrap_if_necessary(field.sub_field(1).create_column());
+            auto keys = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(0)));
+            auto values = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(1)));
             auto offsets = get_column_ptr<UInt32Column>();
             auto map = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
             return NullableIfNeed(std::move(map));
@@ -269,7 +269,7 @@ struct ColumnPtrBuilder {
             MutableColumns fields;
             for (auto& sub_field : field.sub_fields()) {
                 names.emplace_back(sub_field.name());
-                fields.emplace_back(sub_field.create_column());
+                fields.emplace_back(ChunkHelper::column_from_field(sub_field));
             }
             auto struct_column = StructColumn::create(std::move(fields), std::move(names));
             return NullableIfNeed(std::move(struct_column));
@@ -423,7 +423,7 @@ MutableColumnPtr ChunkHelper::column_from_field(const Field& field) {
         MutableColumns fields;
         for (auto& sub_field : field.sub_fields()) {
             names.emplace_back(sub_field.name());
-            fields.emplace_back(sub_field.create_column());
+            fields.emplace_back(ChunkHelper::column_from_field(sub_field));
         }
         auto struct_column = StructColumn::create(std::move(fields), std::move(names));
         return NullableIfNeed(std::move(struct_column));

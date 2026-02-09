@@ -15,7 +15,6 @@
 #include "column/field.h"
 
 #include "runtime/descriptors.h"
-#include "storage/chunk_helper.h"
 #include "storage/key_coder.h"
 #include "storage/types.h"
 #include "types/datum.h"
@@ -39,10 +38,6 @@ FieldPtr Field::convert_to(LogicalType to_type) const {
     new_field->_type = get_type_info(to_type);
     new_field->_short_key_length = static_cast<uint8_t>(new_field->_type->size());
     return new_field;
-}
-
-MutableColumnPtr Field::create_column() const {
-    return ChunkHelper::column_from_field(*this);
 }
 
 FieldPtr Field::convert_to_dict_field(const Field& field) {
