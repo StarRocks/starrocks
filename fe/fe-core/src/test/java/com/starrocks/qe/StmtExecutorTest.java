@@ -16,9 +16,9 @@ package com.starrocks.qe;
 
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
@@ -35,10 +35,10 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
@@ -137,31 +137,36 @@ public class StmtExecutorTest {
         StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
         Assertions.assertEquals("Query", executor.getExecType());
         Assertions.assertFalse(executor.isExecLoadType());
-        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getQueryTimeoutS(), executor.getExecTimeout());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                executor.getExecTimeout());
 
         stmt = SqlParser.parseSingleStatement("insert into t1 select * from t2", SqlModeHelper.MODE_DEFAULT);
         executor = new StmtExecutor(new ConnectContext(), stmt);
         Assertions.assertEquals("Insert", executor.getExecType());
         Assertions.assertTrue(executor.isExecLoadType());
-        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(),
+                executor.getExecTimeout());
 
         stmt = SqlParser.parseSingleStatement("create table t1 as select * from t2", SqlModeHelper.MODE_DEFAULT);
         executor = new StmtExecutor(new ConnectContext(), stmt);
         Assertions.assertEquals("Insert", executor.getExecType());
         Assertions.assertTrue(executor.isExecLoadType());
-        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(),
+                executor.getExecTimeout());
 
         stmt = SqlParser.parseSingleStatement("update t1 set k1 = 1 where k2 = 1", SqlModeHelper.MODE_DEFAULT);
         executor = new StmtExecutor(new ConnectContext(), stmt);
         Assertions.assertEquals("Update", executor.getExecType());
         Assertions.assertTrue(executor.isExecLoadType());
-        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(),
+                executor.getExecTimeout());
 
         stmt = SqlParser.parseSingleStatement("delete from t1 where k2 = 1", SqlModeHelper.MODE_DEFAULT);
         executor = new StmtExecutor(new ConnectContext(), stmt);
         Assertions.assertEquals("Delete", executor.getExecType());
         Assertions.assertTrue(executor.isExecLoadType());
-        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(),
+                executor.getExecTimeout());
     }
 
     @Test
