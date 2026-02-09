@@ -14,8 +14,8 @@
 
 #include "runtime/tablets_channel.h"
 
+#include "base/concurrency/await.h"
 #include "glog/logging.h"
-#include "util/await.h"
 
 namespace starrocks {
 

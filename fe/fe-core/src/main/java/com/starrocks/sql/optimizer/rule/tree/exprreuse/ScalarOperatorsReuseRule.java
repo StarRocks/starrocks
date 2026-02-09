@@ -15,11 +15,14 @@
 
 package com.starrocks.sql.optimizer.rule.tree.exprreuse;
 
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -47,12 +50,34 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             }
 
             if (shouldRewritePredicate(opt, context)) {
-                Projection result = rewritePredicate(opt, context);
-                if (!result.getCommonSubOperatorMap().isEmpty()) {
-                    PhysicalOperator op = (PhysicalOperator) opt.getOp();
-                    ScalarOperator newPredicate = result.getColumnRefMap().values().iterator().next();
-                    op.setPredicate(newPredicate);
-                    op.setPredicateCommonOperators(result.getCommonSubOperatorMap());
+                ScalarOperator predicate = opt.getOp().getPredicate();
+                if (predicate != null) {
+                    Projection result = rewritePredicate(context, predicate);
+                    if (!result.getCommonSubOperatorMap().isEmpty()) {
+                        PhysicalOperator op = (PhysicalOperator) opt.getOp();
+                        ScalarOperator newPredicate = result.getColumnRefMap().values().iterator().next();
+                        op.setPredicate(newPredicate);
+                        op.setPredicateCommonOperators(result.getCommonSubOperatorMap());
+                    }
+                } else {
+                    if (!JoinHelper.canTreatOnPredicateAsPredicate(opt)) {
+                        return null;
+                    }
+                    PhysicalJoinOperator join = (PhysicalJoinOperator) opt.getOp();
+                    ColumnRefSet leftChildColumns = opt.inputAt(0).getOutputColumns();
+                    ColumnRefSet rightChildColumns = opt.inputAt(1).getOutputColumns();
+                    JoinHelper.JoinOnSplitPredicates split = JoinHelper.splitJoinOnPredicate(join.getJoinType(),
+                            join.getOnPredicate(), leftChildColumns, rightChildColumns);
+                    ScalarOperator joinOtherPredicate = split.otherOnPredicate();
+                    if (joinOtherPredicate != null) {
+                        Projection result = rewritePredicate(context, joinOtherPredicate);
+                        if (!result.getCommonSubOperatorMap().isEmpty()) {
+                            ScalarOperator newPredicate = result.getColumnRefMap().values().iterator().next();
+                            join.setPredicate(newPredicate);
+                            join.setPredicateCommonOperators(result.getCommonSubOperatorMap());
+                            join.setOnPredicate(split.eqOnPredicate());
+                        }
+                    }
                 }
             }
 
@@ -85,8 +110,7 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
         }
 
         private boolean shouldRewritePredicate(OptExpression input, TaskContext context) {
-            if (!context.getOptimizerContext().getSessionVariable().isEnablePredicateExprReuse()
-                    || input.getOp().getPredicate() == null) {
+            if (!context.getOptimizerContext().getSessionVariable().isEnablePredicateExprReuse()) {
                 return false;
             }
             if (input.getOp().getOpType() == OperatorType.PHYSICAL_FILTER ||
@@ -97,8 +121,7 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             return false;
         }
 
-        Projection rewritePredicate(OptExpression input, TaskContext context) {
-            ScalarOperator predicate = input.getOp().getPredicate();
+        Projection rewritePredicate(TaskContext context, ScalarOperator predicate) {
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
             ColumnRefFactory columnRefFactory = context.getOptimizerContext().getColumnRefFactory();
             columnRefMap.put(new ColumnRefOperator(

@@ -17,6 +17,8 @@
 #include <string>
 #include <utility>
 
+#include "base/bit/bit_util.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
@@ -27,8 +29,6 @@
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
 #include "runtime/mem_pool.h"
-#include "util/bit_util.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

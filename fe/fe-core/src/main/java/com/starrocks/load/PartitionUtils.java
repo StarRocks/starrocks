@@ -155,7 +155,7 @@ public class PartitionUtils {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Partition partition : partitions) {
             for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                for (MaterializedIndex materializedIndex : subPartition.getMaterializedIndices(
+                for (MaterializedIndex materializedIndex : subPartition.getAllMaterializedIndices(
                             MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         invertedIndex.deleteTablet(tablet.getId());

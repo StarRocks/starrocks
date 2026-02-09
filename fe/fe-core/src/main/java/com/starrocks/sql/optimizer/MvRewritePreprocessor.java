@@ -654,8 +654,8 @@ public class MvRewritePreprocessor {
     private Set<MaterializedView> getTableRelatedSyncMVs(OlapTable olapTable) {
         Set<MaterializedView> relatedMvs = Sets.newHashSet();
         for (MaterializedIndexMeta indexMeta : olapTable.getVisibleIndexMetas()) {
-            long indexId = indexMeta.getIndexMetaId();
-            if (indexMeta.getIndexMetaId() == olapTable.getBaseIndexMetaId()) {
+            long indexMetaId = indexMeta.getIndexMetaId();
+            if (indexMetaId == olapTable.getBaseIndexMetaId()) {
                 continue;
             }
             // Old sync mv may not contain the index define sql.
@@ -671,7 +671,7 @@ public class MvRewritePreprocessor {
             try {
                 long dbId = indexMeta.getDbId();
                 String viewDefineSql = indexMeta.getViewDefineSql();
-                String mvName = olapTable.getIndexNameByMetaId(indexId);
+                String mvName = olapTable.getIndexNameByMetaId(indexMetaId);
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
                 // distribution info
@@ -723,7 +723,7 @@ public class MvRewritePreprocessor {
                 }
 
                 mv.setViewDefineSql(viewDefineSql);
-                mv.setBaseIndexMetaId(indexId);
+                mv.setBaseIndexMetaId(indexMetaId);
                 relatedMvs.add(mv);
             } catch (Exception e) {
                 logMVPrepare(connectContext, "Fail to get the related sync materialized views from table:{}, " +
@@ -1117,7 +1117,7 @@ public class MvRewritePreprocessor {
                 selectPartitionIds.add(p.getId());
                 selectedPartitionNames.add(p.getName());
                 for (PhysicalPartition physicalPartition : p.getSubPartitions()) {
-                    MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexMetaId());
+                    MaterializedIndex materializedIndex = physicalPartition.getLatestIndex(mv.getBaseIndexMetaId());
                     selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
                 }
             }

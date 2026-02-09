@@ -38,6 +38,7 @@ public class VariableVarConverters {
         PartialUpdateModeConverter partialUpdateModeConverter = new PartialUpdateModeConverter();
         CONVERTERS.put(SessionVariable.PARTIAL_UPDATE_MODE, partialUpdateModeConverter);
         CONVERTERS.put(SessionVariable.INSERT_MAX_FILTER_RATIO, new InsertMaxFilterRatioConverter());
+        CONVERTERS.put(SessionVariable.CUSTOM_SESSION_NAME, new CustomSessionNameConverter());
     }
 
     public static String convert(String varName, String value) throws DdlException {
@@ -82,6 +83,21 @@ public class VariableVarConverters {
             } catch (NumberFormatException e) {
                 ErrorReport.reportDdlException(
                         ErrorCode.ERR_INVALID_VALUE, SessionVariable.INSERT_MAX_FILTER_RATIO, value, "between 0.0 and 1.0");
+            }
+            return value;
+        }
+    }
+
+    // check var `custom_session_name`
+    public static class CustomSessionNameConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            if (value.length() > 64) {
+                throw new DdlException("custom_session_name length can not exceed 64 characters");
+            }
+            // check invalid characters
+            if (!value.matches("^[a-zA-Z0-9_\\-]*$")) {
+                throw new DdlException("custom_session_name can only contain letters, digits, hyhens and underscores");
             }
             return value;
         }

@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 class JavaUDFTest : public testing::Test {

@@ -36,6 +36,7 @@ statement
     | setCatalogStatement
     | showDatabasesStatement
     | alterDbQuotaStatement
+    | alterDatabaseSetStatement
     | createDbStatement
     | dropDbStatement
     | showCreateDbStatement
@@ -79,6 +80,7 @@ statement
 
     // Task Statement
     | submitTaskStatement
+    | alterTaskStatement
     | dropTaskStatement
 
     // Materialized View Statement
@@ -118,6 +120,7 @@ statement
     | adminSetConfigStatement
     | adminSetReplicaStatusStatement
     | adminShowConfigStatement
+    | adminShowAutomatedSnapshotStatement
     | adminShowReplicaDistributionStatement
     | adminShowReplicaStatusStatement
     | adminRepairTableStatement
@@ -129,6 +132,7 @@ statement
     | executeScriptStatement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
+    | adminAlterAutomatedSnapshotIntervalStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -289,6 +293,17 @@ statement
     | dropFileStatement
     | showSmallFilesStatement
 
+    // Warehouse Statement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | suspendWarehouseStatement
+    | resumeWarehouseStatement
+    | setWarehouseStatement
+    | showWarehousesStatement
+    | showClustersStatement
+    | showNodesStatement
+    | alterWarehouseStatement
+
     // Set Statement
     | setStatement
     | setUserPropertyStatement
@@ -333,17 +348,6 @@ statement
     | truncatePlanAdvisorStatement
     | alterPlanAdvisorDropStatement
     | showPlanAdvisorStatement
-
-    // Warehouse Statement
-    | createWarehouseStatement
-    | dropWarehouseStatement
-    | suspendWarehouseStatement
-    | resumeWarehouseStatement
-    | setWarehouseStatement
-    | showWarehousesStatement
-    | showClustersStatement
-    | showNodesStatement
-    | alterWarehouseStatement
 
     // CNGroup Statement
     | createCNGroupStatement
@@ -396,6 +400,10 @@ showDatabasesStatement
 alterDbQuotaStatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
+    ;
+
+alterDatabaseSetStatement
+    : ALTER DATABASE identifier SET propertyList
     ;
 
 createDbStatement
@@ -683,6 +691,10 @@ submitTaskStatement
         AS (createTableAsSelectStatement | insertStatement | dataCacheSelectStatement)
     ;
 
+alterTaskStatement
+    : ALTER TASK (IF EXISTS)? qualifiedName (RESUME | SUSPEND | SET propertyList)
+    ;
+
 taskClause
     : properties
     | taskScheduleDesc
@@ -756,6 +768,10 @@ adminShowConfigStatement
     : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
     ;
 
+adminShowAutomatedSnapshotStatement
+    : ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
+    ;
+
 adminShowReplicaDistributionStatement
     : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
     ;
@@ -789,11 +805,15 @@ syncStatement
     ;
 
 adminSetAutomatedSnapshotOnStatement
-    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (STORAGE VOLUME svName=identifier)?
+    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (interval)? (STORAGE VOLUME svName=identifier)?
     ;
 
 adminSetAutomatedSnapshotOffStatement
     : ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
+    ;
+
+adminAlterAutomatedSnapshotIntervalStatement
+    : ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET interval
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
@@ -974,6 +994,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | mergeTabletClause
     | alterTableAutoIncrementClause
 
     //Alter partition clause
@@ -1235,6 +1256,16 @@ splitTabletClause
       properties?
     ;
 
+mergeTabletClause
+    : MERGE
+      (((TABLET | TABLETS) partitionNames?) | tabletGroupList)
+      properties?
+    ;
+
+tabletGroupList
+    : (TABLET | TABLETS) integer_list+
+    ;
+
 alterTableAutoIncrementClause
     : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
@@ -1453,6 +1484,8 @@ killAnalyzeStatement
 analyzeProfileStatement
     : ANALYZE PROFILE FROM string
     | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
+    | ANALYZE PROFILE FROM LAST_QUERY_ID '(' ')'
+    | ANALYZE PROFILE FROM LAST_QUERY_ID '(' ')' ',' INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 
@@ -1537,7 +1570,8 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction? #createUdfFunctionStmt
+    | CREATE orReplace GLOBAL? FUNCTION ifNotExists qualifiedName '(' functionArgsList ')' RETURNS expression #createInternalFunctionStmt
     ;
 inlineFunction
     : AS ATTACHMENT
@@ -1545,6 +1579,10 @@ inlineFunction
 
 typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
+    ;
+
+functionArgsList
+    : (identifier type)? (',' identifier type)*
     ;
 
 // ------------------------------------------- Load Statement ----------------------------------------------------------
@@ -2294,8 +2332,8 @@ alterCNGroupStatement
 // ------------------------------------------- Transaction Statement ---------------------------------------------------
 
 beginStatement
-    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
-    | BEGIN WORK?
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)? (WITH LABEL label=identifier)?
+    | BEGIN WORK? (WITH LABEL label=identifier)?
     ;
 
 commitStatement
@@ -2335,7 +2373,7 @@ queryRelation
     ;
 
 withClause
-    : WITH commonTableExpression (',' commonTableExpression)*
+    : WITH RECURSIVE? commonTableExpression (',' commonTableExpression)*
     ;
 
 queryNoWith
@@ -2738,6 +2776,7 @@ aggregationFunction
     | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | ARRAY_AGG_DISTINCT '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+    | STRING_AGG '(' setQuantifier? expression ',' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     ;
 
 userVariable
@@ -2794,6 +2833,7 @@ specialFunctionExpression
     | PASSWORD '(' string ')'
     | FLOOR '(' expression ')'
     | CEIL '(' expression ')'
+    | LAST_QUERY_ID '(' ')'
     ;
 
 windowFunction
@@ -2882,6 +2922,7 @@ partitionDesc
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
     | PARTITION BY partitionExpr (',' partitionExpr)*
+    | PARTITION BY '(' partitionExpr (',' partitionExpr)* ')'
     ;
 
 listPartitionDesc
@@ -3241,11 +3282,11 @@ nonReserved
     | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PROVIDER | PROVIDERS | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
-    | REPOSITORIES
+    | REPOSITORIES | RECURSIVE
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
+    | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES

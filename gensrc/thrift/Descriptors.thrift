@@ -57,8 +57,8 @@ struct TSlotDescriptor {
   3: optional Types.TTypeDesc slotType
   4: optional i32 columnPos   // Deprecated
   5: optional i32 byteOffset  // Deprecated
-  6: optional i32 nullIndicatorByte // Deprecated
-  7: optional i32 nullIndicatorBit // Deprecated
+  6: optional i32 nullIndicatorByte = 0 // Deprecated
+  7: optional i32 nullIndicatorBit = -1 // Deprecated
   8: optional string colName;
   9: optional i32 slotIdx // Deprecated
   10: optional bool isMaterialized // Deprecated
@@ -69,6 +69,7 @@ struct TSlotDescriptor {
   // for example, the physical name of a column in a parquet file.
   // used in delta lake column mapping name mode
   14: optional string col_physical_name
+  15: optional bool is_virtual_column = false
 }
 
 struct TTupleDescriptor {
@@ -287,6 +288,8 @@ struct TOlapTableTablet {
 }
 
 struct TOlapTableIndexTablets {
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `index id` is set to the `index meta id`.
     1: required i64 index_id
     2: required list<i64> tablet_ids
     3: optional list<TOlapTableTablet> tablets
@@ -342,7 +345,9 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
-    1: required i64 id // index id
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `id` is set to the `index meta id`.
+    1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
@@ -534,6 +539,8 @@ struct TTableFunctionTable {
 
     10: optional bool parquet_use_legacy_encoding
     11: optional Types.TParquetOptions parquet_options
+
+    12: optional bool csv_include_header
 }
 
 struct TIcebergSchemaField {

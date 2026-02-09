@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 
+#include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/fragment_context.h"
@@ -37,7 +38,6 @@
 #include "exprs/runtime_filter_bank.h"
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -506,6 +506,7 @@ public:
     void runtime_report_action();
 
     std::string to_readable_string() const;
+    std::string get_raw_string_name() const;
 
     workgroup::WorkGroup* workgroup();
     const workgroup::WorkGroup* workgroup() const;
@@ -595,6 +596,9 @@ protected:
 
     // used in event scheduler
     void _update_global_rf_timer();
+
+    // Helper function to build readable string with option to use raw operator names
+    std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
     PipelineObserver _observer;

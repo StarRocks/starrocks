@@ -14,7 +14,7 @@
 
 #include "column/column_helper.h"
 
-#include <runtime/types.h>
+#include "types/type_descriptor.h"
 
 #ifdef __x86_64__
 #include <immintrin.h>
@@ -24,6 +24,11 @@
 #include <arm_neon.h>
 #endif
 
+#include "base/phmap/phmap.h"
+#include "base/simd/simd.h"
+#include "base/types/decimal12.h"
+#include "base/types/int96.h"
+#include "base/types/uint24.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -33,18 +38,13 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/decimalv2_value.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
-#include "storage/decimal12.h"
-#include "storage/uint24.h"
 #include "types/date_value.h"
+#include "types/decimalv2_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/timestamp_value.h"
 #include "util/date_func.h"
-#include "util/int96.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
@@ -514,9 +514,9 @@ size_t ColumnHelper::compute_bytes_size(ColumnsConstIterator const& begin, Colum
         }
         auto binary = ColumnHelper::get_binary_column(col.get());
         if (col->is_constant()) {
-            n += binary->get_bytes().size() * row_num;
+            n += binary->get_immutable_bytes().size() * row_num;
         } else {
-            n += binary->get_bytes().size();
+            n += binary->get_immutable_bytes().size();
         }
     }
     return n;

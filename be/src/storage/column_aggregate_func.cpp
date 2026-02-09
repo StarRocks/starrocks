@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "base/bit/bit_util.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -30,8 +31,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_aggregator.h"
-#include "util/bit_util.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 
@@ -377,6 +377,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_DECIMAL32, Decimal32Column, int32_t)
             CASE_REPLACE(TYPE_DECIMAL64, Decimal64Column, int64_t)
             CASE_REPLACE(TYPE_DECIMAL128, Decimal128Column, int128_t)
+            CASE_REPLACE(TYPE_DECIMAL256, Decimal256Column, int256_t)
             CASE_REPLACE(TYPE_DATE_V1, DateColumn, DateValue)
             CASE_REPLACE(TYPE_DATE, DateColumn, DateValue)
             CASE_REPLACE(TYPE_DATETIME_V1, TimestampColumn, TimestampValue)
@@ -423,6 +424,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const 
         CASE_NEW_KEY_AGGREGATOR(TYPE_DECIMAL32, Decimal32Column)
         CASE_NEW_KEY_AGGREGATOR(TYPE_DECIMAL64, Decimal64Column)
         CASE_NEW_KEY_AGGREGATOR(TYPE_DECIMAL128, Decimal128Column)
+        CASE_NEW_KEY_AGGREGATOR(TYPE_DECIMAL256, Decimal256Column)
         CASE_NEW_KEY_AGGREGATOR(TYPE_DATE, DateColumn)
         CASE_NEW_KEY_AGGREGATOR(TYPE_DATETIME, TimestampColumn)
         CASE_DEFAULT_WARNING(type)

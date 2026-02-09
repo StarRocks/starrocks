@@ -17,6 +17,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -26,12 +27,11 @@
 #include "exprs/table_function/table_function.h"
 #include "gutil/casts.h"
 #include "jni.h"
-#include "runtime/types.h"
 #include "runtime/user_function_cache.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

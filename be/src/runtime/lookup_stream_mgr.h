@@ -16,9 +16,12 @@
 
 #include <google/protobuf/service.h>
 
-#include <mutex>
 #include <shared_mutex>
 
+#include "base/concurrency/moodycamel/concurrentqueue.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_base.h"
+#include "base/phmap/phmap_utils.h"
 #include "bthread/mutex.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -29,16 +32,12 @@
 #include "runtime/descriptors.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
-#include "util/moodycamel/concurrentqueue.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_base.h"
-#include "util/phmap/phmap_utils.h"
 
 namespace starrocks {
 
 class LookUpDispatcher {
 public:
-    LookUpDispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId lookup_node_id,
+    LookUpDispatcher(const TUniqueId& query_id, PlanNodeId lookup_node_id,
                      const std::vector<TupleId>& request_tuple_ids);
 
     ~LookUpDispatcher() = default;
@@ -66,13 +65,14 @@ public:
     }
 
 private:
-    [[maybe_unused]] RuntimeState* _state;
     const TUniqueId _query_id;
     [[maybe_unused]] PlanNodeId _lookup_node_id;
 
     typedef moodycamel::ConcurrentQueue<pipeline::LookUpRequestContextPtr> RequestsQueue;
     typedef std::shared_ptr<RequestsQueue> RequestsQueuePtr;
-    typedef phmap::flat_hash_map<TupleId, RequestsQueuePtr> RequestQueueMap;
+    typedef phmap::parallel_flat_hash_map<TupleId, RequestsQueuePtr, phmap::Hash<TupleId>, phmap::EqualTo<TupleId>,
+                                          phmap::Allocator<TupleId>, 4, bthread::Mutex>
+            RequestQueueMap;
     RequestQueueMap _request_queues;
 
     std::weak_ptr<pipeline::QueryContext> _query_ctx;
@@ -86,10 +86,11 @@ public:
     LookUpDispatcherMgr() = default;
     ~LookUpDispatcherMgr() = default;
 
-    LookUpDispatcherPtr create_dispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId target_node_id,
+    LookUpDispatcherPtr create_dispatcher(const TUniqueId& query_id, PlanNodeId target_node_id,
                                           const std::vector<TupleId>& request_tuple_ids);
 
     StatusOr<LookUpDispatcherPtr> get_dispatcher(const TUniqueId& query_id, PlanNodeId target_node_id);
+    LookUpDispatcherPtr get_or_create_dispatcher(const pipeline::RemoteLookUpRequestContextPtr& ctx);
     void remove_dispatcher(const TUniqueId& query_id, PlanNodeId target_node_id);
     Status lookup(const pipeline::RemoteLookUpRequestContextPtr& ctx);
 

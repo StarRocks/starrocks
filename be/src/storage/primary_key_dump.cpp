@@ -256,7 +256,8 @@ Status PrimaryKeyDump::_dump_segment_keys() {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : *rowset_map) {
         RowsetReleaseGuard guard(rowset.second);
-        auto res = rowset.second->get_segment_iterators2(pkey_schema, tablet_schema, nullptr, 0, &stats);
+        // Use MetaLoadMode::NONE since we only need to dump primary keys, no metadata required
+        auto res = rowset.second->get_segment_iterators2(pkey_schema, tablet_schema, MetaLoadMode::NONE, 0, &stats);
         if (!res.ok()) {
             return res.status();
         }

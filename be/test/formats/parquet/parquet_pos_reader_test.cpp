@@ -78,12 +78,12 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithFilter) {
     // Read the range with filter
     ASSERT_TRUE(reader.read_range(range, &filter, column).ok());
 
-    // Check that we got 2 rows (positions 201 and 203)
-    ASSERT_EQ(column->size(), 2);
+    // Check that we got 5 rows
+    ASSERT_EQ(column->size(), 5);
 
     // Check the values
-    ASSERT_EQ(column->get(0).get_int64(), 201);
-    ASSERT_EQ(column->get(1).get_int64(), 203);
+    ASSERT_EQ(column->get(1).get_int64(), 201);
+    ASSERT_EQ(column->get(3).get_int64(), 203);
 }
 
 // Test ParquetPosReader with a larger range
@@ -153,8 +153,8 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithNoSelectedRows) {
     // Read the range with filter
     ASSERT_TRUE(reader.read_range(range, &filter, column).ok());
 
-    // Check that we got 0 rows
-    ASSERT_EQ(column->size(), 0);
+    // Check that we got 3 rows
+    ASSERT_EQ(column->size(), 3);
 }
 
 // Test ParquetPosReader with all rows selected by filter

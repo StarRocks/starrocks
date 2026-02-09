@@ -28,9 +28,9 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/decimalv2_value.h"
-#include "runtime/decimalv3.h"
 #include "types/date_value.h"
+#include "types/decimalv2_value.h"
+#include "types/decimalv3.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {

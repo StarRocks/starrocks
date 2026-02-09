@@ -122,6 +122,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     f.set_is_key(c.is_key());
     f.set_length(c.length());
     f.set_uid(c.unique_id());
+    f.set_is_virtual(c.is_virtual_column());
 
     if (type == TYPE_ARRAY) {
         const TabletColumn& sub_column = c.subcolumn(0);
@@ -785,11 +786,11 @@ public:
 
         // input
         auto columns = _segment_column->columns();
-        std::vector<const Bytes*> input_bytes;
+        std::vector<const Byte*> input_bytes;
         std::vector<const Offsets*> input_offsets;
         for (auto& seg_column : columns) {
             auto col_ptr = ColumnHelper::as_column<ColumnT>(seg_column);
-            input_bytes.push_back(&col_ptr->get_bytes());
+            input_bytes.push_back(col_ptr->continuous_data());
             input_offsets.push_back(&col_ptr->get_offset());
         }
 
@@ -822,10 +823,10 @@ public:
         for (size_t i = 0; i < _size; i++) {
             size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
-            const Bytes& src_bytes = *input_bytes[segment_id];
+            const Byte* src_bytes = input_bytes[segment_id];
             const Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
-            const Byte* str_data = src_bytes.data() + src_offsets[segment_offset];
+            const Byte* str_data = src_bytes + src_offsets[segment_offset];
 
             strings::memcpy_inlined(dest_bytes + output_offsets[i], str_data, str_size);
         }

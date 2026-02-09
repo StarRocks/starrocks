@@ -164,6 +164,11 @@ public class TypeManager {
             if (types.get(0).isDateType()) {
                 return types.get(0);
             }
+            //date_format(str_to_date('20241209','%Y%m%d'),'%Y-%m-%d 00:00:00') in (str_to_date('20241209','%Y%m%d'),str_to_date('20241208','%Y%m%d'))
+            if (!isBetween && types.size() > 1 && types.get(1).isDateType() &&
+                    types.stream().skip(1).allMatch(e -> e == types.get(1))) {
+                return types.get(1);
+            }
         }
 
         return compatibleType;
@@ -399,6 +404,8 @@ public class TypeManager {
         } else if (from.isJsonType() && to.isMapType()) {
             MapType map = (MapType) to;
             return canCastTo(VarcharType.VARCHAR, map.getKeyType()) && canCastTo(JsonType.JSON, map.getValueType());
+        } else if (to.isVariantType()) {
+            return variantCanCastFromType(from);
         } else if (from.isVariantType() && variantCanCastToComplexType(to)) {
             return true;
         } else if (from.isBoolean() && to.isComplexType()) {
@@ -423,6 +430,40 @@ public class TypeManager {
         } else {
             return to.isStructType();
         }
+    }
+
+    private static boolean variantCanCastFromType(Type from) {
+        if (from.isNull()) {
+            return true;
+        }
+        if (from.isVariantType()) {
+            return true;
+        }
+        if (from.isScalarType()) {
+            PrimitiveType primitive = ((ScalarType) from).getPrimitiveType();
+            return primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
+                    primitive != PrimitiveType.PERCENTILE && primitive != PrimitiveType.FUNCTION &&
+                    primitive != PrimitiveType.VARBINARY;
+        }
+        if (from.isArrayType()) {
+            ArrayType arrayType = (ArrayType) from;
+            return variantCanCastFromType(arrayType.getItemType());
+        }
+        if (from.isMapType()) {
+            MapType mapType = (MapType) from;
+            return canCastTo(mapType.getKeyType(), VarcharType.VARCHAR) &&
+                    variantCanCastFromType(mapType.getValueType());
+        }
+        if (from.isStructType()) {
+            StructType structType = (StructType) from;
+            for (StructField field : structType.getFields()) {
+                if (!variantCanCastFromType(field.getType())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -595,6 +636,9 @@ public class TypeManager {
         }
 
         if (t1.isStringType() || t2.isStringType()) {
+            if (t1.getLength() <= 0 || t2.getLength() <= 0) {
+                return VarcharType.VARCHAR;
+            }
             return TypeFactory.createVarcharType(Math.max(t1.getLength(), t2.getLength()));
         }
 

@@ -29,12 +29,11 @@ using std::swap;
 using std::make_pair;
 using std::pair;
 
-#include <common/logging.h>
-
 #include "gutil/endian.h"
 #include "gutil/hash/hash128to64.h"
 #include "gutil/int128.h"
 #include "gutil/integral_types.h"
+#include "gutil/logging.h"
 
 namespace util_hash {
 

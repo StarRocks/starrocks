@@ -73,13 +73,13 @@ public class BestIndexRewriter extends OptExpressionVisitor<OptExpression, Long>
     }
 
     private Map<ColumnRefOperator, Column> getColumnRefOperatorColumnMapByIndexMeta(LogicalOlapScanOperator scanOperator,
-                                                                                    Long bestIndex) {
+                                                                                    Long bestIndexMetaId) {
         OlapTable olapTable = (OlapTable) scanOperator.getTable();
-        long oldSelectedIndexId = scanOperator.getSelectedIndexId();
-        if (oldSelectedIndexId != olapTable.getBaseIndexMetaId() || bestIndex == oldSelectedIndexId) {
+        long oldSelectedIndexMetaId = scanOperator.getSelectedIndexMetaId();
+        if (oldSelectedIndexMetaId != olapTable.getBaseIndexMetaId() || bestIndexMetaId == oldSelectedIndexMetaId) {
             return null;
         }
-        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(bestIndex);
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(bestIndexMetaId);
         List<Column> mvMetaColumns = indexMeta.getSchema();
         Map<String, Column> nameToColumnMap = Maps.newHashMap();
         for (Column mvColumn : mvMetaColumns) {

@@ -14,17 +14,17 @@
 
 #pragma once
 
-#include <runtime/types.h>
-
 #include <string_view>
 
+#include "base/phmap/phmap.h"
 #include "butil/containers/flat_map.h"
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/schema.h"
 #include "common/global_types.h"
 #include "exec/query_cache/owner_info.h"
-#include "util/phmap/phmap.h"
+#include "storage/variant_tuple.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 class ChunkPB;
@@ -134,6 +134,7 @@ public:
     void append_column(const ColumnPtr& column, const FieldPtr& field);
     void append_column(const ColumnPtr& column, SlotId slot_id);
     void update_column(ColumnPtr& column, SlotId slot_id);
+    void append_column(const ColumnPtr& column, ColumnId column_id, [[maybe_unused]] bool is_column_id);
 
     void append_vector_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
     void update_column_by_index(ColumnPtr&& column, size_t idx);
@@ -241,6 +242,8 @@ public:
     // Return the data of n-th row.
     // This method is relatively slow and mainly used for unit tests now.
     DatumTuple get(size_t n) const;
+
+    VariantTuple get(size_t n, const std::vector<uint32_t>& column_indexes) const;
 
     void set_delete_state(DelCondSatisfied state) { _delete_state = state; }
 

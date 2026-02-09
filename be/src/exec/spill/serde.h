@@ -18,6 +18,7 @@
 
 #include <cstring>
 
+#include "base/container/raw_container.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -25,7 +26,6 @@
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spill_fwd.h"
 #include "gutil/macros.h"
-#include "util/raw_container.h"
 
 namespace starrocks::spill {
 

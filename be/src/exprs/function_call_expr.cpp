@@ -16,6 +16,9 @@
 
 #include <cstdint>
 
+#include "base/failpoint/fail_point.h"
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -29,9 +32,6 @@
 #include "runtime/user_function_cache.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
-#include "util/failpoint/fail_point.h"
-#include "util/slice.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -121,7 +121,9 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
 
     _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
-                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uniq_id */;
+                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uuid_numeric */ ||
+                                 _fn.fid == 100025 /* uuid_v7 */ || _fn.fid == 100026 /* uuid_v7_numeric */
+            ;
 
     return Status::OK();
 }

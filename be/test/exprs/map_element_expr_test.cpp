@@ -17,14 +17,14 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/string/slice.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/map_column.h"
 #include "column/type_traits.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "testutil/column_test_helper.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 
 namespace starrocks {
 namespace {

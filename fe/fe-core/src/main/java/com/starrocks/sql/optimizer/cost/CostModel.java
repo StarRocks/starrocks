@@ -204,6 +204,11 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalTopN(PhysicalTopNOperator node, ExpressionContext context) {
+            // we always prefer topn push down agg.
+            if (node.isTopNPushDownAgg()) {
+                return CostEstimate.zero();
+            }
+
             // Disable one phased sort, Currently, we always use two phase sort
             if (!node.isEnforced() && !node.isSplit()
                     && node.getSortPhase().isFinal()

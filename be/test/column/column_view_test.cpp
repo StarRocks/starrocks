@@ -17,12 +17,12 @@
 
 #include <numeric>
 
+#include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
-#include "runtime/types.h"
-#include "testutil/parallel_test.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 static ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t>>& values, bool is_nullable) {

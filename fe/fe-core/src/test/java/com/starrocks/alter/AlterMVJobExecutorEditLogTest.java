@@ -38,6 +38,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -1121,5 +1122,120 @@ public class AlterMVJobExecutorEditLogTest {
             String actualValue = tableProperty.getProperties().get(propertyName);
             Assertions.assertEquals(propertyValue, actualValue);
         }
+    }
+
+    @Test
+    public void testVisitTableRenameClauseNormalCase() throws Exception {
+        // 1. Get materialized view
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(mv);
+        String oldMvName = mv.getName();
+        Assertions.assertEquals(MV_NAME, oldMvName);
+
+        // 2. Create TableRenameClause
+        String newMvName = "renamed_mv";
+        com.starrocks.sql.ast.TableRenameClause clause =
+                new com.starrocks.sql.ast.TableRenameClause(newMvName, NodePosition.ZERO);
+
+        // 3. Create AlterMaterializedViewStmt
+        QualifiedName qualifiedName = QualifiedName.of(List.of("default_catalog", DB_NAME, MV_NAME));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
+                tableRef,
+                clause,
+                NodePosition.ZERO);
+
+        // 4. Execute visitTableRenameClause
+        AlterMVJobExecutor executor = new AlterMVJobExecutor();
+        executor.process(stmt, connectContext);
+
+        // 5. Verify master state
+        mv = (MaterializedView) db.getTable(newMvName);
+        Assertions.assertNotNull(mv);
+        Assertions.assertEquals(newMvName, mv.getName());
+        Assertions.assertEquals(MV_ID, mv.getId());
+        Assertions.assertNull(db.getTable(oldMvName));
+
+        // 6. Test follower replay
+        RenameMaterializedViewLog replayInfo = (RenameMaterializedViewLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_RENAME_MATERIALIZED_VIEW);
+
+        // Verify replay info
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(MV_ID, replayInfo.getId());
+        Assertions.assertEquals(newMvName, replayInfo.getNewMaterializedViewName());
+
+        // Create follower metastore and the same id objects, then replay into it
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(DB_ID, DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+
+        // Create base table with same ID
+        OlapTable followerBaseTable = createHashOlapTable(BASE_TABLE_ID, BASE_TABLE_NAME, 3);
+        followerDb.registerTableUnlocked(followerBaseTable);
+
+        // Create materialized view with same ID and old name
+        MaterializedView followerMv = createMaterializedView(MV_ID, oldMvName, followerBaseTable, 3);
+        followerDb.registerTableUnlocked(followerMv);
+
+        // Set follower metastore to GlobalStateMgr so replay can find it
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        
+        AlterJobMgr followerAlterJobMgr = new AlterJobMgr(
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler(),
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().getMaterializedViewHandler(),
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler());
+        followerAlterJobMgr.replayRenameMaterializedView(replayInfo);
+
+        // 7. Verify follower state
+        MaterializedView replayed = (MaterializedView) followerDb.getTable(newMvName);
+        Assertions.assertNotNull(replayed);
+        Assertions.assertEquals(newMvName, replayed.getName());
+        Assertions.assertEquals(MV_ID, replayed.getId());
+        Assertions.assertNull(followerDb.getTable(oldMvName));
+    }
+
+    @Test
+    public void testVisitTableRenameClauseEditLogException() throws Exception {
+        // 1. Get materialized view
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(mv);
+        String oldMvName = mv.getName();
+
+        // 2. Create TableRenameClause
+        String newMvName = "renamed_mv";
+        com.starrocks.sql.ast.TableRenameClause clause =
+                new com.starrocks.sql.ast.TableRenameClause(newMvName, NodePosition.ZERO);
+
+        // 3. Create AlterMaterializedViewStmt
+        QualifiedName qualifiedName = QualifiedName.of(List.of("default_catalog", DB_NAME, MV_NAME));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
+                tableRef,
+                clause,
+                NodePosition.ZERO);
+
+        // 4. Mock EditLog.logMvRename to throw exception
+        EditLog spyEditLog = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logMvRename(any(com.starrocks.persist.RenameMaterializedViewLog.class), any());
+
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // 5. Execute visitTableRenameClause and expect exception
+        AlterMVJobExecutor executor = new AlterMVJobExecutor();
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            executor.process(stmt, connectContext);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
+
+        // 6. Verify materialized view name remains unchanged after exception
+        MaterializedView unchangedMv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(unchangedMv);
+        Assertions.assertEquals(oldMvName, unchangedMv.getName());
     }
 }

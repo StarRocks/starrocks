@@ -25,11 +25,11 @@
 #include <string>
 #include <vector>
 
+#include "base/concurrency/countdown_latch.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/basictypes.h"
 #include "gutil/ref_counted.h"
-#include "util/countdown_latch.h"
 #include "util/runtime_profile.h"
 
 using std::string;

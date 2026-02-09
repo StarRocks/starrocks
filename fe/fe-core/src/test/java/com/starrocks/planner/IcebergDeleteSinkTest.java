@@ -180,4 +180,39 @@ public class IcebergDeleteSinkTest {
         assertTrue(explainString.contains("iceberg_catalog.db.table"));
         assertTrue(explainString.contains("/tmp/iceberg"));
     }
+
+    @Test
+    public void testSinkExtraInfo() {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0), "DeleteTuple");
+
+        Column fileColumn = new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR);
+        SlotDescriptor fileSlot = new SlotDescriptor(new SlotId(0), desc);
+        fileSlot.setColumn(fileColumn);
+        desc.addSlot(fileSlot);
+
+        Column posColumn = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT);
+        SlotDescriptor posSlot = new SlotDescriptor(new SlotId(1), desc);
+        posSlot.setColumn(posColumn);
+        desc.addSlot(posSlot);
+
+        // Mock IcebergTable
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        when(nativeTable.location()).thenReturn("/tmp/iceberg");
+
+        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+
+        // Initially, sink extra info should be null
+        assertNull(sink.getSinkExtraInfo());
+
+        // Create and set sink extra info
+        com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra extraInfo =
+                new com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra();
+        sink.setSinkExtraInfo(extraInfo);
+
+        // Verify the extra info was set correctly
+        assertNotNull(sink.getSinkExtraInfo());
+        assertEquals(extraInfo, sink.getSinkExtraInfo());
+    }
 }

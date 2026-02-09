@@ -22,7 +22,7 @@ add_subdirectory(rowset)
 set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
-    decimal12.cpp
+    array_type_info.cpp
     decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
@@ -34,6 +34,7 @@ set(STORAGE_FILES
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
+    map_type_info.cpp
     publish_version_manager.cpp
     olap_common.cpp
     olap_define.cpp
@@ -65,6 +66,7 @@ set(STORAGE_FILES
     tablet_updates.cpp
     txn_manager.cpp
     types.cpp
+    struct_type_info.cpp
     update_manager.cpp
     utils.cpp
     compaction_utils.cpp
@@ -176,6 +178,7 @@ set(STORAGE_FILES
     compaction_manager.cpp
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
+    virtual_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
@@ -188,6 +191,7 @@ set(STORAGE_FILES
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
+    lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
@@ -196,14 +200,18 @@ set(STORAGE_FILES
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
+    lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
     lake/rowset.cpp
+    lake/segment_metadata_filter.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
+    lake/tablet_range_helper.cpp
+    lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
@@ -269,6 +277,8 @@ set(STORAGE_FILES
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
+    load_spill_pipeline_merge_iterator.cpp
+    load_spill_pipeline_merge_context.cpp
     index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp

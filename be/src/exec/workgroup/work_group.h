@@ -36,10 +36,7 @@ class TWorkGroup;
 
 namespace workgroup {
 
-using seconds = std::chrono::seconds;
-using milliseconds = std::chrono::microseconds;
 using steady_clock = std::chrono::steady_clock;
-using std::chrono::duration_cast;
 
 using pipeline::QueryContext;
 using WorkGroupType = TWorkGroupType::type;
@@ -157,25 +154,21 @@ public:
     // mark the workgroup is deleted, but at the present, it can not be removed from WorkGroupManager, because
     // 1. there exists pending drivers
     // 2. there is a race condition that a driver is attached to the workgroup after it is marked del.
-    void mark_del() {
+    void mark_del(const std::chrono::seconds expiration_time) {
         bool expect_false = false;
         if (_is_marked_del.compare_exchange_strong(expect_false, true)) {
-            static constexpr seconds expire_seconds{120};
-            _vacuum_ttl = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + expire_seconds).count();
+            _vacuum_ttl = steady_clock::time_point(steady_clock::now()) + expiration_time;
         }
     }
     // no drivers shall be added to this workgroup
     bool is_marked_del() const { return _is_marked_del.load(std::memory_order_acquire); }
     // a workgroup should wait several seconds to be cleaned safely.
-    bool is_expired() const {
-        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _vacuum_ttl;
-    }
+    bool is_expired() const { return steady_clock::time_point(steady_clock::now()) > _vacuum_ttl; }
 
     // return true if current workgroup is removable:
     // 1. is already marked del
     // 2. no pending drivers exists
-    // 3. wait for a period of vacuum_ttl to prevent race condition
+    // 3. wait until vacuum_ttl to prevent race condition
     bool is_removable() const {
         return is_marked_del() && _num_running_drivers.load(std::memory_order_acquire) == 0 && is_expired();
     }
@@ -252,8 +245,8 @@ private:
     int64_t _spill_mem_limit_bytes = -1;
 
     std::string _mem_pool;
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemTracker> _shared_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker = nullptr;
 
     WorkGroupDriverSchedEntity _driver_sched_entity;
@@ -264,7 +257,8 @@ private:
 
     std::atomic<size_t> _num_running_drivers = 0;
     std::atomic<size_t> _acc_num_drivers = 0;
-    int64_t _vacuum_ttl = std::numeric_limits<int64_t>::max();
+    // vacuum_ttl is set to max, as a data race might cause a thread to read `is_marked_del = true` and `vacuum_ttl = 0`
+    steady_clock::time_point _vacuum_ttl = steady_clock::time_point::max();
 
     // Metrics of this workgroup
     std::atomic<int64_t> _num_running_queries = 0;
@@ -304,6 +298,7 @@ public:
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
+    std::vector<std::string> list_memory_pools() const;
 
     using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
     void for_each_workgroup(const WorkGroupConsumer& consumer) const;
@@ -315,6 +310,7 @@ public:
     void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
+    void set_workgroup_expiration_time(std::chrono::seconds value);
 
 private:
     using MutexType = std::shared_mutex;
@@ -341,6 +337,7 @@ private:
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
+    std::chrono::seconds _workgroup_expiration_time{120};
 
     std::atomic<size_t> _sum_cpu_weight = 0;
     MemTrackerManager _shared_mem_tracker_manager;

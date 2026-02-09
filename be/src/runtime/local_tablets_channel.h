@@ -18,12 +18,12 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 
+#include "base/concurrency/bthread_shared_mutex.h"
+#include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
 #include "runtime/tablets_channel.h"
 #include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
-#include "util/bthreads/bthread_shared_mutex.h"
-#include "util/countdown_latch.h"
 #include "util/reusable_closure.h"
 
 namespace brpc {

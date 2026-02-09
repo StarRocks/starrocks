@@ -204,7 +204,12 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
 }
 
 Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
-    RETURN_IF_ERROR(_init_parquet_reader());
+    auto st = _init_parquet_reader();
+    // Initializing a reader on empty Parquet files (with 0 row groups) returns EOF,
+    // but the file schema is still available
+    if (!st.ok() && !(st.is_end_of_file() && _file_metadata != nullptr)) {
+        return st;
+    }
 
     const auto& file_schema = _file_metadata->schema();
 

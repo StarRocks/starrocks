@@ -64,6 +64,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -116,7 +117,6 @@ import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 public class DatabaseTransactionMgr {
     public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
-    private static final int MEMORY_TXN_SAMPLES = 10;
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
     private final GlobalStateMgr globalStateMgr;
@@ -1021,7 +1021,7 @@ public class DatabaseTransactionMgr {
                         return false;
                     }
 
-                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
+                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partition.getParentId(), table.writeQuorum());
                     int replicaNum = partitionInfo.getReplicationNum(partition.getParentId());
                     for (MaterializedIndex index : allIndices) {
@@ -1201,7 +1201,7 @@ public class DatabaseTransactionMgr {
                                 partitionInfo.getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
 
                         List<MaterializedIndex> allIndices =
-                                transactionState.getPartitionLoadedTblIndexes(tableId, physicalPartition);
+                                transactionState.getPartitionLoadedIndexesWithoutLock(tableId, physicalPartition);
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
@@ -2303,33 +2303,22 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    public List<Object> getSamplesForMemoryTracker() {
-        readLock();
-        try {
-            if (idToRunningTransactionState.size() > 0) {
-                return idToRunningTransactionState.values()
-                        .stream()
-                        .limit(MEMORY_TXN_SAMPLES)
-                        .collect(Collectors.toList());
-            }
-            if (idToFinalStatusTransactionState.size() > 0) {
-                return idToFinalStatusTransactionState.values()
-                        .stream()
-                        .limit(MEMORY_TXN_SAMPLES)
-                        .collect(Collectors.toList());
-            }
-            return new ArrayList<>();
-        } finally {
-            readUnlock();
-        }
-    }
-
     public void resetTransactionStateTabletCommitInfos(TransactionState transactionState) {
         writeLock();
         try {
             transactionState.resetTabletCommitInfos();
         } finally {
             writeUnlock();
+        }
+    }
+
+    public long estimateSize() {
+        readLock();
+        try {
+            return Estimator.estimate(idToRunningTransactionState, 20) +
+                    Estimator.estimate(idToFinalStatusTransactionState, 20);
+        } finally {
+            readUnlock();
         }
     }
 }

@@ -35,6 +35,7 @@ fe/mocked
 fe/ut_ports
 fe/*/target
 fe/*/bin
+fe/target/
 fe/plugin/*/target/
 fe/fe-grammar/gen
 fe/fe-grammar/src/main/antlr/com/starrocks/grammar/gen
@@ -64,8 +65,12 @@ compile_commands.json
 .classpath
 .vimspector.json
 .gdb_history
+
+# FE Plugin
 fe/plugin/hive-udf/target
 fe/plugin/spark-dpp/target
+fe/plugin/hive-udf/bin/
+fe/plugin/spark-dpp/bin/
 
 # ignore generated files
 StarRocksLex.tokens
@@ -99,7 +104,6 @@ build/
 cmake-build-debug/
 CMakeLists.txt
 .claude
-CLAUDE.md
 .clangd
 .cursor/
 
@@ -115,3 +119,4 @@ build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
 _codeql_detected_source_root
+

@@ -30,6 +30,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -77,6 +78,12 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     public void createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
             throws StarRocksException {
         TabletReshardJob job = new SplitTabletJobFactory(db, table, splitTabletClause).createTabletReshardJob();
+        addTabletReshardJob(job);
+    }
+
+    public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause mergeTabletClause)
+            throws StarRocksException {
+        TabletReshardJob job = new MergeTabletJobFactory(db, table, mergeTabletClause).createTabletReshardJob();
         addTabletReshardJob(job);
     }
 
@@ -177,8 +184,9 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
 
             // Job is done, remove expired job
             if (job.isExpired()) {
-                iterator.remove();
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId());
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId(), wal -> {
+                    iterator.remove();
+                });
                 LOG.info("Removed expired tablet reshard job. {}", job);
             }
         }

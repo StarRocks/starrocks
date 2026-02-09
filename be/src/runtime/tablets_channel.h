@@ -21,7 +21,7 @@
 #include <sstream>
 #include <string>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"

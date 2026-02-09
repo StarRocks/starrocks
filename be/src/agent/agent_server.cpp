@@ -44,14 +44,15 @@
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
+#include "base/phmap/phmap.h"
+#include "base/testutil/sync_point.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
-#include "testutil/sync_point.h"
-#include "util/phmap/phmap.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -251,8 +252,9 @@ Status AgentServer::Impl::init() {
         BUILD_DYNAMIC_TASK_THREAD_POOL(move_dir, 0, calc_real_num_threads(config::download_worker_count),
                                        std::numeric_limits<int>::max(), _thread_pool_move_dir);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL(update_tablet_meta_info, 0, 1, std::numeric_limits<int>::max(),
-                                       _thread_pool_update_tablet_meta_info);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(update_tablet_meta_info, 0,
+                                       std::max(1, config::update_tablet_meta_info_worker_count),
+                                       std::numeric_limits<int>::max(), _thread_pool_update_tablet_meta_info);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(drop_auto_increment_map_dir, 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_drop_auto_increment_map);

@@ -39,9 +39,9 @@
 #include <memory>
 #include <queue>
 
+#include "base/time/time.h"
 #include "common/logging.h"
 #include "util/ratelimit.h"
-#include "util/time.h"
 
 namespace starrocks {
 

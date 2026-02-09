@@ -126,6 +126,10 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         wrappedIO = new ResolvingFileIO();
         wrappedIO.initialize(properties);
 
+        if (conf != null) {
+            wrappedIO.setConf(conf.get());
+        }
+
         if (ENABLE_DISK_CACHE) {
             this.fileContentCache = TwoLevelCacheHolder.INSTANCE;
         } else {
@@ -155,6 +159,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public void setConf(Configuration conf) {
         this.conf = new SerializableConfiguration(conf)::get;
+        if (wrappedIO != null) {
+            wrappedIO.setConf(conf);
+        }
     }
 
     @Override

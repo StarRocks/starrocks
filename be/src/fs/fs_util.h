@@ -18,9 +18,9 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
 #include "common/config.h"
 #include "fs/fs.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::fs {
 

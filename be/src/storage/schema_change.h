@@ -38,7 +38,6 @@
 #include <queue>
 #include <vector>
 
-#include "column/datum.h"
 #include "column/datum_convert.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
@@ -47,6 +46,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema_change_utils.h"
+#include "types/datum.h"
 
 namespace starrocks {
 class Field;

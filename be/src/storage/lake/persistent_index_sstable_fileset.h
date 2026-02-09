@@ -19,11 +19,11 @@
 #include <string>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/sstable/comparator.h"
-#include "util/slice.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

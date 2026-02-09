@@ -16,7 +16,7 @@
 
 #include <numeric>
 
-#include "util/metrics.h"
+#include "base/metrics.h"
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 

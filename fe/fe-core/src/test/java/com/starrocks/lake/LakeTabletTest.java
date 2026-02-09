@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -32,13 +33,20 @@ public class LakeTabletTest {
         Assertions.assertEquals(tablet.getId(), deserializedTablet.getId());
         Assertions.assertEquals(tablet.getDataSize(true), deserializedTablet.getDataSize(true));
         Assertions.assertEquals(tablet.getRowCount(0), deserializedTablet.getRowCount(0));
-        Assertions.assertNotNull(deserializedTablet.getRange());
+        Assertions.assertNull(deserializedTablet.getRange());
     }
 
     @Test
     public void testDefaultConstructor() {
         LakeTablet tablet = new LakeTablet();
-        Assertions.assertNotNull(tablet.getRange());
+        Assertions.assertNull(tablet.getRange());
+    }
+
+    @Test
+    public void testRangeSerialization() {
+        LakeTablet tablet = new LakeTablet(10002L, new TabletRange());
+        String json = GsonUtils.GSON.toJson(tablet);
+        LakeTablet deserializedTablet = GsonUtils.GSON.fromJson(json, LakeTablet.class);
+        Assertions.assertNotNull(deserializedTablet.getRange());
     }
 }
-

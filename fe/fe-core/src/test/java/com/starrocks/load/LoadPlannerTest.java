@@ -951,7 +951,7 @@ public class LoadPlannerTest {
                 result = 3;
                 table.getBaseIndexMetaId();
                 result = 1;
-                table.getKeyColumnsByIndexId((long) 1);
+                table.getKeyColumnsByIndexMetaId((long) 1);
                 result = keyColumns;
                 table.getBaseSchema();
                 result = columns;
@@ -1069,9 +1069,9 @@ public class LoadPlannerTest {
                 result = 3;
                 table.getBaseIndexMetaId();
                 result = 1;
-                table.getIndexIdToSchema();
+                table.getIndexMetaIdToSchema();
                 result = indexSchema;
-                table.getKeyColumnsByIndexId((long) 1);
+                table.getKeyColumnsByIndexMetaId((long) 1);
                 result = keyColumns;
                 table.getBaseSchema();
                 result = columns;

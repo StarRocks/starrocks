@@ -84,6 +84,19 @@ public class JDBCMetaCache<K, V> {
         }
     }
 
+    public V getIfPresent(@NonNull K key) {
+        if (this.metaCache != null && this.enableCache) {
+            return this.metaCache.getIfPresent(key);
+        }
+        return null;
+    }
+
+    public void put(@NonNull K key, V value) {
+        if (this.metaCache != null && this.enableCache) {
+            this.metaCache.put(key, value);
+        }
+    }
+
     public boolean isEnableCache() {
         return enableCache;
     }

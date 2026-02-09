@@ -16,14 +16,14 @@
 
 #include <future>
 
-#include "column/datum.h"
+#include "base/url_coding.h"
 #include "connector/async_flush_stream_poller.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-#include "util/url_coding.h"
+#include "types/datum.h"
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -74,6 +74,10 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
         TSinkCommitInfo commit_info;
         commit_info.__set_iceberg_data_file(iceberg_data_file);
         _state->add_sink_commit_info(commit_info);
+
+        COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
     }
 }
 

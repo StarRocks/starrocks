@@ -83,7 +83,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -335,7 +334,7 @@ public class AnalyzeStmtTest {
 
         AnalyzeMgr analyzeMgr = getConnectContext().getGlobalStateMgr().getAnalyzeMgr();
         analyzeMgr.dropBasicStatsMetaAndData(getConnectContext(),
-                Set.of(tbl.getId(), tb2.getId(), structA.getId(), upperTbl.getId()));
+                List.of(tbl.getId(), tb2.getId(), structA.getId(), upperTbl.getId()));
 
 
         BasicStatsMeta meta1 = new BasicStatsMeta(db.getId(), tbl.getId(), null,
@@ -568,7 +567,7 @@ public class AnalyzeStmtTest {
         OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
                 .getLocalMetastore().getDb("db").getTable("tbl");
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
         }
 
         String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -577,7 +576,7 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(400000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(400000);
         }
 
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -586,7 +585,7 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(20000000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(20000000);
         }
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
                 "properties(\"histogram_sample_ratio\"=\"0.9\")";
@@ -890,6 +889,25 @@ public class AnalyzeStmtTest {
         int failedSize = types.stream().filter(x -> x == StatsConstants.ScheduleStatus.FAILED).toList().size();
         Assertions.assertEquals(3, pendingSize);
         Assertions.assertEquals(3, failedSize);
+    }
+
+    @Test
+    public void testStatisticSQLBuilderBatchDropSqls() {
+        List<Long> tableIds = List.of(1L, 2L, 3L);
+        String sampleSql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, StatsConstants.AnalyzeType.SAMPLE);
+        Assertions.assertEquals("DELETE FROM table_statistic_v1 WHERE TABLE_ID IN (1, 2, 3)", sampleSql);
+
+        String fullSql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, StatsConstants.AnalyzeType.FULL);
+        Assertions.assertEquals("DELETE FROM column_statistics WHERE TABLE_ID IN (1, 2, 3)", fullSql);
+
+        Assertions.assertThrows(IllegalStateException.class, () ->
+                StatisticSQLBuilder.buildDropStatisticsSQL(List.of(), StatsConstants.AnalyzeType.FULL));
+
+        String mcSql = StatisticSQLBuilder.buildDropMultipleStatisticsSQL(List.of(10L, 20L));
+        Assertions.assertEquals("DELETE FROM multi_column_statistics WHERE TABLE_ID IN (10, 20)", mcSql);
+
+        String histogramSql = StatisticSQLBuilder.buildDropHistogramSQL(List.of(100L));
+        Assertions.assertEquals("delete from histogram_statistics where table_id in (100)", histogramSql);
     }
 
 }

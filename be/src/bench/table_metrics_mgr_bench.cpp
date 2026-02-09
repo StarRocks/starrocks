@@ -19,8 +19,8 @@
 #include <cstdint>
 #include <memory>
 
+#include "base/metrics.h"
 #include "common/config.h"
-#include "util/metrics.h"
 #include "util/table_metrics.h"
 
 namespace starrocks {

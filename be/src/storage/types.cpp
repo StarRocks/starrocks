@@ -34,31 +34,31 @@
 
 #include "storage/types.h"
 
+#include "base/hash/unaligned_access.h"
+#include "base/string/slice.h"
+#include "base/string/string_parser.hpp"
+#include "base/types/decimal12.h"
+#include "base/types/int128.h"
+#include "base/utility/mem_util.hpp"
+#include "base/utility/mysql_global.h"
 #include "gutil/strings/numbers.h"
-#include "runtime/datetime_value.h"
-#include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"
-#include "runtime/time_types.h"
-#include "runtime/types.h"
+#include "storage/array_type_info.h"
 #include "storage/collection.h"
 #include "storage/convert_helper.h"
-#include "storage/decimal12.h"
 #include "storage/decimal_type_info.h"
+#include "storage/map_type_info.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
+#include "storage/struct_type_info.h"
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/type_traits.h"
-#include "types/array_type_info.h"
 #include "types/date_value.hpp"
-#include "types/large_int_value.h"
-#include "types/map_type_info.h"
-#include "types/struct_type_info.h"
+#include "types/datetime_value.h"
+#include "types/decimalv2_value.h"
+#include "types/time_types.h"
+#include "types/type_descriptor.h"
 #include "util/hash_util.hpp"
-#include "util/mem_util.hpp"
-#include "util/mysql_global.h"
-#include "util/slice.h"
-#include "util/string_parser.hpp"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -357,6 +357,32 @@ TypeInfoPtr get_type_info(const TypeDescriptor& type_desc) {
     } else {
         return get_type_info(type_desc.type, type_desc.precision, type_desc.scale);
     }
+}
+
+TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
+    LogicalType ftype = type_info->type();
+
+    bool is_array = false;
+    if (ftype == TYPE_ARRAY) {
+        is_array = true;
+        type_info = get_item_type_info(type_info).get();
+        ftype = type_info->type();
+    }
+
+    LogicalType ltype = scalar_field_type_to_logical_type(ftype);
+    DCHECK(ltype != TYPE_UNKNOWN);
+    int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
+    int precision = type_info->precision();
+    int scale = type_info->scale();
+    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, len, precision, scale);
+
+    if (is_array) {
+        TypeDescriptor arr;
+        arr.type = TYPE_ARRAY;
+        arr.children.emplace_back(ret);
+        return arr;
+    }
+    return ret;
 }
 
 TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {

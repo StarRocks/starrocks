@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "util/gc_helper_smoothstep.h"
-#include "util/monotime.h"
+#include "base/gc/gc_helper_smoothstep.h"
+#include "base/time/monotime.h"
 
 namespace starrocks {
 

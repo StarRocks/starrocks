@@ -18,6 +18,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "common/logging.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
@@ -28,7 +29,6 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
-#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -149,7 +149,7 @@ void Operator::close(RuntimeState* state) {
             for (const auto& [filter_id, desc] : rf_bloom_filters->descriptors()) {
                 rf_desc += "<" + std::to_string(filter_id) + ": ";
                 if (desc != nullptr && desc->runtime_filter(0) != nullptr) {
-                    rf_desc += to_string(desc->runtime_filter(0)->type());
+                    rf_desc += desc->runtime_filter(0)->debug_string();
                 } else {
                     rf_desc += "NULL";
                 }
@@ -370,8 +370,7 @@ void OperatorFactory::_prepare_runtime_holders(const std::vector<RuntimeFilterHo
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            WARN_IF_ERROR(filter->prepare(runtime_state()), "prepare filter expression failed");
-            WARN_IF_ERROR(filter->open(runtime_state()), "open filter expression failed");
+            DCHECK(filter->opened());
             runtime_in_filters->push_back(filter);
         }
     }

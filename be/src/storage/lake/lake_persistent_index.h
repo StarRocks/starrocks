@@ -176,12 +176,12 @@ private:
     static Status prepare_merging_iterator(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                            TxnLogPB* txn_log,
                                            std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-                                           std::unique_ptr<sstable::Iterator>* merging_iter_ptr,
-                                           bool* merge_base_level);
+                                           std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level,
+                                           bool* contain_shared_sstables);
 
     static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
             std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-            int64_t tablet_id);
+            const TabletMetadataPtr& metadata, bool contain_shared_sstables);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
 

@@ -90,7 +90,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -190,14 +189,6 @@ public class SparkLoadPendingTask extends LoadTask {
                             tableIdToPartitionIds.get(tableId));
                     etlTable = new EtlTable(etlIndexes, etlPartitionInfo);
                     tables.put(tableId, etlTable);
-
-                    // add table indexes to transaction state
-                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                            .getTransactionState(dbId, transactionId);
-                    if (txnState == null) {
-                        throw new LoadException("txn does not exist. id: " + transactionId);
-                    }
-                    txnState.addTableIndexes(table);
                 }
 
                 // file group
@@ -255,9 +246,9 @@ public class SparkLoadPendingTask extends LoadTask {
     private List<EtlIndex> createEtlIndexes(OlapTable table) throws LoadException {
         List<EtlIndex> etlIndexes = Lists.newArrayList();
 
-        for (Map.Entry<Long, List<Column>> entry : table.getIndexIdToSchema().entrySet()) {
-            long indexId = entry.getKey();
-            int schemaHash = table.getSchemaHashByIndexMetaId(indexId);
+        for (Map.Entry<Long, List<Column>> entry : table.getIndexMetaIdToSchema().entrySet()) {
+            long indexMetaId = entry.getKey();
+            int schemaHash = table.getSchemaHashByIndexMetaId(indexMetaId);
 
             // columns
             List<EtlColumn> etlColumns = Lists.newArrayList();
@@ -276,7 +267,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
             // index type
             String indexType = null;
-            KeysType keysType = table.getKeysTypeByIndexMetaId(indexId);
+            KeysType keysType = table.getKeysTypeByIndexMetaId(indexMetaId);
             switch (keysType) {
                 case DUP_KEYS:
                     indexType = "DUPLICATE";
@@ -294,9 +285,9 @@ public class SparkLoadPendingTask extends LoadTask {
             }
 
             // is base index
-            boolean isBaseIndex = indexId == table.getBaseIndexMetaId() ? true : false;
+            boolean isBaseIndex = indexMetaId == table.getBaseIndexMetaId();
 
-            etlIndexes.add(new EtlIndex(indexId, etlColumns, schemaHash, indexType, isBaseIndex));
+            etlIndexes.add(new EtlIndex(indexMetaId, etlColumns, schemaHash, indexType, isBaseIndex));
         }
 
         return etlIndexes;

@@ -38,12 +38,12 @@
 #include <functional>
 #include <memory>
 
+#include "base/hash/murmur_hash3.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "storage/utils.h"
 #include "util/hash_util.hpp"
-#include "util/murmur_hash3.h"
 
 namespace starrocks {
 class Slice;

@@ -18,14 +18,12 @@
 #include <utility>
 #include <vector>
 
-#include "column/chunk.h"
+#include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/decimalv3.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/index/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
@@ -33,9 +31,10 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "types/datum.h"
+#include "types/decimalv3.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
-#include "util/string_parser.hpp"
 
 class Roaring;
 
@@ -270,6 +269,9 @@ ColumnPredicate* new_column_in_predicate_from_datum(const TypeInfoPtr& type, Col
                                                     const std::vector<Datum>& operands);
 ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
                                                         const std::vector<Datum>& operands);
+
+Status compound_and_predicates_evaluate(const std::vector<const ColumnPredicate*>& predicates, const Column* col,
+                                        uint8_t* selection, uint16_t* selected_idx, uint16_t from, uint16_t to);
 
 template <LogicalType LT>
 class Bitset;

@@ -18,7 +18,7 @@
 
 #include <vector>
 
-#include "util/phmap/phmap.h"
+#include "base/phmap/phmap.h"
 
 namespace starrocks {
 

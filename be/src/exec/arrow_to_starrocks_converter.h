@@ -17,6 +17,7 @@
 #include <arrow/array.h>
 #include <arrow/status.h>
 
+#include "base/utility/meta_macro.h"
 #include "column/array_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -25,9 +26,8 @@
 #include "exec/arrow_type_traits.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
-#include "util/meta_macro.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 class RuntimeState;

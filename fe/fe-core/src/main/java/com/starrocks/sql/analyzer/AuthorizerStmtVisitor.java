@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -68,6 +69,7 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -638,6 +640,31 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     statement.getCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), statement.getDbName());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkDbAction(context,
+                    statement.getCatalogName(), statement.getDbName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    statement.getCatalogName(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectType.DATABASE.name(), statement.getDbName());
+        }
+        if (statement.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+            String storageVolume = statement.getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+            try {
+                Authorizer.checkStorageVolumeAction(context, storageVolume, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        statement.getCatalogName(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), ObjectType.STORAGE_VOLUME.name(), storageVolume);
+            }
         }
         return null;
     }
@@ -2141,6 +2168,20 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitAdminShowConfigStatement(AdminShowConfigStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                         ConnectContext context) {
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {

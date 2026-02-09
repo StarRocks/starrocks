@@ -269,6 +269,7 @@
                         "data_source/catalog/hudi_catalog",
                         "data_source/catalog/deltalake_catalog",
                         "data_source/catalog/jdbc_catalog",
+                        "data_source/catalog/benchmark_catalog",
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
@@ -418,6 +419,7 @@
                         "integrations/BI_integrations/Hex",
                         "integrations/BI_integrations/Querybook",
                         "integrations/BI_integrations/QuickBI",
+                        "integrations/BI_integrations/Rill",
                         "integrations/BI_integrations/Tableau_Desktop",
                         "integrations/BI_integrations/Metabase"
                     ]
@@ -439,6 +441,10 @@
                 {
                     "type": "doc",
                     "id": "integrations/other_integrations/datadog_support"
+                },
+                {
+                    "type": "doc",
+                    "id": "integrations/airflow"
                 },
                 {
                     "type": "doc",
@@ -522,7 +528,17 @@
                 "administration/Data_recovery",
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
-                "administration/http_interface",
+                {
+                    "type": "category",
+                    "label": "HTTP Interface",
+                    "link": {
+                        "type": "doc",
+                        "id": "administration/http_interface"
+                    },
+                    "items": [
+                        "administration/http_interface/query_detail"
+                    ]
+                },
                 "administration/sql_digest",
         {
             "type": "category",

@@ -402,7 +402,7 @@ public class ShowStmtAnalyzer {
                             for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
                                 if (olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId())
                                         .equalsIgnoreCase(node.getTableName())) {
-                                    List<Column> columns = olapTable.getIndexIdToSchema().get(mvMeta.getIndexMetaId());
+                                    List<Column> columns = olapTable.getSchemaByIndexMetaId(mvMeta.getIndexMetaId());
                                     for (Column column : columns) {
                                         // Extra string (aggregation and bloom filter)
                                         List<String> extras = Lists.newArrayList();
@@ -455,23 +455,23 @@ public class ShowStmtAnalyzer {
                         node.setOlapTable(true);
                         OlapTable olapTable = (OlapTable) table;
                         Set<String> bfColumns = olapTable.getBfColumnNames();
-                        Map<Long, List<Column>> indexIdToSchema = olapTable.getIndexIdToSchema();
+                        Map<Long, List<Column>> indexMetaIdToSchema = olapTable.getIndexMetaIdToSchema();
 
                         // indices order
                         List<Long> indices = Lists.newArrayList();
                         indices.add(olapTable.getBaseIndexMetaId());
-                        for (Long indexId : indexIdToSchema.keySet()) {
-                            if (indexId != olapTable.getBaseIndexMetaId()) {
-                                indices.add(indexId);
+                        for (Long indexMetaId : indexMetaIdToSchema.keySet()) {
+                            if (indexMetaId != olapTable.getBaseIndexMetaId()) {
+                                indices.add(indexMetaId);
                             }
                         }
 
                         // add all indices
                         for (int i = 0; i < indices.size(); ++i) {
-                            long indexId = indices.get(i);
-                            List<Column> columns = indexIdToSchema.get(indexId);
-                            String indexName = olapTable.getIndexNameByMetaId(indexId);
-                            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                            long indexMetaId = indices.get(i);
+                            List<Column> columns = indexMetaIdToSchema.get(indexMetaId);
+                            String indexName = olapTable.getIndexNameByMetaId(indexMetaId);
+                            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
                             for (int j = 0; j < columns.size(); ++j) {
                                 Column column = columns.get(j);
 

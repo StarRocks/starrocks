@@ -61,7 +61,7 @@ public:
         uint64_t value = 0;
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (lt_is_string<LT>) {
+        if constexpr (lt_is_string_or_binary<LT>) {
             Slice s = column->get_slice(row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
@@ -77,7 +77,7 @@ public:
         // init state if needed
         _init_if_needed(ctx, columns, state);
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
-        if constexpr (lt_is_string<LT>) {
+        if constexpr (lt_is_string_or_binary<LT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
                 Slice s = column->get_slice(i);
@@ -163,7 +163,7 @@ public:
         for (size_t i = 0; i < chunk_size; ++i) {
             int64_t memory_usage = 0;
             DataSketchesHll hll{log_k, tgt_type, &memory_usage};
-            if constexpr (lt_is_string<LT>) {
+            if constexpr (lt_is_string_or_binary<LT>) {
                 Slice s = column->get_slice(i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {

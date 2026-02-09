@@ -32,4 +32,6 @@ public class OpRuleBit {
     public static final int OP_PARTITION_PRUNED = 3;
     // Operator has been mv transparent union rewrite and needs to prune agg columns.
     public static final int OP_MV_AGG_PRUNE_COLUMNS = 4;
+    // Operator has been push down topn below agg or not, if push down topn, no need to push down again.
+    public static final int OP_PUSH_DOWN_TOPN_AGG = 5;
 }

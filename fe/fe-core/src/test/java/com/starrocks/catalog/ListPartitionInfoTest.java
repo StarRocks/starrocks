@@ -30,9 +30,12 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
@@ -41,6 +44,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -109,7 +113,9 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testMultiListPartition(@Injectable OlapTable dstTable) throws StarRocksException {
+    public void testMultiListPartition(@Injectable OlapTable dstTable,
+                                       @Mocked GlobalStateMgr globalStateMgr,
+                                       @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
 
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
@@ -148,6 +154,14 @@ public class ListPartitionInfoTest {
         idToColumn.put(ColumnId.create("dt"), new Column("dt", StringType.STRING));
         idToColumn.put(ColumnId.create("province"), new Column("province", StringType.STRING));
         new Expectations() {{
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitions();

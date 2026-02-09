@@ -170,7 +170,15 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAlterTaskStatement(AlterTaskStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -592,6 +600,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -930,6 +942,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

@@ -6,21 +6,157 @@ displayed_sidebar: docs
 
 :::warning
 
-After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5.1, otherwise it will cause metadata incompatibility and FE crash. You must downgrade the cluster to v3.5.2 or later to prevent these issues.
+**Downgrade Notes**
+
+- After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5.1, otherwise it will cause metadata incompatibility and FE crash. You must downgrade the cluster to v3.5.2 or later to prevent these issues.
+- Before downgrading clusters from v4.0.2 to v4.0.1, v4.0.0, and v3.5.2~v3.5.10, execute the following statement:
+
+  ```SQL
+  SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
+  ```
+
+  After upgrading the cluster back to v4.0.2 and later, execute the following statement:
+
+  ```SQL
+  SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=true;
+  ```
 
 :::
+
+## 4.0.5
+
+Release Date: February 3, 2026
+
+### Improvements
+
+- Bumped Paimon version to 1.3.1. [#67098](https://github.com/StarRocks/starrocks/pull/67098)
+- Restored missing optimizations in DP statistics estimation to reduce redundant calculations. [#67852](https://github.com/StarRocks/starrocks/pull/67852)
+- Improved pruning in DP Join reorder to skip expensive candidate plans earlier. [#67828](https://github.com/StarRocks/starrocks/pull/67828)
+- Optimized JoinReorderDP partition enumeration to reduce object allocation and added an atom count cap (&le; 62). [#67643](https://github.com/StarRocks/starrocks/pull/67643)
+- Optimized DP join reorder pruning and added checks to BitSet to reduce stream operation overhead. [#67644](https://github.com/StarRocks/starrocks/pull/67644)
+- Skipped predicate column statistics collection during DP statistics estimation to reduce CPU overhead. [#67663](https://github.com/StarRocks/starrocks/pull/67663)
+- Optimized correlated Join row count estimation to avoid repeatedly building `Statistics` objects. [#67773](https://github.com/StarRocks/starrocks/pull/67773)
+- Reduced memory allocations in `Statistics.getUsedColumns`. [#67786](https://github.com/StarRocks/starrocks/pull/67786)
+- Avoided redundant `Statistics` map copies when only row counts are updated. [#67777](https://github.com/StarRocks/starrocks/pull/67777)
+- Skipped aggregate pushdown logic when no aggregation exists in the query to reduce overhead. [#67603](https://github.com/StarRocks/starrocks/pull/67603)
+- Improved COUNT DISTINCT over windows, added support for fused multi-distinct aggregations, and optimized CTE generation. [#67453](https://github.com/StarRocks/starrocks/pull/67453)
+- Supports `map_agg` function in the Trino dialect. [#66673](https://github.com/StarRocks/starrocks/pull/66673)
+- Supports batching retrieval of LakeTablet location information during physical planning to reduce RPC calls in shared-data clusters. [#67325](https://github.com/StarRocks/starrocks/pull/67325)
+- Added a thread pool for Publish Version transactions to shared-nothing clusters to improve concurrency. [#67797](https://github.com/StarRocks/starrocks/pull/67797)
+- Optimized LocalMetastore locking granularity by replacing database-level locks with table-level locks. [#67658](https://github.com/StarRocks/starrocks/pull/67658)
+- Refactored MergeCommitTask lifecycle management and added support for task cancellation. [#67425](https://github.com/StarRocks/starrocks/pull/67425)
+- Supports intervals for automated cluster snapshots. [#67525](https://github.com/StarRocks/starrocks/pull/67525)
+- Automatically cleaned up unused `mem_pool` entries in MemTrackerManager. [#67347](https://github.com/StarRocks/starrocks/pull/67347)
+- Ignored `information_schema` queries during warehouse idle checks. [#67958](https://github.com/StarRocks/starrocks/pull/67958)
+- Supports dynamically enabling global shuffle for Iceberg table sinks based on data distribution. [#67442](https://github.com/StarRocks/starrocks/pull/67442)
+- Added Profile metrics for connector sink modules. [#67761](https://github.com/StarRocks/starrocks/pull/67761)
+- Improved the collection and display of load spill metrics in Profiles, distinguishing between local and remote I/O. [#67527](https://github.com/StarRocks/starrocks/pull/67527)
+- Changed Async-Profiler log level to Error to avoid repeating warning logs. [#67297](https://github.com/StarRocks/starrocks/pull/67297)
+- Notified Starlet during BE shutdown to report SHUTDOWN status to StarMgr. [#67461](https://github.com/StarRocks/starrocks/pull/67461)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Lacking support for legal simple paths containing hyphens (`-`). [#67988](https://github.com/StarRocks/starrocks/pull/67988)
+- Runtime error when aggregate pushdown occurred on grouping keys involving JSON types. [#68142](https://github.com/StarRocks/starrocks/pull/68142)
+- Issue where JSON path rewrite rules incorrectly pruned partition columns referenced in partition predicates. [#67986](https://github.com/StarRocks/starrocks/pull/67986)
+- Type mismatch issue when rewriting simple aggregation using statistics. [#67829](https://github.com/StarRocks/starrocks/pull/67829)
+- Potential heap-buffer-overflow in partition Joins. [#67435](https://github.com/StarRocks/starrocks/pull/67435)
+- Duplicate `slot_ids` introduced when pushing down heavy expressions. [#67477](https://github.com/StarRocks/starrocks/pull/67477)
+- Division-by-zero error in ExecutionDAG fragment connection for lacking precondition checks. [#67918](https://github.com/StarRocks/starrocks/pull/67918)
+- Potential issues caused by fragment parallel prepare for single BE. [#67798](https://github.com/StarRocks/starrocks/pull/67798)
+- Operator terminates incorrectly for lacking `set_finished` method for RawValuesSourceOperator. [#67609](https://github.com/StarRocks/starrocks/pull/67609)
+- BE crash caused by unsupported DECIMAL256 type (precision > 38) in column aggregators. [#68134](https://github.com/StarRocks/starrocks/pull/68134)
+- Shared-data clusters lack support for Fast Schema Evolution v2 over DELETE operations by carrying `schema_key` in requests. [#67456](https://github.com/StarRocks/starrocks/pull/67456)
+- Shared-data clusters lack support for Fast Schema Evolution v2 over synchronous materialized views and traditional schema changes. [#67443](https://github.com/StarRocks/starrocks/pull/67443)
+- Vacuum might accidentally delete files when file bundling is disabled during FE downgrade. [#67849](https://github.com/StarRocks/starrocks/pull/67849)
+- Incorrect graceful exit handling in MySQLReadListener. [#67917](https://github.com/StarRocks/starrocks/pull/67917)
+
+## 4.0.4
+
+Release Date: January 16, 2026
+
+### Improvements
+
+- Supports Parallel Prepare for Operators and Drivers, and single-node batch fragment deployment to improve query scheduling performance. [#63956](https://github.com/StarRocks/starrocks/pull/63956)
+- Optimized `deltaRows` calculation with lazy evaluation for large partition tables. [#66381](https://github.com/StarRocks/starrocks/pull/66381)
+- Optimized Flat JSON processing with sequential iteration and improved path derivation. [#66941](https://github.com/StarRocks/starrocks/pull/66941) [#66850](https://github.com/StarRocks/starrocks/pull/66850)
+- Supports releasing Spill Operator memory earlier to reduce memory usage in group execution. [#66669](https://github.com/StarRocks/starrocks/pull/66669)
+- Optimized the logic to reduce string comparison overhead. [#66570](https://github.com/StarRocks/starrocks/pull/66570)
+- Improved skew detection in `GroupByCountDistinctDataSkewEliminateRule` and `SkewJoinOptimizeRule` to support histogram and NULL-based strategies. [#66640](https://github.com/StarRocks/starrocks/pull/66640) [#67100](https://github.com/StarRocks/starrocks/pull/67100)
+- Enhanced Column ownership management in Chunk using Move semantics to reduce Copy-On-Write overhead. [#66805](https://github.com/StarRocks/starrocks/pull/66805)
+- For shared-data clusters, added FE `TableSchemaService` and updated `MetaScanNode` to support Fast Schema Evolution v2 schema retrieval. [#66142](https://github.com/StarRocks/starrocks/pull/66142) [#66970](https://github.com/StarRocks/starrocks/pull/66970)
+- Supports multi-warehouse Backend resource statistics and parallelism (DOP) calculation for better resource isolation. [#66632](https://github.com/StarRocks/starrocks/pull/66632)
+- Supports configuring Iceberg split size via StarRocks session variable `connector_huge_file_size`. [#67044](https://github.com/StarRocks/starrocks/pull/67044)
+- Supports label-formatted statistics in `QueryDumpDeserializer`. [#66656](https://github.com/StarRocks/starrocks/pull/66656)
+- Added an FE configuration `lake_enable_fullvacuum` (Default: `false`) to allow disabling Full Vacuum in shared-data clusters. [#63859](https://github.com/StarRocks/starrocks/pull/63859)
+- Upgraded lz4 dependency to v1.10.0. [#67045](https://github.com/StarRocks/starrocks/pull/67045)
+- Added fallback logic for sample-type cardinality estimation when row count is 0. [#65599](https://github.com/StarRocks/starrocks/pull/65599)
+- Validated Strict Weak Ordering property for lambda comparator in `array_sort`. [#66951](https://github.com/StarRocks/starrocks/pull/66951)
+- Optimized error messages when fetching external table metadata (Delta/Hive/Hudi/Iceberg) fails, showing root causes. [#66916](https://github.com/StarRocks/starrocks/pull/66916)
+- Supports dumping pipeline status on query timeout and cancelling with `TIMEOUT` state in FE. [#66540](https://github.com/StarRocks/starrocks/pull/66540)
+- Displays matched rule index in SQL blacklist error messages. [#66618](https://github.com/StarRocks/starrocks/pull/66618)
+- Added labels to column statistics in `EXPLAIN` output. [#65899](https://github.com/StarRocks/starrocks/pull/65899)
+- Filtered out "cancel fragment" logs for normal query completions (for example, LIMIT reached). [#66506](https://github.com/StarRocks/starrocks/pull/66506)
+- Reduced Backend heartbeat failure logs when the warehouse is suspended. [#66733](https://github.com/StarRocks/starrocks/pull/66733)
+- Supports `IF EXISTS` in the `ALTER STORAGE VOLUME` syntax. [#66691](https://github.com/StarRocks/starrocks/pull/66691)
+
+### Bug Fix
+
+The following issues have been fixed:
+
+- Incorrect `DISTINCT` and `GROUP BY` results under Low Cardinality optimization due to missing `withLocalShuffle`. [#66768](https://github.com/StarRocks/starrocks/pull/66768)
+- Rewrite error for JSON v2 functions with Lambda expressions. [#66550](https://github.com/StarRocks/starrocks/pull/66550)
+- Incorrect application of Partition Join in Null-aware Left Anti Join within correlated subqueries. [#67038](https://github.com/StarRocks/starrocks/pull/67038)
+- Incorrect row count calculation in the Meta Scan rewrite rule. [#66852](https://github.com/StarRocks/starrocks/pull/66852)
+- Nullable property mismatched in Union Node when rewriting Meta Scan by statistics. [#67051](https://github.com/StarRocks/starrocks/pull/67051)
+- BE crash caused by optimization logic for Ranking window functions when `PARTITION BY` and `ORDER BY` are missing. [#67094](https://github.com/StarRocks/starrocks/pull/67094)
+- Potential wrong results in Group Execution Join with window functions. [#66441](https://github.com/StarRocks/starrocks/pull/66441)
+- Incorrect results from `PartitionColumnMinMaxRewriteRule` under specific filter conditions. [#66356](https://github.com/StarRocks/starrocks/pull/66356)
+- Incorrect Nullable property deduction in Union operations after aggregation. [#65429](https://github.com/StarRocks/starrocks/pull/65429)
+- Crash in `percentile_approx_weighted` when handling compression parameters. [#64838](https://github.com/StarRocks/starrocks/pull/64838)
+- Crash when spilling with large string encoding. [#61495](https://github.com/StarRocks/starrocks/pull/61495)
+- Crash triggered by multiple calls to `set_collector` when pushing down local TopN. [#66199](https://github.com/StarRocks/starrocks/pull/66199)
+- Dependency deduction error in LowCardinality rewrite logic. [#66795](https://github.com/StarRocks/starrocks/pull/66795)
+- Rowset ID leak when rowset commit fails. [#66301](https://github.com/StarRocks/starrocks/pull/66301)
+- Metacache lock contention. [#66637](https://github.com/StarRocks/starrocks/pull/66637)
+- Ingestion failure when column-mode partial update is used with conditional update. [#66139](https://github.com/StarRocks/starrocks/pull/66139)
+- Concurrent import failure caused by Tablet deletion during the ALTER operation. [#65396](https://github.com/StarRocks/starrocks/pull/65396)
+- Tablet metadata load error due to RocksDB iteration timeout. [#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- Compression settings were not applied during table creation and Schema Change in shared-data clusters. [#65673](https://github.com/StarRocks/starrocks/pull/65673)
+- Delete Vector CRC32 compatibility issue during upgrade. [#65442](https://github.com/StarRocks/starrocks/pull/65442)
+- Status check logic error in file cleanup after clone task failure. [#65709](https://github.com/StarRocks/starrocks/pull/65709)
+- Abnormal statistics collection logic after `INSERT OVERWRITE`. [#65327](https://github.com/StarRocks/starrocks/pull/65327) [#65298](https://github.com/StarRocks/starrocks/pull/65298) [#65225](https://github.com/StarRocks/starrocks/pull/65225)
+- Foreign Key constraints were lost after FE restart. [#66474](https://github.com/StarRocks/starrocks/pull/66474)
+- Metadata retrieval error after Warehouse deletion. [#66436](https://github.com/StarRocks/starrocks/pull/66436)
+- Inaccurate Audit Log scan statistics under high selectivity filters. [#66280](https://github.com/StarRocks/starrocks/pull/66280)
+- Incorrect query error rate metrics calculation logic. [#65891](https://github.com/StarRocks/starrocks/pull/65891)
+- Potential MySQL connection leaks when tasks exit. [#66829](https://github.com/StarRocks/starrocks/pull/66829)
+- BE status was not updated immediately on the SIGSEGV crash. [#66212](https://github.com/StarRocks/starrocks/pull/66212)
+- NPE during LDAP user login. [#65843](https://github.com/StarRocks/starrocks/pull/65843)
+- Inaccurate error log when switching users in HTTP SQL requests. [#65371](https://github.com/StarRocks/starrocks/pull/65371)
+- HTTP context leaks during TCP connection reuse. [#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- Missing QueryDetail in Profile logs for queries forwarded from Follower. [#64395](https://github.com/StarRocks/starrocks/pull/64395)
+- Missing Prepare/Execute details in Audit logs. [#65448](https://github.com/StarRocks/starrocks/pull/65448)
+- Crash caused by HyperLogLog memory allocation failures. [#66747](https://github.com/StarRocks/starrocks/pull/66747)
+- Issue with the `trim` function memory reservation. [#66477](https://github.com/StarRocks/starrocks/pull/66477) [#66428](https://github.com/StarRocks/starrocks/pull/66428)
+- CVE-2025-66566 and CVE-2025-12183. [#66453](https://github.com/StarRocks/starrocks/pull/66453) [#66362](https://github.com/StarRocks/starrocks/pull/66362) [#67053](https://github.com/StarRocks/starrocks/pull/67053) 
+- Race condition in Exec Group driver submission. [#66099](https://github.com/StarRocks/starrocks/pull/66099)
+- Use-after-free risk in Pipeline countdown. [#65940](https://github.com/StarRocks/starrocks/pull/65940)
+- `MemoryScratchSinkOperator` hangs when the queue closes. [#66041](https://github.com/StarRocks/starrocks/pull/66041)
+- Filesystem cache key collision issue. [#65823](https://github.com/StarRocks/starrocks/pull/65823)
+- Wrong subtask count in `SHOW PROC '/compactions'`. [#67209](https://github.com/StarRocks/starrocks/pull/67209)
+- A unified JSON format is not returned in the Query Profile API. [#67077](https://github.com/StarRocks/starrocks/pull/67077)
+- Improper `getTable` exception handling that affects the materialized view check. [#67224](https://github.com/StarRocks/starrocks/pull/67224)
+- Inconsistent output of the `Extra` column from the `DESC` statement for native and cloud-native tables. [#67238](https://github.com/StarRocks/starrocks/pull/67238)
+- Race condition in single-node deployments. [#67215](https://github.com/StarRocks/starrocks/pull/67215)
+- Log leakage from third-party libraries. [#67129](https://github.com/StarRocks/starrocks/pull/67129)
+- Incorrect REST Catalog authentication logic that causes authentication failures. [#66861](https://github.com/StarRocks/starrocks/pull/66861)
 
 ## 4.0.3
 
 Release Date: December 25, 2025
-
-### Downgrade Notes
-
-Before downgrading clusters from v4.0.3 to v3.5.0~v3.5.10, execute the following statement:
-
-```SQL
-SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
-```
 
 ### Improvements
 

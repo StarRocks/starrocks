@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -32,13 +33,12 @@
 #include "exprs/function_context.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 

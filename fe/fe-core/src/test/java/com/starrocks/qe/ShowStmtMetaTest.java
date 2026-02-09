@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -539,6 +540,18 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("Type", metaData.getColumn(3).getName());
         Assertions.assertEquals("IsMutable", metaData.getColumn(4).getName());
         Assertions.assertEquals("Comment", metaData.getColumn(5).getName());
+    }
+
+    @Test
+    public void testAdminShowAutomatedSnapshotStmt() {
+        AdminShowAutomatedSnapshotStmt stmt = new AdminShowAutomatedSnapshotStmt();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertEquals(5, metaData.getColumnCount());
+        Assertions.assertEquals("Enabled", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Interval", metaData.getColumn(1).getName());
+        Assertions.assertEquals("StorageVolume", metaData.getColumn(2).getName());
+        Assertions.assertEquals("LastSnapshotTime", metaData.getColumn(3).getName());
+        Assertions.assertEquals("NextSnapshotTime", metaData.getColumn(4).getName());
     }
 
     @Test

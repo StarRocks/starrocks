@@ -16,17 +16,18 @@
 
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "common/system/cpu_info.h"
 #include "exec/hash_join_node.h"
 #include "exec/join/join_hash_map_method.h"
 #include "exec/join/join_key_constructor.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
-#include "simd/simd.h"
 #include "types/logical_type_infra.h"
-#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
@@ -135,7 +136,7 @@ size_t JoinHashMapSelector::_get_binary_column_max_size(RuntimeState* state, con
     }
 
     const auto& offsets = binary_column->get_offset();
-    const auto& bytes = binary_column->get_bytes();
+    auto bytes = binary_column->get_immutable_bytes();
 
     bool has_tail_zero = false;
     for (size_t i = offsets.size() - 1; i > 0 && offsets[i] > 0; i--) {
@@ -260,7 +261,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
         RuntimeState* state, JoinHashTableItems* table_items) {
     bool is_asof_join_type = is_asof_join(table_items->join_type);
 
-    if (!state->enable_hash_join_range_direct_mapping_opt()) {
+    if (!state->enable_hash_join_range_direct_mapping_opt() || table_items->row_count == 0) {
         return _get_fallback_method<LT>(is_asof_join_type);
     }
 

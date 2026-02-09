@@ -68,6 +68,8 @@ public:
     Expr* get_lambda_expr() const { return _children[0]; }
     std::string debug_string() const override;
 
+    Status do_for_each_child(const std::function<Status(Expr*)>& callback) override;
+
     struct ExtractContext {
         // lambda arguments id in the current scope
         std::unordered_set<SlotId> current_lambda_arguments;

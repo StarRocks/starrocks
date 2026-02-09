@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -24,7 +25,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "testutil/assert.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -33,6 +34,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        StarRocksMetrics::instance()->metrics()->set_collect_hook_enabled(true);
 
         _mem_tracker = std::make_shared<MemTracker>(-1, "connector scan");
         _exec_env = ExecEnv::GetInstance();

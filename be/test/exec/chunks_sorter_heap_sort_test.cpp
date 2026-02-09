@@ -22,17 +22,17 @@
 #include <optional>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "types/type_descriptor.h"
 #include "util/value_generator.h"
 
 namespace starrocks {

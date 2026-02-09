@@ -443,11 +443,6 @@ WHERE test_scenario = 'variant_to_complex' AND id = 7;
 -- result:
 7	variant_to_complex_types	PASS	PASS	PASS	PASS
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_test_unified force;
 -- result:
 -- !result
@@ -456,4 +451,9 @@ set catalog default_catalog;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result

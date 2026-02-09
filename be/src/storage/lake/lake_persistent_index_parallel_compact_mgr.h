@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "common/status.h"
-#include "gen_cpp/lake_types.pb.h"
 #include "gutil/ref_counted.h"
+#include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
 #include "util/threadpool.h"
 #include "util/trace.h"
@@ -66,21 +66,12 @@ private:
 
 using AsyncCompactCBPtr = std::unique_ptr<AsyncCompactCB>;
 
-// SeekRange represents a basic key range unit for compaction tasks split.
-struct SeekRange {
-    // scan range is [seek_key, stop_key). stop_key is exclusive.
-    std::string seek_key;
-    std::string stop_key; // could be empty meaning infinity
-    bool has_overlap(const PersistentIndexSstableRangePB& range) const;
-    bool full_contains(const PersistentIndexSstableRangePB& range) const;
-};
-
 class LakePersistentIndexParallelCompactTask : public Runnable {
 public:
     LakePersistentIndexParallelCompactTask(const std::vector<std::vector<PersistentIndexSstablePB>>& input_sstables,
                                            TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                            bool merge_base_level, const UniqueId& fileset_id,
-                                           const SeekRange& seek_range)
+                                           const SstSeekRange& seek_range)
             : _input_sstables(input_sstables),
               _tablet_mgr(tablet_mgr),
               _metadata(metadata),
@@ -112,7 +103,7 @@ private:
     TabletMetadataPtr _metadata;
     bool _merge_base_level = false;
     UniqueId _output_fileset_id;
-    SeekRange _seek_range;
+    SstSeekRange _seek_range;
     AsyncCompactCB* _cb = nullptr;
     // output sstable pb
     std::vector<PersistentIndexSstablePB> _output_sstables;
@@ -129,6 +120,8 @@ public:
     void shutdown();
 
     Status update_max_threads(int max_threads);
+
+    int32_t calc_max_threads() const;
 
     StatusOr<AsyncCompactCBPtr> async_compact(
             const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
@@ -149,6 +142,9 @@ public:
     Status TEST_sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb, const TabletMetadataPtr& metadata,
                                          std::vector<std::string>* sample_keys);
 
+    // For UT
+    void TEST_set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
+
 private:
     // generate compaction tasks using candidate filesets.
     // The final task number will be decided by config pk_index_parallel_compaction_task_split_threshold_bytes
@@ -158,9 +154,6 @@ private:
 
     Status sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb, const TabletMetadataPtr& metadata,
                                     std::vector<std::string>* sample_keys);
-
-    // For UT
-    void TEST_set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
 
 private:
     // Check if two key ranges overlap

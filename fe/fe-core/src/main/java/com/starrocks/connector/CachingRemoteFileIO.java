@@ -55,7 +55,7 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                 .executor(executor)
                 .maximumWeight(cacheMemSize)
                 .weigher((RemotePathKey key, List<RemoteFileDesc> value) -> {
-                    long size = Math.toIntExact(SizeEstimator.estimate(key));
+                    long size = SizeEstimator.estimate(key);
                     if (!value.isEmpty()) {
                         size += 1L * SizeEstimator.estimate(value.get(0)) * value.size();
                     }

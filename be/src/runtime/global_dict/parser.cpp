@@ -14,6 +14,7 @@
 
 #include "runtime/global_dict/parser.h"
 
+#include "base/simd/gather.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
@@ -33,9 +34,8 @@
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
-#include "simd/gather.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -76,7 +76,7 @@ public:
         }
     }
 
-    PlaceHolderRef* get_place_holder(Expr* root) {
+    static PlaceHolderRef* get_place_holder(Expr* root) {
         if (auto f = dynamic_cast<PlaceHolderRef*>(root)) {
             return down_cast<PlaceHolderRef*>(f);
         }
@@ -200,7 +200,7 @@ private:
             array_col = down_cast<const ArrayColumn*>(const_column->data_column().get());
 
             auto element = array_col->elements_column();
-            auto offsets = UInt32Column::create(array_col->offsets());
+            auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));
@@ -208,10 +208,10 @@ private:
         } else if (array->is_nullable()) {
             const auto* nullable = down_cast<const NullableColumn*>(array.get());
             array_col = down_cast<const ArrayColumn*>(nullable->data_column_raw_ptr());
-            NullColumnPtr array_null = NullColumn::create(*nullable->null_column());
+            NullColumnPtr array_null = NullColumn::static_pointer_cast(nullable->null_column()->clone());
 
             auto element = array_col->elements_column();
-            auto offsets = UInt32Column::create(array_col->offsets());
+            auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));
@@ -219,7 +219,7 @@ private:
         } else {
             array_col = down_cast<const ArrayColumn*>(array.get());
             auto element = array_col->elements_column();
-            auto offsets = UInt32Column::create(array_col->offsets());
+            auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));
@@ -405,8 +405,11 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
 }
 
 Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id) {
+    VLOG(2) << "rewrite_expr: " << expr->debug_string();
     // call rewrite for each DictMappingExpr
     if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
+        DCHECK_GE(f->get_num_children(), 2);
+        DCHECK_NOTNULL(DictFuncExpr::get_place_holder(f->get_child(1)));
         return f->rewrite([&]() -> StatusOr<Expr*> {
             auto* dict_ctx_handle = _runtime_state->obj_pool()->add(new DictOptimizeContext());
             RETURN_IF_ERROR(_eval_and_rewrite(ctx, f, dict_ctx_handle, slot_id));
@@ -414,9 +417,7 @@ Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slo
         });
     }
 
-    for (auto child : expr->children()) {
-        RETURN_IF_ERROR(rewrite_expr(ctx, child, -1));
-    }
+    RETURN_IF_ERROR(expr->do_for_each_child([&](Expr* child_expr) { return rewrite_expr(ctx, child_expr, -1); }));
     return Status::OK();
 }
 

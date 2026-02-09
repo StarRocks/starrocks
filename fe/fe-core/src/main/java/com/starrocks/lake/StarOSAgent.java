@@ -59,6 +59,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -588,6 +589,12 @@ public class StarOSAgent {
     public void createShards(Map<Long, List<Long>> oldToNewShardIds, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
             long groupId, @NotNull Map<String, String> properties, ComputeResource computeResource)
             throws DdlException {
+        createShardsForSplit(oldToNewShardIds, pathInfo, cacheInfo, groupId, properties, computeResource);
+    }
+
+    public void createShardsForSplit(Map<Long, List<Long>> oldToNewShardIds, FilePathInfo pathInfo,
+            FileCacheInfo cacheInfo, long groupId, @NotNull Map<String, String> properties,
+            ComputeResource computeResource) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         List<ShardInfo> shardInfos = null;
@@ -613,6 +620,49 @@ public class StarOSAgent {
                     builder.setShardId(newShardId);
                     createShardInfoList.add(builder.build());
                 }
+            }
+            shardInfos = client.createShard(serviceId, createShardInfoList);
+            Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
+            LOG.debug("Create shards success. shard infos: {}", shardInfos);
+        } catch (Exception e) {
+            throw new DdlException("Failed to create shards. error: " + e.getMessage());
+        }
+    }
+
+    public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds, FilePathInfo pathInfo,
+            FileCacheInfo cacheInfo, long groupId, @NotNull Map<String, String> properties,
+            ComputeResource computeResource) throws DdlException {
+        long workerGroupId = computeResource.getWorkerGroupId();
+        prepare();
+        List<ShardInfo> shardInfos = null;
+        try {
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(1)
+                    .addGroupIds(groupId)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(newToOldShardIds.size());
+            for (Map.Entry<Long, List<Long>> entry : newToOldShardIds.entrySet()) {
+                long newShardId = entry.getKey();
+                List<Long> oldShardIds = entry.getValue();
+                Preconditions.checkState(oldShardIds != null && !oldShardIds.isEmpty(),
+                        "Empty old shard ids for new shard " + newShardId);
+
+                builder.clearPlacementPreferences();
+                for (Long oldShardId : oldShardIds) {
+                    PlacementPreference preference = PlacementPreference.newBuilder()
+                            .setPlacementPolicy(PlacementPolicy.PACK)
+                            .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                            .setRelationshipTargetId(oldShardId)
+                            .build();
+                    builder.addPlacementPreferences(preference);
+                }
+
+                builder.setShardId(newShardId);
+                createShardInfoList.add(builder.build());
             }
             shardInfos = client.createShard(serviceId, createShardInfoList);
             Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
@@ -773,6 +823,21 @@ public class StarOSAgent {
         try {
             ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
             return getAllNodeIdsByShard(shardInfo);
+        } catch (StarClientException e) {
+            throw new StarRocksException(e);
+        }
+    }
+
+    public Map<Long, List<Long>> getAllNodeIdsByShards(List<Long> shardIds, long workerGroupId)
+            throws StarRocksException {
+        try {
+            List<ShardInfo> shardInfos = getShardInfo(shardIds, workerGroupId);
+            Map<Long, List<Long>> result = new HashMap<>();
+            for (ShardInfo shardInfo : shardInfos) {
+                List<Long> nodeIds = getAllNodeIdsByShard(shardInfo);
+                result.put(shardInfo.getShardId(), nodeIds);
+            }
+            return result;
         } catch (StarClientException e) {
             throw new StarRocksException(e);
         }

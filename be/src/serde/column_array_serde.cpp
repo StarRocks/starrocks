@@ -18,6 +18,7 @@
 #include <streamvbyte.h>
 #include <streamvbytedelta.h>
 
+#include "base/coding.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_visitor_adapter.h"
@@ -35,11 +36,10 @@
 #include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/variant_value.h"
-#include "util/coding.h"
 #include "util/compression/compression_headers.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
 
 namespace starrocks::serde {
 namespace {
@@ -204,7 +204,7 @@ class BinaryColumnSerde {
 public:
     template <typename T>
     static int64_t max_serialized_size(const BinaryColumnBase<T>& column, const int encode_level) {
-        const auto& bytes = column.get_bytes();
+        auto bytes = column.get_immutable_bytes();
         const auto& offsets = column.get_offset();
         int64_t res = sizeof(T) * 2;
         int64_t offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
@@ -224,7 +224,7 @@ public:
 
     template <typename T>
     static uint8_t* serialize(const BinaryColumnBase<T>& column, uint8_t* buff, const int encode_level) {
-        const auto& bytes = column.get_bytes();
+        auto bytes = column.get_immutable_bytes();
         const auto& offsets = column.get_offset();
 
         T bytes_size = bytes.size() * sizeof(uint8_t);

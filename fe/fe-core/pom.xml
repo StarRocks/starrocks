@@ -985,8 +985,6 @@ under the License.
                             </includes>
                             <excludes>
                                 <exclude>com/starrocks/proto/**</exclude>
-                                <exclude>com/starrocks/rpc/**</exclude>
-                                <exclude>com/starrocks/server/**</exclude>
                                 <exclude>**/*$$JProtoBufClass</exclude>
                                 <exclude>**/*$$JProtoBuf*</exclude>
                             </excludes>

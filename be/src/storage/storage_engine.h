@@ -51,7 +51,6 @@
 #include <vector>
 
 #include "agent/status.h"
-#include "column/chunk.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"

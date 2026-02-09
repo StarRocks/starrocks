@@ -16,27 +16,27 @@
 
 #include <utility>
 
+#include "base/hash/unaligned_access.h"
+#include "base/utility/pred_guard.h"
 #include "column/chunk.h"
 #include "column/datum_convert.h"
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/datetime_value.h"
-#include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/type_traits.h"
 #include "types/bitmap_value.h"
+#include "types/datetime_value.h"
+#include "types/decimalv2_value.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/timestamp_value.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
-#include "util/pred_guard.h"
 #include "util/stack_util.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

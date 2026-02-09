@@ -18,9 +18,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -480,5 +482,86 @@ public class CreateTableAnalyzerTest {
                 "PROPERTIES(\"replication_num\" = \"1\", \"fast_schema_evolution\" = \"false\")";
 
         analyzeFail(sql, "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution");
+    }
+
+    @Test
+    public void testPkTableSortKeyOrder() {
+        boolean oldEnableRangeDistribution = Config.enable_range_distribution;
+        Config.enable_range_distribution = true;
+        try {
+            // PK columns: (v1, v2), Sort keys: (v2, v1) -> Should fail
+            String sql1 = "CREATE TABLE test_create_table_db.pk_table_wrong_order\n" +
+                    "(\n" +
+                    "    v1 int not null,\n" +
+                    "    v2 int not null,\n" +
+                    "    v3 int\n" +
+                    ") PRIMARY KEY(v1, v2)\n" +
+                    "ORDER BY(v2, v1)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            analyzeFail(sql1, "The sort columns must be same with primary key columns and the order must be consistent");
+
+            // PK columns: (v1, v2), Sort keys: (v1, v2) -> Should pass
+            String sql2 = "CREATE TABLE test_create_table_db.pk_table_correct_order\n" +
+                    "(\n" +
+                    "    v1 int not null,\n" +
+                    "    v2 int not null,\n" +
+                    "    v3 int\n" +
+                    ") PRIMARY KEY(v1, v2)\n" +
+                    "ORDER BY(v1, v2)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            analyzeSuccess(sql2);
+
+            // enable_range_distribution = false -> Should pass even if order is different
+            Config.enable_range_distribution = false;
+            String sql3 = "CREATE TABLE test_create_table_db.pk_table_diff_order_range_off\n" +
+                    "(\n" +
+                    "    v1 int not null,\n" +
+                    "    v2 int not null,\n" +
+                    "    v3 int\n" +
+                    ") PRIMARY KEY(v1, v2)\n" +
+                    "DISTRIBUTED BY HASH(v1)\n" +
+                    "ORDER BY(v2, v1)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            analyzeSuccess(sql3);
+        } finally {
+            Config.enable_range_distribution = oldEnableRangeDistribution;
+        }
+    }
+
+    @Test
+    public void testCreateTableForceRange() {
+        boolean oldEnableRangeDistribution = Config.enable_range_distribution;
+        Config.enable_range_distribution = false;
+        try {
+            String sql = "CREATE TABLE test_create_table_db.force_range_table\n" +
+                    "(\n" +
+                    "    k1 int,\n" +
+                    "    k2 int,\n" +
+                    "    v1 int\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(k1, k2)\n" +
+                    "PROPERTIES('replication_num' = '1');";
+
+            // 1. Default: should NOT be range distribution if Config is false
+            CreateTableStmt stmt1 = (CreateTableStmt) analyzeSuccess(sql);
+            Assertions.assertFalse(stmt1.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // 2. Set session variable to true: should be range distribution
+            connectContext.getSessionVariable().setEnableRangeDistribution(true);
+            try {
+                CreateTableStmt stmt2 = (CreateTableStmt) analyzeSuccess(sql);
+                Assertions.assertTrue(stmt2.getDistributionDesc() instanceof RangeDistributionDesc);
+            } finally {
+                connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            }
+
+            // 3. Set Config to true: should be range distribution even if session variable is false
+            Config.enable_range_distribution = true;
+            CreateTableStmt stmt3 = (CreateTableStmt) analyzeSuccess(sql);
+            Assertions.assertTrue(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+
+        } finally {
+            Config.enable_range_distribution = oldEnableRangeDistribution;
+        }
     }
 }

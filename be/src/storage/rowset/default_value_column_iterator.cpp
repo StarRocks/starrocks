@@ -37,20 +37,20 @@
 #include <algorithm>
 #include <variant>
 
+#include "base/utility/mem_util.hpp"
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_builder.h"
-#include "column/datum.h"
-#include "runtime/decimalv3.h"
+#include "storage/array_type_info.h"
+#include "storage/map_type_info.h"
 #include "storage/range.h"
+#include "storage/struct_type_info.h"
 #include "storage/types.h"
-#include "types/array_type_info.h"
-#include "types/map_type_info.h"
-#include "types/struct_type_info.h"
-#include "util/json.h"
+#include "types/datum.h"
+#include "types/decimalv3.h"
+#include "types/json_value.h"
 #include "util/json_converter.h"
-#include "util/mem_util.hpp"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 

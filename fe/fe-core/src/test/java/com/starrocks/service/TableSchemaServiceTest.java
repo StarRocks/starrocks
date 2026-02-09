@@ -191,8 +191,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testScanNodeCacheSchema() throws Exception {
         LakeTable table = createTable("t_scan_node_cache_schema");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // Generate OlapScanNode
         ExecPlan plan1 = UtFrameUtils.getPlanAndFragment(
@@ -238,8 +238,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInQueryCoordinator() throws Exception {
         LakeTable table = createTable("t_scan_coordinator");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // Execute query to create coordinator with OlapScanNode
         TUniqueId queryId1 = UUIDUtil.genTUniqueId();
@@ -269,8 +269,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInCatalog() throws Exception {
         LakeTable table = createTable("t_found_in_catalog");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // query fallback to catalog
         TUniqueId queryId = UUIDUtil.genTUniqueId();
@@ -293,8 +293,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInHistory() throws Exception {
         LakeTable table = createTable("t_found_in_history");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // Begin a transaction before alter to prevent the history schema to be cleaned
         TransactionState.TxnCoordinator txnCoordinator = new TransactionState.TxnCoordinator(
@@ -349,8 +349,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testScanNotFound() throws Exception {
         LakeTable table = createTable("t_scan_not_found");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // query not exists, and schema not found in catalog and history
         {
@@ -387,7 +387,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testLoadNotFound() throws Exception {
         LakeTable table = createTable("t_load_not_found");
-        long invalidSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() - 1;
+        long invalidSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId() - 1;
 
         // txn not exist
         {

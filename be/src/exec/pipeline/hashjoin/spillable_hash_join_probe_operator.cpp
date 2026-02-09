@@ -19,6 +19,7 @@
 #include <mutex>
 #include <numeric>
 
+#include "base/failpoint/fail_point.h"
 #include "common/config.h"
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
@@ -31,7 +32,6 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

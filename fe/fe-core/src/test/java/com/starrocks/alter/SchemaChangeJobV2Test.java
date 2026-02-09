@@ -158,7 +158,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
         alterJobsV2.clear();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
@@ -175,11 +175,11 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         schemaChangeJob.runPendingJob();
         Assertions.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assertions.assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(IndexExtState.ALL).size());
         Assertions.assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(IndexExtState.VISIBLE).size());
         Assertions.assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         schemaChangeJob.runWaitingTxnJob();
@@ -216,7 +216,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
         alterJobsV2.clear();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
@@ -239,11 +239,11 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         schemaChangeJob.runPendingJob();
         Assertions.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assertions.assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(IndexExtState.ALL).size());
         Assertions.assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(IndexExtState.VISIBLE).size());
         Assertions.assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         schemaChangeJob.runWaitingTxnJob();
@@ -471,7 +471,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
         alterJobsV2.clear();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
@@ -503,8 +503,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
                 TransactionState.TxnSourceType.BE, "127.0.0.1");
 
-        long baseIndexId = table.getBaseIndexMetaId();
-        MaterializedIndexMeta preAlterIndexMeta1 = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta preAlterIndexMeta1 = table.getIndexMetaByMetaId(baseIndexMetaId).shallowCopy();
         long runningTxn1 = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
@@ -514,9 +514,9 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         OlapTableHistorySchema historySchema1 = job1.getHistorySchema().orElse(null);
         Assertions.assertNotNull(historySchema1);
         Assertions.assertTrue(historySchema1.getHistoryTxnIdThreshold() > runningTxn1);
-        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta1, historySchema1);
+        assertHistorySchemaMatches(table, baseIndexMetaId, preAlterIndexMeta1, historySchema1);
 
-        MaterializedIndexMeta preAlterIndexMeta2 = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        MaterializedIndexMeta preAlterIndexMeta2 = table.getIndexMetaByMetaId(baseIndexMetaId).shallowCopy();
         long runningTxn2 = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
@@ -526,7 +526,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         OlapTableHistorySchema historySchema2 = job2.getHistorySchema().orElse(null);
         Assertions.assertNotNull(historySchema2);
         Assertions.assertTrue(historySchema2.getHistoryTxnIdThreshold() > runningTxn2);
-        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta2, historySchema2);
+        assertHistorySchemaMatches(table, baseIndexMetaId, preAlterIndexMeta2, historySchema2);
 
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         job1.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
@@ -541,7 +541,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         schemaChangeHandler.runAfterCatalogReady();
         Assertions.assertSame(job2, schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
         Assertions.assertTrue(job2.getHistorySchema().orElse(null).isExpired());
-        Assertions.assertNull(job2.getHistorySchema().orElse(null).getSchemaByIndexId(baseIndexId).orElse(null));
+        Assertions.assertNull(job2.getHistorySchema().orElse(null).getSchemaByIndexMetaId(baseIndexMetaId).orElse(null));
         Assertions.assertNull(job2.getHistorySchema().orElse(null)
                 .getSchemaBySchemaId(preAlterIndexMeta2.getSchemaId()).orElse(null));
         job2.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
@@ -562,14 +562,14 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         GlobalStateMgr.getCurrentState().getLocalMetastore().save(imageWriter);
         GlobalStateMgr.getCurrentState().getAlterJobMgr().save(imageWriter);
 
-        long baseIndexId = table.getBaseIndexMetaId();
-        MaterializedIndexMeta preAlterIndexMeta = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta preAlterIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId).shallowCopy();
         SchemaChangeJobV2 job = (SchemaChangeJobV2) executeAlterAndWaitFinish(
                 table, "ALTER TABLE t_history_schema_replay ADD COLUMN c1 BIGINT");
         Assertions.assertTrue(isSchemaMatch(db, table, Lists.newArrayList("c0", "c1")));
         OlapTableHistorySchema historySchema = job.getHistorySchema().orElse(null);
         Assertions.assertNotNull(historySchema);
-        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta, historySchema);
+        assertHistorySchemaMatches(table, baseIndexMetaId, preAlterIndexMeta, historySchema);
 
         LocalMetastore restoredMetastore =
                 new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
@@ -586,8 +586,9 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Assertions.assertNotNull(restoredDb, "Restored database not found");
         OlapTable restoredTable = (OlapTable) restoredMetastore.getTable(restoredDb.getFullName(), table.getName());
         Assertions.assertNotNull(restoredTable, "Restored table not found");
-        Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseIndexId, preAlterIndexMeta),
-                SchemaInfo.fromMaterializedIndex(restoredTable, baseIndexId, restoredTable.getIndexMetaByIndexId(baseIndexId)));
+        Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId, preAlterIndexMeta),
+                SchemaInfo.fromMaterializedIndex(restoredTable, baseIndexMetaId,
+                        restoredTable.getIndexMetaByMetaId(baseIndexMetaId)));
         Assertions.assertFalse(getLatestAlterJob(restoredTable, restoredAlterJobMgr.getSchemaChangeHandler()).isPresent());
         isSchemaMatch(restoredDb, restoredTable, Lists.newArrayList("c0"));
 
@@ -603,22 +604,24 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
             GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
         }
         Assertions.assertTrue(isSchemaMatch(restoredDb, restoredTable, Lists.newArrayList("c0", "c1")));
-        Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseIndexId, table.getIndexMetaByIndexId(baseIndexId)),
-                SchemaInfo.fromMaterializedIndex(restoredTable, baseIndexId, restoredTable.getIndexMetaByIndexId(baseIndexId)));
+        Assertions.assertEquals(
+                SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId, table.getIndexMetaByMetaId(baseIndexMetaId)),
+                SchemaInfo.fromMaterializedIndex(restoredTable, baseIndexMetaId,
+                        restoredTable.getIndexMetaByMetaId(baseIndexMetaId)));
         AlterJobV2 restoredJob = restoredHandler.getAlterJobsV2().get(job.getJobId());
         Assertions.assertInstanceOf(SchemaChangeJobV2.class, restoredJob);
         SchemaChangeJobV2 fseJob = (SchemaChangeJobV2) restoredJob;
         OlapTableHistorySchema restoredHistorySchema = fseJob.getHistorySchema().orElse(null);
         Assertions.assertNotNull(restoredHistorySchema);
         Assertions.assertEquals(historySchema.getHistoryTxnIdThreshold(), restoredHistorySchema.getHistoryTxnIdThreshold());
-        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta, restoredHistorySchema);
+        assertHistorySchemaMatches(table, baseIndexMetaId, preAlterIndexMeta, restoredHistorySchema);
     }
 
-    private void assertHistorySchemaMatches(OlapTable table, long indexId, MaterializedIndexMeta originMeta,
+    private void assertHistorySchemaMatches(OlapTable table, long indexMetaId, MaterializedIndexMeta originMeta,
                                             OlapTableHistorySchema historySchema) {
-        SchemaInfo originSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, originMeta);
+        SchemaInfo originSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, originMeta);
         Assertions.assertNotNull(historySchema);
-        SchemaInfo schemaInfo = historySchema.getSchemaByIndexId(indexId).orElse(null);
+        SchemaInfo schemaInfo = historySchema.getSchemaByIndexMetaId(indexMetaId).orElse(null);
         Assertions.assertNotNull(schemaInfo);
         Assertions.assertEquals(originSchemaInfo, schemaInfo);
         Assertions.assertEquals(originSchemaInfo.hashCode(), schemaInfo.hashCode());
@@ -655,8 +658,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            long baseIndexId = table.getBaseIndexMetaId();
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
+            long baseIndexMetaId = table.getBaseIndexMetaId();
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
             List<Column> schema = indexMeta.getSchema();
             if (schema.size() != columNames.size()) {
                 return false;

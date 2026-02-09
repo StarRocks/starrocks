@@ -18,6 +18,11 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/hash/unaligned_access.h"
+#include "base/orlp/pdqsort.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_fwd_decl.h"
+#include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/object_column.h"
@@ -28,11 +33,6 @@
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/orlp/pdqsort.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_fwd_decl.h"
-#include "util/slice.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -270,7 +270,7 @@ public:
         auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
-        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
+        const auto& src_column = *down_cast<const InputColumnType*>(src[0].get());
         const InputCppType* src_data = src_column.immutable_data().data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
@@ -393,7 +393,7 @@ public:
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
 
-        auto src_column = *down_cast<const BinaryColumn*>(src[0].get());
+        const auto& src_column = *down_cast<const BinaryColumn*>(src[0].get());
         const auto& src_data = src_column.get_proxy_data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
@@ -671,7 +671,7 @@ public:
         bytes.resize(new_size);
         unsigned char* cur = bytes.data() + old_size;
 
-        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
+        const auto& src_column = *down_cast<const InputColumnType*>(src[0].get());
         const InputCppType* src_data = src_column.immutable_data().data();
 
         size_t cur_size = old_size;

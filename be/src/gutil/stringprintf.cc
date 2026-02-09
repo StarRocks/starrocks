@@ -6,8 +6,7 @@
 #include <cstdio>  // MSVC requires this for _vsnprintf
 #include <vector>
 using std::vector;
-#include <common/logging.h>
-
+#include "gutil/logging.h"
 #include "gutil/macros.h"
 
 #ifdef _MSC_VER

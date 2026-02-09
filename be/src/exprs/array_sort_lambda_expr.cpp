@@ -20,6 +20,8 @@
 #include <memory>
 #include <sstream>
 
+#include "base/orlp/pdqsort.h"
+#include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/array_view_column.h"
 #include "column/chunk.h"
@@ -34,9 +36,7 @@
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
 #include "runtime/user_function_cache.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 ArraySortLambdaExpr::ArraySortLambdaExpr(const TExprNode& node) : Expr(node, false) {}
@@ -89,6 +89,15 @@ void ArraySortLambdaExpr::close(RuntimeState* state, ExprContext* context, Funct
         expr->close(state, context, scope);
     }
     Expr::close(state, context, scope);
+}
+
+Status ArraySortLambdaExpr::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    RETURN_IF_ERROR(Expr::do_for_each_child(callback));
+
+    for (const auto& [slot_id, expr] : _outer_common_exprs) {
+        RETURN_IF_ERROR(callback(expr));
+    }
+    return Status::OK();
 }
 
 // Helper class to manage comparisons during sorting

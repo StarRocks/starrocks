@@ -20,6 +20,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -28,12 +29,14 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -947,6 +950,12 @@ public class RedirectStatusTest {
     }
 
     @Test
+    public void testAdminShowAutomatedSnapshotStmt() {
+        AdminShowAutomatedSnapshotStmt stmt = new AdminShowAutomatedSnapshotStmt();
+        Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
     public void testAdminCheckTabletsStmt() {
         AdminCheckTabletsStmt stmt = new AdminCheckTabletsStmt(java.util.Collections.emptyList(), null, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_NO_SYNC, RedirectStatus.getRedirectStatus(stmt));
@@ -1068,6 +1077,12 @@ public class RedirectStatusTest {
     @Test
     public void testAlterDatabaseQuotaStmt() {
         AlterDatabaseQuotaStmt stmt = new AlterDatabaseQuotaStmt("test_db", null, null, NodePosition.ZERO);
+        Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testAlterDatabaseSetStmt() {
+        AlterDatabaseSetStmt stmt = new AlterDatabaseSetStmt("test_db", new HashMap<>(), NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1793,7 +1808,13 @@ public class RedirectStatusTest {
 
     @Test
     public void testAdminSetAutomatedSnapshotOnStmtCoverage() {
-        AdminSetAutomatedSnapshotOnStmt stmt = new AdminSetAutomatedSnapshotOnStmt(null);
+        AdminSetAutomatedSnapshotOnStmt stmt = new AdminSetAutomatedSnapshotOnStmt(null, null);
+        Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testAdminAlterAutomatedSnapshotIntervalStmtCoverage() {
+        AdminAlterAutomatedSnapshotIntervalStmt stmt = new AdminAlterAutomatedSnapshotIntervalStmt(null);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

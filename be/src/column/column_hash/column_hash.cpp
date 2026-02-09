@@ -29,7 +29,7 @@
 #include "column/object_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
-#include "runtime/time_types.h"
+#include "types/time_types.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
@@ -233,7 +233,7 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& column) {
         const auto& offsets = column.get_offset();
-        const auto& bytes = column.get_bytes();
+        const auto& bytes = column.get_immutable_bytes();
         const auto column_size = column.size();
         _selector.for_each([&](uint32_t idx) {
             // Skip out-of-bounds indices (preserve hash seed)

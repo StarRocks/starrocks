@@ -135,6 +135,7 @@ public class StatisticUtils {
         context.getSessionVariable().setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
         context.getSessionVariable().setEnableSPMRewrite(false);
         context.getSessionVariable().setSingleNodeExecPlan(false);
+        context.getSessionVariable().setEnablePredicateColLateMaterialize(false);
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
@@ -234,7 +235,7 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
+                if (partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                     LOG.warn("Statistics table {} partition {} has tablets without normal replicas", 
                             tableName, partition.getName());

@@ -14,11 +14,11 @@
 
 #include "column/field.h"
 
-#include "column/datum.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/key_coder.h"
 #include "storage/types.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

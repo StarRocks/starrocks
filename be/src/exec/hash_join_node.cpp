@@ -20,6 +20,7 @@
 #include <memory>
 #include <type_traits>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
@@ -46,7 +47,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
-#include "simd/simd.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

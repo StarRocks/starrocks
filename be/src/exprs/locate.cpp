@@ -14,13 +14,13 @@
 
 #include <algorithm>
 
+#include "base/string/utf8.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/string_functions.h"
 #include "runtime/Volnitsky.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -111,7 +111,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
 
     const char* begin = haystack->get_slice(0).data;
     const char* pos = begin;
-    const char* end = pos + haystack->get_bytes().size();
+    const char* end = pos + haystack->get_immutable_bytes().size();
 
     /// Current index in the array of strings.
     size_t i = 0;

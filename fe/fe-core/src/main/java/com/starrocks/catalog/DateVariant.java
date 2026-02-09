@@ -17,9 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
-import com.starrocks.type.TypeSerializer;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -58,15 +56,7 @@ public class DateVariant extends Variant {
     }
 
     @Override
-    public TVariant toThrift() {
-        TVariant variant = new TVariant();
-        variant.setType(TypeSerializer.toThrift(type));
-        variant.setValue(getStringValue());
-        return variant;
-    }
-
-    @Override
-    public int compareTo(Variant other) {
+    protected int compareToImpl(Variant other) {
         Preconditions.checkArgument(other instanceof DateVariant, other);
         DateVariant otherDateTime = (DateVariant) other;
 

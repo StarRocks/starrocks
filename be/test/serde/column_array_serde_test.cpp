@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -26,13 +29,10 @@
 #include "column/variant_column.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
 #include "types/hll.h"
-#include "util/failpoint/fail_point.h"
+#include "types/json_value.h"
+#include "types/variant.h"
 #include "util/hash_util.hpp"
-#include "util/json.h"
-#include "util/variant.h"
 
 namespace starrocks::serde {
 
@@ -152,6 +152,10 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
     }
 }
 
+#if !DCHECK_IS_ON()
+// we have DCHECK inside VariantColumn deserialize to check version,
+// so this test case is only enabled when DCHECK is off
+
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
     auto c1 = VariantColumn::create();
@@ -172,6 +176,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
     ASSERT_ERROR(ColumnArraySerde::deserialize(buffer.data(), c2.get()));
     ASSERT_EQ(0, c2->size()); // Deserialization should fail, resulting in an empty column
 }
+#endif
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, hll_column_failed_deserialize) {

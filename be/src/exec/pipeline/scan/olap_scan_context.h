@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <mutex>
 
+#include "base/phmap/phmap_fwd_decl.h"
 #include "column/column_access_path.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
@@ -26,7 +27,6 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/rowset/rowset.h"
-#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 
@@ -102,6 +102,9 @@ public:
                            RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence);
 
     OlapScanNode* scan_node() const { return _scan_node; }
+    // Returns the next unique ID. only used in flat json column access path.
+    size_t next_unique_id() const;
+
     ScanConjunctsManager& conjuncts_manager() { return *_conjuncts_manager; }
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }

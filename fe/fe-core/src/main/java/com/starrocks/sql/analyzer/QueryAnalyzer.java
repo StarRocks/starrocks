@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
@@ -37,6 +38,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -76,6 +78,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
@@ -303,6 +306,9 @@ public class QueryAnalyzer {
     }
 
     private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
+        // for recursive cte analyze
+        private String currentRecursiveCTE = null;
+
         public Visitor() {
         }
 
@@ -332,49 +338,126 @@ public class QueryAnalyzer {
             if (!stmt.hasWithClause()) {
                 return cteScope;
             }
-
+            Set<String> cteNames = Sets.newHashSet();
             for (CTERelation withQuery : stmt.getCteRelations()) {
-                QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
-                process(withQuery.getCteQueryStatement(), cteScope);
                 String cteName = withQuery.getName();
-                if (cteScope.containsCTE(cteName)) {
+                if (cteNames.contains(cteName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, cteName);
                 }
-
-                if (withQuery.getColumnOutputNames() == null) {
-                    withQuery.setColumnOutputNames(new ArrayList<>(query.getColumnOutputNames()));
-                } else {
-                    if (withQuery.getColumnOutputNames().size() != query.getColumnOutputNames().size()) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
-                    }
+                cteNames.add(cteName);
+            }
+            for (CTERelation withQuery : stmt.getCteRelations()) {
+                boolean isRecursive = stmt.isHasRecursiveCTE();
+                if (isRecursive) {
+                    isRecursive = tryProcessRecursiveCte(withQuery, cteScope);
                 }
-
-                /*
-                 * use cte column name as output scope of subquery relation fields
-                 */
-                ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-                for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
-                    Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
-
-                    String database = originField.getRelationAlias() == null ? session.getDatabase() :
-                            originField.getRelationAlias().getDb();
-                    TableName tableName = new TableName(database, cteName);
-                    outputFields.add(
-                            new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
-                                    originField.getOriginExpression()));
+                if (!isRecursive) {
+                    processCteRelation(withQuery, cteScope);
                 }
+            }
+            return cteScope;
+        }
 
-                /*
-                 *  Because the analysis of CTE is sensitive to order
-                 *  the later CTE can call the previous resolved CTE,
-                 *  and the previous CTE can rewrite the existing table name.
-                 *  So here will save an increasing AnalyzeState to add cte scope
-                 */
-                withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(outputFields.build())));
-                cteScope.addCteQueries(cteName, withQuery);
+        private boolean tryProcessRecursiveCte(CTERelation withQuery, Scope cteScope) {
+            String cteName = withQuery.getName();
+            if (!(withQuery.getCteQueryStatement().getQueryRelation() instanceof UnionRelation unionRelation)) {
+                return false;
+            }
+            QueryRelation anchor = unionRelation.getRelations().get(0);
+            // process is like union operator
+            // analyze cte anchor
+            Scope anchorScope = process(anchor, cteScope);
+            Type[] outputTypes = anchorScope.getRelationFields().getAllFields().stream().map(Field::getType).toArray(Type[]::new);
+
+            if (withQuery.getColumnOutputNames() == null) {
+                withQuery.setColumnOutputNames(Lists.newArrayList(anchor.getColumnOutputNames()));
+            } else {
+                if (withQuery.getColumnOutputNames().size() != anchor.getColumnOutputNames().size()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                }
             }
 
-            return cteScope;
+            List<Field> cteOutputs = Lists.newArrayList();
+            List<Field> unionOutputs = Lists.newArrayList();
+            for (int fieldIdx = 0; fieldIdx < anchorScope.getRelationFields().size(); ++fieldIdx) {
+                Field anchorField = anchorScope.getRelationFields().getFieldByIndex(fieldIdx);
+                String name = withQuery.getColumnOutputNames().get(fieldIdx);
+                String database = anchorField.getRelationAlias() == null ?
+                        session.getDatabase() : anchorField.getRelationAlias().getDb();
+                cteOutputs.add(new Field(name, outputTypes[fieldIdx], new TableName(database, cteName),
+                        anchorField.getOriginExpression(), true, true));
+                unionOutputs.add(new Field(anchorField.getName(), outputTypes[fieldIdx],
+                        anchorField.getRelationAlias(), anchorField.getOriginExpression()));
+            }
+
+            unionRelation.setScope(new Scope(RelationId.of(unionRelation), new RelationFields(unionOutputs)));
+            withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(cteOutputs)));
+            cteScope.addCteQueries(cteName, withQuery);
+            int outputSize = anchorScope.getRelationFields().size();
+            this.currentRecursiveCTE = cteName;
+            for (int i = 1; i < unionRelation.getRelations().size(); ++i) {
+                Scope relation = process(unionRelation.getRelations().get(i), cteScope);
+                if (relation.getRelationFields().size() != outputSize) {
+                    throw new SemanticException("Operands have unequal number of columns");
+                }
+                for (int fieldIdx = 0; fieldIdx < relation.getRelationFields().size(); ++fieldIdx) {
+                    Field field = relation.getRelationFields().getAllFields().get(fieldIdx);
+                    Type fieldType = field.getType();
+                    if (fieldType.isOnlyMetricType() && !unionRelation.getQualifier().equals(SetQualifier.ALL)) {
+                        throw new SemanticException("%s not support set operation", fieldType);
+                    }
+                    Type childRelationType = relation.getRelationFields().getFieldByIndex(fieldIdx).getType();
+                    if (!childRelationType.matchesType(outputTypes[fieldIdx])
+                            && !TypeManager.canCastTo(childRelationType, outputTypes[fieldIdx])) {
+                        throw new SemanticException(String.format("Unequality return types '%s' and '%s' in recursive cte",
+                                outputTypes[fieldIdx], childRelationType));
+                    }
+                }
+            }
+            this.currentRecursiveCTE = null;
+            if (!withQuery.isRecursive()) {
+                return false;
+            }
+            if (withQuery.isRecursive() && (unionRelation.hasOrderByClause() || unionRelation.hasLimit())) {
+                throw new SemanticException(String.format("ORDER BY is not allowed in recursive CTE '%s'", cteName));
+            }
+            return true;
+        }
+
+        private void processCteRelation(CTERelation withQuery, Scope cteScope) {
+            QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
+            String cteName = withQuery.getName();
+            process(withQuery.getCteQueryStatement(), cteScope);
+            if (withQuery.getColumnOutputNames() == null) {
+                withQuery.setColumnOutputNames(new ArrayList<>(query.getColumnOutputNames()));
+            } else {
+                if (withQuery.getColumnOutputNames().size() != query.getColumnOutputNames().size()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                }
+            }
+
+            /*
+             * use cte column name as output scope of subquery relation fields
+             */
+            ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+            for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
+                Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
+
+                String database =
+                        originField.getRelationAlias() == null ? session.getDatabase() : originField.getRelationAlias().getDb();
+                TableName tableName = new TableName(database, cteName);
+                outputFields.add(new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
+                        originField.getOriginExpression()));
+            }
+
+            /*
+             *  Because the analysis of CTE is sensitive to order
+             *  the later CTE can call the previous resolved CTE,
+             *  and the previous CTE can rewrite the existing table name.
+             *  So here will save an increasing AnalyzeState to add cte scope
+             */
+            withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(outputFields.build())));
+            cteScope.addCteQueries(cteName, withQuery);
         }
 
         @Override
@@ -561,12 +644,16 @@ public class QueryAnalyzer {
                         //                "having v1 in (select v3 from w where v2 = 2)
                         // cte used in outer query and sub-query can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(withRelation.getCteMouldId(), tableName.getTbl(),
-                                withRelation.getColumnOutputNames(),
-                                withRelation.getCteQueryStatement());
+                                withRelation.getColumnOutputNames(), withRelation.getCteQueryStatement(),
+                                withRelation.isRecursive(), false);
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
                                 new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
+                        if (currentRecursiveCTE != null && currentRecursiveCTE.equals(tableName.getTbl())) {
+                            newCteRelation.setRecursive(true);
+                            withRelation.setRecursive(true);
+                        }
                         return newCteRelation;
                     }
                 }
@@ -698,6 +785,15 @@ public class QueryAnalyzer {
                     columns.put(field, column);
                     fields.add(field);
                 }
+                
+                // Add virtual columns for sync MV queries as well
+                for (Column column : getVirtualColumns(table)) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+                }
             } else {
                 List<Column> fullSchema = table.getFullSchema();
                 Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
@@ -745,6 +841,16 @@ public class QueryAnalyzer {
                         fields.add(field);
                     }
                 }
+
+                // Add virtual columns for OLAP tables
+                for (Column column : getVirtualColumns(table)) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    // Virtual columns are not visible in SELECT * but can be explicitly referenced
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+                }
             }
 
             node.setColumns(columns.build());
@@ -783,6 +889,16 @@ public class QueryAnalyzer {
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, IntegerType.BIGINT));
+            return columns;
+        }
+
+        private List<Column> getVirtualColumns(Table table) {
+            List<Column> columns = new ArrayList<>();
+            // Add _tablet_id_ virtual column for OLAP tables
+            if (table.isNativeTableOrMaterializedView() && Config.enable_virtual_columns) {
+                OlapTable olapTable = (OlapTable) table;
+                columns.addAll(olapTable.getVirtualColumns());
+            }
             return columns;
         }
 
@@ -832,6 +948,11 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitJoin(JoinRelation join, Scope parentScope) {
+            if (join.getLeft() instanceof TableFunctionRelation) {
+                throw unsupportedException("Table function cannot appear on the left side of a join. " +
+                        "Place it on the right side (optionally with LATERAL) or wrap it with TABLE(...).");
+            }
+
             Scope leftScope = process(join.getLeft(), parentScope);
             Scope rightScope;
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
@@ -910,8 +1031,10 @@ public class QueryAnalyzer {
                  * To ensure the OnPredicate in semi/anti is correct, the relation needs to be re-assembled here
                  * with left child and right child relationFields
                  */
-                analyzeExpression(joinEqual, new AnalyzeState(), new Scope(RelationId.of(join),
-                        leftScope.getRelationFields().joinWith(rightScope.getRelationFields())));
+                Scope joinScope = new Scope(RelationId.of(join),
+                        leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
+                joinScope.setParent(parentScope);
+                analyzeExpression(joinEqual, new AnalyzeState(), joinScope);
 
                 AnalyzerUtils.verifyNoAggregateFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoWindowFunctions(joinEqual, "JOIN");
@@ -976,6 +1099,7 @@ public class QueryAnalyzer {
                 RelationFields joinedFields = leftScope.getRelationFields().joinWith(rightScope.getRelationFields());
                 scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join, leftScope, rightScope));
             }
+            scope.setParent(parentScope);
             join.setScope(scope);
 
             GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
@@ -1174,10 +1298,6 @@ public class QueryAnalyzer {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
             } else if (HintNode.HINT_JOIN_SKEW.equals(join.getJoinHint())) {
-                if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
-                        (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
-                    throw new SemanticException("CROSS JOIN does not support SKEW JOIN optimize");
-                }
                 if (join.getJoinOp().isRightJoin()) {
                     throw new SemanticException("RIGHT JOIN does not support SKEW JOIN optimize");
                 }
@@ -1360,7 +1480,7 @@ public class QueryAnalyzer {
             Type[] outputTypes = leftChildScope.getRelationFields().getAllFields()
                     .stream().map(Field::getType).toArray(Type[]::new);
             List<Boolean> nullables = leftChildScope.getRelationFields().getAllFields()
-                    .stream().map(field -> field.isNullable()).collect(Collectors.toList());
+                    .stream().map(Field::isNullable).collect(Collectors.toList());
             int outputSize = leftChildScope.getRelationFields().size();
 
             for (int i = 1; i < setOpRelations.size(); ++i) {
@@ -1932,6 +2052,8 @@ public class QueryAnalyzer {
         private final LinkedList<String> resolvingAlias = new LinkedList<>();
         private final Scope sourceScope;
         private final ConnectContext session;
+        // Track whether we're currently inside a FunctionCallExpr or AnalyticExpr to detect nested aggregation/analytic
+        private boolean insideAggregateOrAnalyticFunction = false;
 
         public RewriteAliasVisitor(Scope sourceScope, ConnectContext session) {
             this.sourceScope = sourceScope;
@@ -1944,6 +2066,28 @@ public class QueryAnalyzer {
                 expr.setChild(i, visit(expr.getChild(i)));
             }
             return expr;
+        }
+
+        @Override
+        public Expr visitFunctionCall(FunctionCallExpr funcCall, Void context) {
+            // Track that we're inside a function call
+            insideAggregateOrAnalyticFunction |= ExprUtils.isAggregateFunction(funcCall.getFunctionName());
+            // Visit children
+            for (int i = 0; i < funcCall.getChildren().size(); ++i) {
+                funcCall.setChild(i, visit(funcCall.getChild(i)));
+            }
+            return funcCall;
+        }
+
+        @Override
+        public Expr visitAnalyticExpr(AnalyticExpr analyticExpr, Void context) {
+            // Track that we're inside an analytic expression
+            insideAggregateOrAnalyticFunction = true;
+            // Visit children
+            for (int i = 0; i < analyticExpr.getChildren().size(); ++i) {
+                analyticExpr.setChild(i, visit(analyticExpr.getChild(i)));
+            }
+            return analyticExpr;
         }
 
         @Override
@@ -1971,6 +2115,26 @@ public class QueryAnalyzer {
             if (sourceScope.tryResolveField(slotRef).isPresent() &&
                     !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
                 return slotRef;
+            }
+            // If the alias matches the source column name and the alias expression is an aggregation/analytic function,
+            // and we're inside another function call or analytic expression, use the source column
+            // directly instead of the aggregation/analytic expression to avoid nested aggregation/analytic.
+            // For example: sum(input_count) as input_count, then sum(case when ... then input_count else 0 end)
+            // should use the source column input_count, not sum(input_count)
+            // Similarly: sum(input_count) over() as input_count, then sum(case when ... then input_count else 0 end) over()
+            // should use the source column input_count, not sum(input_count) over()
+            if (sourceScope.tryResolveField(slotRef).isPresent() && (insideAggregateOrAnalyticFunction)) {
+                // Check if alias expression is an AnalyticExpr
+                if (e instanceof AnalyticExpr) {
+                    return slotRef;
+                }
+                // Check if alias expression is a FunctionCallExpr that is aggregate or analytic
+                if (e instanceof FunctionCallExpr) {
+                    FunctionCallExpr funcCall = (FunctionCallExpr) e;
+                    if (ExprUtils.isAggregateFunction(funcCall.getFunctionName())) {
+                        return slotRef;
+                    }
+                }
             }
             // Referring to a duplicated alias is ambiguous
             if (aliasesMaybeAmbiguous.contains(ref)) {
@@ -2014,6 +2178,7 @@ public class QueryAnalyzer {
                 return null;
             }
             for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                insideAggregateOrAnalyticFunction = false;
                 if (item.getExpr() == null) {
                     continue;
                 }

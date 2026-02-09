@@ -134,6 +134,9 @@ target_cluster_user=root
 target_cluster_password=
 target_cluster_password_secret_key=
 
+jdbc_connect_timeout_ms=30000
+jdbc_socket_timeout_ms=60000
+
 # Comma-separated list of database names or table names like <db_name> or <db_name.table_name>
 # example: db1,db2.tbl2,db3
 # Effective order: 1. include 2. exclude
@@ -196,6 +199,8 @@ The description of the parameters is as follows:
 | target_cluster_user                       | The username used to log in to the target cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
 | target_cluster_password                   | The user password used to log in to the target cluster.      |
 | target_cluster_password_secret_key        | The secret key used to encrypt the password of the login user for the target cluster. The default value is an empty string, which means that the login password is not encrypted. If you want to encrypt `target_cluster_password`, you can get the encrypted `target_cluster_password` string by using SQL statement `SELECT TO_BASE64(AES_ENCRYPT('<target_cluster_password>','<target_cluster_password_ secret_key>'))`. |
+| jdbc_connect_timeout_ms                   | JDBC connection timeout in milliseconds for FE queries. Default: `30000`. |
+| jdbc_socket_timeout_ms                    | JDBC socket timeout in milliseconds for FE queries. Default: `60000`. |
 | include_data_list                         | The databases and tables that need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. This item takes effect prior to `exclude_data_list`. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | exclude_data_list                         | The databases and tables that do not need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. `include_data_list` takes effect prior to this item. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | target_cluster_storage_volume             | The storage volume used to store tables in the target cluster when the target cluster is a shared-data cluster. If you want to use the default storage volume, you do not need to specify this item. |
@@ -267,19 +272,24 @@ vi conf/hosts.properties
 The default content of the file is as follows, describing how network address mapping is configured:
 
 ```Properties
-# <SOURCE/TARGET>_<domain>=<IP>
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
 ```
+
+:::note
+The `<host>` must match the address shown in the `IP` column returned by `SHOW FRONTENDS`, `SHOW BACKENDS`, or `SHOW COMPUTE NODES`.
+:::
 
 The following example performs these operations:
 
 1. Map the source cluster's private network addresses `192.1.1.1` and `192.1.1.2` to `10.1.1.1` and `10.1.1.2`.
-2. Map the target cluster's private network address `fe-0.starrocks.svc.cluster.local` to `10.1.2.1`.
+2. Map the source cluster's FE ports `8030` and `9030` to `38030` and `39030` on `10.1.1.1`.
+3. Map the target cluster's private network address `fe-0.starrocks.svc.cluster.local` to `10.1.2.1` and remap port `9030`.
 
 ```Properties
-# <SOURCE/TARGET>_<domain>=<IP>
-SOURCE_192.1.1.1=10.1.1.1
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
+SOURCE_192.1.1.1=10.1.1.1;8030:38030,9030:39030
 SOURCE_192.1.1.2=10.1.1.2
-TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
+TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1;9030:19030
 ```
 
 ## Step 3: Start the Migration Tool

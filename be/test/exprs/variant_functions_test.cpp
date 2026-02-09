@@ -33,7 +33,7 @@
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/variant.h"
+#include "types/variant.h"
 
 namespace starrocks {
 

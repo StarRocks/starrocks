@@ -34,6 +34,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_tracker.h"
@@ -42,7 +43,6 @@
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
 #include "util/bloom_filter.h"
 
 namespace starrocks {

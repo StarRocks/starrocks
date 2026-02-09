@@ -34,8 +34,8 @@
 
 #include "util/uid_util.h"
 
+#include "base/uuid/uuid_generator.h"
 #include "gutil/endian.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 

@@ -14,6 +14,9 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include "base/phmap/phmap.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -34,10 +37,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
-#include "util/defer_op.h"
-#include "util/phmap/phmap.h"
 #include "util/stack_util.h"
-#include "util/time.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -428,6 +428,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             (*insert_rowids_by_segment)[upt_id] = std::move(_partial_update_states[upt_id].insert_rowids);
         }
     }
+
+    const size_t partial_update_states_size = _partial_update_states.size();
     _partial_update_states.clear();
     // must record unique column id in delta column group
     // dcg_column_ids and dcg_column_files are mapped one to the other. E.g.
@@ -476,14 +478,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
         builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first]);
     }
-    // COLUMN_UPDATE_MODE: remove segments that contain only updated columns
-    // COLUMN_UPSERT_MODE: keep segments; upper layer will append delvec/PK index changes and new rowsets
-    if (params.op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE) {
-        builder->apply_column_mode_partial_update(params.op_write);
-    }
+    builder->apply_column_mode_partial_update(params.op_write);
 
     TRACE_COUNTER_INCREMENT("pcu_rss_cnt", rss_upt_id_to_rowid_pairs.size());
-    TRACE_COUNTER_INCREMENT("pcu_upt_cnt", _partial_update_states.size());
+    TRACE_COUNTER_INCREMENT("pcu_upt_cnt", partial_update_states_size);
     TRACE_COUNTER_INCREMENT("pcu_column_cnt", update_column_ids.size());
     return Status::OK();
 }

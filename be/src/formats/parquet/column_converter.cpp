@@ -25,6 +25,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/bit/bit_util.h"
+#include "base/decimal_types.h"
+#include "base/time/timezone_utils.h"
+#include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -37,16 +41,12 @@
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/time_types.h"
-#include "runtime/types.h"
 #include "storage/olap_common.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
-#include "util/bit_util.h"
-#include "util/decimal_types.h"
-#include "util/int96.h"
-#include "util/timezone_utils.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -287,7 +287,7 @@ public:
         auto* src_column = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable_column->data_column());
         auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column_raw_ptr());
 
-        const BinaryColumn::Bytes& src_data = src_column->get_bytes();
+        auto src_data = src_column->get_immutable_bytes();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();

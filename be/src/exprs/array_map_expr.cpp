@@ -19,6 +19,7 @@
 #include <memory>
 #include <sstream>
 
+#include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/array_view_column.h"
 #include "column/chunk.h"
@@ -33,7 +34,6 @@
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
 #include "runtime/user_function_cache.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -442,6 +442,15 @@ int ArrayMapExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
         num += (expr->get_slot_ids(slot_ids));
     }
     return num;
+}
+
+Status ArrayMapExpr::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    RETURN_IF_ERROR(Expr::do_for_each_child(callback));
+
+    for (const auto& [slot_id, expr] : _outer_common_exprs) {
+        RETURN_IF_ERROR(callback(expr));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

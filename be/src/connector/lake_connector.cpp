@@ -16,11 +16,13 @@
 
 #include <vector>
 
+#include "base/string/string_parser.hpp"
 #include "column/column_access_path.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/jsonpath.h"
+#include "runtime/current_thread.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -31,6 +33,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/virtual_column_utils.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
@@ -228,7 +231,7 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
 Status LakeDataSource::init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
         int32_t index = _tablet_schema->field_index(col_name);
-        if (index < 0) {
+        if (index < 0 && !is_virtual_column(col_name)) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
             LOG(WARNING) << ss.str();
@@ -388,6 +391,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
+    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(init_global_dicts(&_params));
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
@@ -485,35 +489,63 @@ void LakeDataSource::_inherit_default_value_from_json(TabletColumn* column, cons
 
     vpack::Builder builder;
     vpack::Slice extracted = JsonPath::extract(&json_value_or.value(), json_path_or.value(), &builder);
-    if (extracted.isNone()) {
+    if (extracted.isNone() || extracted.isNull()) {
         return;
     }
 
+    const LogicalType value_type = column->type();
     std::string default_value_str;
-    LogicalType value_type = column->type();
 
-    // For string types (VARCHAR/CHAR), extract the raw string value without JSON quotes
-    // For other types (INT/DOUBLE/BOOLEAN/etc), use JSON representation
     if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
         if (extracted.isString()) {
             default_value_str = extracted.copyString();
         } else {
-            JsonValue extracted_value(extracted);
-            auto result_or = extracted_value.to_string();
-            if (result_or.ok()) {
-                default_value_str = *result_or;
-            } else {
-                return;
-            }
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
         }
-    } else {
-        JsonValue extracted_value(extracted);
-        auto result_or = extracted_value.to_string();
-        if (result_or.ok()) {
-            default_value_str = *result_or;
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (value_type == TYPE_BOOLEAN) {
+        if (extracted.isString()) {
+            vpack::ValueLength len;
+            const char* str = extracted.getStringUnchecked(len);
+            StringParser::ParseResult parse_result;
+            auto as_int = StringParser::string_to_int<int32_t>(str, len, &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                default_value_str = (as_int != 0) ? "1" : "0";
+            } else {
+                bool b = StringParser::string_to_bool(str, len, &parse_result);
+                if (parse_result != StringParser::PARSE_SUCCESS) {
+                    return;
+                }
+                default_value_str = b ? "1" : "0";
+            }
+        } else if (extracted.isBool()) {
+            default_value_str = extracted.getBool() ? "1" : "0";
+        } else if (extracted.isNumber()) {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
         } else {
             return;
         }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (extracted.isString()) {
+        default_value_str = extracted.copyString();
+    } else if (extracted.isBool()) {
+        default_value_str = extracted.getBool() ? "1" : "0";
+    } else if (extracted.isNumber()) {
+        vpack::Options options = vpack::Options::Defaults;
+        options.singleLinePrettyPrint = true;
+        default_value_str = extracted.toJson(&options);
+    } else {
+        return;
     }
 
     column->set_default_value(default_value_str);
@@ -530,7 +562,7 @@ Status LakeDataSource::_extend_schema_by_access_paths() {
     }
 
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
-    int field_number = tmp_schema->num_columns();
+    int field_number = _provider->next_uniq_id();
     for (auto& path : access_paths) {
         if (!path->is_extended()) {
             continue;
@@ -726,10 +758,12 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", segment_init_name);
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
-    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, segment_init_name);
-    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilter", segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
+    _seg_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentMetadataFilterRows", TUnit::UNIT, segment_init_name);
+    _segs_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentsMetadataFiltered", TUnit::UNIT, segment_init_name);
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, segment_init_name);
     _zm_filtered_counter =
@@ -744,6 +778,19 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
+
+    const std::string gin_filter_name = "GinFilter";
+    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, gin_filter_name, segment_init_name);
+    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, gin_filter_name);
+    _gin_prefix_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinPrefixFilter", gin_filter_name);
+    _gin_ngram_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinNgramDictFilter", gin_filter_name);
+    _gin_predicate_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinDictFilter", gin_filter_name);
+    _gin_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinNGramDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinNGramFilteredDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_predicate_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinPredicateFilteredDictNum", TUnit::UNIT, gin_filter_name);
 
     // SegmentRead
     const std::string segment_read_name = "SegmentRead";
@@ -862,6 +909,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_record_predicate_filter_counter, _reader->stats().rows_record_predicate_filtered);
 
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
+    COUNTER_UPDATE(_seg_metadata_filtered_counter, _reader->stats().segment_metadata_filtered);
+    COUNTER_UPDATE(_segs_metadata_filtered_counter, _reader->stats().segments_metadata_filtered);
     COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
@@ -871,9 +920,17 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
-    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
-    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
+    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_gin_prefix_filter_timer, _reader->stats().gin_prefix_filter_ns);
+    COUNTER_UPDATE(_gin_ngram_dict_filter_timer, _reader->stats().gin_ngram_filter_dict_ns);
+    COUNTER_UPDATE(_gin_predicate_dict_filter_timer, _reader->stats().gin_predicate_filter_dict_ns);
+    COUNTER_UPDATE(_gin_dict_counter, _reader->stats().gin_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
+    COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);

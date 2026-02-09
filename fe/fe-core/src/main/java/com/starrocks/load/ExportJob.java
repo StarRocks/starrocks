@@ -169,6 +169,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
     @SerializedName("rd")
     private String rowDelimiter;
     private boolean includeQueryId;
+    @SerializedName("withHdr")
+    private boolean withHeader;
     @SerializedName("pt")
     private Map<String, String> properties = Maps.newHashMap();
     @SerializedName("ps")
@@ -257,6 +259,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.columnSeparator = stmt.getColumnSeparator();
         this.rowDelimiter = stmt.getRowDelimiter();
         this.includeQueryId = stmt.isIncludeQueryId();
+        this.withHeader = stmt.isWithHeader();
         this.properties = stmt.getProperties();
 
         exportPath = stmt.getPath();
@@ -465,8 +468,15 @@ public class ExportJob implements Writable, GsonPostProcessable {
             HdfsUtil.getTProperties(exportTempPath, brokerPersistInfo.getProperties(), hdfsProperties);
         }
         BrokerDesc runtimeBrokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+
+        // Extract column names from slot descriptors for CSV header row
+        List<String> exportColumnNames = Lists.newArrayList();
+        for (SlotDescriptor slot : exportTupleDesc.getSlots()) {
+            exportColumnNames.add(slot.getColumn().getName());
+        }
+
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
-                rowDelimiter, runtimeBrokerDesc, hdfsProperties));
+                rowDelimiter, runtimeBrokerDesc, hdfsProperties, exportColumnNames, withHeader));
         try {
             fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {

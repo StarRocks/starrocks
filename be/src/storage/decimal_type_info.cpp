@@ -14,12 +14,12 @@
 
 #include "storage/decimal_type_info.h"
 
-#include "column/datum.h"
+#include "base/utility/guard.h"
 #include "gutil/casts.h"
-#include "runtime/decimalv3.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/guard.h"
+#include "types/datum.h"
+#include "types/decimalv3.h"
 
 namespace starrocks {
 

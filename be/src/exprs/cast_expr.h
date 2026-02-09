@@ -17,6 +17,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -25,8 +26,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "jsonpath.h"
-#include "runtime/types.h"
-#include "types/large_int_value.h"
+#include "types/type_descriptor.h"
 #include "variant_path_parser.h"
 
 namespace starrocks {
@@ -293,6 +293,27 @@ private:
     std::vector<VariantPath> _variant_paths;
 };
 
+// Expression to cast SQL types to VARIANT
+class CastToVariantExpr final : public Expr {
+public:
+    CastToVariantExpr(const TExprNode& node, TypeDescriptor from_type, bool allow_throw_exception)
+            : Expr(node), _from_type(std::move(from_type)), _allow_throw_exception(allow_throw_exception) {}
+
+    ~CastToVariantExpr() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastToVariantExpr(*this)); }
+
+private:
+    // Invoked only by clone.
+    CastToVariantExpr(const CastToVariantExpr& rhs)
+            : Expr(rhs), _from_type(rhs._from_type), _allow_throw_exception(rhs._allow_throw_exception) {}
+
+    TypeDescriptor _from_type;
+    bool _allow_throw_exception;
+};
+
 // cast one MAP to another MAP.
 // For example.
 //   cast MAP<tinyint, tinyint> to MAP<int, int>
@@ -383,7 +404,7 @@ struct CastToString {
             return v.to_string();
         } else if constexpr (IsInt128<Type>) {
             // int128_t
-            return LargeIntValue::to_string(v);
+            return int128_to_string(v);
         } else if constexpr (IsInt256<Type>) {
             // int256_t
             return v.to_string();

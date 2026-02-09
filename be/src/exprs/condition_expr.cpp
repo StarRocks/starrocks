@@ -20,15 +20,15 @@
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
+#include "column/simd_selector.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "gutil/casts.h"
-#include "runtime/types.h"
-#include "simd/selector.h"
 #include "types/logical_type.h"
+#include "types/percentile_value.h"
+#include "types/type_descriptor.h"
 #include "util/dispatch.h"
-#include "util/percentile_value.h"
 
 namespace starrocks {
 

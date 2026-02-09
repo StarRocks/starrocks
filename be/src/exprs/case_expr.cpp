@@ -20,14 +20,14 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/simd_mulselector.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "simd/mulselector.h"
 #include "types/logical_type_infra.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/ir_helper.h"

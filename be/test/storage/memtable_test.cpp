@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
@@ -36,7 +37,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "testutil/assert.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

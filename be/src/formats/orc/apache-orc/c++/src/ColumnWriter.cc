@@ -1542,7 +1542,7 @@ protected:
 
 private:
     RleVersion rleVersion;
-    const Timezone& timezone;
+    const Timezone* timezone;
     const bool isUTC;
 };
 
@@ -1550,7 +1550,7 @@ TimestampColumnWriter::TimestampColumnWriter(const Type& type, const StreamsFact
                                              const WriterOptions& options, bool isInstantType)
         : ColumnWriter(type, factory, options),
           rleVersion(options.getRleVersion()),
-          timezone(isInstantType ? getTimezoneByName("GMT") : options.getTimezone()),
+          timezone(isInstantType ? &getTimezoneByName("GMT") : &options.getTimezone()),
           isUTC(isInstantType || options.getTimezoneName() == "GMT") {
     std::unique_ptr<BufferedOutputStream> dataStream = factory.createStream(proto::Stream_Kind_DATA);
     std::unique_ptr<BufferedOutputStream> secondaryStream = factory.createStream(proto::Stream_Kind_SECONDARY);
@@ -1608,7 +1608,7 @@ void TimestampColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, ui
             // TimestampVectorBatch already stores data in UTC
             int64_t millsUTC = secs[i] * 1000 + nanos[i] / 1000000;
             if (!isUTC) {
-                millsUTC = timezone.convertToUTC(secs[i]) * 1000 + nanos[i] / 1000000;
+                millsUTC = timezone->convertToUTC(secs[i]) * 1000 + nanos[i] / 1000000;
             }
             ++count;
             if (enableBloomFilter) {
@@ -1620,7 +1620,7 @@ void TimestampColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, ui
                 secs[i] += 1;
             }
 
-            secs[i] -= timezone.getEpoch();
+            secs[i] -= timezone->getEpoch();
             nanos[i] = formatNano(nanos[i]);
         }
     }

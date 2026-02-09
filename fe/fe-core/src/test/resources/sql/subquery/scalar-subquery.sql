@@ -658,7 +658,7 @@ LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(23: expr, 1,
 [sql]
 select t0.v1, t1.v4, t2.v7 from t0 left join t1 on t0.v1 = t1.v4 left join t2 on t0.v2 = t2.v8 where t1.v5 = (select max(t1d - 1) from test_all_type where t0.v1 + t1.v4 + t2.v9 = case when t1c + t1.v5 = 1 then 1 else t0.v1 + t1.v4 + t2.v9 end);
 [result]
-INNER JOIN (join-predicate [5: v5 = 21: max AND add(add(1: v1, 4: v4), 9: v9) = if(add(23: cast, 5: v5) = 1, 1, add(add(1: v1, 4: v4), 9: v9))] post-join-predicate [null])
+INNER JOIN (join-predicate [5: v5 = 21: max] post-join-predicate [25: add = if(add(23: cast, 5: v5) = 1, 1, 25: add)])
     LEFT OUTER JOIN (join-predicate [2: v2 = 8: v8] post-join-predicate [null])
         INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
             SCAN (columns[1: v1, 2: v2] predicate[1: v1 IS NOT NULL])

@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "column/datum.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

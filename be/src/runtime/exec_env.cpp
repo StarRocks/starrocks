@@ -40,10 +40,15 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "base/time/time.h"
+#include "base/utility/pretty_printer.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "common/mem_chunk.h"
 #include "common/process_exit.h"
+#include "common/system/cpu_info.h"
+#include "common/system/mem_info.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -95,15 +100,12 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+#include "types/hll.h"
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/cpu_info.h"
-#include "util/mem_info.h"
 #include "util/parse_util.h"
-#include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -157,6 +159,26 @@ static StatusOr<int64_t> calc_max_consistency_memory(int64_t process_mem_limit) 
     }
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
+
+namespace {
+
+bool allocate_hll_registers_with_mem_chunk_allocator(size_t size, void* /*ctx*/, MemChunk* chunk) {
+    return MemChunkAllocator::allocate(size, chunk);
+}
+
+void free_hll_registers_with_mem_chunk_allocator(const MemChunk& chunk, void* /*ctx*/) {
+    MemChunkAllocator::free(chunk);
+}
+
+void register_hll_registers_allocator() {
+    HyperLogLog::RegistersAllocator allocator;
+    allocator.allocate = allocate_hll_registers_with_mem_chunk_allocator;
+    allocator.free = free_hll_registers_with_mem_chunk_allocator;
+    Status st = HyperLogLog::set_registers_allocator(allocator);
+    CHECK(st.ok()) << "failed to register hll registers allocator: " << st.to_string();
+}
+
+} // namespace
 
 bool GlobalEnv::_is_init = false;
 
@@ -247,6 +269,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
+    register_hll_registers_allocator();
     MemChunkAllocator::init_metrics();
 
     return Status::OK();
@@ -578,20 +601,26 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
-    max_thread_count = config::pk_index_parallel_get_threadpool_max_threads;
+    max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
     if (max_thread_count <= 0) {
-        max_thread_count = CpuInfo::num_cores();
+        max_thread_count = CpuInfo::num_cores() / 2;
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_get")
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
                             .set_min_threads(1)
                             .set_max_threads(std::max(1, max_thread_count))
-                            .set_max_queue_size(config::pk_index_parallel_get_threadpool_size)
-                            .build(&_pk_index_get_thread_pool));
-    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_flush")
+                            .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
+                            .build(&_pk_index_execution_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
+    max_thread_count = config::pk_index_memtable_flush_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores() / 2;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_memtable_flush")
                             .set_min_threads(1)
-                            .set_max_threads(std::max(1, config::pk_index_memtable_flush_threadpool_max_threads))
+                            .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::pk_index_memtable_flush_threadpool_size)
                             .build(&_pk_index_memtable_flush_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_memtable_flush, _pk_index_memtable_flush_thread_pool);
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
@@ -607,12 +636,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_put_aggregate_metadata_thread_pool));
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
-    RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_get")
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
                             .set_min_threads(1)
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
-                            .build(&_pk_index_get_thread_pool));
-    RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_flush")
+                            .build(&_pk_index_execution_thread_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_memtable_flush")
                             .set_min_threads(1)
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
@@ -715,10 +744,10 @@ void ExecEnv::stop() {
         component_times.emplace_back("parallel_compact_mgr", MonotonicMillis() - start);
     }
 
-    if (_pk_index_get_thread_pool) {
+    if (_pk_index_execution_thread_pool) {
         start = MonotonicMillis();
-        _pk_index_get_thread_pool->shutdown();
-        component_times.emplace_back("pk_index_get_thread_pool", MonotonicMillis() - start);
+        _pk_index_execution_thread_pool->shutdown();
+        component_times.emplace_back("pk_index_execution_thread_pool", MonotonicMillis() - start);
     }
 
     if (_pk_index_memtable_flush_thread_pool) {
@@ -919,7 +948,7 @@ void ExecEnv::destroy() {
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
     _parallel_compact_mgr.reset();
-    _pk_index_get_thread_pool.reset();
+    _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();
     _metrics = nullptr;
 }

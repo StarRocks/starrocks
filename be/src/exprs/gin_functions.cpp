@@ -21,7 +21,7 @@
 
 #include "column/array_column.h"
 #include "column/column_viewer.h"
-#include "column/datum.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

@@ -107,13 +107,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newMvName) != null) {
             throw new SemanticException("Materialized view [" + newMvName + "] is already used");
         }
-        table.setName(newMvName);
-        db.dropTable(oldMvName);
-        db.registerTableUnlocked(table);
         final RenameMaterializedViewLog renameMaterializedViewLog =
                 new RenameMaterializedViewLog(table.getId(), db.getId(), newMvName);
-        updateTaskDefinition((MaterializedView) table);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog, wal -> {
+            table.setName(newMvName);
+            db.dropTable(oldMvName);
+            db.registerTableUnlocked(table);
+            updateTaskDefinition((MaterializedView) table);
+        });
         LOG.info("rename materialized view[{}] to {}, id: {}", oldMvName, newMvName, table.getId());
         return null;
     }
@@ -963,13 +964,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (olapTable.getIndexNameToMetaId().size() > 1) {
             Map<Long, MaterializedIndexMeta> metaMap = olapTable.getIndexMetaIdToMeta();
             for (Map.Entry<Long, MaterializedIndexMeta> entry : metaMap.entrySet()) {
-                Long id = entry.getKey();
-                if (id == olapTable.getBaseIndexMetaId()) {
+                Long indexMetaId = entry.getKey();
+                if (indexMetaId == olapTable.getBaseIndexMetaId()) {
                     continue;
                 }
                 MaterializedIndexMeta meta = entry.getValue();
                 List<Column> schema = meta.getSchema();
-                String indexName = olapTable.getIndexNameByMetaId(id);
+                String indexName = olapTable.getIndexNameByMetaId(indexMetaId);
                 // ignore agg_keys type because it's like duplicated without agg functions
                 boolean hasAggregateFunction = olapTable.getKeysType() != KeysType.AGG_KEYS &&
                         schema.stream().anyMatch(x -> x.isAggregated());

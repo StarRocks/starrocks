@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "storage/chunk_helper.h"
 #include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 class ColumnHashIsCongruentTest : public ::testing::Test {

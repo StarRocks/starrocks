@@ -17,11 +17,11 @@
 #include <span>
 
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
 #include "runtime/chunk_cursor.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

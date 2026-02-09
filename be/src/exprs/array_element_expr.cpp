@@ -16,11 +16,11 @@
 
 #include <gutil/strings/substitute.h>
 
+#include "base/container/raw_container.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

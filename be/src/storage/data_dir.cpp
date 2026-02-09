@@ -39,6 +39,9 @@
 #include <sstream>
 #include <utility>
 
+#include "base/system/errno.h"
+#include "base/time/monotime.h"
+#include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -55,9 +58,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/utils.h" // for check_dir_existed
-#include "util/defer_op.h"
-#include "util/errno.h"
-#include "util/monotime.h"
 #include "util/string_util.h"
 
 using strings::Substitute;
@@ -367,8 +367,8 @@ void DataDir::load() {
             return true;
         }
         RowsetSharedPtr rowset;
-        Status create_status =
-                RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(), rowset_meta, &rowset);
+        Status create_status = RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(),
+                                                            rowset_meta, &rowset, tablet->data_dir()->get_meta());
         if (!create_status.ok()) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();

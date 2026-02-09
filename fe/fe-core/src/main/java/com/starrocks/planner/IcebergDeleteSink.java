@@ -46,6 +46,7 @@ public class IcebergDeleteSink extends DataSink {
     private final long targetMaxFileSize;
     private final String tableIdentifier;
     private CloudConfiguration cloudConfiguration;
+    private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
 
     /**
      * Constructor for IcebergDeleteSink
@@ -155,5 +156,23 @@ public class IcebergDeleteSink extends DataSink {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    /**
+     * Sets the sink extra info for this delete operation
+     *
+     * @param sinkExtraInfo The extra info to set
+     */
+    public void setSinkExtraInfo(com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo) {
+        this.sinkExtraInfo = sinkExtraInfo;
+    }
+
+    /**
+     * Gets the sink extra info for this delete operation
+     *
+     * @return The extra info, or null if not set
+     */
+    public com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra getSinkExtraInfo() {
+        return sinkExtraInfo;
     }
 }

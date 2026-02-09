@@ -719,7 +719,29 @@ public class SelectAnalyzer {
 
             Optional<ResolvedField> resolvedField = outputScope.tryResolveField(slotRef);
             if (resolvedField.isPresent()) {
-                return outputExprs.get(resolvedField.get().getRelationFieldIndex());
+                Expr outputExpr = outputExprs.get(resolvedField.get().getRelationFieldIndex());
+                // If the alias matches the source column name and the output expression is an aggregation/analytic function,
+                // use the source column directly instead of the aggregation/analytic expression to avoid nested aggregation/analytic.
+                // For example: sum(input_count) as input_count, then sum(case when ... then input_count else 0 end)
+                // should use the source column input_count, not sum(input_count)
+                // Similarly: sum(input_count) over() as input_count, then sum(case when ... then input_count else 0 end) over()
+                // should use the source column input_count, not sum(input_count) over()
+                if (sourceScope.tryResolveField(slotRef).isPresent()) {
+                    // Check if output expression is an AnalyticExpr
+                    if (outputExpr instanceof AnalyticExpr) {
+                        return slotRef;
+                    }
+                    // Check if output expression is a FunctionCallExpr that is aggregate or analytic
+                    if (outputExpr instanceof FunctionCallExpr) {
+                        FunctionCallExpr funcCall = (FunctionCallExpr) outputExpr;
+                        // Check if it's an aggregate or analytic function (fn must be set and analyzed)
+                        if (funcCall.getFn() != null &&
+                                (funcCall.isAggregateFunction() || funcCall.isAnalyticFnCall())) {
+                            return slotRef;
+                        }
+                    }
+                }
+                return outputExpr;
             }
             return slotRef;
         }

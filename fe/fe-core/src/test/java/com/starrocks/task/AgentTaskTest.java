@@ -38,8 +38,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.Range;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
@@ -53,12 +57,15 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletRange;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -108,6 +115,7 @@ public class AgentTaskTest {
     private TabletMetadataUpdateAgentTask modifyEnablePersistentIndexTask2;
     private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask1;
     private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask2;
+    private TTabletSchema tabletSchema;
 
     @BeforeEach
     public void setUp() throws AnalysisException {
@@ -123,7 +131,7 @@ public class AgentTaskTest {
 
         PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
 
-        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+        tabletSchema = SchemaInfo.newBuilder()
                 .setId(indexId1)
                 .setKeysType(KeysType.AGG_KEYS)
                 .setShortKeyColumnCount(shortKeyNum)
@@ -345,5 +353,142 @@ public class AgentTaskTest {
             Assertions.assertTrue(e.getMessage().contains("Connection refused"));
             Assertions.assertEquals(0, countDownLatch.getCount());
         }
+    }
+
+    @Test
+    public void testCreateReplicaTaskWithRange() throws AnalysisException {
+        // Create a TabletRange with values
+        List<Variant> lowerBoundValues = new ArrayList<>();
+        lowerBoundValues.add(Variant.of(IntegerType.INT, "100"));
+        lowerBoundValues.add(Variant.of(VarcharType.VARCHAR, "abc"));
+        Tuple lowerBound = new Tuple(lowerBoundValues);
+
+        List<Variant> upperBoundValues = new ArrayList<>();
+        upperBoundValues.add(Variant.of(IntegerType.INT, "200"));
+        upperBoundValues.add(Variant.of(VarcharType.VARCHAR, "xyz"));
+        Tuple upperBound = new Tuple(upperBoundValues);
+
+        TabletRange tabletRange = new TabletRange(Range.of(lowerBound, upperBound, true, false));
+
+        // Create CreateReplicaTask with range
+        CreateReplicaTask taskWithRange = CreateReplicaTask.newBuilder()
+                .setNodeId(backendId1)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId1)
+                .setTabletId(tabletId1)
+                .setVersion(version)
+                .setStorageMedium(TStorageMedium.SSD)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .setRange(tabletRange)
+                .build();
+
+        // Get TCreateTabletReq
+        TCreateTabletReq req = taskWithRange.toThrift();
+        
+        // Verify range is set
+        Assertions.assertTrue(req.isSetRange());
+        TTabletRange thriftRange = req.getRange();
+        
+        // Verify lower bound
+        Assertions.assertNotNull(thriftRange.getLower_bound());
+        Assertions.assertEquals(2, thriftRange.getLower_bound().getValues().size());
+        Assertions.assertEquals("100", thriftRange.getLower_bound().getValues().get(0).getValue());
+        Assertions.assertEquals("abc", thriftRange.getLower_bound().getValues().get(1).getValue());
+        
+        // Verify upper bound
+        Assertions.assertNotNull(thriftRange.getUpper_bound());
+        Assertions.assertEquals(2, thriftRange.getUpper_bound().getValues().size());
+        Assertions.assertEquals("200", thriftRange.getUpper_bound().getValues().get(0).getValue());
+        Assertions.assertEquals("xyz", thriftRange.getUpper_bound().getValues().get(1).getValue());
+    }
+
+    @Test
+    public void testCreateReplicaTaskWithoutRange() {
+        // Create CreateReplicaTask without range
+        CreateReplicaTask taskWithoutRange = CreateReplicaTask.newBuilder()
+                .setNodeId(backendId2)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId2)
+                .setTabletId(tabletId2)
+                .setVersion(version)
+                .setStorageMedium(TStorageMedium.HDD)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .build();
+
+        // Get TCreateTabletReq
+        TCreateTabletReq req = taskWithoutRange.toThrift();
+        
+        // Verify range is not set
+        Assertions.assertFalse(req.isSetRange());
+    }
+
+    @Test
+    public void testCreateReplicaTaskWithNullRange() {
+        // Explicitly set null range
+        CreateReplicaTask taskWithNullRange = CreateReplicaTask.newBuilder()
+                .setNodeId(backendId1)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId1)
+                .setTabletId(tabletId1)
+                .setVersion(version)
+                .setStorageMedium(TStorageMedium.SSD)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .setRange(null)
+                .build();
+
+        // Get TCreateTabletReq
+        TCreateTabletReq req = taskWithNullRange.toThrift();
+        
+        // Verify range is not set
+        Assertions.assertFalse(req.isSetRange());
+    }
+
+    @Test
+    public void testCreateReplicaTaskBuilderPreservesRange() throws AnalysisException {
+        // Create a TabletRange
+        List<Variant> lowerBoundValues = new ArrayList<>();
+        lowerBoundValues.add(Variant.of(VarcharType.VARCHAR, "MIN_VALUE"));
+        Tuple lowerBound = new Tuple(lowerBoundValues);
+
+        List<Variant> upperBoundValues = new ArrayList<>();
+        upperBoundValues.add(Variant.of(VarcharType.VARCHAR, "MAX_VALUE"));
+        Tuple upperBound = new Tuple(upperBoundValues);
+
+        TabletRange tabletRange = new TabletRange(Range.of(lowerBound, upperBound, true, false));
+
+        // Create builder and set range
+        CreateReplicaTask.Builder builder = CreateReplicaTask.newBuilder()
+                .setNodeId(backendId1)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId1)
+                .setTabletId(tabletId1)
+                .setVersion(version)
+                .setStorageMedium(TStorageMedium.SSD)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .setRange(tabletRange);
+        
+        // Verify builder getter
+        Assertions.assertEquals(tabletRange, builder.getRange());
+        
+        // Build and verify
+        CreateReplicaTask task = builder.build();
+        TCreateTabletReq req = task.toThrift();
+        Assertions.assertTrue(req.isSetRange());
     }
 }

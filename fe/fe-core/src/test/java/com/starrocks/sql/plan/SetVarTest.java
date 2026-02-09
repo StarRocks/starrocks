@@ -211,14 +211,21 @@ public class SetVarTest extends PlanTestBase {
 
     @Test
     public void testMissingWarehouse() throws Exception {
-        // Simulate that after setting the warehouse, this warehouse is deleted.
-        starRocksAssert.getCtx().getSessionVariable().setWarehouseName("no_exist_warehouse");
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+        try {
+            // Simulate that after setting the warehouse, this warehouse is deleted.
+            starRocksAssert.getCtx().getSessionVariable().setWarehouseName("no_exist_warehouse");
 
-        String sql = "set warehouse = default_warehouse";
-        StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
-        StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
-        executor.execute();
-        assertEquals("default_warehouse", starRocksAssert.getCtx().getSessionVariable().getWarehouseName());
+            String sql = "set warehouse = default_warehouse";
+            StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
+            StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+            executor.execute();
+            assertEquals("default_warehouse", starRocksAssert.getCtx().getSessionVariable().getWarehouseName());
+        } finally {
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
     }
 
     @Test

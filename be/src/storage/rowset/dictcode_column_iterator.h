@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/simd/gather.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -23,7 +24,6 @@
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/types.h"
-#include "simd/gather.h"
 #include "storage/range.h"
 #include "storage/rowset/column_iterator_decorator.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -46,6 +46,9 @@ public:
 
     Status next_batch(const SparseRange<>& range, Column* dst) override { return _parent->next_dict_codes(range, dst); }
 
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override {
+        return _parent->fetch_dict_codes_by_rowid(rowids, values);
+    }
     std::string name() const override { return "DictCodeColumnIterator"; }
 
 private:
@@ -81,6 +84,10 @@ public:
         _swap_null_columns(_local_dict_code_col.get(), values);
         values->set_delete_state(_local_dict_code_col->delete_state());
         return Status::OK();
+    }
+
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override {
+        return _parent->fetch_dict_codes_by_rowid(rowids, values);
     }
 
     Status next_dict_codes(size_t* n, Column* dst) override {

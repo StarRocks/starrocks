@@ -18,6 +18,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -26,12 +27,14 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -40,6 +43,7 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -359,6 +363,12 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitAlterTaskStatement(AlterTaskStmt statement, ConnectContext context) {
+            TaskAnalyzer.analyzeAlterTaskStmt(statement);
+            return null;
+        }
+
         public static void analyzeSubmitTask(SubmitTaskStmt statement, ConnectContext context) {
             StatementBase workhouse = analyzeSubmitTaskWorkhorse(statement, context);
             analyzeSubmitTaskOnly(workhouse, statement, context);
@@ -458,6 +468,13 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                             ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
             DropStmtAnalyzer.analyze(statement, session);
             return null;
@@ -535,7 +552,13 @@ public class Analyzer {
 
         @Override
         public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
-            AlterDbQuotaAnalyzer.analyze(statement, context);
+            AlterDatabaseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, ConnectContext context) {
+            AlterDatabaseAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -553,7 +576,7 @@ public class Analyzer {
 
         @Override
         public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
-            AlterDatabaseRenameStatementAnalyzer.analyze(statement, context);
+            AlterDatabaseAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -619,6 +642,13 @@ public class Analyzer {
         @Override
         public Void visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt statement,
                                                                ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement,
+                                                                      ConnectContext context) {
             ClusterSnapshotAnalyzer.analyze(statement, context);
             return null;
         }

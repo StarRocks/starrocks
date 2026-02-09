@@ -18,9 +18,10 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/hash/xxh3.h"
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
-#include "column/datum.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/dictionary_cache_writer.h"
@@ -29,8 +30,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/type_traits.h"
-#include "util/phmap/phmap.h"
-#include "util/xxh3.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

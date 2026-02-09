@@ -20,6 +20,9 @@
 #include <optional>
 #include <unordered_map>
 
+#include "base/concurrency/spinlock.h"
+#include "base/hash/hash.h"
+#include "base/time/time.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -31,10 +34,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
-#include "util/hash.h"
 #include "util/hash_util.hpp"
-#include "util/spinlock.h"
-#include "util/time.h"
 
 namespace starrocks {
 

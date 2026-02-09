@@ -247,11 +247,11 @@ ORDER BY case_id;
 -- ORDER BY case_id;
 
 
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/ > /dev/null
-
 drop table variant_test_cases force;
 set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/ > /dev/null
 
 
 -- use spark to generate those data files

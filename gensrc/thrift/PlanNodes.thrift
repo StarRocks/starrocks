@@ -88,6 +88,7 @@ enum TPlanNodeType {
   RAW_VALUES_NODE,
   FETCH_NODE,
   LOOKUP_NODE,
+  BENCHMARK_SCAN_NODE,
 }
 
 // phases of an execution node
@@ -286,6 +287,7 @@ struct TBrokerScanRangeParams {
     31: optional i64 schema_sample_file_row_count
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
+    34: optional bool schema_sample_types = true
 }
 
 // Broker scan range
@@ -311,16 +313,10 @@ struct TEsScanRange {
   4: required i32 shard_id
 }
 
-enum TIcebergFileContent {
-    DATA,
-    POSITION_DELETES,
-    EQUALITY_DELETES,
-}
-
 struct TIcebergDeleteFile {
     1: optional string full_path
     2: optional Descriptors.THdfsFileFormat file_format
-    3: optional TIcebergFileContent file_content
+    3: optional Types.TIcebergFileContent file_content
     4: optional i64 length
 }
 
@@ -456,6 +452,11 @@ struct TBinlogScanRange {
   11: optional Types.TBinlogOffset offset
 }
 
+struct TBenchmarkScanRange {
+  1: optional i64 start_row
+  2: optional i64 row_count
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -469,6 +470,8 @@ struct TScanRange {
   20: optional THdfsScanRange hdfs_scan_range
 
   30: optional TBinlogScanRange binlog_scan_range
+
+  40: optional TBenchmarkScanRange benchmark_scan_range
 }
 
 struct TMySQLScanNode {
@@ -478,6 +481,13 @@ struct TMySQLScanNode {
   4: required list<string> filters
   5: optional i64 limit
   6: optional string temporal_clause
+}
+
+struct TBenchmarkScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string db_name
+  3: optional string table_name
+  4: optional double scale_factor
 }
 
 struct TFileScanNode {
@@ -647,6 +657,9 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+
+  // This field is only used for flat json to provide a uniq id
+  55: optional i32 next_uniq_id
 }
 
 struct TJDBCScanNode {
@@ -693,6 +706,8 @@ struct TLakeScanNode {
   // inverted index
   44: optional bool enable_prune_column_after_index_filter
   45: optional bool enable_gin_filter
+
+  46: optional i32 next_uniq_id
 }
 
 struct TEqJoinCondition {
@@ -1297,6 +1312,7 @@ struct TMetaScanNode {
     // deprecated. use schema key instead
     5: optional i64 schema_id
     6: optional Descriptors.TTableSchemaKey schema_key
+    7: optional i32 next_uniq_id
 }
 
 struct TDecodeNode {
@@ -1328,6 +1344,12 @@ const string BINLOG_OP_COLUMN_NAME = "_binlog_op";
 const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
 const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
 const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
+
+// virtual column names
+const string TABLET_ID_COLUMN_NAME = "_tablet_id_";
+// Future virtual columns (not yet implemented in BE):
+// const string SEGMENT_ID_COLUMN_NAME = "_segment_id_";
+// const string ROW_ID_COLUMN_NAME = "_row_id_";
 
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
@@ -1477,6 +1499,8 @@ struct TPlanNode {
   81: optional TSelectNode select_node; 
   82: optional TFetchNode fetch_node;
   83: optional TLookUpNode look_up_node;
+  // Scan node for benchmark
+  84: optional TBenchmarkScanNode benchmark_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

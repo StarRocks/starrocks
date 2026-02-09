@@ -16,9 +16,9 @@
 
 #include <utility>
 
+#include "base/concurrency/race_detect.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "exec/spill/spiller.hpp"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {

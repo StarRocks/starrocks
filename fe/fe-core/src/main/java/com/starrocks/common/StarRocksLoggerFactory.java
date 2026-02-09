@@ -38,7 +38,8 @@ public class StarRocksLoggerFactory {
      * @return The logger for the class with the given identifier by using the specific message factory.
      */
     public Logger getLogger(Class<?> clazz, String prefix) {
-        if (!Config.enable_mv_refresh_extra_prefix_logging || Strings.isNullOrEmpty(prefix)) {
+        if (FeConstants.runningUnitTest || !Config.enable_mv_refresh_extra_prefix_logging
+                || Strings.isNullOrEmpty(prefix)) {
             return LogManager.getLogger(clazz);
         } else {
             final LoggerContext loggerContext = LogManager.getContext(LogManager.class.getClassLoader(), false);

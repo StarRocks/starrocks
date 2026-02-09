@@ -37,11 +37,11 @@
 #include <algorithm>
 #include <filesystem>
 
+#include "base/testutil/assert.h"
 #include "common/logging.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

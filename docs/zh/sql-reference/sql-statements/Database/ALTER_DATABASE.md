@@ -37,11 +37,18 @@ ALTER DATABASE <db_name> RENAME <new_db_name>
 ALTER DATABASE <db_name> SET REPLICA QUOTA <quota>
 ```
 
+### 设置数据库存储卷
+
+```sql
+ALTER DATABASE <db_name> SET ("storage_volume" = "<new_storage_volume_name>");
+```
+
 说明：
 
 ```plain text
 重命名数据库后，如需要，请使用 REVOKE 和 GRANT 命令修改相应的用户权限。
 数据库的默认数据量配额和默认副本数量配额均为 2^63 - 1。
+如果未明确指定 "storage_volume" 属性，数据库的默认存储卷为创建数据库时的默认存储卷。
 ```
 
 ## 示例
@@ -66,6 +73,12 @@ ALTER DATABASE <db_name> SET REPLICA QUOTA <quota>
 
     ```SQL
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
+    ```
+
+4. 设置数据库存储卷。
+
+    ```SQL
+    ALTER DATABASE example_db SET ("storage_volume" = "aws_s3_storage_volume");
     ```
 
 ## 相关参考

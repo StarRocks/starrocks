@@ -56,17 +56,28 @@ public class Tuple implements Comparable<Tuple> {
         return values.hashCode();
     }
 
-    public static Tuple fromThrift(TTuple tTuple) {
-        return new Tuple(tTuple.values.stream().map(v -> Variant.fromThrift(v)).collect(Collectors.toList()));
-    }
-
-    public static Tuple fromProto(TuplePB tuplePB) {
-        return new Tuple(tuplePB.values.stream().map(v -> Variant.fromProto(v)).collect(Collectors.toList()));
+    @Override
+    public String toString() {
+        return values.toString();
     }
 
     public TTuple toThrift() {
         TTuple tuple = new TTuple();
         tuple.setValues(values.stream().map(Variant::toThrift).collect(Collectors.toList()));
         return tuple;
+    }
+
+    public TuplePB toProto() {
+        TuplePB tuple = new TuplePB();
+        tuple.values = values.stream().map(Variant::toProto).collect(Collectors.toList());
+        return tuple;
+    }
+
+    public static Tuple fromThrift(TTuple tTuple) {
+        return new Tuple(tTuple.values.stream().map(v -> Variant.fromThrift(v)).collect(Collectors.toList()));
+    }
+
+    public static Tuple fromProto(TuplePB tuplePB) {
+        return new Tuple(tuplePB.values.stream().map(v -> Variant.fromProto(v)).collect(Collectors.toList()));
     }
 }

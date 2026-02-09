@@ -48,6 +48,11 @@ public class InsertOverwriteJob {
     @SerializedName(value = "dynamicOverwrite")
     private boolean dynamicOverwrite = false;
 
+    // Transaction ID for dynamic overwrite, used to identify temp partitions after FE restart.
+    // Temp partition name prefix is "txn{txnId}_".
+    @SerializedName(value = "txnId")
+    private long txnId = -1;
+
     private transient InsertStmt insertStmt;
 
     public InsertOverwriteJob() {
@@ -139,5 +144,13 @@ public class InsertOverwriteJob {
 
     public boolean isDynamicOverwrite() {
         return dynamicOverwrite;
+    }
+
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 }

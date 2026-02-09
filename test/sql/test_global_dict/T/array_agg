@@ -1,0 +1,188 @@
+-- name: test_low_cardinality_array_agg
+
+CREATE TABLE `t` (
+  `id` int(11) NOT NULL COMMENT "",
+  `grp` int(11) NOT NULL COMMENT "",
+  `str1` varchar(65533) NOT NULL COMMENT "",
+  `str2` varchar(65533) NULL COMMENT "",
+  `val` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t VALUES
+    (1,  1, 'apple',  'X', 10),
+    (2,  1, 'banana', 'Y', 20),
+    (3,  1, 'apple',  'Z', 15),
+    (4,  1, 'cherry', 'X', 25),
+    (5,  2, 'banana', 'Y', 30),
+    (6,  2, 'cherry', 'Z', 35),
+    (7,  2, 'apple',  'X', 40),
+    (8,  2, 'date',   'Y', 45),
+    (9,  3, 'cherry', 'Z', 50),
+    (10, 3, 'cherry', 'X', 55),
+    (11, 3, 'date',   NULL, 60),
+    (12, 3, 'banana', 'Y', 65);
+
+[UC] analyze full table t;
+function: wait_global_dict_ready('str1', 't')
+function: wait_global_dict_ready('str2', 't')
+
+-- ===== Basic ARRAY_AGG(string) - 1 stage and 2 stage =====
+
+-- 1-stage aggregation
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_sort(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+
+-- 2-stage aggregation (local + merge)
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_sort(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+
+-- ===== ARRAY_AGG(DISTINCT string) =====
+
+-- Basic ARRAY_AGG(DISTINCT)
+SELECT grp, array_sort(array_agg(distinct str1)) FROM t GROUP BY grp ORDER BY grp;
+
+-- ARRAY_AGG(DISTINCT) with ORDER BY
+SELECT grp, array_agg(distinct str1 ORDER BY str1) FROM t GROUP BY grp ORDER BY grp;
+
+-- ARRAY_AGG(DISTINCT) with multi-column ORDER BY
+SELECT grp, array_agg(distinct str1 ORDER BY str1, str2) FROM t GROUP BY grp ORDER BY grp;
+
+-- ===== ARRAY_AGG(string) with single-column ORDER BY =====
+
+-- ORDER BY same string column
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str1) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str1) FROM t GROUP BY grp ORDER BY grp;
+
+-- ORDER BY different string column (non-deterministic ties within str2 groups, use array_sort)
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_sort(array_agg(str1 ORDER BY str2)) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_sort(array_agg(str1 ORDER BY str2)) FROM t GROUP BY grp ORDER BY grp;
+
+-- ORDER BY non-string column
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+
+-- ===== ARRAY_AGG(string) with multi-column ORDER BY =====
+
+-- Two string columns
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str1, str2) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str1, str2) FROM t GROUP BY grp ORDER BY grp;
+
+-- Two non-string columns
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY val, id) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY val, id) FROM t GROUP BY grp ORDER BY grp;
+
+-- String + non-string
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str2, val) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str2, val) FROM t GROUP BY grp ORDER BY grp;
+
+-- Non-string + string
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY val, str1) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY val, str1) FROM t GROUP BY grp ORDER BY grp;
+
+-- Three columns: string, non-string, string
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str2, val, str1) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str2, val, str1) FROM t GROUP BY grp ORDER BY grp;
+
+-- Mixed directions
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY str1 DESC, val ASC) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str1 DESC, val ASC) FROM t GROUP BY grp ORDER BY grp;
+
+-- ===== ARRAY_AGG(non-string) - NOT dict-optimized, correctness check =====
+
+-- Non-string value column, string ORDER BY
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(val ORDER BY str1, val) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(val ORDER BY str1, val) FROM t GROUP BY grp ORDER BY grp;
+
+-- Non-string value column, no ORDER BY
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_sort(array_agg(val)) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_sort(array_agg(val)) FROM t GROUP BY grp ORDER BY grp;
+
+-- ===== Derived operations on ARRAY_AGG result =====
+
+-- array_length of array_agg
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_length(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_length(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+
+-- Element access + string function: upper(array_agg(...)[1])
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, upper(array_sort(array_agg(str1))[1]) FROM t GROUP BY grp ORDER BY grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, upper(array_sort(array_agg(str1))[1]) FROM t GROUP BY grp ORDER BY grp;
+
+-- Element access on ARRAY_AGG(DISTINCT)
+SELECT grp, upper(array_sort(array_agg(distinct str1))[1]) FROM t GROUP BY grp ORDER BY grp;
+
+-- array_distinct of array_agg
+SELECT grp, array_sort(array_distinct(array_agg(str1))) FROM t GROUP BY grp ORDER BY grp;
+
+-- ===== Multiple ARRAY_AGGs =====
+
+-- Multiple ARRAY_AGGs in same query
+SELECT grp, array_sort(array_distinct(array_agg(str1))), array_sort(array_distinct(array_agg(str2))) FROM t GROUP BY grp ORDER BY grp;
+
+-- ===== Filtering: WHERE and HAVING =====
+
+-- ARRAY_AGG with WHERE on dict column
+SELECT grp, array_sort(array_agg(str1)) FROM t WHERE str2 = 'X' GROUP BY grp ORDER BY grp;
+
+-- ARRAY_AGG with WHERE using IN on dict column
+SELECT grp, array_sort(array_agg(str1)) FROM t WHERE str1 IN ('apple', 'banana') GROUP BY grp ORDER BY grp;
+
+-- ARRAY_AGG with HAVING clause
+SELECT grp, array_sort(array_distinct(array_agg(str1))) as names FROM t GROUP BY grp HAVING array_length(array_agg(str1)) > 100 ORDER BY grp;
+
+-- ARRAY_AGG(DISTINCT) with WHERE
+SELECT grp, array_sort(array_agg(distinct str1)) FROM t WHERE str2 = 'X' GROUP BY grp ORDER BY grp;
+
+-- ===== Subqueries =====
+
+-- Nested subquery with ARRAY_AGG
+SELECT grp, names FROM (
+    SELECT grp, array_sort(array_distinct(array_agg(str1))) as names FROM t GROUP BY grp
+) sub WHERE array_length(names) > 2 ORDER BY grp;
+
+-- Subquery with element access
+SELECT grp, first_val FROM (
+    SELECT grp, array_sort(array_agg(str1 ORDER BY str1))[1] as first_val FROM t GROUP BY grp
+) sub ORDER BY grp;
+
+-- ===== Correctness: optimized vs non-optimized =====
+
+-- 2-stage: with optimization (default)
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_sort(array_distinct(array_agg(str1))), array_length(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+
+-- 2-stage: without optimization
+SELECT /*+SET_VAR(new_planner_agg_stage=2, cbo_enable_low_cardinality_optimize=false)*/ grp, array_sort(array_distinct(array_agg(str1))), array_length(array_agg(str1)) FROM t GROUP BY grp ORDER BY grp;
+
+-- ARRAY_AGG(DISTINCT): with optimization
+SELECT grp, array_sort(array_agg(distinct str1)) FROM t GROUP BY grp ORDER BY grp;
+
+-- ARRAY_AGG(DISTINCT): without optimization
+SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/ grp, array_sort(array_agg(distinct str1)) FROM t GROUP BY grp ORDER BY grp;
+
+-- 1-stage with ORDER BY: with optimization
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+
+-- 1-stage with ORDER BY: without optimization
+SELECT /*+SET_VAR(new_planner_agg_stage=1, cbo_enable_low_cardinality_optimize=false)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+
+-- 2-stage with ORDER BY: with optimization
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+
+-- 2-stage with ORDER BY: without optimization
+SELECT /*+SET_VAR(new_planner_agg_stage=2, cbo_enable_low_cardinality_optimize=false)*/ grp, array_agg(str1 ORDER BY val) FROM t GROUP BY grp ORDER BY grp;
+
+-- 2-stage with multi-column ORDER BY: with optimization
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str1 ORDER BY str2, val) FROM t GROUP BY grp ORDER BY grp;
+
+-- 2-stage with multi-column ORDER BY: without optimization
+SELECT /*+SET_VAR(new_planner_agg_stage=2, cbo_enable_low_cardinality_optimize=false)*/ grp, array_agg(str1 ORDER BY str2, val) FROM t GROUP BY grp ORDER BY grp;
+
+-- Cleanup
+drop table t;
+

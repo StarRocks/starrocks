@@ -18,6 +18,9 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "connector/connector.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
@@ -33,9 +36,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/tablet_meta_manager.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::lake {
 
@@ -312,6 +312,43 @@ inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysTyp
 
 inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type) {
     return generate_simple_tablet_metadata(keys_type, 2);
+}
+
+inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata_v2(KeysType keys_type) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_next_rowset_id(1);
+    //
+    //  | column | type | KEY | NULL |
+    //  +--------+------+-----+------+
+    //  |   c0   |  VARCHAR | YES |  NO  |
+    //  |   c1   |  INT | NO  |  NO  |
+    auto schema = metadata->mutable_schema();
+    schema->set_keys_type(keys_type);
+    schema->set_id(next_id());
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+    auto c0 = schema->add_column();
+    {
+        c0->set_unique_id(next_id());
+        c0->set_name("c0");
+        c0->set_type("VARCHAR");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        c0->set_length(3200);
+    }
+    auto c1 = schema->add_column();
+    {
+        c1->set_unique_id(next_id());
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        c1->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+    }
+    return metadata;
 }
 
 inline std::shared_ptr<RuntimeState> create_runtime_state() {

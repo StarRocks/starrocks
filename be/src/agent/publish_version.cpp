@@ -16,6 +16,9 @@
 
 #include <bvar/bvar.h>
 
+#include "base/concurrency/countdown_latch.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
@@ -28,11 +31,8 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/countdown_latch.h"
-#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -285,6 +285,9 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);
                     pair.__set_version(max_continuous_version);
+                    if (is_replication_txn) {
+                        pair.__set_min_readable_version(tablet->min_readable_version());
+                    }
                 }
 
                 if (enable_sync_publish && tablet_tasks.empty() && max_continuous_version < partition_version.version) {

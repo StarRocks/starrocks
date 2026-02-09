@@ -22,6 +22,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
+#include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -55,7 +56,7 @@ Status LoadSpillBlockMergeExecutor::init() {
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&_tablet_internal_parallel_merge_pool));
-    // TODO: add metrics
+    REGISTER_THREAD_POOL_METRICS(tablet_internal_parallel_merge, _tablet_internal_parallel_merge_pool);
     return Status::OK();
 }
 
@@ -77,15 +78,20 @@ std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_tablet_inte
     return _tablet_internal_parallel_merge_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
 }
 
-void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
+void LoadSpillBlockContainer::append_block(spill::BlockGroup* block_group, const spill::BlockPtr& block) {
+    // Move append outside the lock to reduce lock contention
+    block_group->append(block);
     std::lock_guard guard(_mutex);
-    _block_groups.back().append(block);
     _total_bytes += block->size();
 }
 
-void LoadSpillBlockContainer::create_block_group() {
+// Create a new block group tagged with the given slot_idx
+// @param slot_idx: slot index from flush token, used to track submission order
+// @return: pointer to the newly created block group
+spill::BlockGroup* LoadSpillBlockContainer::create_block_group(int64_t slot_idx) {
     std::lock_guard guard(_mutex);
-    _block_groups.emplace_back(spill::BlockGroup());
+    _block_groups.emplace_back(BlockGroupPtrWithSlot{std::make_shared<spill::BlockGroup>(), slot_idx});
+    return _block_groups.back().block_group.get();
 }
 
 bool LoadSpillBlockContainer::empty() {
@@ -94,12 +100,28 @@ bool LoadSpillBlockContainer::empty() {
 }
 
 spill::BlockPtr LoadSpillBlockContainer::get_block(size_t gid, size_t bid) {
-    return _block_groups[gid].blocks()[bid];
+    return _block_groups[gid].block_group->blocks()[bid];
 }
 
 LoadSpillBlockManager::~LoadSpillBlockManager() {
     // release blocks before block manager
     _block_container.reset();
+    // _remote_dir_manager is initialized in init(), skip cleanup if init() was not called or failed
+    if (_remote_dir_manager != nullptr) {
+        auto status = clear_parent_path();
+        if (!status.ok() && !status.is_not_found()) {
+            LOG(WARNING) << "Failed to clear load spill parent path, load_id=" << print_id(_load_id)
+                         << ", error=" << status;
+        }
+    }
+}
+
+Status LoadSpillBlockManager::clear_parent_path() {
+    spill::AcquireDirOptions acquire_dir_opts;
+    acquire_dir_opts.data_size = 1; // just need acquire a dir
+    ASSIGN_OR_RETURN(auto dir, _remote_dir_manager->acquire_writable_dir(acquire_dir_opts));
+    std::string parent_path = dir->dir() + "/" + print_id(_load_id);
+    return dir->fs()->delete_dir(parent_path);
 }
 
 Status LoadSpillBlockManager::init() {
@@ -140,6 +162,9 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     opts.name = "load_spill";
     opts.block_size = block_size;
     opts.force_remote = force_remote;
+    // Defer parent path deletion to LoadSpillBlockManager::~LoadSpillBlockManager(),
+    // so the directory is only removed after all spill files have been cleaned up.
+    opts.skip_parent_path_deletion = true;
     return _block_manager->acquire_block(opts);
 }
 

@@ -27,6 +27,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
@@ -43,7 +44,6 @@ import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -57,7 +57,6 @@ import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetastore.class);
-    private static final int MEMORY_META_SAMPLES = 10;
     protected final String catalogName;
     protected final IMetastore delegate;
     protected final Configuration hdfsConfiguration;
@@ -79,7 +78,14 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.checkpointCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeCheckpointMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .weigher((key, value) -> Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .weigher((key, value) -> {
+                    // Structure-based estimation
+                    long structureEstimated = DeltaLakeCacheSizeEstimator.estimateCheckpointByStructure(
+                            (Pair<DeltaLakeFileStatus, StructType>) key, (List<ColumnarBatch>) value);
+
+                    // Return structure-based estimate for cache size limiting
+                    return (int) Math.min(structureEstimated, Integer.MAX_VALUE);
+                })
                 .maximumWeight(checkpointCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
@@ -91,8 +97,14 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .weigher((key, value) ->
-                        Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .weigher((key, value) -> {
+                    // Structure-based estimation
+                    long structureEstimated = DeltaLakeCacheSizeEstimator.estimateJsonByStructure(
+                            (DeltaLakeFileStatus) key, (List<JsonNode>) value);
+
+                    // Return structure-based estimate for cache size limiting
+                    return (int) Math.min(structureEstimated, Integer.MAX_VALUE);
+                })
                 .maximumWeight(jsonCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
@@ -216,18 +228,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> jsonSamples = jsonCache.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList());
-
-        List<Object> checkpointSamples = checkpointCache.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList());
-
-        return Lists.newArrayList(Pair.create(jsonSamples, jsonCache.size()),
-                Pair.create(checkpointSamples, checkpointCache.size()));
+    public long estimateSize() {
+        return Estimator.estimate(checkpointCache, 20) + Estimator.estimate(jsonCache, 20);
     }
 }

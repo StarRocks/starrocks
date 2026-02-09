@@ -39,6 +39,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/failpoint/fail_point.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -57,7 +58,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -319,8 +319,8 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
 
     OlapReaderStatistics stats;
     RowsetReleaseGuard guard(src_rowset->shared_from_this());
-    auto res = src_rowset->get_segment_iterators2(read_schema, base_tablet_schema, nullptr, version, &stats,
-                                                  base_tablet->data_dir()->get_meta());
+    auto res = src_rowset->get_segment_iterators2(read_schema, base_tablet_schema, MetaLoadMode::DCG_ONLY, version,
+                                                  &stats);
     if (!res.ok()) {
         return res.status();
     }

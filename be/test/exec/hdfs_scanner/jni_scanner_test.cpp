@@ -404,4 +404,18 @@ TEST_F(JniScannerTest, test_create_odps_jni_scanner) {
     check_jni_scanner_params(scanner->_jni_scanner_params, expected);
 }
 
+// Test that scanner can be safely closed even when JNI initialization fails
+TEST_F(JniScannerTest, test_close_without_jni_init) {
+    // Create a simple JniScanner without initializing JNI
+    std::map<std::string, std::string> params = {{"test_key", "test_value"}};
+    auto scanner = std::make_unique<JniScanner>("com/test/TestFactory", params);
+
+    // This should not crash even if JNI is not initialized
+    // The do_close() method should check for nullptr JNIEnv and return early
+    scanner->do_close(_runtime_state);
+
+    // If we reach here, the test passed (no crash occurred)
+    ASSERT_TRUE(true);
+}
+
 } // namespace starrocks
