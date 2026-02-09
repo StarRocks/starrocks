@@ -26,6 +26,7 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
@@ -34,6 +35,7 @@ import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnStateCallbackFactory;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -89,7 +91,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         map.put(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE, "true");
         map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "true");
         kvParams = new StreamLoadKvParams(map);
-        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), kvParams);
+        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), kvParams,
+                CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
         warehouseName = "default_warehouse";
         loadExecuteCallback = new TestMergeCommitTaskCallback();
         coordinatorFactory = Mockito.mock(Coordinator.Factory.class);

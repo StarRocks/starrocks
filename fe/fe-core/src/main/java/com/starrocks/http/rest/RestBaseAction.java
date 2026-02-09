@@ -39,7 +39,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
@@ -59,10 +58,8 @@ import com.starrocks.http.WebUtils;
 import com.starrocks.http.rest.v2.RestBaseResultV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -413,26 +410,5 @@ public class RestBaseAction extends BaseAction {
                 response,
                 status,
                 new RestBaseResultV2<>(status.code(), message));
-    }
-
-    public static Optional<String> getUserDefaultWarehouse(BaseRequest request) {
-        ConnectContext ctx = request.getConnectContext();
-        if (ctx != null && ctx.getCurrentUserIdentity() != null) {
-            UserIdentity userIdentity = ctx.getCurrentUserIdentity();
-            if (!userIdentity.isEphemeral()) {
-                try {
-                    UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                            .getUserProperty(userIdentity.getUser());
-                    String userWarehouse = userProperty.getSessionVariables().get(SessionVariable.WAREHOUSE_NAME);
-                    if (!Strings.isNullOrEmpty(userWarehouse)) {
-                        return Optional.of(userWarehouse);
-                    }
-                } catch (SemanticException e) {
-                    // user does not exist, use default warehouse
-                    LOG.warn("Failed to get user property. user: {}", userIdentity.getUser(), e);
-                }
-            }
-        }
-        return Optional.empty();
     }
 }
