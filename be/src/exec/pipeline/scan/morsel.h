@@ -255,13 +255,14 @@ public:
     virtual StatusOr<int> next_driver_seq();
     virtual bool enable_random_append_split_morsel() const { return false; }
     virtual void set_has_more(bool v) {}
+    virtual void set_has_more_from_split(bool v) {}
     virtual void mark_split_source_morsel_finished() {}
     virtual bool reach_limit() const { return false; }
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
 public:
-    SharedMorselQueueFactory(MorselQueuePtr queue, int size) : _queue(std::move(queue)), _size(size) {}
+    SharedMorselQueueFactory(MorselQueuePtr queue, int size);
     ~SharedMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override { return _queue.get(); }
@@ -273,11 +274,14 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more(bool v) override;
+    void set_has_more_from_split(bool v) override;
+    void mark_split_source_morsel_finished() override;
     bool reach_limit() const override;
 
 private:
     MorselQueuePtr _queue;
     const int _size;
+    std::atomic<int64_t> _num_original_morsels{0};
 };
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
@@ -302,7 +306,7 @@ public:
     StatusOr<int> next_driver_seq() override;
     bool enable_random_append_split_morsel() const override {
         DCHECK(_could_local_shuffle);
-        return enable_random_append_split_morsel;
+        return _enable_random_append_split_morsel;
     }
     void set_has_more(bool v) override;
     void mark_split_source_morsel_finished() override;

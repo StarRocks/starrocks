@@ -208,9 +208,7 @@ void ConnectorScanOperatorFactory::detach_shared_input(int32_t operator_seq, int
 }
 
 void ConnectorScanOperatorFactory::mark_split_source_morsel_finished() {
-    if (morsel_queue_factory()->enable_random_append_split_morsel()) {
-        morsel_queue_factory()->mark_split_source_morsel_finished();
-    }
+    morsel_queue_factory()->mark_split_source_morsel_finished();
 }
 
 // ===============================================================
