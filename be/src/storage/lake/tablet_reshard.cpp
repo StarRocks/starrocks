@@ -271,26 +271,34 @@ static Status get_tablet_split_ranges(TabletManager* tablet_manager, const Table
     std::vector<const RangeInfo*> tablet_overlapped_ranges;
     tablet_overlapped_ranges.reserve(ordered_ranges.size());
     int64_t total_num_rows = 0;
+    size_t non_empty_ranges = 0;
     for (const auto& range_info : ordered_ranges) {
-        if (!(tablet_range.less_than(range_info.min) || tablet_range.greater_than(range_info.max))) {
-            tablet_overlapped_ranges.push_back(&range_info);
-            total_num_rows += range_info.stat.num_rows;
+        if (tablet_range.less_than(range_info.min) || tablet_range.greater_than(range_info.max)) {
+            continue;
+        }
+        tablet_overlapped_ranges.push_back(&range_info);
+        total_num_rows += range_info.stat.num_rows;
+        if (range_info.stat.num_rows > 0) {
+            ++non_empty_ranges;
         }
     }
 
-    if (tablet_overlapped_ranges.empty()) {
-        return Status::InvalidArgument("No split ranges available");
+    // Need enough non-empty ranges to form split_count ranges; otherwise fallback.
+    if (non_empty_ranges < split_count) {
+        return Status::InvalidArgument("Not enough split ranges available");
     }
 
     // Calculate split ranges
     DCHECK(split_ranges.empty());
     split_ranges.reserve(split_count);
-    const int64_t avg_num_rows = total_num_rows / split_count;
+    const int64_t avg_num_rows = std::max<int64_t>(1, total_num_rows / split_count);
     int64_t acc_num_rows = 0;
     std::unordered_map<uint32_t, starrocks::lake::Statistic> acc_rowset_stats;
     last_boundary = nullptr;
+    size_t remaining_non_empty_ranges = non_empty_ranges;
     for (size_t i = 0; i < tablet_overlapped_ranges.size(); ++i) {
         const auto* range_info = tablet_overlapped_ranges[i];
+        const bool is_non_empty = range_info->stat.num_rows > 0;
         acc_num_rows += range_info->stat.num_rows;
         for (const auto& [rowset_id, stat] : range_info->rowset_stats) {
             auto& rowset_stat = acc_rowset_stats[rowset_id];
@@ -298,30 +306,48 @@ static Status get_tablet_split_ranges(TabletManager* tablet_manager, const Table
             rowset_stat.data_size += stat.data_size;
         }
 
-        if (((acc_num_rows >= avg_num_rows) ||
-             (tablet_overlapped_ranges.size() - i <= split_count - split_ranges.size())) &&
-            (split_ranges.size() < split_count)) {
-            auto& split_range = split_ranges.emplace_back();
-            if (last_boundary == nullptr) {
-                // Use lower bound in tablet range
-                split_range.range = tablet_metadata->range();
-            } else {
-                last_boundary->to_proto(split_range.range.mutable_lower_bound());
-                split_range.range.set_lower_bound_included(true);
+        const auto remaining_splits = static_cast<size_t>(split_count) - split_ranges.size();
+        if (is_non_empty && remaining_splits > 0 &&
+            (acc_num_rows >= avg_num_rows || remaining_non_empty_ranges <= remaining_splits)) {
+            const VariantTuple* boundary = &range_info->max;
+            // Advance boundary across empty ranges within tablet range to reach the gap end.
+            for (size_t j = i + 1; j < tablet_overlapped_ranges.size(); ++j) {
+                const auto* next_range = tablet_overlapped_ranges[j];
+                if (next_range->stat.num_rows > 0 || !tablet_range.strictly_contains(next_range->max)) {
+                    break;
+                }
+                boundary = &next_range->max;
             }
 
-            range_info->max.to_proto(split_range.range.mutable_upper_bound());
-            split_range.range.set_upper_bound_included(false);
+            // Skip invalid boundary to avoid generating empty or overlapping ranges.
+            if ((last_boundary == nullptr || boundary->compare(*last_boundary) > 0) &&
+                tablet_range.strictly_contains(*boundary)) {
+                auto& split_range = split_ranges.emplace_back();
+                if (last_boundary == nullptr) {
+                    // Use lower bound in tablet range
+                    split_range.range = tablet_metadata->range();
+                } else {
+                    last_boundary->to_proto(split_range.range.mutable_lower_bound());
+                    split_range.range.set_lower_bound_included(true);
+                }
 
-            for (const auto& [rowset_id, stat] : acc_rowset_stats) {
-                auto& rowset_stat = split_range.rowset_stats[rowset_id];
-                rowset_stat.num_rows = stat.num_rows;
-                rowset_stat.data_size = stat.data_size;
+                boundary->to_proto(split_range.range.mutable_upper_bound());
+                split_range.range.set_upper_bound_included(false);
+
+                for (const auto& [rowset_id, stat] : acc_rowset_stats) {
+                    auto& rowset_stat = split_range.rowset_stats[rowset_id];
+                    rowset_stat.num_rows = stat.num_rows;
+                    rowset_stat.data_size = stat.data_size;
+                }
+
+                acc_num_rows = 0;
+                acc_rowset_stats.clear();
+                last_boundary = boundary;
             }
+        }
 
-            acc_num_rows = 0;
-            acc_rowset_stats.clear();
-            last_boundary = &range_info->max;
+        if (is_non_empty) {
+            --remaining_non_empty_ranges;
         }
     }
 
@@ -339,7 +365,7 @@ static Status get_tablet_split_ranges(TabletManager* tablet_manager, const Table
             rowset_stat.num_rows += stat.num_rows;
             rowset_stat.data_size += stat.data_size;
         }
-    } else if (split_ranges.size() + 1 == split_count) {
+    } else if (split_ranges.size() + 1 == split_count && acc_num_rows > 0) {
         auto& split_range = split_ranges.emplace_back();
         // Use upper bound in tablet range
         split_range.range = tablet_metadata->range();
@@ -352,7 +378,7 @@ static Status get_tablet_split_ranges(TabletManager* tablet_manager, const Table
             rowset_stat.data_size = stat.data_size;
         }
     } else {
-        return Status::InvalidArgument("Invalid split count, it is too large");
+        return Status::InvalidArgument("Not enough split ranges available");
     }
 
     return Status::OK();
