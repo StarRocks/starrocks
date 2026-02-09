@@ -363,6 +363,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_limited_memory(RuntimeStat
                                                                      const size_t chunk_size) {
     if (_limited_mem_state.has_limited(*_aggregator)) {
         RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
+        auto notify = _aggregator->defer_notify_source();
         _aggregator->set_streaming_all_states(true);
     } else {
         RETURN_IF_ERROR(_push_chunk_by_auto(state, chunk, chunk_size));
