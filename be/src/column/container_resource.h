@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <span>
+#include <utility>
 
 namespace starrocks {
 class faststring;
@@ -27,6 +28,31 @@ public:
     template <class T>
     ContainerResource(const std::shared_ptr<T>& handle, const void* data, size_t length)
             : _owner(std::static_pointer_cast<void>(handle)), _data(data), _length(length) {}
+
+    ContainerResource(const ContainerResource& other)
+            : _owner(other._owner), _data(other._data), _length(other._length) {}
+
+    ContainerResource& operator=(const ContainerResource& other) {
+        if (this != &other) {
+            _owner = other._owner;
+            _data = other._data;
+            _length = other._length;
+        }
+        return *this;
+    }
+
+    ContainerResource(ContainerResource&& other) noexcept {
+        std::swap(_owner, other._owner);
+        std::swap(_data, other._data);
+        std::swap(_length, other._length);
+    }
+
+    ContainerResource& operator=(ContainerResource&& other) noexcept {
+        std::swap(_owner, other._owner);
+        std::swap(_data, other._data);
+        std::swap(_length, other._length);
+        return *this;
+    }
 
     void acquire(const ContainerResource& other) {
         reset();
