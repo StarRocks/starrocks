@@ -25,6 +25,7 @@ set(STARROCKS_LIBS
     Base
     Common
     Column
+    ColumnCore
     Connector
     Exec
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive

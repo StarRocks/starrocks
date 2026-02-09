@@ -12,27 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "base/container/raw_container.h"
+#pragma once
 
-#include <gtest/gtest.h>
-
-#include "common/memory/column_allocator.h"
+#include <string>
 
 namespace starrocks {
 
-TEST(TestRawContainer, testResizeWithStdAllocator) {
-    std::vector<int> v;
-    raw::make_room(&v, 5);
-    ASSERT_EQ(v.size(), 5);
-    raw::stl_vector_resize_uninitialized(&v, 10);
-    ASSERT_EQ(v.size(), 10);
-}
+std::string get_stack_trace();
 
-TEST(TestRawContainer, testResizeWithColumnAllocator) {
-    std::vector<int, ColumnAllocator<int>> v;
-    raw::make_room(&v, 5);
-    ASSERT_EQ(v.size(), 5);
-    raw::stl_vector_resize_uninitialized(&v, 10);
-    ASSERT_EQ(v.size(), 10);
-}
 } // namespace starrocks

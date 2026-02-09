@@ -16,7 +16,7 @@
 
 #include <glog/logging.h>
 
-#include "runtime/memory/mem_hook_allocator.h"
+#include "common/memory/mem_hook_allocator.h"
 
 namespace starrocks {
 

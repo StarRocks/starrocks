@@ -16,8 +16,7 @@
 
 #include <memory>
 #include <span>
-
-#include "storage/rowset/page_handle_fwd.h"
+#include <utility>
 
 namespace starrocks {
 class faststring;
@@ -25,31 +24,39 @@ class faststring;
 class ContainerResource {
 public:
     ContainerResource() = default;
-    ContainerResource(const std::shared_ptr<PageHandle>& handle, const void* data, size_t length)
-            : _handle(handle), _data(data), _length(length) {}
 
-    ContainerResource(const ContainerResource& other) {
-        this->_data = other._data;
-        this->_length = other._length;
-        this->_handle = other._handle;
+    template <class T>
+    ContainerResource(const std::shared_ptr<T>& handle, const void* data, size_t length)
+            : _owner(std::static_pointer_cast<void>(handle)), _data(data), _length(length) {}
+
+    ContainerResource(const ContainerResource& other)
+            : _owner(other._owner), _data(other._data), _length(other._length) {}
+
+    ContainerResource& operator=(const ContainerResource& other) {
+        if (this != &other) {
+            _owner = other._owner;
+            _data = other._data;
+            _length = other._length;
+        }
+        return *this;
     }
 
     ContainerResource(ContainerResource&& other) noexcept {
-        std::swap(this->_data, other._data);
-        std::swap(this->_length, other._length);
-        std::swap(this->_handle, other._handle);
+        std::swap(_owner, other._owner);
+        std::swap(_data, other._data);
+        std::swap(_length, other._length);
     }
 
     ContainerResource& operator=(ContainerResource&& other) noexcept {
-        std::swap(this->_data, other._data);
-        std::swap(this->_length, other._length);
-        std::swap(this->_handle, other._handle);
+        std::swap(_owner, other._owner);
+        std::swap(_data, other._data);
+        std::swap(_length, other._length);
         return *this;
     }
 
     void acquire(const ContainerResource& other) {
         reset();
-        _handle = other._handle;
+        _owner = other._owner;
     }
 
     template <class T>
@@ -58,7 +65,7 @@ public:
     }
 
     void reset() {
-        _handle.reset();
+        _owner.reset();
         _data = nullptr;
     }
 
@@ -72,16 +79,13 @@ public:
 
     template <class T>
     bool is_aligned() const {
-        if ((uintptr_t)_data % alignof(T) == 0) {
-            return true;
-        }
-        return false;
+        return reinterpret_cast<uintptr_t>(_data) % alignof(T) == 0;
     }
 
-    bool owned() const { return _handle != nullptr; }
+    bool owned() const { return _owner != nullptr; }
 
 private:
-    std::shared_ptr<PageHandle> _handle;
+    std::shared_ptr<void> _owner;
 
     const void* _data{};
     size_t _length{};

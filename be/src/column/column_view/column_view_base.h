@@ -16,7 +16,7 @@
 #include <column/column.h>
 #include <types/datum.h>
 
-#include "util/cow.h"
+#include "common/cow.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 #define NOT_SUPPORT()                                                                                         \

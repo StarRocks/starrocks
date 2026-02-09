@@ -12,10 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/memory/column_allocator.h"
+#include "common/stack_util.h"
+
+namespace google {
+std::string GetStackTrace();
+}
 
 namespace starrocks {
 
-MemHookAllocator kDefaultColumnAllocator = MemHookAllocator{};
-
+std::string get_stack_trace() {
+    return google::GetStackTrace();
 }
+
+} // namespace starrocks

@@ -61,10 +61,6 @@ bool Symbolize(void* pc, char* out, unsigned long out_size, SymbolizeOptions opt
 
 namespace starrocks {
 
-std::string get_stack_trace() {
-    return google::GetStackTrace();
-}
-
 struct StackTraceTask {
     std::thread::id id;
     static constexpr int kMaxStackDepth = 64;
