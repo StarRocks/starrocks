@@ -3102,14 +3102,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean azure_use_native_sdk = true;
 
-    @ConfField(mutable = true,
-            comment = "Whether to use URI authority (rather than host) to build the file system cache key " +
-                    "for all schemes. If set to false, only azure-related schemes use authority and other " +
-                    "schemes fall back to legacy host-based keying. This flag exists for rollback purposes: " +
-                    "if issues arise in production, it can be dynamically set to false to revert non-Azure " +
-                    "schemes to the legacy behavior.")
-    public static boolean fs_cache_key_use_uri_authority_for_all_schemes = true;
-
     @ConfField(mutable = true)
     public static boolean enable_experimental_rowstore = false;
 

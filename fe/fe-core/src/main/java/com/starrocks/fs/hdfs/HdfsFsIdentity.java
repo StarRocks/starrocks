@@ -17,9 +17,10 @@
 
 package com.starrocks.fs.hdfs;
 
+import java.util.Objects;
+
 public class HdfsFsIdentity {
 
-    // A URI identity key, which may be built from either host or authority.
     private final String uriIdentity;
     private final String ugiInfo;
 
@@ -30,12 +31,7 @@ public class HdfsFsIdentity {
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result
-                + ((uriIdentity == null) ? 0 : uriIdentity.hashCode());
-        result = prime * result + ((ugiInfo == null) ? 0 : ugiInfo.hashCode());
-        return result;
+        return Objects.hash(uriIdentity, ugiInfo);
     }
 
     @Override

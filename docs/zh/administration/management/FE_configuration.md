@@ -2875,15 +2875,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否使用 Native SDK 访问 Azure Blob Storage，从而允许使用 Managed Identity 和 Service Principal 进行身份验证。如果该项设置为 `false`，则只允许使用 Shared Key 和 SAS 令牌进行身份验证。
 - 引入版本：v3.4.4
 
-##### fs_cache_key_use_uri_authority_for_all_schemes
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否使用 URI authority（而非 host）来构建所有 scheme 的文件系统缓存 key。如果设置为 `false`，则只有 Azure 相关 scheme（abfs、abfss、wasb、wasbs）使用 authority，其他 scheme 回退到旧的基于 host 的缓存 key 方式。此配置用于回滚：如果生产环境出现问题，可以通过 `ADMIN SET FRONTEND CONFIG` 将其动态设置为 `false`，无需重启即可将非 Azure scheme 恢复到旧行为。
-- 引入版本：v3.4.11、v3.5.14、v4.0.7、v4.1
-
 ##### cloud_native_hdfs_url
 
 - 默认值：空字符串
