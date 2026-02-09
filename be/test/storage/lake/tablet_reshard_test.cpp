@@ -79,12 +79,18 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
 
     auto rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
-    rowset_meta_pb->add_segments("test.dat");
-    rowset_meta_pb->add_segment_size(1024);
+    rowset_meta_pb->add_segments("test_0.dat");
+    rowset_meta_pb->add_segment_size(512);
     auto* segment_meta = rowset_meta_pb->add_segment_metas();
     segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
-    segment_meta->set_num_rows(5);
+    segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(50));
+    segment_meta->set_num_rows(3);
+    rowset_meta_pb->add_segments("test_1.dat");
+    rowset_meta_pb->add_segment_size(512);
+    auto* segment_meta1 = rowset_meta_pb->add_segment_metas();
+    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
+    segment_meta1->set_num_rows(2);
     rowset_meta_pb->add_del_files()->set_name("test.del");
     rowset_meta_pb->set_overlapped(false);
     rowset_meta_pb->set_data_size(1024);
@@ -185,6 +191,93 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
     EXPECT_OK(res);
     EXPECT_EQ(2, tablet_metadatas.size());
     EXPECT_EQ(0, tablet_ranges.size());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+
+    auto rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    rowset_meta_pb->add_segments("test_0.dat");
+    rowset_meta_pb->add_segment_size(512);
+    auto* segment_meta0 = rowset_meta_pb->add_segment_metas();
+    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(299999));
+    segment_meta0->set_num_rows(100);
+
+    rowset_meta_pb->add_segments("test_1.dat");
+    rowset_meta_pb->add_segment_size(512);
+    auto* segment_meta1 = rowset_meta_pb->add_segment_metas();
+    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(300000));
+    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(599999));
+    segment_meta1->set_num_rows(100);
+
+    rowset_meta_pb->set_overlapped(true);
+    rowset_meta_pb->set_data_size(1024);
+    rowset_meta_pb->set_num_rows(200);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding_tablet_for_splitting;
+    auto& splitting_tablet = *resharding_tablet_for_splitting.mutable_splitting_tablet_info();
+    splitting_tablet.set_old_tablet_id(tablet_id);
+    std::vector<int64_t> new_tablet_ids{next_id(), next_id()};
+    for (auto new_tablet_id : new_tablet_ids) {
+        splitting_tablet.add_new_tablet_ids(new_tablet_id);
+    }
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto res =
+            lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet_for_splitting, metadata.version(),
+                                            metadata.version() + 1, txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_OK(res);
+    EXPECT_EQ(3, tablet_metadatas.size());
+    EXPECT_EQ(2, tablet_ranges.size());
+
+    int upper_300000 = 0;
+    int lower_300000 = 0;
+    for (const auto& [tablet_id, range_pb] : tablet_ranges) {
+        if (range_pb.has_upper_bound()) {
+            ASSERT_EQ(1, range_pb.upper_bound().values_size());
+            if (range_pb.upper_bound().values(0).value() == "300000") {
+                ++upper_300000;
+                EXPECT_FALSE(range_pb.upper_bound_included());
+            }
+        }
+        if (range_pb.has_lower_bound()) {
+            ASSERT_EQ(1, range_pb.lower_bound().values_size());
+            if (range_pb.lower_bound().values(0).value() == "300000") {
+                ++lower_300000;
+                EXPECT_TRUE(range_pb.lower_bound_included());
+            }
+        }
+        if (range_pb.has_lower_bound() && range_pb.has_upper_bound()) {
+            VariantTuple lower;
+            VariantTuple upper;
+            ASSERT_OK(lower.from_proto(range_pb.lower_bound()));
+            ASSERT_OK(upper.from_proto(range_pb.upper_bound()));
+            EXPECT_LT(lower.compare(upper), 0);
+        }
+    }
+    EXPECT_EQ(1, upper_300000);
+    EXPECT_EQ(1, lower_300000);
+
+    for (auto new_tablet_id : new_tablet_ids) {
+        auto it = tablet_metadatas.find(new_tablet_id);
+        ASSERT_TRUE(it != tablet_metadatas.end());
+        auto* meta = it->second.get();
+        ASSERT_EQ(1, meta->rowsets_size());
+        EXPECT_GT(meta->rowsets(0).num_rows(), 0);
+        EXPECT_GT(meta->rowsets(0).data_size(), 0);
+    }
 }
 
 } // namespace starrocks
