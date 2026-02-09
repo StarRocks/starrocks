@@ -49,8 +49,9 @@ for COMP in "fe" "be"; do
         [ -d "$SRC_DIR/www" ] && cp -r "$SRC_DIR/www" "$STAGING_DIR/usr/lib/starrocks/be/"
     fi
 
-    # Copy Configs
+    # Copy Configs and set up symlink
     cp -r "$SRC_DIR/conf/"* "$STAGING_DIR/etc/starrocks/$COMP/"
+    ln -s "/etc/starrocks/$COMP" "$STAGING_DIR/usr/lib/starrocks/$COMP/conf"
 
     # Path Patching (LSB)
     echo "Patching $COMP.conf for standard paths..."
