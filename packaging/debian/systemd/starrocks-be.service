@@ -6,11 +6,11 @@ After=network.target
 Type=simple
 User=starrocks
 Group=starrocks
+RuntimeDirectory=starrocks
 Environment="STARROCKS_HOME=/usr/lib/starrocks/be"
-Environment="PID_DIR=/var/run/starrocks"
-ExecStart=/usr/lib/starrocks/be/bin/start_be.sh --conf_dir /etc/starrocks/be --daemonize 0
+ExecStart=/usr/lib/starrocks/be/bin/start_be.sh
 Restart=on-failure
-LimitNOFILE=65536
+LimitNOFILE=262144
 LimitMEMLOCK=infinity
 
 [Install]
