@@ -32,6 +32,7 @@ import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.services.glue.model.ResourceShareType;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.hadoop.hive.metastore.TableType.EXTERNAL_TABLE;
@@ -145,23 +146,25 @@ public final class MetastoreClientUtils {
     /**
      * Gets the ResourceShareType for AWS Glue GetDatabases API.
      * Valid values: ALL, FOREIGN, FEDERATED
-     * Default: ALL (returns both local and shared databases)
+     * <p>
+     * When not specified (null or empty), AWS Glue defaults to returning only local databases.
+     * To include shared databases, explicitly set this to ALL.
      *
      * @param conf Hadoop configuration
-     * @return ResourceShareType enum value, defaults to ALL if not specified or invalid
+     * @return Optional containing ResourceShareType if specified and valid, empty Optional otherwise
      * @see <a href="https://docs.aws.amazon.com/glue/latest/webapi/API_GetDatabases.html">AWS Glue GetDatabases API</a>
      */
-    public static ResourceShareType getResourceShareType(Configuration conf) {
+    public static Optional<ResourceShareType> getResourceShareType(Configuration conf) {
         String resourceShareType = conf.get(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE);
         if (StringUtils.isNotEmpty(resourceShareType)) {
             try {
-                return ResourceShareType.valueOf(resourceShareType.toUpperCase());
+                return Optional.of(ResourceShareType.valueOf(resourceShareType.toUpperCase()));
             } catch (IllegalArgumentException e) {
                 LOG.warn("Invalid aws.glue.resource_share_type value: '{}'. Valid values are: ALL, FOREIGN, FEDERATED. " +
-                        "Using default value: ALL", resourceShareType);
+                        "AWS default behavior will be used (local databases only).", resourceShareType);
             }
         }
-        // Default to ALL to include both local and shared databases
-        return ResourceShareType.ALL;
+        // Return empty Optional when not specified - AWS Glue defaults to local databases only
+        return Optional.empty();
     }
 }

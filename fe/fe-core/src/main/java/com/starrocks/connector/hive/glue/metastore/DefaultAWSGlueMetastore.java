@@ -97,6 +97,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -135,7 +136,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
     private final HiveConf conf;
     private final GlueClient glueClient;
     private final String catalogId;
-    private final ResourceShareType resourceShareType;
+    private final Optional<ResourceShareType> resourceShareType;
     private final ExecutorService executorService;
     private final int numPartitionSegments;
 
@@ -187,8 +188,10 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
             GetDatabasesRequest.Builder getDatabasesRequest =
                     GetDatabasesRequest.builder()
                             .nextToken(nextToken)
-                            .catalogId(catalogId)
-                            .resourceShareType(resourceShareType);
+                            .catalogId(catalogId);
+            // Only set ResourceShareType when explicitly specified
+            // When not set, AWS Glue defaults to returning only local databases
+            resourceShareType.ifPresent(getDatabasesRequest::resourceShareType);
             GetDatabasesResponse result = glueClient.getDatabases(getDatabasesRequest.build());
             nextToken = result.nextToken();
             ret.addAll(result.databaseList());

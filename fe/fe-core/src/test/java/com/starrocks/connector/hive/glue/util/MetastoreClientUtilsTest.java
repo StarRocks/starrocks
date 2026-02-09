@@ -25,6 +25,7 @@ import software.amazon.awssdk.services.glue.model.ResourceShareType;
 import software.amazon.awssdk.services.glue.model.StorageDescriptor;
 
 import java.util.Map;
+import java.util.Optional;
 
 
 public class MetastoreClientUtilsTest {
@@ -70,8 +71,9 @@ public class MetastoreClientUtilsTest {
     @Test
     public void testGetResourceShareTypeDefaultValue() {
         Configuration conf = new Configuration();
-        // When not set, should default to ALL
-        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+        // When not set, should return empty Optional (AWS defaults to local databases only)
+        Optional<ResourceShareType> result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertFalse(result.isPresent(), "When not set, should return empty Optional");
     }
 
     @Test
@@ -80,17 +82,23 @@ public class MetastoreClientUtilsTest {
 
         // Test ALL
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "ALL");
-        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+        Optional<ResourceShareType> result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertEquals(ResourceShareType.ALL, result.get());
 
         // Test FOREIGN
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "FOREIGN");
-        Assertions.assertEquals(ResourceShareType.FOREIGN, MetastoreClientUtils.getResourceShareType(conf));
+        result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertEquals(ResourceShareType.FOREIGN, result.get());
 
         // Test FEDERATED
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "FEDERATED");
-        Assertions.assertEquals(ResourceShareType.FEDERATED, MetastoreClientUtils.getResourceShareType(conf));
+        result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertEquals(ResourceShareType.FEDERATED, result.get());
     }
 
     @Test
@@ -99,34 +107,43 @@ public class MetastoreClientUtilsTest {
 
         // Test lowercase
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "all");
-        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+        Optional<ResourceShareType> result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertEquals(ResourceShareType.ALL, result.get());
 
         // Test mixed case
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "Foreign");
-        Assertions.assertEquals(ResourceShareType.FOREIGN, MetastoreClientUtils.getResourceShareType(conf));
+        result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertEquals(ResourceShareType.FOREIGN, result.get());
 
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "federated");
-        Assertions.assertEquals(ResourceShareType.FEDERATED, MetastoreClientUtils.getResourceShareType(conf));
+        result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertEquals(ResourceShareType.FEDERATED, result.get());
     }
 
     @Test
     public void testGetResourceShareTypeInvalidValue() {
         Configuration conf = new Configuration();
 
-        // Test invalid value - should return default (ALL)
+        // Test invalid value - should return empty Optional (AWS defaults to local databases)
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "INVALID");
-        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+        Optional<ResourceShareType> result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertFalse(result.isPresent(), "Invalid value should return empty Optional");
 
-        // Test empty string - should return default (ALL)
+        // Test empty string - should return empty Optional
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "");
-        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+        result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertFalse(result.isPresent(), "Empty string should return empty Optional");
 
-        // Test whitespace - should return default (ALL)
+        // Test whitespace - should return empty Optional
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "   ");
-        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+        result = MetastoreClientUtils.getResourceShareType(conf);
+        Assertions.assertFalse(result.isPresent(), "Whitespace should return empty Optional");
     }
 }
