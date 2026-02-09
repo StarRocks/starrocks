@@ -18,6 +18,7 @@
 #include <type_traits>
 
 #include "base/container/raw_container.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
@@ -653,13 +654,7 @@ public:
         if (columns[1]->only_null() || columns[1]->is_null(row_num)) {
             return;
         }
-        Slice rhs;
-        auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[1]));
-        if (columns[1]->is_constant()) {
-            rhs = binary_column->get_slice(0);
-        } else {
-            rhs = binary_column->get_slice(row_num);
-        }
+        Slice rhs = ColumnHelper::get_binary_slice(columns[1], row_num);
         OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 

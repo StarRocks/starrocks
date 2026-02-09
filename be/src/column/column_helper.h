@@ -533,6 +533,34 @@ public:
         }
     }
 
+    template <LogicalType Type, typename ColumnPtrType>
+    static inline auto get_container_data(const ColumnPtrType& column) {
+        using ColumnType = RunTimeColumnType<Type>;
+        if constexpr (lt_is_string_or_binary<Type>) {
+            const Column* data_column = get_data_column(column.get());
+            if (data_column->is_large_binary()) {
+                return get_proxy_data(down_cast<const LargeBinaryColumn*>(data_column));
+            }
+            return get_proxy_data(down_cast<const BinaryColumn*>(data_column));
+        } else {
+            return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
+        }
+    }
+
+    template <LogicalType Type>
+    static inline auto get_container_data(const Column* column) {
+        using ColumnType = RunTimeColumnType<Type>;
+        if constexpr (lt_is_string_or_binary<Type>) {
+            const Column* data_column = get_data_column(column);
+            if (data_column->is_large_binary()) {
+                return get_proxy_data(down_cast<const LargeBinaryColumn*>(data_column));
+            }
+            return get_proxy_data(down_cast<const BinaryColumn*>(data_column));
+        } else {
+            return ColumnHelper::as_raw_column<ColumnType>(column)->immutable_data();
+        }
+    }
+
     template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const Column* col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
@@ -611,6 +639,92 @@ public:
     // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
     static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
 
+    static inline Slice get_binary_slice(const Column* column, size_t row) {
+        const Column* data_column = get_data_column(column);
+        size_t index = column->is_constant() ? 0 : row;
+        if (data_column->is_large_binary()) {
+            return down_cast<const LargeBinaryColumn*>(data_column)->get_slice(index);
+        }
+        return down_cast<const BinaryColumn*>(data_column)->get_slice(index);
+    }
+
+    static inline void append_binary_value(Column* column, const Slice& value) {
+        Column* data_column = get_data_column(column);
+        if (data_column->is_large_binary()) {
+            down_cast<LargeBinaryColumn*>(data_column)->append(value);
+        } else {
+            down_cast<BinaryColumn*>(data_column)->append(value);
+        }
+    }
+
+    template <typename ColumnPtrType>
+    static inline void ensure_large_binary_column(ColumnPtrType& column) {
+        Column* data_column = get_data_column(column->as_mutable_raw_ptr());
+        if (!data_column->is_binary()) {
+            return;
+        }
+        auto* binary_column = down_cast<BinaryColumn*>(data_column);
+        auto large_column = LargeBinaryColumn::create();
+        large_column->get_bytes().swap(binary_column->get_bytes());
+        auto& src_offsets = binary_column->get_offset();
+        auto& dst_offsets = large_column->get_offset();
+        dst_offsets.resize(src_offsets.size());
+        for (size_t i = 0; i < src_offsets.size(); ++i) {
+            dst_offsets[i] = src_offsets[i];
+        }
+        // Reset to valid empty state (offsets must have at least one element)
+        src_offsets.resize(1);
+        src_offsets[0] = 0;
+        if (column->is_nullable()) {
+            auto* nullable_column = down_cast<NullableColumn*>(column->as_mutable_raw_ptr());
+            nullable_column->data_column() = std::move(large_column);
+        } else if (column->is_constant()) {
+            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_raw_ptr());
+            const_column->data_column() = std::move(large_column);
+        } else {
+            column = std::move(large_column);
+        }
+    }
+
+    static inline BinaryDataProxyContainer get_proxy_data(const BinaryColumn* column) {
+        return column->get_proxy_data();
+    }
+
+    static inline BinaryDataProxyContainer get_proxy_data(const LargeBinaryColumn* column) {
+        return column->get_proxy_data();
+    }
+
+    static inline size_t get_binary_bytes_size(const Column* column) {
+        if (column->is_large_binary()) {
+            return down_cast<const LargeBinaryColumn*>(column)->get_immutable_bytes().size();
+        }
+        return down_cast<const BinaryColumn*>(column)->get_immutable_bytes().size();
+    }
+
+    template <typename Func>
+    static inline void with_binary_column_bytes(Column* column, Func&& func) {
+        if (column->is_large_binary()) {
+            auto* col = down_cast<LargeBinaryColumn*>(column);
+            func(col->get_bytes(), col->get_offset());
+        } else {
+            auto* col = down_cast<BinaryColumn*>(column);
+            func(col->get_bytes(), col->get_offset());
+        }
+    }
+
+    // Dispatch on the concrete binary column type once, then invoke the lambda
+    // with a typed pointer (const BinaryColumn* or const LargeBinaryColumn*).
+    // Use this to hoist the type check out of hot loops.
+    template <typename Func>
+    static inline void with_binary_data_column(const Column* column, Func&& func) {
+        const Column* data_column = get_data_column(column);
+        if (data_column->is_large_binary()) {
+            func(down_cast<const LargeBinaryColumn*>(data_column));
+        } else {
+            func(down_cast<const BinaryColumn*>(data_column));
+        }
+    }
+
     static bool is_all_const(const Columns& columns);
 
     // Returns
@@ -683,14 +797,10 @@ public:
 template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
-    static const auto get_data(const Column* column) {
-        return ColumnHelper::as_raw_column<ColumnType>(column)->immutable_data();
-    }
-    static const auto get_data(const ColumnPtr& column) {
-        return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
-    }
+    static const auto get_data(const Column* column) { return ColumnHelper::get_container_data<ltype>(column); }
+    static const auto get_data(const ColumnPtr& column) { return ColumnHelper::get_container_data<ltype>(column); }
     static const auto get_data(const MutableColumnPtr& column) {
-        return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
+        return ColumnHelper::get_container_data<ltype>(column);
     }
 };
 
