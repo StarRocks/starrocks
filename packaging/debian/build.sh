@@ -1,34 +1,34 @@
 #!/bin/bash
 set -e
 
-# --- Configuration ---
-VERSION="4.0.4"
+# --- Configuration & Arguments ---
+# $1: Version (default: 4.0.4)
+# $2: FE Source directory (default: ../../out/fe)
+# $3: BE Source directory (default: ../../out/be)
+
+VERSION=${1:-"4.0.4"}
 ARCH="amd64"
-TARBALL="../../build_output/StarRocks-4.0.4-ubuntu-amd64.tar.gz"
-EXTRACT_DIR="target/extract"
+FE_SOURCE=${2:-"../../out/fe"}
+BE_SOURCE=${3:-"../../out/be"}
 
 echo "### StarRocks Debian Packaging Build ###"
 
-# 1. Validation
-if [ ! -f "$TARBALL" ]; then
-    echo "ERROR: Tarball not found at $TARBALL"
-    exit 1
-fi
-
-# 2. Cleanup
+# Cleanup previous builds
 rm -rf target
-mkdir -p "$EXTRACT_DIR"
+mkdir -p target
 
-# 3. Unpack
-echo "Unpacking tarball..."
-tar -xzf "$TARBALL" -C "$EXTRACT_DIR" --strip-components=1
-
-# 4. Processing Loop
+# Processing Loop
 for COMP in "fe" "be"; do
     PACKAGE_NAME="starrocks-$COMP"
     STAGING_DIR="target/${PACKAGE_NAME}_${VERSION}_${ARCH}"
+    SRC_DIR=$([ "$COMP" == "fe" ] && echo "$FE_SOURCE" || echo "$BE_SOURCE")
     
     echo "--- Processing $PACKAGE_NAME ---"
+
+    if [ ! -d "$SRC_DIR" ]; then
+        echo "ERROR: Source directory $SRC_DIR not found!"
+        exit 1
+    fi
 
     # Create Structure
     mkdir -p "$STAGING_DIR/DEBIAN"
@@ -39,18 +39,18 @@ for COMP in "fe" "be"; do
     mkdir -p "$STAGING_DIR/lib/systemd/system"
 
     # Copy Binaries/Libs
-    cp -r "$EXTRACT_DIR/$COMP/bin" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
-    cp -r "$EXTRACT_DIR/$COMP/lib" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
+    cp -r "$SRC_DIR/bin" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
+    cp -r "$SRC_DIR/lib" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
     
     if [ "$COMP" == "fe" ]; then
-        [ -d "$EXTRACT_DIR/fe/spark-dpp" ] && cp -r "$EXTRACT_DIR/fe/spark-dpp" "$STAGING_DIR/usr/lib/starrocks/fe/"
-        [ -d "$EXTRACT_DIR/fe/webroot" ] && cp -r "$EXTRACT_DIR/fe/webroot" "$STAGING_DIR/usr/lib/starrocks/fe/"
+        [ -d "$SRC_DIR/spark-dpp" ] && cp -r "$SRC_DIR/spark-dpp" "$STAGING_DIR/usr/lib/starrocks/fe/"
+        [ -d "$SRC_DIR/webroot" ] && cp -r "$SRC_DIR/webroot" "$STAGING_DIR/usr/lib/starrocks/fe/"
     else
-        [ -d "$EXTRACT_DIR/be/www" ] && cp -r "$EXTRACT_DIR/be/www" "$STAGING_DIR/usr/lib/starrocks/be/"
+        [ -d "$SRC_DIR/www" ] && cp -r "$SRC_DIR/www" "$STAGING_DIR/usr/lib/starrocks/be/"
     fi
 
     # Copy Configs
-    cp -r "$EXTRACT_DIR/$COMP/conf/"* "$STAGING_DIR/etc/starrocks/$COMP/"
+    cp -r "$SRC_DIR/conf/"* "$STAGING_DIR/etc/starrocks/$COMP/"
 
     # Path Patching (LSB)
     echo "Patching $COMP.conf for standard paths..."
