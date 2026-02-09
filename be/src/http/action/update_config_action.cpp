@@ -418,11 +418,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("sys_log_verbose_modules", [&]() -> Status {
-            update_verbose_modules();
+            update_vlog_conf();
             return Status::OK();
         });
         _config_callback.emplace("sys_log_verbose_level", [&]() -> Status {
-            update_verbose_modules();
+            update_vlog_conf();
             return Status::OK();
         });
 

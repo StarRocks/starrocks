@@ -436,7 +436,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
             google::SetVLOGLevel(verbose_module.c_str(), vlog_level);
         }
     }
-    // Initialize s_previous_verbose_modules so update_verbose_modules can clean up properly
+    // Initialize s_previous_verbose_modules so update_vlog_conf can clean up properly
     s_previous_verbose_modules = verbose_modules;
 
     google::InitGoogleLogging(basename);
@@ -493,7 +493,7 @@ void update_logging() {
     }
 }
 
-void update_verbose_modules() {
+void update_vlog_conf() {
     std::lock_guard<std::mutex> lock(s_verbose_modules_mutex);
 
     // Clear previous verbose module settings first
