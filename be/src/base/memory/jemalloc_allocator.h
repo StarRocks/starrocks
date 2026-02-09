@@ -18,6 +18,20 @@
 
 namespace starrocks::memory {
 
-Allocator* get_default_allocator();
+template <bool clear_memory>
+class JemallocAllocator : public Allocator {
+public:
+    JemallocAllocator() = default;
+    ~JemallocAllocator() override = default;
+
+    void* alloc(size_t size, size_t alignment = 0) override;
+    void* realloc(void* ptr, size_t old_size, size_t new_size, size_t alignment = 0) override;
+    void free(void* ptr, size_t size) override;
+    int64_t nallox(size_t size, int flags = 0) const override;
+
+    Allocator::MemoryKind memory_kind() const override { return Allocator::MemoryKind::kJemalloc; }
+
+    static constexpr bool throw_bad_alloc_on_failure() { return false; }
+};
 
 } // namespace starrocks::memory
