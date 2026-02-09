@@ -16,6 +16,8 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
 add_library(ColumnCore STATIC
         column.cpp
+        column_visitor.cpp
+        column_visitor_mutable.cpp
 )
 
 add_library(Column STATIC
@@ -39,8 +41,6 @@ add_library(Column STATIC
         binary_column.cpp
         object_column.cpp
         decimalv3_column.cpp
-        column_visitor.cpp
-        column_visitor_mutable.cpp
         json_column.cpp
         map_column.cpp
         struct_column.cpp

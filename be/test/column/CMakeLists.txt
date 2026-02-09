@@ -15,6 +15,7 @@
 set(COLUMN_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     column_base_test.cpp
+    column_visitor_test.cpp
     column_hash_stub.cpp
 )
 
