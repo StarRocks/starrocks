@@ -241,7 +241,7 @@ public class FlatJsonConfigValidationTest {
         // Test the bug fix scenario:
         // 1. Table has flat JSON enabled with other properties set
         // 2. User sets flat_json.enable = false (properties may contain residual flat JSON properties)
-        // 3. TableProperty.copy() -> gsonPostProcess() -> buildFlatJsonConfig() should not throw exception
+        // 3. TableProperty.copy() should preserve a valid FlatJsonConfig and should not throw exception
         
         // Step 1: Create TableProperty with flat JSON enabled and other properties
         Map<String, String> initialProperties = new HashMap<>();
@@ -290,7 +290,7 @@ public class FlatJsonConfigValidationTest {
         Assertions.assertEquals(Config.flat_json_sparsity_factory, configWithResidual.getFlatJsonSparsityFactor(), 0.001);
         Assertions.assertEquals(Config.flat_json_column_max, configWithResidual.getFlatJsonColumnMax());
         
-        // Step 4: Test TableProperty.copy() which calls gsonPostProcess()
+        // Step 4: Test TableProperty.copy()
         // This simulates what happens during SELECT query when table is copied
         TableProperty copiedProperty = propertyWithResidual.copy();
         Assertions.assertNotNull(copiedProperty);
