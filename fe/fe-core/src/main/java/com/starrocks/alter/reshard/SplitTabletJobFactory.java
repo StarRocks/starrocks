@@ -310,7 +310,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
-                GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
+                GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                         oldToNewTabletIds,
                         table.getPartitionFilePathInfo(physicalPartitionId),
                         table.getPartitionFileCacheInfo(physicalPartitionId),
