@@ -16,6 +16,7 @@
 
 #include "base/testutil/parallel_test.h"
 #include "column/column_builder.h"
+#include "column/mysql_row_buffer.h"
 #include "column/type_traits.h"
 #include "types/logical_type.h"
 #include "types/variant.h"
