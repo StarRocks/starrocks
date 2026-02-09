@@ -947,19 +947,11 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> txnSamples = new ArrayList<>();
-        for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
-            List<Object> samples = mgr.getSamplesForMemoryTracker();
-            if (samples.size() > 0) {
-                txnSamples.addAll(samples);
-                break;
-            }
+    public long estimateSize() {
+        long size = 0;
+        for (DatabaseTransactionMgr dbTxnMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            size += dbTxnMgr.estimateSize();
         }
-
-        List<Object> callbackSamples = callbackFactory.getSamplesForMemoryTracker();
-
-        return Lists.newArrayList(Pair.create(txnSamples, (long) getTransactionNum()),
-                Pair.create(callbackSamples, callbackFactory.getCallBackCnt()));
+        return size;
     }
 }

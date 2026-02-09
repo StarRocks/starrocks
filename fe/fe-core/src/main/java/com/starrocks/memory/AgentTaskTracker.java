@@ -15,11 +15,8 @@
 package com.starrocks.memory;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
 import com.starrocks.task.AgentTaskQueue;
 
-import java.util.List;
 import java.util.Map;
 
 public class AgentTaskTracker implements MemoryTrackable {
@@ -29,8 +26,7 @@ public class AgentTaskTracker implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return Lists.newArrayList(Pair.create(AgentTaskQueue.getSamplesForMemoryTracker(),
-                (long) AgentTaskQueue.getTaskNum()));
+    public long estimateSize() {
+        return AgentTaskQueue.estimateSize();
     }
 }
