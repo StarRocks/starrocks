@@ -52,7 +52,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.net.URI;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -706,27 +705,6 @@ public class HdfsFsManager {
     }
 
     /**
-     * Builds the URI identity string used as part of the FileSystem cache key.
-     *
-     * <p>This method uses the full URI authority (e.g., "container@account.dfs.core.windows.net" for Azure
-     * ABFS/S). This is required for Azure ABFS(S)/WASB(S) schemes because different containers under the same
-     * storage account must use separate FileSystem instances.
-     *
-     * @param uri the parsed URI of the file path
-     * @return the identity string in the format "scheme://authority"
-     */
-    private String getUriIdentity(URI uri) {
-        String scheme = uri.getScheme();
-        Preconditions.checkArgument(!Strings.isNullOrEmpty(scheme),
-                "URI scheme must not be null or empty: %s", uri);
-        String identity = uri.getAuthority();
-        if (identity == null) {
-            identity = uri.getHost();
-        }
-        return scheme + "://" + identity;
-    }
-
-    /**
      * This function create FileSystem by CloudConfiguration
      * Support s3://, s3a://, abfs://, abfss://, adl://, wasb://, wasbs://, gs://, oss://, obs://, cosn://,
      * tos://, ks3://
@@ -737,7 +715,11 @@ public class HdfsFsManager {
         Preconditions.checkArgument(cloudConfiguration != null);
         WildcardURI pathUri = new WildcardURI(path);
 
-        String uriIdentity = getUriIdentity(pathUri.getUri());
+        String scheme = pathUri.getUri().getScheme();
+        String authority = pathUri.getUri().getAuthority();
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(scheme), "URI scheme must not be null or empty: %s", path);
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(authority), "URI authority must not be null or empty: %s", path);
+        String uriIdentity = scheme + "://" + authority;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(uriIdentity, cloudConfiguration.toConfString());
 
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
