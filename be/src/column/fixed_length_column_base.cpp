@@ -19,7 +19,7 @@
 #include "base/types/decimal12.h"
 #include "base/types/int128.h"
 #include "base/types/int256.h"
-#include "column/column_helper.h"
+#include "column/column_filter_range.h"
 #include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -175,7 +175,7 @@ size_t FixedLengthColumnBase<T>::filter_range(const Filter& filter, size_t from,
     // TODO: FIXME
     const auto src = immutable_data();
     raw::stl_vector_resize_uninitialized(&_data, src.size());
-    auto size = ColumnHelper::filter_range<T>(filter, _data.data(), src.data(), from, to);
+    auto size = column_filter_range::filter_range<T>(filter, _data.data(), src.data(), from, to);
     _data.resize(size);
     _resource.reset();
     return size;
