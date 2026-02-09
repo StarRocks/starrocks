@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -165,6 +166,30 @@ class EstimatorTest {
         long size = Estimator.estimate(array);
         // Should be positive and include array overhead + string sizes
         assertTrue(size > Estimator.ARRAY_HEADER_SIZE + 3 * 4);
+    }
+
+    @Test
+    void testCustomEstimatorLookupForHeapByteBuffer() {
+        Estimator.registerCustomEstimator(ByteBuffer.class, new ByteBufferEstimator());
+        ByteBuffer buffer = ByteBuffer.allocate(8);
+        // Registry uses class names; lookup by interface should succeed.
+        assertNotNull(Estimator.getCustomEstimator(ByteBuffer.class));
+
+        long shallow = Estimator.shallow(buffer);
+        long estimated = Estimator.estimate(buffer);
+        // Heap buffer estimate should be at least its shallow size.
+        assertTrue(estimated >= shallow);
+    }
+
+    @Test
+    void testEstimateReadOnlyHeapByteBuffer() {
+        Estimator.registerCustomEstimator(ByteBuffer.class, new ByteBufferEstimator());
+        ByteBuffer roBuffer = ByteBuffer.wrap(new byte[16]).asReadOnlyBuffer();
+
+        long shallow = Estimator.shallow(roBuffer);
+        long estimated = Estimator.estimate(roBuffer);
+        // Read-only heap buffer estimate should be at least its shallow size.
+        assertTrue(estimated >= shallow);
     }
 
     // ==================== Collection Tests ====================

@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.memory.estimate.ByteBufferEstimator;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.memory.estimate.StringEstimator;
 import com.starrocks.monitor.jvm.JvmStats;
@@ -36,6 +37,7 @@ import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -235,6 +237,8 @@ public class MemoryUsageTracker extends FrontendDaemon {
 
     private void registerCustomEstimators() {
         Estimator.registerCustomEstimator(String.class, new StringEstimator());
+        Estimator.registerCustomEstimator(ByteBuffer.class, new ByteBufferEstimator());
+        Estimator.registerCustomEstimator("java.nio.HeapByteBuffer", new ByteBufferEstimator());
     }
 
     private void registerShallowMemoryClasses() {

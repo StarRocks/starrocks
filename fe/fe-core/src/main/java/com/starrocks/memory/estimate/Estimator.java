@@ -76,7 +76,7 @@ public class Estimator {
     };
 
     // Registry for custom estimators
-    protected static final Map<Class<?>, CustomEstimator> CUSTOM_ESTIMATORS = new HashMap<>();
+    protected static final Map<String, CustomEstimator> CUSTOM_ESTIMATORS = new HashMap<>();
 
     // Registry for classes that should only calculate shallow memory
     // Store class names instead of Class<?> to avoid pinning Class/ClassLoader.
@@ -156,7 +156,17 @@ public class Estimator {
      * @param estimator the custom estimator
      */
     public static void registerCustomEstimator(Class<?> clazz, CustomEstimator estimator) {
-        CUSTOM_ESTIMATORS.put(clazz, estimator);
+        CUSTOM_ESTIMATORS.put(clazz.getName(), estimator);
+    }
+
+    /**
+     * Register a custom estimator for a specific class.
+     *
+     * @param clazzName     the class name to register estimator for
+     * @param estimator the custom estimator
+     */
+    public static void registerCustomEstimator(String clazzName, CustomEstimator estimator) {
+        CUSTOM_ESTIMATORS.put(clazzName, estimator);
     }
 
     /**
@@ -166,7 +176,7 @@ public class Estimator {
      * @return the custom estimator, or null if not registered
      */
     public static CustomEstimator getCustomEstimator(Class<?> clazz) {
-        return CUSTOM_ESTIMATORS.get(clazz);
+        return CUSTOM_ESTIMATORS.get(clazz.getName());
     }
 
     /**
