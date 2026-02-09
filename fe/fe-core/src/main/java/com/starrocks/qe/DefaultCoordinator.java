@@ -58,12 +58,15 @@ import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.RunMode;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.lake.QueryVersionPinManager;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -174,6 +177,8 @@ public class DefaultCoordinator extends Coordinator {
 
     private long estimatedMemCost;
     private ExecutionSchedule scheduler;
+
+    private volatile boolean versionsPinned = false;
 
     public static class Factory implements Coordinator.Factory {
 
@@ -524,10 +529,38 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void onFinished() {
+        unpinQueryVersions();
         onReleaseSlots();
         // for async profile, if Be doesn't report profile in time, we upload the most complete profile
         // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
         queryProfile.finishAllInstances(Status.OK);
+    }
+
+    private void pinQueryVersions() {
+        if (!RunMode.isSharedDataMode() || !Config.lake_enable_query_version_pinning) {
+            return;
+        }
+        Map<Long, Long> partitionVersions = new HashMap<>();
+        for (ScanNode scanNode : jobSpec.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode) {
+                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
+                partitionVersions.putAll(olapScanNode.getScanPartitionVersions());
+            }
+        }
+        if (!partitionVersions.isEmpty()) {
+            String queryId = DebugUtil.printId(jobSpec.getQueryId());
+            QueryVersionPinManager.getInstance().pinVersions(queryId, partitionVersions);
+            versionsPinned = true;
+        }
+    }
+
+    private void unpinQueryVersions() {
+        if (!versionsPinned) {
+            return;
+        }
+        versionsPinned = false;
+        String queryId = DebugUtil.printId(jobSpec.getQueryId());
+        QueryVersionPinManager.getInstance().unpinVersions(queryId);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -567,6 +600,8 @@ public class DefaultCoordinator extends Coordinator {
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
         }
+
+        pinQueryVersions();
 
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
             deliverExecFragments(option);
@@ -1074,6 +1109,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        unpinQueryVersions();
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         clearExternalResources();
 
