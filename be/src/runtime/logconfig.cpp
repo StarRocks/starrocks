@@ -525,7 +525,7 @@ void update_verbose_modules() {
     // Save current modules for future cleanup
     s_previous_verbose_modules = verbose_modules;
 
-    LOG(INFO) << "Updated sys_log_verbose_modules, " << verbose_modules.size()
+    LOG(INFO) << "Updated verbose logging configuration: " << verbose_modules.size()
               << " file patterns configured with verbose level " << vlog_level;
 }
 
