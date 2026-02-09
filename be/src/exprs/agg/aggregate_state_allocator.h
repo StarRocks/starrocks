@@ -19,8 +19,8 @@
 #include "base/hash/hash_fwd.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "common/logging.h"
+#include "common/memory/allocator.h"
 #include "exec/agg_hash_fwd.h"
-#include "runtime/memory/allocator.h"
 #include "runtime/memory/roaring_hook.h"
 
 namespace starrocks {

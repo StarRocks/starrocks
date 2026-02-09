@@ -15,8 +15,8 @@
 
 #include <cstdlib>
 
+#include "common/memory/allocator.h"
 #include "malloc.h"
-#include "runtime/memory/allocator.h"
 
 namespace starrocks {
 

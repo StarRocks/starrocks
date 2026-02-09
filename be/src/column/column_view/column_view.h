@@ -17,7 +17,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_view/column_view_base.h"
-#include "util/cow.h"
+#include "common/cow.h"
 
 namespace starrocks {
 class ColumnView final : public CowFactory<ColumnFactory<ColumnViewBase, ColumnView>, ColumnView, Column> {

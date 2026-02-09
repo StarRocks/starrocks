@@ -50,8 +50,8 @@
 #include <unordered_set>
 
 #include "base/utility/guard.h"
+#include "common/delete_condition.h"
 #include "gen_cpp/Types_types.h"
-#include "storage/delete_condition.h"
 #include "storage/olap_define.h"
 #include "util/hash_util.hpp"
 #include "util/uid_util.h"

@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(COMMON_TEST_FILES
+set(COLUMN_TEST_FILES
     ../base/cxa_throw_wrap.cpp
-    config_test.cpp
-    cow_test.cpp
-    process_exit_test.cpp
-    tracer_test.cpp
+    column_base_test.cpp
+    column_hash_stub.cpp
 )
 
-set(COMMON_TEST_LINK_LIBS
+set(COLUMN_TEST_LINK_LIBS
+    ColumnCore
+    TypesCore
     Common
     Base
     Gutil
@@ -34,8 +34,8 @@ set(COMMON_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_common_test_objs OBJECT ${COMMON_TEST_FILES})
-target_link_libraries(starrocks_common_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_common_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(common_test $<TARGET_OBJECTS:starrocks_common_test_objs>)
-target_link_libraries(common_test ${COMMON_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_column_test_objs OBJECT ${COLUMN_TEST_FILES})
+target_link_libraries(starrocks_column_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_column_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(column_test $<TARGET_OBJECTS:starrocks_column_test_objs>)
+target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS} gtest_main)

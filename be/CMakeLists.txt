@@ -396,6 +396,7 @@ set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
     Column
+    ColumnCore
     Connector
     Exec
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
