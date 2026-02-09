@@ -116,6 +116,10 @@ struct AcquireBlockOptions {
     BlockAffinityGroup affinity_group = kDefaultBlockAffinityGroup;
     // force to use remote block
     bool force_remote = false;
+    // When true, the container will not attempt to delete the parent directory (e.g. query_id dir)
+    // in its destructor. This is used by LoadSpillBlockManager which defers parent path cleanup
+    // to its own destructor via clear_parent_path(), ensuring all spill files are removed first.
+    bool skip_parent_path_deletion = false;
 };
 
 // BlockManager is used to manage the life cycle of the Block.
