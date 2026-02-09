@@ -48,7 +48,6 @@
 
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
-#include "base/string/string_parser.hpp"
 #include "base/types/decimal12.h"
 #include "base/types/int128.h"
 #include "base/utility/guard.h"
@@ -66,11 +65,6 @@
 #include "types/type_traits.h"
 
 namespace starrocks {
-
-// NOLINTNEXTLINE
-static const std::vector<std::string> DATE_FORMATS{
-        "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d", "%y/%m/%d",
-};
 
 #define APPLY_FOR_TYPE_INTEGER(M) \
     M(TYPE_TINYINT)               \
@@ -118,34 +112,6 @@ static const std::vector<std::string> DATE_FORMATS{
 
 inline uint32_t type_info_string_max_length() {
     return config::olap_string_max_length;
-}
-
-template <typename T>
-static Status convert_int_from_varchar(void* dest, const void* src) {
-    using SrcType = typename CppTypeTraits<TYPE_VARCHAR>::CppType;
-    auto src_value = unaligned_load<SrcType>(src);
-    StringParser::ParseResult parse_res;
-    T result = StringParser::string_to_int<T>(src_value.get_data(), src_value.get_size(), &parse_res);
-    if (UNLIKELY(parse_res != StringParser::PARSE_SUCCESS)) {
-        return Status::InternalError(fmt::format("Fail to cast to int from string: {}",
-                                                 std::string(src_value.get_data(), src_value.get_size())));
-    }
-    memcpy(dest, &result, sizeof(T));
-    return Status::OK();
-}
-
-template <typename T>
-static Status convert_float_from_varchar(void* dest, const void* src) {
-    using SrcType = typename CppTypeTraits<TYPE_VARCHAR>::CppType;
-    auto src_value = unaligned_load<SrcType>(src);
-    StringParser::ParseResult parse_res;
-    T result = StringParser::string_to_float<T>(src_value.get_data(), src_value.get_size(), &parse_res);
-    if (UNLIKELY(parse_res != StringParser::PARSE_SUCCESS)) {
-        return Status::InternalError(fmt::format("Fail to cast to float from string: {}",
-                                                 std::string(src_value.get_data(), src_value.get_size())));
-    }
-    unaligned_store<T>(dest, result);
-    return Status::OK();
 }
 
 int TypeInfo::cmp(const Datum& left, const Datum& right) const {
@@ -240,12 +206,6 @@ struct ScalarTypeInfoImplBase {
 
     static void direct_copy(void* dest, const void* src) {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
-    }
-
-    static Status convert_from(void* dest __attribute__((unused)), const void* src __attribute__((unused)),
-                               const TypeInfoPtr& src_type __attribute__((unused)),
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        return Status::NotSupported("Not supported function");
     }
 
     static void set_to_max(void* buf) { unaligned_store<CppType>(buf, std::numeric_limits<CppType>::max()); }
@@ -414,14 +374,6 @@ struct ScalarTypeInfoImpl<TYPE_TINYINT> : public ScalarTypeInfoImplBase<TYPE_TIN
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const int8_t*>(src));
         return {buf};
     }
-
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        if (src_type->type() == TYPE_VARCHAR) {
-            return convert_int_from_varchar<CppType>(dest, src);
-        }
-        return Status::InternalError("Fail to cast to tinyint.");
-    }
 };
 
 template <>
@@ -430,13 +382,6 @@ struct ScalarTypeInfoImpl<TYPE_SMALLINT> : public ScalarTypeInfoImplBase<TYPE_SM
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int16_t>(src));
         return {buf};
-    }
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        if (src_type->type() == TYPE_VARCHAR) {
-            return convert_int_from_varchar<CppType>(dest, src);
-        }
-        return Status::InternalError("Fail to cast to smallint.");
     }
 };
 
@@ -447,13 +392,6 @@ struct ScalarTypeInfoImpl<TYPE_INT> : public ScalarTypeInfoImplBase<TYPE_INT> {
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int32_t>(src));
         return {buf};
     }
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        if (src_type->type() == TYPE_VARCHAR) {
-            return convert_int_from_varchar<CppType>(dest, src);
-        }
-        return Status::InternalError("Fail to cast to int.");
-    }
 };
 
 template <>
@@ -462,13 +400,6 @@ struct ScalarTypeInfoImpl<TYPE_BIGINT> : public ScalarTypeInfoImplBase<TYPE_BIGI
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%" PRId64, unaligned_load<int64_t>(src));
         return {buf};
-    }
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        if (src_type->type() == TYPE_VARCHAR) {
-            return convert_int_from_varchar<CppType>(dest, src);
-        }
-        return Status::InternalError("Fail to cast to bigint.");
     }
 };
 
@@ -564,13 +495,6 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
     }
     static void set_to_max(void* buf) { unaligned_store<int128_t>(buf, ~((int128_t)(1) << 127)); }
     static void set_to_min(void* buf) { unaligned_store<int128_t>(buf, (int128_t)(1) << 127); }
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        if (src_type->type() == TYPE_VARCHAR) {
-            return convert_int_from_varchar<CppType>(dest, src);
-        }
-        return Status::InternalError("Fail to cast to largeint.");
-    }
 
     static int datum_cmp(const Datum& left, const Datum& right) {
         const int128_t& v1 = left.get_int128();
@@ -613,14 +537,6 @@ struct ScalarTypeInfoImpl<TYPE_INT256> : public ScalarTypeInfoImplBase<TYPE_INT2
     static void set_to_max(void* buf) { unaligned_store<int256_t>(buf, INT256_MAX); }
     static void set_to_min(void* buf) { unaligned_store<int256_t>(buf, INT256_MIN); }
 
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        if (src_type->type() == TYPE_VARCHAR) {
-            return convert_int_from_varchar<CppType>(dest, src);
-        }
-        return Status::InternalError("Fail to cast to bigint.");
-    }
-
     static int datum_cmp(const Datum& left, const Datum& right) {
         const int256_t& v1 = left.get<int256_t>();
         const int256_t& v2 = right.get<int256_t>();
@@ -644,13 +560,6 @@ struct ScalarTypeInfoImpl<TYPE_FLOAT> : public ScalarTypeInfoImplBase<TYPE_FLOAT
         DCHECK(length >= 0) << "gcvt float failed, float value=" << unaligned_load<CppType>(src);
         return {buf};
     }
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        if (src_type->type() == TYPE_VARCHAR) {
-            return convert_float_from_varchar<CppType>(dest, src);
-        }
-        return Status::InternalError("Fail to cast to float.");
-    }
 };
 
 template <>
@@ -668,32 +577,6 @@ struct ScalarTypeInfoImpl<TYPE_DOUBLE> : public ScalarTypeInfoImplBase<TYPE_DOUB
         int length = DoubleToBuffer(unaligned_load<CppType>(src), MAX_DOUBLE_STR_LENGTH, buf);
         DCHECK(length >= 0) << "gcvt float failed, float value=" << unaligned_load<CppType>(src);
         return {buf};
-    }
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        //only support float now
-        if (src_type->type() == TYPE_FLOAT) {
-            using SrcType = typename CppTypeTraits<TYPE_FLOAT>::CppType;
-            //http://www.softelectro.ru/ieee754_en.html
-            //According to the definition of IEEE754, the effect of converting a float binary to a double binary
-            //is the same as that of static_cast . Data precision cannot be guaranteed, but the progress of
-            //decimal system can be guaranteed by converting a float to a char buffer and then to a double.
-            //float v2 = static_cast<double>(v1),
-            //float 0.3000000 is: 0 | 01111101 | 00110011001100110011010
-            //double 0.300000011920929 is: 0 | 01111111101 | 0000000000000000000001000000000000000000000000000000
-            //==float to char buffer to strtod==
-            //float 0.3000000 is: 0 | 01111101 | 00110011001100110011010
-            //double 0.300000000000000 is: 0 | 01111111101 | 0011001100110011001100110011001100110011001100110011
-            char buf[64] = {0};
-            snprintf(buf, 64, "%f", unaligned_load<SrcType>(src));
-            char* tg;
-            unaligned_store<CppType>(dest, strtod(buf, &tg));
-            return Status::OK();
-        }
-        if (src_type->type() == TYPE_VARCHAR) {
-            return convert_float_from_varchar<CppType>(dest, src);
-        }
-        return Status::InternalError("Fail to cast to double.");
     }
 };
 
@@ -784,59 +667,6 @@ struct ScalarTypeInfoImpl<TYPE_DATE_V1> : public ScalarTypeInfoImplBase<TYPE_DAT
         auto v = unaligned_load<CppType>(src);
         return v.to_string();
     }
-
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        if (src_type->type() == LogicalType::TYPE_DATETIME_V1) {
-            using SrcType = typename CppTypeTraits<TYPE_DATETIME_V1>::CppType;
-            auto src_value = unaligned_load<SrcType>(src);
-            //only need part one
-            SrcType part1 = (src_value / 1000000L);
-            CppType year = static_cast<CppType>((part1 / 10000L) % 10000);
-            CppType mon = static_cast<CppType>((part1 / 100) % 100);
-            CppType mday = static_cast<CppType>(part1 % 100);
-            unaligned_store<CppType>(dest, (year << 9) + (mon << 5) + mday);
-            return Status::OK();
-        }
-
-        if (src_type->type() == LogicalType::TYPE_DATETIME) {
-            int year, month, day, hour, minute, second, usec;
-            auto src_value = unaligned_load<TimestampValue>(src);
-            src_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
-            unaligned_store<CppType>(dest, (year << 9) + (month << 5) + day);
-            return Status::OK();
-        }
-
-        if (src_type->type() == LogicalType::TYPE_INT) {
-            using SrcType = typename CppTypeTraits<TYPE_INT>::CppType;
-            auto src_value = unaligned_load<SrcType>(src);
-            DateTimeValue dt;
-            if (!dt.from_date_int64(src_value)) {
-                return Status::InternalError("Fail to cast to date.");
-            }
-            CppType year = static_cast<CppType>(src_value / 10000);
-            CppType month = static_cast<CppType>((src_value % 10000) / 100);
-            CppType day = static_cast<CppType>(src_value % 100);
-            unaligned_store<CppType>(dest, (year << 9) + (month << 5) + day);
-            return Status::OK();
-        }
-
-        if (src_type->type() == LogicalType::TYPE_VARCHAR) {
-            using SrcType = typename CppTypeTraits<TYPE_VARCHAR>::CppType;
-            auto src_value = unaligned_load<SrcType>(src);
-            DateTimeValue dt;
-            for (const auto& format : DATE_FORMATS) {
-                if (dt.from_date_format_str(format.c_str(), format.length(), src_value.get_data(),
-                                            src_value.get_size())) {
-                    unaligned_store<CppType>(dest, (dt.year() << 9) + (dt.month() << 5) + dt.day());
-                    return Status::OK();
-                }
-            }
-            return Status::InternalError("Fail to cast to date.");
-        }
-
-        return Status::InternalError("Fail to cast to date.");
-    }
     static void set_to_max(void* buf) {
         // max is 9999 * 16 * 32 + 12 * 32 + 31;
         unaligned_store<CppType>(buf, 5119903);
@@ -862,11 +692,6 @@ struct ScalarTypeInfoImpl<TYPE_DATE> : public ScalarTypeInfoImplBase<TYPE_DATE> 
     static std::string to_string(const void* src) {
         auto src_val = unaligned_load<DateValue>(src);
         return src_val.to_string();
-    }
-
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        return Status::NotSupported("Fail to cast to date.");
     }
     static void set_to_max(void* buf) {
         // max is 9999 * 16 * 32 + 12 * 32 + 31;
@@ -914,31 +739,6 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<TYPE
         strftime(buf, 20, "%Y-%m-%d %H:%M:%S", &time_tm);
         return {buf};
     }
-
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        // when convert date to datetime, automatic padding zero
-        if (src_type->type() == LogicalType::TYPE_DATE_V1) {
-            using SrcType = typename CppTypeTraits<TYPE_DATE_V1>::CppType;
-            auto value = unaligned_load<SrcType>(src);
-            int day = static_cast<int>(value & 31);
-            int mon = static_cast<int>(value >> 5 & 15);
-            int year = static_cast<int>(value >> 9);
-            unaligned_store<CppType>(dest, (year * 10000L + mon * 100L + day) * 1000000);
-            return Status::OK();
-        }
-
-        // when convert date to datetime, automatic padding zero
-        if (src_type->type() == LogicalType::TYPE_DATE) {
-            auto src_value = unaligned_load<DateValue>(src);
-            int year, month, day;
-            src_value.to_date(&year, &month, &day);
-            unaligned_store<CppType>(dest, (year * 10000L + month * 100L + day) * 1000000);
-            return Status::OK();
-        }
-
-        return Status::InternalError("Fail to cast to datetime.");
-    }
     static void set_to_max(void* buf) { unaligned_store<CppType>(buf, 99991231235959L); }
     static void set_to_min(void* buf) { unaligned_store<CppType>(buf, 101000000); }
 };
@@ -958,11 +758,6 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME> : public ScalarTypeInfoImplBase<TYPE_DA
     static std::string to_string(const void* src) {
         auto timestamp = unaligned_load<TimestampValue>(src);
         return timestamp.to_string();
-    }
-
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator __attribute__((unused))) {
-        return Status::NotSupported("Fail to cast to datetime.");
     }
     static void set_to_max(void* buf) { unaligned_store<CppType>(buf, timestamp::MAX_TIMESTAMP); }
     static void set_to_min(void* buf) { unaligned_store<CppType>(buf, timestamp::MIN_TIMESTAMP); }
@@ -1052,27 +847,6 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
         return Status::OK();
     }
 
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator) {
-        if (src_type->type() == TYPE_TINYINT || src_type->type() == TYPE_SMALLINT || src_type->type() == TYPE_INT ||
-            src_type->type() == TYPE_BIGINT || src_type->type() == TYPE_LARGEINT || src_type->type() == TYPE_FLOAT ||
-            src_type->type() == TYPE_DOUBLE || src_type->type() == TYPE_DECIMAL || src_type->type() == TYPE_DECIMALV2 ||
-            src_type->type() == TYPE_DECIMAL32 || src_type->type() == TYPE_DECIMAL64 ||
-            src_type->type() == TYPE_DECIMAL128 || src_type->type() == TYPE_DECIMAL256) {
-            DCHECK_NE(allocator, nullptr);
-            auto result = src_type->to_string(src);
-            auto slice = reinterpret_cast<Slice*>(dest);
-            slice->data = reinterpret_cast<char*>(allocator->allocate(result.size()));
-            if (UNLIKELY(slice->data == nullptr)) {
-                return Status::InternalError("Fail to malloc memory");
-            }
-            memcpy(slice->data, result.c_str(), result.size());
-            slice->size = result.size();
-            return Status::OK();
-        }
-        return Status::InternalError("Fail to cast to varchar.");
-    }
-
     static void set_to_min(void* buf) {
         auto slice = reinterpret_cast<Slice*>(buf);
         slice->size = 0;
@@ -1107,12 +881,6 @@ template <>
 struct ScalarTypeInfoImpl<TYPE_JSON> : public ScalarTypeInfoImpl<TYPE_OBJECT> {
     static const LogicalType type = TYPE_JSON;
     static const int32_t size = TypeTraits<TYPE_JSON>::size;
-
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               const TypeInfoAllocator* allocator) {
-        // TODO(mofei)
-        return Status::InternalError("Not supported");
-    }
 };
 
 template <>
