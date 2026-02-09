@@ -81,6 +81,7 @@ import software.amazon.awssdk.services.glue.model.Partition;
 import software.amazon.awssdk.services.glue.model.PartitionError;
 import software.amazon.awssdk.services.glue.model.PartitionInput;
 import software.amazon.awssdk.services.glue.model.PartitionValueList;
+import software.amazon.awssdk.services.glue.model.ResourceShareType;
 import software.amazon.awssdk.services.glue.model.Segment;
 import software.amazon.awssdk.services.glue.model.StringColumnStatisticsData;
 import software.amazon.awssdk.services.glue.model.Table;
@@ -134,6 +135,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
     private final HiveConf conf;
     private final GlueClient glueClient;
     private final String catalogId;
+    private final ResourceShareType resourceShareType;
     private final ExecutorService executorService;
     private final int numPartitionSegments;
 
@@ -156,6 +158,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         this.conf = conf;
         this.glueClient = glueClient;
         this.catalogId = MetastoreClientUtils.getCatalogId(conf);
+        this.resourceShareType = MetastoreClientUtils.getResourceShareType(conf);
         this.executorService = getExecutorService(conf);
     }
 
@@ -182,8 +185,10 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         String nextToken = null;
         do {
             GetDatabasesRequest.Builder getDatabasesRequest =
-                    GetDatabasesRequest.builder().nextToken(nextToken).catalogId(
-                    catalogId);
+                    GetDatabasesRequest.builder()
+                            .nextToken(nextToken)
+                            .catalogId(catalogId)
+                            .resourceShareType(resourceShareType);
             GetDatabasesResponse result = glueClient.getDatabases(getDatabasesRequest.build());
             nextToken = result.nextToken();
             ret.addAll(result.databaseList());

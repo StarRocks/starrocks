@@ -21,6 +21,7 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.services.glue.model.ResourceShareType;
 import software.amazon.awssdk.services.glue.model.StorageDescriptor;
 
 import java.util.Map;
@@ -64,5 +65,68 @@ public class MetastoreClientUtilsTest {
         } catch (Exception e) {
             Assertions.fail("Partition projection table should be valid: " + e.getMessage());
         }
+    }
+
+    @Test
+    public void testGetResourceShareTypeDefaultValue() {
+        Configuration conf = new Configuration();
+        // When not set, should default to ALL
+        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+    }
+
+    @Test
+    public void testGetResourceShareTypeValidValues() {
+        Configuration conf = new Configuration();
+
+        // Test ALL
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "ALL");
+        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+
+        // Test FOREIGN
+        conf = new Configuration();
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "FOREIGN");
+        Assertions.assertEquals(ResourceShareType.FOREIGN, MetastoreClientUtils.getResourceShareType(conf));
+
+        // Test FEDERATED
+        conf = new Configuration();
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "FEDERATED");
+        Assertions.assertEquals(ResourceShareType.FEDERATED, MetastoreClientUtils.getResourceShareType(conf));
+    }
+
+    @Test
+    public void testGetResourceShareTypeCaseInsensitive() {
+        Configuration conf = new Configuration();
+
+        // Test lowercase
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "all");
+        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+
+        // Test mixed case
+        conf = new Configuration();
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "Foreign");
+        Assertions.assertEquals(ResourceShareType.FOREIGN, MetastoreClientUtils.getResourceShareType(conf));
+
+        conf = new Configuration();
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "federated");
+        Assertions.assertEquals(ResourceShareType.FEDERATED, MetastoreClientUtils.getResourceShareType(conf));
+    }
+
+    @Test
+    public void testGetResourceShareTypeInvalidValue() {
+        Configuration conf = new Configuration();
+
+        // Test invalid value - should return default (ALL)
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "INVALID");
+        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+
+        // Test empty string - should return default (ALL)
+        conf = new Configuration();
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "");
+        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
+
+        // Test whitespace - should return default (ALL)
+        conf = new Configuration();
+        conf.set(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE, "   ");
+        Assertions.assertEquals(ResourceShareType.ALL, MetastoreClientUtils.getResourceShareType(conf));
     }
 }
