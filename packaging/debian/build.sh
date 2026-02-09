@@ -82,10 +82,9 @@ for COMP in "fe" "be"; do
     chmod 755 "$STAGING_DIR/DEBIAN/postinst"
     
 
-    if [ -f "conffiles.$COMP" ]; then
-        cp "conffiles.$COMP" "$STAGING_DIR/DEBIAN/conffiles"
-        echo "" >> "$STAGING_DIR/DEBIAN/conffiles"
-    fi
+    echo "Generating conffiles for $COMP..."
+    find "$STAGING_DIR/etc/starrocks/$COMP" -type f | sed "s|^$STAGING_DIR||" > "$STAGING_DIR/DEBIAN/conffiles"
+    echo "" >> "$STAGING_DIR/DEBIAN/conffiles"
 
     # Inject Systemd
     if [ -f "systemd/starrocks-$COMP.service" ]; then
