@@ -809,7 +809,7 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
 
 TEST_F(LakeServiceTest, test_publish_splitting_tablet) {
     {
-        auto txn_log = generate_write_txn_log(1, 100, 100);
+        auto txn_log = generate_write_txn_log(2, 100, 100);
         ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
 
         PublishVersionRequest publish_request;
