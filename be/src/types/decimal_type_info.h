@@ -14,11 +14,12 @@
 
 #pragma once
 
-#include "storage/types.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
-TypeInfoPtr get_array_type_info(const TypeInfoPtr& item_type);
+TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale);
 
-const TypeInfoPtr& get_item_type_info(const TypeInfo* type_info);
+std::string get_decimal_zone_map_string(TypeInfo* type_info, const void* value);
+
 } // namespace starrocks

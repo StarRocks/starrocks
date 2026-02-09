@@ -28,7 +28,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
-#include "storage/type_traits.h"
 #include "types/bitmap_value.h"
 #include "types/datetime_value.h"
 #include "types/decimalv2_value.h"
@@ -36,6 +35,7 @@
 #include "types/json_value.h"
 #include "types/percentile_value.h"
 #include "types/timestamp_value.h"
+#include "types/type_traits.h"
 #include "util/stack_util.h"
 
 namespace starrocks {

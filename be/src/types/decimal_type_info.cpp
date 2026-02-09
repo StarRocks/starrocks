@@ -12,37 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/decimal_type_info.h"
+#include "types/decimal_type_info.h"
 
+#include "base/hash/unaligned_access.h"
 #include "base/utility/guard.h"
 #include "gutil/casts.h"
-#include "storage/type_traits.h"
-#include "storage/types.h"
+#include "gutil/compiler_util.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
-VALUE_GUARD(LogicalType, DecimalFTGuard, ft_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
-            TYPE_DECIMAL256)
-
-VALUE_GUARD(LogicalType, InvalidFTGuard, ft_is_invalid, TYPE_MAX_VALUE);
-
-template <LogicalType TYPE, typename = DecimalFTGuard<TYPE>>
+template <LogicalType TYPE, typename = DecimalLTGuard<TYPE>>
 class DecimalTypeInfo final : public TypeInfo {
 public:
-    virtual ~DecimalTypeInfo() = default;
+    ~DecimalTypeInfo() override = default;
 
     using CppType = typename CppTypeTraits<TYPE>::CppType;
     DecimalTypeInfo(int precision, int scale)
-            : _delegate(get_scalar_type_info(DelegateType<TYPE>)), _precision(precision), _scale(scale) {
-        static_assert(!ft_is_invalid<DelegateType<TYPE>>);
-    }
+            : _delegate(get_scalar_type_info(DelegateType<TYPE>)), _precision(precision), _scale(scale) {}
 
     void shallow_copy(void* dest, const void* src) const override { return _delegate->shallow_copy(dest, src); }
 
-    void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override {
-        return _delegate->deep_copy(dest, src, mem_pool);
+    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override {
+        return _delegate->deep_copy(dest, src, allocator);
     }
 
     void direct_copy(void* dest, const void* src) const override { _delegate->direct_copy(dest, src); }
@@ -240,4 +234,4 @@ std::string get_decimal_zone_map_string(TypeInfo* type_info, const void* value) 
     }
 }
 
-} //namespace starrocks
+} // namespace starrocks

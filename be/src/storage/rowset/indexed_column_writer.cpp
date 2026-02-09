@@ -48,6 +48,7 @@
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "util/compression/block_compression.h"
 
@@ -96,7 +97,8 @@ Status IndexedColumnWriter::init() {
 Status IndexedColumnWriter::add(const void* value) {
     if (_options.write_value_index && _data_page_builder->count() == 0) {
         // remember page's first value because it's used to build value index
-        _typeinfo->deep_copy(_first_value.data(), value, &_mem_pool);
+        const auto allocator = make_type_info_allocator(&_mem_pool);
+        _typeinfo->deep_copy(_first_value.data(), value, &allocator);
     }
     (void)_data_page_builder->add(reinterpret_cast<const uint8_t*>(value), 1);
     _num_values++;

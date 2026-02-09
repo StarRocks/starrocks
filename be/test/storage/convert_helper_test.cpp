@@ -22,10 +22,10 @@
 #include "base/testutil/parallel_test.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "types/decimalv3.h"
 #include "types/json_value.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 

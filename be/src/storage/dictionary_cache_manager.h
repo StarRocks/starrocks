@@ -29,8 +29,8 @@
 #include "service/internal_service.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/type_traits.h"
 #include "types/datum.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 

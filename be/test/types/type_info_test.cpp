@@ -34,17 +34,34 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+#include <memory>
+#include <vector>
+
 #include "base/string/slice.h"
-#include "runtime/mem_pool.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
-class StorageLayerTypesTest : public testing::Test {
+class TypeInfoTest : public testing::Test {
 public:
-    StorageLayerTypesTest() = default;
-    ~StorageLayerTypesTest() override = default;
+    TypeInfoTest() = default;
+    ~TypeInfoTest() override = default;
+};
+
+class LocalTypeInfoAllocator {
+public:
+    static uint8_t* allocate(void* ctx, size_t size) {
+        auto* self = static_cast<LocalTypeInfoAllocator*>(ctx);
+        self->_buffers.emplace_back(std::make_unique<uint8_t[]>(size));
+        return self->_buffers.back().get();
+    }
+
+    TypeInfoAllocator make_allocator() { return TypeInfoAllocator{this, &LocalTypeInfoAllocator::allocate}; }
+
+private:
+    std::vector<std::unique_ptr<uint8_t[]>> _buffers;
 };
 
 template <LogicalType field_type>
@@ -55,8 +72,9 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
     ASSERT_EQ(sizeof(src_val), type->size());
     {
         typename TypeTraits<field_type>::CppType dst_val;
-        MemPool pool;
-        type->deep_copy((char*)&dst_val, (char*)&src_val, &pool);
+        LocalTypeInfoAllocator local_allocator;
+        auto allocator = local_allocator.make_allocator();
+        type->deep_copy((char*)&dst_val, (char*)&src_val, &allocator);
     }
     {
         typename TypeTraits<field_type>::CppType dst_val;
@@ -84,8 +102,9 @@ void test_char(Slice src_val) {
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
-        MemPool pool;
-        type->deep_copy((char*)&dst_val, (char*)&src_val, &pool);
+        LocalTypeInfoAllocator local_allocator;
+        auto allocator = local_allocator.make_allocator();
+        type->deep_copy((char*)&dst_val, (char*)&src_val, &allocator);
     }
     {
         char buf[64];
@@ -116,7 +135,7 @@ void common_test<TYPE_VARCHAR>(Slice src_val) {
     test_char<TYPE_VARCHAR>(src_val);
 }
 
-TEST(StorageLayerTypesTest, copy_and_equal) {
+TEST(TypeInfoTest, copy_and_equal) {
     common_test<TYPE_BOOLEAN>(true);
     common_test<TYPE_TINYINT>(112);
     common_test<TYPE_SMALLINT>(54321);

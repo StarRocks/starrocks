@@ -26,6 +26,7 @@ set(TYPES_TEST_FILES
     type_descriptor_test.cpp
     tdigest_test.cpp
     timestamp_value_test.cpp
+    type_info_test.cpp
     variant_value_test.cpp
 )
 

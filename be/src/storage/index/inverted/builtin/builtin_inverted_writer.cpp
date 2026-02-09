@@ -29,8 +29,8 @@
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/tablet_index.h"
-#include "storage/type_traits.h"
 #include "types/logical_type.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 

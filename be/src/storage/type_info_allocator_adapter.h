@@ -14,12 +14,21 @@
 
 #pragma once
 
-#include "storage/types.h"
+#include <cstddef>
+#include <cstdint>
+
+#include "runtime/mem_pool.h"
+#include "types/type_info_allocator.h"
 
 namespace starrocks {
 
-TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale);
+inline uint8_t* type_info_allocate_from_mem_pool(void* ctx, size_t size) {
+    auto* mem_pool = static_cast<MemPool*>(ctx);
+    return mem_pool->allocate(size);
+}
 
-std::string get_decimal_zone_map_string(TypeInfo* type_info, const void* value);
+inline TypeInfoAllocator make_type_info_allocator(MemPool* mem_pool) {
+    return TypeInfoAllocator{mem_pool, type_info_allocate_from_mem_pool};
+}
 
 } // namespace starrocks

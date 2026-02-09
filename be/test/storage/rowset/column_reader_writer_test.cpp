@@ -59,9 +59,9 @@
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "types/date_value.h"
+#include "types/type_traits.h"
 
 using std::string;
 
