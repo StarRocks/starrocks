@@ -172,9 +172,12 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
         if (!always_shared_scan() && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
             morsel_queue->num_original_morsels() <= io_parallelism) {
+            bool enable_random_append_split_morsel =
+                    morsel_queue->has_more_from_split() && morsel_queue->type() == pipeline::MorselQueue::Type::DYNAMIC;
             ASSIGN_OR_RETURN(auto morsel_queue_map, uniform_distribute_morsels(std::move(morsel_queue), scan_dop));
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
-                                                                            /*could_local_shuffle*/ true);
+                                                                            /*could_local_shuffle*/ true,
+                                                                            enable_random_append_split_morsel);
         } else {
             if (config::use_default_dop_when_shared_scan && enable_shared_scan && is_fixed_or_dynamic_morsel_queue) {
                 scan_dop = pipeline_dop;
@@ -205,7 +208,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                                                 /*could_local_shuffle*/ false);
         } else {
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
-                                                                            /*could_local_shuffle*/ false);
+                                                                            /*could_local_shuffle*/ false, false);
         }
     }
 }

@@ -208,18 +208,8 @@ void ConnectorScanOperatorFactory::detach_shared_input(int32_t operator_seq, int
 }
 
 void ConnectorScanOperatorFactory::mark_split_source_morsel_finished() {
-    morsel_queue_factory()->mark_split_source_morsel_finished();
-    // int64_t remain = _remaining_split_source_morsels.load(std::memory_order_relaxed);
-    // while (remain > 0) {
-    //     if (_remaining_split_source_morsels.compare_exchange_weak(remain, remain - 1, std::memory_order_relaxed,
-    //                                                               std::memory_order_relaxed)) {
-    //         if (remain == 1) {
-    //             auto* queue_factory = morsel_queue_factory();
-    //             DCHECK(queue_factory != nullptr);
-    //             queue_factory->set_has_more_from_split(false);
-    //         }
-    //         return;
-    //     }
+    if (morsel_queue_factory()->enable_random_append_split_morsel()) {
+        morsel_queue_factory()->mark_split_source_morsel_finished();
     }
 }
 

@@ -87,7 +87,6 @@ private:
     ActiveInputSet _active_inputs;
     std::atomic_int _num_active_inputs{};
     std::atomic_bool _active_inputs_empty{};
-    std::atomic<int64_t> _remaining_split_source_morsels{};
 
 public:
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter = nullptr;

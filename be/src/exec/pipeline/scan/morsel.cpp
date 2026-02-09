@@ -16,6 +16,7 @@
 
 #include <fmt/compile.h>
 
+#include <algorithm>
 #include <memory>
 #include <mutex>
 
@@ -90,10 +91,6 @@ void SharedMorselQueueFactory::set_has_more(bool v) {
     _queue->set_has_more(v);
 }
 
-void SharedMorselQueueFactory::set_has_more_from_split(bool v) {
-    _queue->set_has_more_from_split(v);
-}
-
 bool SharedMorselQueueFactory::reach_limit() const {
     return _queue->reach_limit();
 }
@@ -115,8 +112,10 @@ StatusOr<int> MorselQueueFactory::next_driver_seq() {
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
-                                                           bool could_local_shuffle)
-        : _could_local_shuffle(could_local_shuffle) {
+                                                           bool could_local_shuffle,
+                                                           bool enable_random_append_split_morsel)
+        : _could_local_shuffle(could_local_shuffle),
+          _enable_random_append_split_morsel(enable_random_append_split_morsel) {
     if (queue_per_driver_seq.empty()) {
         _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
         return;
@@ -130,6 +129,16 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
             _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
         } else {
             _queue_per_driver_seq.emplace_back(std::move(it->second));
+        }
+    }
+
+    if (_enable_random_append_split_morsel) {
+        int64_t total = static_cast<int64_t>(num_original_morsels());
+        _remaining_split_source_morsels.store(total, std::memory_order_relaxed);
+        if (total == 0) {
+            for (auto& q : _queue_per_driver_seq) {
+                q->set_has_more_from_split(false);
+            }
         }
     }
 }
@@ -167,9 +176,18 @@ void IndividualMorselQueueFactory::set_has_more(bool v) {
     }
 }
 
-void IndividualMorselQueueFactory::set_has_more_from_split(bool v) {
-    for (auto& q : _queue_per_driver_seq) {
-        q->set_has_more_from_split(v);
+void IndividualMorselQueueFactory::mark_split_source_morsel_finished() {
+    int64_t remain = _remaining_split_source_morsels.load(std::memory_order_relaxed);
+    while (remain > 0) {
+        if (_remaining_split_source_morsels.compare_exchange_weak(remain, remain - 1, std::memory_order_relaxed,
+                                                                  std::memory_order_relaxed)) {
+            if (remain == 1) {
+                for (auto& q : _queue_per_driver_seq) {
+                    q->set_has_more_from_split(false);
+                }
+            }
+            return;
+        }
     }
 }
 
@@ -211,12 +229,6 @@ Status BucketSequenceMorselQueueFactory::append_morsels(int driver_seq, Morsels&
 void BucketSequenceMorselQueueFactory::set_has_more(bool v) {
     for (auto& q : _queue_per_driver_seq) {
         q->set_has_more(v);
-    }
-}
-
-void BucketSequenceMorselQueueFactory::set_has_more_from_split(bool v) {
-    for (auto& q : _queue_per_driver_seq) {
-        q->set_has_more_from_split(v);
     }
 }
 

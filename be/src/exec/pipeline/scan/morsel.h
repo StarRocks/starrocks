@@ -273,7 +273,6 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more(bool v) override;
-    void set_has_more_from_split(bool v) override;
     bool reach_limit() const override;
 
 private:
@@ -283,7 +282,8 @@ private:
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
 public:
-    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle);
+    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle,
+                                 bool enable_random_append_split_morsel);
     ~IndividualMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override {
@@ -300,7 +300,10 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     StatusOr<int> next_driver_seq() override;
-    bool enable_random_append_split_morsel() const override { return _could_local_shuffle; }
+    bool enable_random_append_split_morsel() const override {
+        DCHECK(_could_local_shuffle);
+        return enable_random_append_split_morsel;
+    }
     void set_has_more(bool v) override;
     void mark_split_source_morsel_finished() override;
     bool reach_limit() const override;
@@ -308,7 +311,9 @@ public:
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
     std::atomic<int> _random_cursor{0};
+    std::atomic<int64_t> _remaining_split_source_morsels{0};
     const bool _could_local_shuffle;
+    const bool _enable_random_append_split_morsel;
 };
 
 class BucketSequenceMorselQueueFactory final : public MorselQueueFactory {
@@ -331,7 +336,6 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more(bool v) override;
-    void set_has_more_from_split(bool v) override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
