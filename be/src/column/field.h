@@ -198,8 +198,6 @@ public:
 
     bool has_sub_fields() const { return _sub_fields != nullptr; }
 
-    MutableColumnPtr create_column() const;
-
     void set_uid(ColumnUID uid) { _uid = uid; }
     const ColumnUID& uid() const { return _uid; }
 
