@@ -16,7 +16,6 @@ package com.starrocks.connector;
 
 import com.starrocks.authorization.AllowAllAccessController;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.epack.authorization.NativeAccessControllerEPack;
 import com.starrocks.epack.authorization.ranger.hive.RangerHiveAccessControllerEPack;
@@ -25,7 +24,6 @@ import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.Map;
 
 public class LazyConnector implements Connector {
@@ -101,9 +99,9 @@ public class LazyConnector implements Connector {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
+    public long estimateSize() {
         initIfNeeded();
-        return delegate.getSamples();
+        return delegate.estimateSize();
     }
 
     public String getRealConnectorClassName() {

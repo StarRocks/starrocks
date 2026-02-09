@@ -40,6 +40,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -55,6 +56,7 @@ import java.util.Set;
 public class TempPartitions implements Writable, GsonPostProcessable {
     @SerializedName(value = "idToPartition")
     private Map<Long, Partition> idToPartition = Maps.newHashMap();
+    @IgnoreMemoryTrack
     private Map<String, Partition> nameToPartition = Maps.newHashMap();
     @Deprecated
     // the range info of temp partitions has been moved to "partitionInfo" in OlapTable.

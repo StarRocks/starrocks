@@ -53,6 +53,7 @@ import com.starrocks.common.util.concurrent.LockUtils.SlowLockLogStats;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -105,6 +106,7 @@ public class Database extends MetaObject implements Writable {
     @SerializedName(value = "r")
     private volatile long replicaQuotaSize;
 
+    @IgnoreMemoryTrack
     private final Map<String, Table> nameToTable;
     private final Map<Long, Table> idToTable;
 

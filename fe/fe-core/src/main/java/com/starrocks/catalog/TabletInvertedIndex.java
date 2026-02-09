@@ -41,10 +41,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
@@ -487,15 +487,13 @@ public class TabletInvertedIndex implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
+    public long estimateSize() {
         readLock();
         try {
-            List<Object> tabletMetaSamples = tabletMetaMap.values()
-                    .stream()
-                    .limit(1)
-                    .collect(Collectors.toList());
-
-            return Lists.newArrayList(Pair.create(tabletMetaSamples, (long) tabletMetaMap.size()));
+            return Estimator.estimate(tabletMetaMap) +
+                   Estimator.estimate(replicaToTabletMap) +
+                   Estimator.estimate(replicaMetaTable) +
+                   Estimator.estimate(backingReplicaMetaTable);
         } finally {
             readUnlock();
         }

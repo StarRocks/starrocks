@@ -47,7 +47,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
@@ -55,6 +54,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OriginStatementInfo;
@@ -98,7 +98,6 @@ import java.util.stream.Collectors;
 
 public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
-    private static final int MEMORY_JOB_SAMPLES = 10;
 
     // warehouse ==> {be : running tasks num}
     protected Map<Long, Map<Long, Integer>> warehouseNodeTasksNum = Maps.newHashMap();
@@ -814,13 +813,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = idToRoutineLoadJob.values()
-                .stream()
-                .limit(MEMORY_JOB_SAMPLES)
-                .collect(Collectors.toList());
-
-        return Lists.newArrayList(Pair.create(samples, (long) idToRoutineLoadJob.size()));
+    public long estimateSize() {
+        return Estimator.estimate(idToRoutineLoadJob, 20);
     }
 
     public Map<Long, Long> getRunningRoutingLoadCount() {

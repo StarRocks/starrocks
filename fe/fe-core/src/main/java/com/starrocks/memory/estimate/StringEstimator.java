@@ -12,21 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.memory;
+package com.starrocks.memory.estimate;
 
-import com.google.common.collect.ImmutableMap;
-import com.starrocks.qe.QueryDetailQueue;
+import com.google.common.base.Preconditions;
 
-import java.util.Map;
-
-public class QueryTracker implements MemoryTrackable {
+public class StringEstimator implements CustomEstimator {
     @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryDetail", QueryDetailQueue.getTotalQueriesCount());
-    }
-
-    @Override
-    public long estimateSize() {
-        return QueryDetailQueue.estimateSize();
+    public long estimate(Object obj) {
+        Preconditions.checkArgument(obj instanceof String);
+        String str = (String) obj;
+        // String: shallow size + array header (16 bytes) + character data
+        // Java 9+ uses byte[] with compact strings (Latin-1: 1 byte per char, otherwise 2 bytes)
+        // Here we use a conservative estimate of 1 byte per character for most cases
+        return Estimator.shallow(str) + Estimator.ARRAY_HEADER_SIZE + str.length();
     }
 }
