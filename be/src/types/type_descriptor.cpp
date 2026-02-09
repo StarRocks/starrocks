@@ -23,6 +23,7 @@
 #include "gutil/strings/substitute.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
@@ -273,6 +274,28 @@ bool TypeDescriptor::support_groupby() const {
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
            type != TYPE_VARIANT;
+}
+
+TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
+    LogicalType ftype = type_info->type();
+    bool is_array = false;
+    if (ftype == TYPE_ARRAY) {
+        is_array = true;
+        type_info = get_item_type_info(type_info).get();
+        ftype = type_info->type();
+    }
+
+    LogicalType ltype = scalar_field_type_to_logical_type(ftype);
+    DCHECK(ltype != TYPE_UNKNOWN);
+
+    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, TypeDescriptor::MAX_VARCHAR_LENGTH,
+                                                           type_info->precision(), type_info->scale());
+    if (is_array) {
+        TypeDescriptor arr(TYPE_ARRAY);
+        arr.children.emplace_back(ret);
+        return arr;
+    }
+    return ret;
 }
 
 /// Returns the size of a slot for this type.

@@ -14,7 +14,7 @@
 
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 
-#include "storage/array_type_info.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 

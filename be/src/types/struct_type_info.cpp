@@ -12,24 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/map_type_info.h"
-
-#include "base/utility/mem_util.hpp"
 #include "common/logging.h"
 #include "gutil/casts.h"
-#include "runtime/mem_pool.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
-class MapTypeInfo final : public TypeInfo {
+class StructTypeInfo final : public TypeInfo {
 public:
-    virtual ~MapTypeInfo() = default;
-    explicit MapTypeInfo(TypeInfoPtr key_type, TypeInfoPtr value_type)
-            : _key_type(std::move(key_type)), _value_type(std::move(value_type)) {}
+    explicit StructTypeInfo(std::vector<TypeInfoPtr> field_types) : _field_types(std::move(field_types)) {}
+
+    ~StructTypeInfo() override = default;
 
     void shallow_copy(void* dest, const void* src) const override { CHECK(false); }
 
-    void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { CHECK(false); }
+    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override { CHECK(false); }
 
     void direct_copy(void* dest, const void* src) const override { CHECK(false); }
 
@@ -45,10 +42,9 @@ public:
 
     size_t size() const override { return 16; }
 
-    LogicalType type() const override { return TYPE_MAP; }
+    LogicalType type() const override { return TYPE_STRUCT; }
 
-    const TypeInfoPtr& key_type() const { return _key_type; }
-    const TypeInfoPtr& value_type() const { return _value_type; }
+    const std::vector<TypeInfoPtr>& field_types() const { return _field_types; }
 
 protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override {
@@ -57,22 +53,16 @@ protected:
     }
 
 private:
-    TypeInfoPtr _key_type;
-    TypeInfoPtr _value_type;
+    std::vector<TypeInfoPtr> _field_types;
 };
 
-TypeInfoPtr get_map_type_info(const TypeInfoPtr& key_type, const TypeInfoPtr& value_type) {
-    return std::make_shared<MapTypeInfo>(key_type, value_type);
+TypeInfoPtr get_struct_type_info(std::vector<TypeInfoPtr> field_types) {
+    return std::make_shared<StructTypeInfo>(std::move(field_types));
 }
 
-const TypeInfoPtr& get_key_type_info(const TypeInfo* type_info) {
-    auto map_type = down_cast<const MapTypeInfo*>(type_info);
-    return map_type->key_type();
-}
-
-const TypeInfoPtr& get_value_type_info(const TypeInfo* type_info) {
-    auto map_type = down_cast<const MapTypeInfo*>(type_info);
-    return map_type->value_type();
+const std::vector<TypeInfoPtr>& get_struct_field_types(const TypeInfo* type_info) {
+    auto struct_type = down_cast<const StructTypeInfo*>(type_info);
+    return struct_type->field_types();
 }
 
 } // namespace starrocks

@@ -582,7 +582,6 @@ SET(DW_TEST_FILES
     ./storage/sstable/sstable_predicate_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_engine_test.cpp
-    ./storage/storage_types_test.cpp
     ./storage/table_reader_remote_test.cpp
     ./storage/table_reader_test.cpp
     ./storage/tablet_binlog_test.cpp

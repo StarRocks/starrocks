@@ -33,8 +33,8 @@
 #include "runtime/descriptors.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 

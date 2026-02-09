@@ -12,53 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/array_type_info.h"
-
+#include "base/hash/unaligned_access.h"
 #include "base/utility/mem_util.hpp"
+#include "common/logging.h"
 #include "gutil/casts.h"
-#include "runtime/mem_pool.h"
+#include "types/collection.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
 class ArrayTypeInfo final : public TypeInfo {
 public:
-    virtual ~ArrayTypeInfo() = default;
     explicit ArrayTypeInfo(const TypeInfoPtr& item_type_info)
             : _item_type_info(item_type_info), _item_size(item_type_info->size()) {}
+
+    ~ArrayTypeInfo() override = default;
 
     void shallow_copy(void* dest, const void* src) const override {
         unaligned_store<Collection>(dest, unaligned_load<Collection>(src));
     }
 
-    void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override {
+    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override {
+        DCHECK_NE(allocator, nullptr);
         Collection dest_value;
         auto src_value = unaligned_load<Collection>(src);
-
         dest_value.length = src_value.length;
 
         size_t item_size = src_value.length * _item_size;
         size_t nulls_size = src_value.has_null ? src_value.length : 0;
-        dest_value.data = mem_pool->allocate(item_size + nulls_size);
-        assert(dest_value.data != nullptr);
+        dest_value.data = allocator->allocate(item_size + nulls_size);
+        DCHECK_NE(dest_value.data, nullptr);
+
         dest_value.has_null = src_value.has_null;
         dest_value.null_signs = src_value.has_null ? reinterpret_cast<uint8_t*>(dest_value.data) + item_size : nullptr;
 
-        // copy null_signs
         if (src_value.has_null) {
             memory_copy(dest_value.null_signs, src_value.null_signs, sizeof(uint8_t) * src_value.length);
         }
 
-        // copy item
         for (uint32_t i = 0; i < src_value.length; ++i) {
             if (dest_value.is_null_at(i)) {
-                auto* item = reinterpret_cast<Collection*>((uint8_t*)dest_value.data + i * _item_size);
+                auto* item =
+                        reinterpret_cast<Collection*>(reinterpret_cast<uint8_t*>(dest_value.data) + i * _item_size);
                 item->data = nullptr;
                 item->length = 0;
                 item->has_null = false;
                 item->null_signs = nullptr;
             } else {
-                _item_type_info->deep_copy((uint8_t*)(dest_value.data) + i * _item_size,
-                                           (uint8_t*)(src_value.data) + i * _item_size, mem_pool);
+                _item_type_info->deep_copy(reinterpret_cast<uint8_t*>(dest_value.data) + i * _item_size,
+                                           reinterpret_cast<uint8_t*>(src_value.data) + i * _item_size, allocator);
             }
         }
         unaligned_store<Collection>(dest, dest_value);
@@ -73,14 +75,13 @@ public:
     std::string to_string(const void* src) const override {
         auto src_value = unaligned_load<Collection>(src);
         std::string result = "[";
-
         for (size_t i = 0; i < src_value.length; ++i) {
             if (src_value.has_null && src_value.null_signs[i]) {
                 result += "NULL";
             } else {
-                result += _item_type_info->to_string((uint8_t*)(src_value.data) + i * _item_size);
+                result += _item_type_info->to_string(reinterpret_cast<uint8_t*>(src_value.data) + i * _item_size);
             }
-            if (i != src_value.length - 1) {
+            if (i + 1 != src_value.length) {
                 result += ", ";
             }
         }
@@ -106,7 +107,7 @@ protected:
 
 private:
     TypeInfoPtr _item_type_info;
-    const size_t _item_size;
+    size_t _item_size;
 };
 
 TypeInfoPtr get_array_type_info(const TypeInfoPtr& item_type) {

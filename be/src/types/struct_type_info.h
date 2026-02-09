@@ -14,29 +14,12 @@
 
 #pragma once
 
-#include "common/status.h"
-#include "types/collection.h"
+#include "types/type_info.h"
 
 namespace starrocks {
-class WritableFile;
-class ColumnMetaPB;
 
-class InvertedWriter {
-public:
-    InvertedWriter() = default;
+TypeInfoPtr get_struct_type_info(std::vector<TypeInfoPtr> field_types);
 
-    InvertedWriter(InvertedWriter&& other_writer) noexcept = default;
+const std::vector<TypeInfoPtr>& get_struct_field_types(const TypeInfo* type_info);
 
-    virtual ~InvertedWriter() = default;
-
-    virtual Status init() = 0;
-
-    virtual void add_values(const void* values, size_t count) = 0;
-
-    virtual void add_nulls(uint32_t count) = 0;
-
-    virtual Status finish(WritableFile* wfile, ColumnMetaPB* meta) = 0;
-
-    virtual uint64_t size() const = 0;
-};
 } // namespace starrocks

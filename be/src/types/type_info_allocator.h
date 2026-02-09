@@ -10,16 +10,22 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License
+// limitations under the License.
 
 #pragma once
 
-#include "storage/types.h"
+#include <cstddef>
+#include <cstdint>
 
 namespace starrocks {
 
-TypeInfoPtr get_struct_type_info(std::vector<TypeInfoPtr> field_types);
+struct TypeInfoAllocator {
+    using AllocateFn = uint8_t* (*)(void* ctx, size_t size);
 
-const std::vector<TypeInfoPtr>& get_struct_field_types(const TypeInfo* type_info);
+    void* ctx = nullptr;
+    AllocateFn fn = nullptr;
+
+    uint8_t* allocate(size_t size) const { return fn == nullptr ? nullptr : fn(ctx, size); }
+};
 
 } // namespace starrocks

@@ -55,9 +55,9 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "types/date_value.hpp"
+#include "types/type_traits.h"
 
 namespace starrocks {
 

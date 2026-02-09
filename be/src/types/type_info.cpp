@@ -32,33 +32,38 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/types.h"
+#include "types/type_info.h"
+
+#include <cassert>
+#include <cinttypes>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <limits>
+#include <sstream>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
 #include "base/string/string_parser.hpp"
 #include "base/types/decimal12.h"
 #include "base/types/int128.h"
+#include "base/utility/guard.h"
 #include "base/utility/mem_util.hpp"
 #include "base/utility/mysql_global.h"
+#include "common/config.h"
+#include "gutil/casts.h"
 #include "gutil/strings/numbers.h"
-#include "runtime/mem_pool.h"
-#include "storage/array_type_info.h"
-#include "storage/collection.h"
-#include "storage/convert_helper.h"
-#include "storage/decimal_type_info.h"
-#include "storage/map_type_info.h"
-#include "storage/olap_define.h"
-#include "storage/olap_type_infra.h"
-#include "storage/struct_type_info.h"
-#include "storage/tablet_schema.h" // for TabletColumn
-#include "storage/type_traits.h"
 #include "types/date_value.hpp"
 #include "types/datetime_value.h"
+#include "types/datum.h"
 #include "types/decimalv2_value.h"
 #include "types/time_types.h"
 #include "types/type_descriptor.h"
-#include "util/hash_util.hpp"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -66,6 +71,54 @@ namespace starrocks {
 static const std::vector<std::string> DATE_FORMATS{
         "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d", "%y/%m/%d",
 };
+
+#define APPLY_FOR_TYPE_INTEGER(M) \
+    M(TYPE_TINYINT)               \
+    M(TYPE_SMALLINT)              \
+    M(TYPE_BIGINT)                \
+    M(TYPE_LARGEINT)              \
+    M(TYPE_INT)                   \
+    M(TYPE_INT256)
+
+#define APPLY_FOR_TYPE_DECIMAL(M) \
+    M(TYPE_DECIMAL)               \
+    M(TYPE_DECIMALV2)             \
+    M(TYPE_DECIMAL32)             \
+    M(TYPE_DECIMAL64)             \
+    M(TYPE_DECIMAL128)            \
+    M(TYPE_DECIMAL256)
+
+#define APPLY_FOR_TYPE_TIME(M) \
+    M(TYPE_DATE_V1)            \
+    M(TYPE_DATE)               \
+    M(TYPE_DATETIME_V1)        \
+    M(TYPE_DATETIME)
+
+#define APPLY_FOR_BASIC_LOGICAL_TYPE(M) \
+    APPLY_FOR_TYPE_INTEGER(M)           \
+    APPLY_FOR_TYPE_TIME(M)              \
+    M(TYPE_UNSIGNED_INT)                \
+    M(TYPE_FLOAT)                       \
+    M(TYPE_DOUBLE)                      \
+    M(TYPE_CHAR)                        \
+    M(TYPE_VARCHAR)                     \
+    M(TYPE_BOOLEAN)                     \
+    APPLY_FOR_TYPE_DECIMAL(M)           \
+    M(TYPE_JSON)                        \
+    M(TYPE_VARBINARY)
+
+#define APPLY_FOR_SUPPORTED_FIELD_TYPE(M) \
+    APPLY_FOR_BASIC_LOGICAL_TYPE(M)       \
+    M(TYPE_UNSIGNED_TINYINT)              \
+    M(TYPE_UNSIGNED_SMALLINT)             \
+    M(TYPE_UNSIGNED_BIGINT)               \
+    M(TYPE_HLL)                           \
+    M(TYPE_OBJECT)                        \
+    M(TYPE_PERCENTILE)
+
+inline uint32_t type_info_string_max_length() {
+    return config::olap_string_max_length;
+}
 
 template <typename T>
 static Status convert_int_from_varchar(void* dest, const void* src) {
@@ -108,7 +161,9 @@ public:
 
     void shallow_copy(void* dest, const void* src) const override { _shallow_copy(dest, src); }
 
-    void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { _deep_copy(dest, src, mem_pool); }
+    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override {
+        _deep_copy(dest, src, allocator);
+    }
 
     void direct_copy(void* dest, const void* src) const override { _direct_copy(dest, src); }
 
@@ -128,7 +183,7 @@ protected:
 
 private:
     void (*_shallow_copy)(void* dest, const void* src);
-    void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
+    void (*_deep_copy)(void* dest, const void* src, const TypeInfoAllocator* allocator);
     void (*_direct_copy)(void* dest, const void* src);
 
     Status (*_from_string)(void* buf, const std::string& scan_key);
@@ -179,7 +234,7 @@ struct ScalarTypeInfoImplBase {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
-    static void deep_copy(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
+    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
@@ -189,7 +244,7 @@ struct ScalarTypeInfoImplBase {
 
     static Status convert_from(void* dest __attribute__((unused)), const void* src __attribute__((unused)),
                                const TypeInfoPtr& src_type __attribute__((unused)),
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         return Status::NotSupported("Not supported function");
     }
 
@@ -226,11 +281,17 @@ struct ScalarTypeInfoImpl : public ScalarTypeInfoImplBase<field_type> {};
 // ScalarTypeInfoResolver
 // Manage all type-info instances, providing getter
 class ScalarTypeInfoResolver {
-    DECLARE_SINGLETON(ScalarTypeInfoResolver);
-
 public:
+    static ScalarTypeInfoResolver* instance() {
+        static ScalarTypeInfoResolver resolver;
+        return &resolver;
+    }
+
     ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
-    const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
+    ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
+
+    ScalarTypeInfoResolver();
+    ~ScalarTypeInfoResolver();
 
     const TypeInfoPtr get_type_info(const LogicalType t) {
         if (this->_mapping.find(t) == this->_mapping.end()) {
@@ -282,60 +343,6 @@ TypeInfoPtr get_type_info(LogicalType field_type) {
     return ScalarTypeInfoResolver::instance()->get_type_info(field_type);
 }
 
-TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
-    auto type = static_cast<LogicalType>(column_meta_pb.type());
-    TypeInfoPtr type_info;
-    if (type == TYPE_ARRAY) {
-        const ColumnMetaPB& child = column_meta_pb.children_columns(0);
-        TypeInfoPtr child_type_info = get_type_info(child);
-        type_info = get_array_type_info(child_type_info);
-        return type_info;
-    } else if (type == TYPE_MAP) {
-        const ColumnMetaPB& key_meta = column_meta_pb.children_columns(0);
-        TypeInfoPtr key_type_info = get_type_info(key_meta);
-
-        const ColumnMetaPB& value_meta = column_meta_pb.children_columns(1);
-        TypeInfoPtr value_type_info = get_type_info(value_meta);
-
-        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
-    } else if (type == TYPE_STRUCT) {
-        std::vector<TypeInfoPtr> field_types;
-        for (int i = 0; i < column_meta_pb.children_columns_size(); ++i) {
-            auto& meta = column_meta_pb.children_columns(i);
-            field_types.emplace_back(get_type_info(meta));
-        }
-        return get_struct_type_info(std::move(field_types));
-    } else {
-        return get_type_info(delegate_type(type));
-    }
-}
-
-TypeInfoPtr get_type_info(const TabletColumn& col) {
-    TypeInfoPtr type_info;
-    if (col.type() == TYPE_ARRAY) {
-        const TabletColumn& child = col.subcolumn(0);
-        TypeInfoPtr child_type_info = get_type_info(child);
-        type_info = get_array_type_info(child_type_info);
-        return type_info;
-    } else if (col.type() == TYPE_MAP) {
-        const TabletColumn& key_meta = col.subcolumn(0);
-        TypeInfoPtr key_type_info = get_type_info(key_meta);
-
-        const TabletColumn& value_meta = col.subcolumn(1);
-        TypeInfoPtr value_type_info = get_type_info(value_meta);
-
-        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
-    } else if (col.type() == TYPE_STRUCT) {
-        std::vector<TypeInfoPtr> field_types;
-        for (int i = 0; i < col.subcolumn_count(); ++i) {
-            field_types.emplace_back(get_type_info(col.subcolumn(i)));
-        }
-        return get_struct_type_info(std::move(field_types));
-    } else {
-        return get_type_info(col.type(), col.precision(), col.scale());
-    }
-}
-
 TypeInfoPtr get_type_info(const TypeDescriptor& type_desc) {
     if (type_desc.is_array_type()) {
         const TypeDescriptor& child = type_desc.children[0];
@@ -357,32 +364,6 @@ TypeInfoPtr get_type_info(const TypeDescriptor& type_desc) {
     } else {
         return get_type_info(type_desc.type, type_desc.precision, type_desc.scale);
     }
-}
-
-TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
-    LogicalType ftype = type_info->type();
-
-    bool is_array = false;
-    if (ftype == TYPE_ARRAY) {
-        is_array = true;
-        type_info = get_item_type_info(type_info).get();
-        ftype = type_info->type();
-    }
-
-    LogicalType ltype = scalar_field_type_to_logical_type(ftype);
-    DCHECK(ltype != TYPE_UNKNOWN);
-    int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
-    int precision = type_info->precision();
-    int scale = type_info->scale();
-    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, len, precision, scale);
-
-    if (is_array) {
-        TypeDescriptor arr;
-        arr.type = TYPE_ARRAY;
-        arr.children.emplace_back(ret);
-        return arr;
-    }
-    return ret;
 }
 
 TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
@@ -435,7 +416,7 @@ struct ScalarTypeInfoImpl<TYPE_TINYINT> : public ScalarTypeInfoImplBase<TYPE_TIN
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
@@ -451,7 +432,7 @@ struct ScalarTypeInfoImpl<TYPE_SMALLINT> : public ScalarTypeInfoImplBase<TYPE_SM
         return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
@@ -467,7 +448,7 @@ struct ScalarTypeInfoImpl<TYPE_INT> : public ScalarTypeInfoImplBase<TYPE_INT> {
         return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
@@ -483,7 +464,7 @@ struct ScalarTypeInfoImpl<TYPE_BIGINT> : public ScalarTypeInfoImplBase<TYPE_BIGI
         return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
@@ -574,7 +555,7 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
     static void shallow_copy(void* dest, const void* src) {
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
-    static void deep_copy(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
+    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
 
@@ -584,7 +565,7 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
     static void set_to_max(void* buf) { unaligned_store<int128_t>(buf, ~((int128_t)(1) << 127)); }
     static void set_to_min(void* buf) { unaligned_store<int128_t>(buf, (int128_t)(1) << 127); }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
@@ -621,7 +602,7 @@ struct ScalarTypeInfoImpl<TYPE_INT256> : public ScalarTypeInfoImplBase<TYPE_INT2
         unaligned_store<int256_t>(dest, unaligned_load<int256_t>(src));
     }
 
-    static void deep_copy(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
+    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
         unaligned_store<int256_t>(dest, unaligned_load<int256_t>(src));
     }
 
@@ -633,7 +614,7 @@ struct ScalarTypeInfoImpl<TYPE_INT256> : public ScalarTypeInfoImplBase<TYPE_INT2
     static void set_to_min(void* buf) { unaligned_store<int256_t>(buf, INT256_MIN); }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
@@ -664,7 +645,7 @@ struct ScalarTypeInfoImpl<TYPE_FLOAT> : public ScalarTypeInfoImplBase<TYPE_FLOAT
         return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         if (src_type->type() == TYPE_VARCHAR) {
             return convert_float_from_varchar<CppType>(dest, src);
         }
@@ -689,7 +670,7 @@ struct ScalarTypeInfoImpl<TYPE_DOUBLE> : public ScalarTypeInfoImplBase<TYPE_DOUB
         return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         //only support float now
         if (src_type->type() == TYPE_FLOAT) {
             using SrcType = typename CppTypeTraits<TYPE_FLOAT>::CppType;
@@ -759,7 +740,7 @@ struct ScalarTypeInfoImpl<TYPE_DECIMALV2> : public ScalarTypeInfoImplBase<TYPE_D
     // GCC7.3 will generate movaps instruction, which will lead to SEGV when buf is
     // not aligned to 16 byte
     static void shallow_copy(void* dest, const void* src) { memcpy(dest, src, sizeof(CppType)); }
-    static void deep_copy(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
+    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
         memcpy(dest, src, sizeof(CppType));
     }
 
@@ -805,7 +786,7 @@ struct ScalarTypeInfoImpl<TYPE_DATE_V1> : public ScalarTypeInfoImplBase<TYPE_DAT
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         if (src_type->type() == LogicalType::TYPE_DATETIME_V1) {
             using SrcType = typename CppTypeTraits<TYPE_DATETIME_V1>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
@@ -884,10 +865,8 @@ struct ScalarTypeInfoImpl<TYPE_DATE> : public ScalarTypeInfoImplBase<TYPE_DATE> 
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* mem_pool __attribute__((unused))) {
-        auto converter = get_type_converter(src_type->type(), TYPE_DATE);
-        RETURN_IF_ERROR(converter->convert(dest, src, mem_pool));
-        return Status::OK();
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
+        return Status::NotSupported("Fail to cast to date.");
     }
     static void set_to_max(void* buf) {
         // max is 9999 * 16 * 32 + 12 * 32 + 31;
@@ -937,7 +916,7 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<TYPE
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
-                               MemPool* memPool __attribute__((unused))) {
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
         // when convert date to datetime, automatic padding zero
         if (src_type->type() == LogicalType::TYPE_DATE_V1) {
             using SrcType = typename CppTypeTraits<TYPE_DATE_V1>::CppType;
@@ -981,13 +960,9 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME> : public ScalarTypeInfoImplBase<TYPE_DA
         return timestamp.to_string();
     }
 
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
-        TimestampValue value;
-        auto converter = get_type_converter(src_type->type(), TYPE_DATETIME);
-        auto st = converter->convert(&value, src, mem_pool);
-        unaligned_store<TimestampValue>(dest, value);
-        RETURN_IF_ERROR(st);
-        return Status::OK();
+    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
+                               const TypeInfoAllocator* allocator __attribute__((unused))) {
+        return Status::NotSupported("Fail to cast to datetime.");
     }
     static void set_to_max(void* buf) { unaligned_store<CppType>(buf, timestamp::MAX_TIMESTAMP); }
     static void set_to_min(void* buf) { unaligned_store<CppType>(buf, timestamp::MIN_TIMESTAMP); }
@@ -997,9 +972,9 @@ template <>
 struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> {
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
-        if (value_len > get_olap_string_max_length()) {
+        if (value_len > type_info_string_max_length()) {
             return Status::InvalidArgument(fmt::format("String(length={}) is too long, the max length is: {}",
-                                                       value_len, get_olap_string_max_length()));
+                                                       value_len, type_info_string_max_length()));
         }
 
         auto slice = unaligned_load<Slice>(buf);
@@ -1022,10 +997,11 @@ struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> 
         auto slice = unaligned_load<Slice>(src);
         return slice.to_string();
     }
-    static void deep_copy(void* dest, const void* src, MemPool* mem_pool) {
+    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) {
         auto l_slice = unaligned_load<Slice>(dest);
         auto r_slice = unaligned_load<Slice>(src);
-        l_slice.data = reinterpret_cast<char*>(mem_pool->allocate(r_slice.size));
+        DCHECK_NE(allocator, nullptr);
+        l_slice.data = reinterpret_cast<char*>(allocator->allocate(r_slice.size));
         assert(l_slice.data != nullptr);
         memory_copy(l_slice.data, r_slice.data, r_slice.size);
         l_slice.size = r_slice.size;
@@ -1062,11 +1038,11 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
 
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
-        if (value_len > get_olap_string_max_length()) {
+        if (value_len > type_info_string_max_length()) {
             LOG(WARNING) << "String(length=" << value_len << ") is too long, the max length is "
-                         << get_olap_string_max_length();
+                         << type_info_string_max_length();
             return Status::InternalError(fmt::format("String(length={}) is too long, the max length is: {}", value_len,
-                                                     get_olap_string_max_length()));
+                                                     type_info_string_max_length()));
         }
 
         auto slice = unaligned_load<Slice>(buf);
@@ -1076,15 +1052,17 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
         return Status::OK();
     }
 
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
+    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
+                               const TypeInfoAllocator* allocator) {
         if (src_type->type() == TYPE_TINYINT || src_type->type() == TYPE_SMALLINT || src_type->type() == TYPE_INT ||
             src_type->type() == TYPE_BIGINT || src_type->type() == TYPE_LARGEINT || src_type->type() == TYPE_FLOAT ||
             src_type->type() == TYPE_DOUBLE || src_type->type() == TYPE_DECIMAL || src_type->type() == TYPE_DECIMALV2 ||
             src_type->type() == TYPE_DECIMAL32 || src_type->type() == TYPE_DECIMAL64 ||
             src_type->type() == TYPE_DECIMAL128 || src_type->type() == TYPE_DECIMAL256) {
+            DCHECK_NE(allocator, nullptr);
             auto result = src_type->to_string(src);
             auto slice = reinterpret_cast<Slice*>(dest);
-            slice->data = reinterpret_cast<char*>(mem_pool->allocate(result.size()));
+            slice->data = reinterpret_cast<char*>(allocator->allocate(result.size()));
             if (UNLIKELY(slice->data == nullptr)) {
                 return Status::InternalError("Fail to malloc memory");
             }
@@ -1130,7 +1108,8 @@ struct ScalarTypeInfoImpl<TYPE_JSON> : public ScalarTypeInfoImpl<TYPE_OBJECT> {
     static const LogicalType type = TYPE_JSON;
     static const int32_t size = TypeTraits<TYPE_JSON>::size;
 
-    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
+    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
+                               const TypeInfoAllocator* allocator) {
         // TODO(mofei)
         return Status::InternalError("Not supported");
     }

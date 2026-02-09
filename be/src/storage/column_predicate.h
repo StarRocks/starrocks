@@ -28,13 +28,13 @@
 #include "storage/index/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
+#include "types/type_traits.h"
 
 class Roaring;
 

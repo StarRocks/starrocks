@@ -23,6 +23,11 @@ ADD_BE_LIB(TypesCore
     json_value.cpp
     json_value_converter.cpp
     logical_type.cpp
+    array_type_info.cpp
+    decimal_type_info.cpp
+    map_type_info.cpp
+    struct_type_info.cpp
+    type_info.cpp
     type_descriptor.cpp
     date_value.cpp
     datetime_value.cpp
