@@ -20,22 +20,20 @@ case "$1" in
         fi
 
         # 3. Create specific subdirectories for FE and BE
-        # This ensures the 'meta' and 'storage' paths from our sed patches exist
         echo "Creating StarRocks runtime directories..."
         mkdir -p /var/log/starrocks/fe /var/log/starrocks/be
         mkdir -p /var/lib/starrocks/fe/meta /var/lib/starrocks/be/storage
-        mkdir -p /var/run/starrocks
 
         # 4. Set ownership and permissions
         echo "Setting permissions for starrocks user..."
         chown -R starrocks:starrocks /var/log/starrocks
         chown -R starrocks:starrocks /var/lib/starrocks
-        chown -R starrocks:starrocks /var/run/starrocks
         
         # Secure the configuration directory
         if [ -d /etc/starrocks ]; then
             chown -R root:starrocks /etc/starrocks
-            chmod -R 750 /etc/starrocks
+            find /etc/starrocks -type d -exec chmod 750 {} \;  
+            find /etc/starrocks -type f -exec chmod 640 {} \;  
         fi
     ;;
 
