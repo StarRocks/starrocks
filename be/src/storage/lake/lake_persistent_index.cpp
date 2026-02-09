@@ -35,7 +35,6 @@
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
-#include "storage/sstable/sstable_predicate.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
 
@@ -511,10 +510,6 @@ Status LakePersistentIndex::prepare_merging_iterator(
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
-        if (sstable_pb.has_predicate()) {
-            ASSIGN_OR_RETURN(read_options.predicate,
-                             sstable::SstablePredicate::create(metadata->schema(), sstable_pb.predicate()));
-        }
         read_options.shared_rssid = sstable_pb.shared_rssid();
         read_options.shared_version = sstable_pb.shared_version();
         read_options.delvec = merging_sstable->delvec();
