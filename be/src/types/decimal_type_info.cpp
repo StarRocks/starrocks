@@ -27,7 +27,7 @@ namespace starrocks {
 template <LogicalType TYPE, typename = DecimalLTGuard<TYPE>>
 class DecimalTypeInfo final : public TypeInfo {
 public:
-    virtual ~DecimalTypeInfo() = default;
+    ~DecimalTypeInfo() override = default;
 
     using CppType = typename CppTypeTraits<TYPE>::CppType;
     DecimalTypeInfo(int precision, int scale)
