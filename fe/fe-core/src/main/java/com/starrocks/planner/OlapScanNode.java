@@ -1010,8 +1010,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     // check key columns
                     SlotId cid = ((SlotRef) expr).getSlotId();
                     String columnName = desc.getSlot(cid.asInt()).getColumn().getName();
-                    if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(columnName)) {
-                        sortKeyAscHint = outputAscHint;
+                    if (!keyColumnNames.isEmpty() && keyColumnNames.contains(columnName)) {
+                        if (keyColumnNames.get(0).equals(columnName)) {
+                            sortKeyAscHint = outputAscHint;
+                        }
                         topnFilterOnSortKey = true;
                         if (ConnectContext.get() != null) {
                             topnRuntimeFilterUpdateMode =

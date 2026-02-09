@@ -121,6 +121,8 @@ static StatusOr<std::map<int, pipeline::MorselQueuePtr>> uniform_distribute_mors
     }
 
     auto morsel_queue_type = morsel_queue->type();
+    bool has_more_scan_ranges = morsel_queue->has_more_scan_ranges();
+    bool has_more_from_split = morsel_queue->has_more_from_split();
     DCHECK(morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
            morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
 
@@ -131,7 +133,19 @@ static StatusOr<std::map<int, pipeline::MorselQueuePtr>> uniform_distribute_mors
     } else {
         for (auto& [operator_seq, morsels] : morsels_per_driver) {
             queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::DynamicMorselQueue>(
-                                                           std::move(morsels), morsel_queue->has_more()));
+                                                           std::move(morsels), has_more_scan_ranges));
+        }
+
+        if (has_more_from_split) {
+            for (; driver_seq < dop; driver_seq++) {
+                queue_per_driver.emplace(driver_seq, std::make_unique<pipeline::DynamicMorselQueue>(
+                                                             pipeline::Morsels(), has_more_scan_ranges));
+            }
+            DCHECK_EQ(queue_per_driver.size(), dop);
+        }
+
+        for (auto& [_, queue] : queue_per_driver) {
+            queue->set_has_more_from_split(has_more_from_split);
         }
     }
 

@@ -90,6 +90,10 @@ void SharedMorselQueueFactory::set_has_more(bool v) {
     _queue->set_has_more(v);
 }
 
+void SharedMorselQueueFactory::set_has_more_from_split(bool v) {
+    _queue->set_has_more_from_split(v);
+}
+
 bool SharedMorselQueueFactory::reach_limit() const {
     return _queue->reach_limit();
 }
@@ -104,6 +108,10 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
 
 Status MorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
     return Status::NotSupported("MorselQueueFactory::append_morsels not supported");
+}
+
+StatusOr<int> MorselQueueFactory::next_driver_seq() {
+    return Status::NotSupported("MorselQueueFactory::next_driver_seq not supported");
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
@@ -144,9 +152,24 @@ Status IndividualMorselQueueFactory::append_morsels(int driver_seq, Morsels&& mo
     return Status::OK();
 }
 
+StatusOr<int> IndividualMorselQueueFactory::next_driver_seq() {
+    int size = _queue_per_driver_seq.size();
+    if (size == 0) {
+        return Status::NotSupported("IndividualMorselQueueFactory::next_driver_seq empty");
+    }
+    int seq = _random_cursor.fetch_add(1, std::memory_order_relaxed);
+    return seq % size;
+}
+
 void IndividualMorselQueueFactory::set_has_more(bool v) {
     for (auto& q : _queue_per_driver_seq) {
         q->set_has_more(v);
+    }
+}
+
+void IndividualMorselQueueFactory::set_has_more_from_split(bool v) {
+    for (auto& q : _queue_per_driver_seq) {
+        q->set_has_more_from_split(v);
     }
 }
 
@@ -188,6 +211,12 @@ Status BucketSequenceMorselQueueFactory::append_morsels(int driver_seq, Morsels&
 void BucketSequenceMorselQueueFactory::set_has_more(bool v) {
     for (auto& q : _queue_per_driver_seq) {
         q->set_has_more(v);
+    }
+}
+
+void BucketSequenceMorselQueueFactory::set_has_more_from_split(bool v) {
+    for (auto& q : _queue_per_driver_seq) {
+        q->set_has_more_from_split(v);
     }
 }
 
