@@ -146,7 +146,6 @@ Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
 
     auto* queue_factory = morsel_queue_factory();
     DCHECK(queue_factory != nullptr);
-    _remaining_split_source_morsels.store(queue_factory->num_original_morsels(), std::memory_order_relaxed);
 
     return Status::OK();
 }

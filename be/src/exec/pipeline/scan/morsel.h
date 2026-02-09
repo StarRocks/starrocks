@@ -255,7 +255,6 @@ public:
     virtual StatusOr<int> next_driver_seq();
     virtual bool enable_random_append_split_morsel() const { return false; }
     virtual void set_has_more(bool v) {}
-    virtual void set_has_more_from_split(bool v) {}
     virtual void mark_split_source_morsel_finished() {}
     virtual bool reach_limit() const { return false; }
 };
@@ -274,7 +273,6 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more(bool v) override;
-    void set_has_more_from_split(bool v) override;
     void mark_split_source_morsel_finished() override;
     bool reach_limit() const override;
 
