@@ -157,7 +157,7 @@ int TypeInfo::cmp(const Datum& left, const Datum& right) const {
 
 class ScalarTypeInfo final : public TypeInfo {
 public:
-    virtual ~ScalarTypeInfo() = default;
+    ~ScalarTypeInfo() override = default;
 
     void shallow_copy(void* dest, const void* src) const override { _shallow_copy(dest, src); }
 
