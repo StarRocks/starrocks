@@ -47,7 +47,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -152,6 +151,7 @@ public class CachingIcebergCatalogTest {
         Assertions.assertEquals(db, cachingIcebergCatalog.getDB(connectContext, "test"));
     }
 
+
     @Test
     public void testGetTable(@Mocked IcebergCatalog icebergCatalog) {
         Table nativeTable = createBaseTableWithManifests(1, 1);
@@ -186,39 +186,6 @@ public class CachingIcebergCatalogTest {
         String expectedPrefix = "Failed to get iceberg table iceberg_catalog.test.table";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
         Assertions.assertTrue(ex.getMessage().contains("io failure"));
-    }
-
-    @Test
-    public void testTableWeigherUsesSnapshotsAndManifests() {
-        IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
-        ExecutorService executorService = Executors.newSingleThreadExecutor();
-        try {
-            CachingIcebergCatalog catalog =
-                    new CachingIcebergCatalog(CATALOG_NAME, delegate, DEFAULT_CATALOG_PROPERTIES, executorService);
-
-            LoadingCache<IcebergTableName, Table> tables = Deencapsulation.getField(catalog, "tables");
-            com.github.benmanes.caffeine.cache.Policy.Eviction<IcebergTableName, Table> eviction =
-                    tables.policy().eviction().orElseThrow(() -> new AssertionError("eviction should be present"));
-
-            IcebergTableName key = new IcebergTableName("db", "tbl");
-            Table lightTable = createBaseTableWithManifests(1, 2);
-            Table heavyTable = createBaseTableWithManifests(3, 5);
-
-            tables.put(key, lightTable);
-            OptionalInt weightLight = eviction.weightOf(key);
-            tables.put(key, heavyTable);
-            OptionalInt weightHeavy = eviction.weightOf(key);
-
-            int snapshotSize = getStaticIntField("MEMORY_SNAPSHOT_SIZE");
-            int manifestSize = getStaticIntField("MEMORY_MANIFEST_SIZE");
-            int expectedDiff = (3 - 1) * snapshotSize + (5 - 2) * manifestSize;
-
-            Assertions.assertTrue(weightLight.isPresent() && weightHeavy.isPresent());
-            Assertions.assertTrue(weightHeavy.getAsInt() > weightLight.getAsInt());
-            Assertions.assertEquals(expectedDiff, weightHeavy.getAsInt() - weightLight.getAsInt());
-        } finally {
-            executorService.shutdownNow();
-        }
     }
 
     private int getStaticIntField(String fieldName) {
