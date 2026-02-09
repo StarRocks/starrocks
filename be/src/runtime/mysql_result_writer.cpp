@@ -38,13 +38,13 @@
 
 #include "column/chunk.h"
 #include "column/const_column.h"
+#include "column/mysql_row_buffer.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"
 #include "types/logical_type.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 

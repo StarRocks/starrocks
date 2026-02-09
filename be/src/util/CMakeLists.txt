@@ -56,7 +56,6 @@ set(UTIL_FILES
   table_metrics.cpp
   system_metrics.cpp
   url_parser.cpp
-  mysql_row_buffer.cpp
   filesystem_util.cc
 # coding_util.cpp
   cidr.cpp

@@ -21,15 +21,15 @@
 #endif
 
 #include "base/container/raw_container.h"
+#include "base/hash/hash_util.hpp"
 #include "column/bytes.h"
+#include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "util/hash_util.hpp"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 template <typename T>

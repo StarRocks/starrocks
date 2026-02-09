@@ -20,6 +20,7 @@
 #include <immintrin.h>
 #endif
 
+#include <cstddef>
 #include <cstdint>
 
 namespace starrocks {

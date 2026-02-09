@@ -14,19 +14,19 @@
 
 #include "column/fixed_length_column_base.h"
 
+#include "base/hash/hash_util.hpp"
 #include "base/simd/gather.h"
 #include "base/types/decimal12.h"
 #include "base/types/int128.h"
 #include "base/types/int256.h"
 #include "column/column_helper.h"
+#include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "util/hash_util.hpp"
-#include "util/mysql_row_buffer.h"
 #include "util/value_generator.h"
 
 namespace starrocks {

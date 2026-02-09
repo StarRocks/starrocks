@@ -19,7 +19,6 @@
 #include "base/decimal_types.h"
 #include "column/column.h"
 #include "column/fixed_length_column_base.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 

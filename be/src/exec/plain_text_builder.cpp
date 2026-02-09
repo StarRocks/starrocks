@@ -3,6 +3,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/mysql_row_buffer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "formats/csv/converter.h"
@@ -11,7 +12,6 @@
 #include "io/formatted_output_stream.h"
 #include "io/formatted_output_stream_file.h"
 #include "util/date_func.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 
