@@ -126,7 +126,7 @@ public class ProcProfileFileAction extends WebBaseAction {
 
         // Validate BE node exists before proxying the request to mitigate SSRF risk.
         if (!validateNodeExists(host, port)) {
-            LOG.warn("BE node not exist: {}:{}", host, port);
+            LOG.warn("BE node does not exist: {}:{}", host, port);
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
         }
