@@ -13,6 +13,12 @@ BE_SOURCE=${3:-"../../out/be"}
 
 echo "### StarRocks Debian Packaging Build ###"
 
+# Detect OS for portable sed
+SED_I=(-i)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  SED_I=(-i '')
+fi
+
 # Cleanup previous builds
 rm -rf target
 mkdir -p target
@@ -55,19 +61,26 @@ for COMP in "fe" "be"; do
 
     # Path Patching (LSB)
     echo "Patching $COMP.conf for standard paths..."
+    CONF_FILE="$STAGING_DIR/etc/starrocks/$COMP/$COMP.conf"
+
     if [ "$COMP" == "fe" ]; then
-        sed -i '' "s|^#\?meta_dir.*|meta_dir = /var/lib/starrocks/fe/meta|" "$STAGING_DIR/etc/starrocks/fe/fe.conf"
-        sed -i '' "s|^#\?sys_log_dir.*|sys_log_dir = /var/log/starrocks/fe|" "$STAGING_DIR/etc/starrocks/fe/fe.conf"
+        sed "${SED_I[@]}" "s|^#\?meta_dir.*|meta_dir = /var/lib/starrocks/fe/meta|" "$CONF_FILE"
     else
-        sed -i '' "s|^#\?storage_root_path.*|storage_root_path = /var/lib/starrocks/be/storage|" "$STAGING_DIR/etc/starrocks/be/be.conf"
-        sed -i '' "s|^#\?sys_log_dir.*|sys_log_dir = /var/log/starrocks/be|" "$STAGING_DIR/etc/starrocks/be/be.conf"
+        sed "${SED_I[@]}" "s|^#\?storage_root_path.*|storage_root_path = /var/lib/starrocks/be/storage|" "$CONF_FILE"
     fi
+
+    # Patch common log and PID paths
+    sed "${SED_I[@]}" "s|^#\?sys_log_dir.*|sys_log_dir = /var/log/starrocks/$COMP|" "$CONF_FILE"
+    sed "${SED_I[@]}" "s|^#\?LOG_DIR.*|LOG_DIR = /var/log/starrocks/$COMP|" "$CONF_FILE"
+    sed "${SED_I[@]}" "s|^#\?PID_DIR.*|PID_DIR = /run/starrocks|" "$CONF_FILE"
 
     # Inject Metadata
     cp "control.$COMP" "$STAGING_DIR/DEBIAN/control"
+    sed "${SED_I[@]}" "s|^Version:.*|Version: $VERSION|" "$STAGING_DIR/DEBIAN/control"
     echo "" >> "$STAGING_DIR/DEBIAN/control"
     cp "postinst" "$STAGING_DIR/DEBIAN/postinst"
     chmod 755 "$STAGING_DIR/DEBIAN/postinst"
+    
 
     if [ -f "conffiles.$COMP" ]; then
         cp "conffiles.$COMP" "$STAGING_DIR/DEBIAN/conffiles"
