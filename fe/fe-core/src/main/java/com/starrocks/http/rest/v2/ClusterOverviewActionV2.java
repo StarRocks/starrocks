@@ -23,8 +23,12 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.v2.vo.ClusterOverview;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
+
+import java.util.Map;
 
 public class ClusterOverviewActionV2 extends RestBaseAction {
 
@@ -40,19 +44,35 @@ public class ClusterOverviewActionV2 extends RestBaseAction {
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         LocalMetastore infoService = GlobalStateMgr.getCurrentState().getLocalMetastore();
 
+        GlobalStateMgr globalState = GlobalStateMgr.getCurrentState();
+        NodeMgr nodeMgr = globalState.getNodeMgr();
+        SystemInfoService clusterInfo = nodeMgr.getClusterInfo();
+
+        ImmutableMap<Long, Backend> backendMap =
+                GlobalStateMgr.getCurrentState()
+                        .getNodeMgr()
+                        .getClusterInfo()
+                        .getIdToBackend();
+
+        long tableCount = getTblCount(infoService);
+        long dataUsedCapacity = getDataUsedCapacity(backendMap);
+        long availableCapacity = getAvailableCapacity(backendMap);
+        long totalCapacity = getTotalCapacity(backendMap);
+
         ClusterOverview clusterOverview = new ClusterOverview(
                 (long) infoService.getAllDbs().size(),
-                (long) getTblCount(infoService),
-                getDataUsedCapacity(),
-                getAvailableCapacity(),
-                getTotalCapacity(),
-                (long) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().size(),
-                (long) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber(),
-                (long) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes().size(),
-                (long) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber(),
-                (long) GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends().size(),
-                GlobalStateMgr.getCurrentState().getNodeMgr().getAliveFrontendsCnt()
+                tableCount,
+                dataUsedCapacity,
+                availableCapacity,
+                totalCapacity,
+                (long) clusterInfo.getBackends().size(),
+                (long) clusterInfo.getAliveBackendNumber(),
+                (long) clusterInfo.getComputeNodes().size(),
+                (long) clusterInfo.getAliveComputeNodeNumber(),
+                (long) nodeMgr.getAllFrontends().size(),
+                nodeMgr.getAliveFrontendsCnt()
         );
+
         sendResult(request, response, new RestBaseResultV2<>(clusterOverview));
     }
 
@@ -64,35 +84,24 @@ public class ClusterOverviewActionV2 extends RestBaseAction {
         return tableCount;
     }
 
-    private long getDataUsedCapacity() {
-        long dataUsedCapacity = 0;
-        ImmutableMap<Long, Backend> backendMap =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
-        for (Backend backend : backendMap.values()) {
-            dataUsedCapacity += backend.getDataUsedCapacityB();
-        }
-        return dataUsedCapacity;
+    private long getDataUsedCapacity(Map<Long, Backend> backendMap) {
+        return backendMap.values()
+                .stream()
+                .mapToLong(Backend::getDataUsedCapacityB)
+                .sum();
     }
 
-    private long getAvailableCapacity() {
-        long availableCapacity = 0;
-        ImmutableMap<Long, Backend> backendMap =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
-        for (Backend backend : backendMap.values()) {
-            availableCapacity += backend.getAvailableCapacityB();
-        }
-        return availableCapacity;
+    private long getAvailableCapacity(Map<Long, Backend> backendMap) {
+        return backendMap.values()
+                .stream()
+                .mapToLong(Backend::getAvailableCapacityB)
+                .sum();
     }
 
-    private long getTotalCapacity() {
-        long totalCapacity = 0;
-        ImmutableMap<Long, Backend> backendMap =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
-        for (Backend backend : backendMap.values()) {
-            totalCapacity += backend.getTotalCapacityB();
-        }
-        return totalCapacity;
+    private long getTotalCapacity(Map<Long, Backend> backendMap) {
+        return backendMap.values()
+                .stream()
+                .mapToLong(Backend::getTotalCapacityB)
+                .sum();
     }
-
-
 }
