@@ -126,11 +126,11 @@ public class MVActiveChecker extends FrontendDaemon {
      */
     public static void tryToActivate(MaterializedView mv, boolean checkGracePeriod) {
         // if the mv is set to inactive manually, we don't activate it
-        String reason = mv.getInactiveReason();
+        String reason = Optional.ofNullable(mv.getInactiveReason()).orElse("");
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
             return;
         }
-        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(x -> reason.contains(x))) {
+        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(reason::contains)) {
             return;
         }
 
