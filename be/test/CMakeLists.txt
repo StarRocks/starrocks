@@ -581,8 +581,6 @@ SET(DW_TEST_FILES
     ./storage/publish_version_task_test.cpp
     ./storage/push_handler_test.cpp
     ./storage/range_test.cpp
-    ./storage/record_predicate/column_hash_is_congruent_test.cpp
-    ./storage/record_predicate/record_predicate_helper_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
     ./storage/roaring2range_test.cpp
@@ -632,7 +630,6 @@ SET(DW_TEST_FILES
     ./storage/short_key_index_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
-    ./storage/sstable/sstable_predicate_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_engine_test.cpp
     ./storage/storage_types_test.cpp
