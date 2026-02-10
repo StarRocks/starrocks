@@ -25,7 +25,7 @@
 #include "common/object_pool.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
-#include "util/value_generator.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 struct SegDataGenerator {

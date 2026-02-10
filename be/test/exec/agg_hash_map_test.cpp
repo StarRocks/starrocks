@@ -27,7 +27,7 @@
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
-#include "util/value_generator.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 

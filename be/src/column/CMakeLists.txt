@@ -16,10 +16,15 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
 add_library(ColumnCore STATIC
         column.cpp
+        column_filter_range.cpp
         column_visitor.cpp
         column_visitor_mutable.cpp
         mysql_row_buffer.cpp
         german_string.cpp
+        object_column.cpp
+        variant_column.cpp
+        fixed_length_column_base.cpp
+        fixed_length_column.cpp
 )
 
 add_library(Column STATIC
@@ -36,12 +41,9 @@ add_library(Column STATIC
         datum_convert.cpp
         datum_tuple.cpp
         field.cpp
-        fixed_length_column_base.cpp
-        fixed_length_column.cpp
         nullable_column.cpp
         schema.cpp
         binary_column.cpp
-        object_column.cpp
         decimalv3_column.cpp
         json_column.cpp
         map_column.cpp
@@ -50,7 +52,6 @@ add_library(Column STATIC
         type_traits.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
-        variant_column.cpp
         column_hash/column_hash.cpp
 )
 

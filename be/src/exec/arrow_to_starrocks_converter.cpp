@@ -41,7 +41,7 @@
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/value_generator.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 

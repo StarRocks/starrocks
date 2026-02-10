@@ -17,7 +17,11 @@ set(COLUMN_TEST_FILES
     column_base_test.cpp
     mysql_row_buffer_test.cpp
     german_string_test.cpp
+    object_column_core_test.cpp
+    variant_column_test.cpp
     column_visitor_test.cpp
+    column_filter_range_test.cpp
+    fixed_length_column_core_test.cpp
     column_hash_stub.cpp
 )
 

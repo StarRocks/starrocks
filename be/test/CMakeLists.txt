@@ -13,9 +13,9 @@ set(EXEC_FILES
         ./column/const_column_test.cpp
         ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
-        ./column/fixed_length_column_test.cpp
+        ./column/fixed_length_column_extended_test.cpp
         ./column/json_column_test.cpp
-        ./column/variant_column_test.cpp
+        ./column/variant_column_extended_test.cpp
         ./column/map_column_test.cpp
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp

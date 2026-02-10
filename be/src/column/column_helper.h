@@ -18,12 +18,12 @@
 #include <utility>
 
 #include "base/simd/simd.h"
+#include "column/column_filter_range.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "gutil/cpu.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/type_descriptor.h"
@@ -615,24 +615,18 @@ public:
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
 
     template <typename T, bool avx512f>
-    static size_t t_filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to);
+    static size_t t_filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to) {
+        return column_filter_range::t_filter_range<T, avx512f>(filter, dst_data, src_data, from, to);
+    }
 
     template <typename T>
     static size_t filter_range(const Filter& filter, T* data, size_t from, size_t to) {
-        if (base::CPU::instance()->has_avx512f()) {
-            return t_filter_range<T, true>(filter, data, data, from, to);
-        } else {
-            return t_filter_range<T, false>(filter, data, data, from, to);
-        }
+        return column_filter_range::filter_range<T>(filter, data, from, to);
     }
 
     template <typename T>
     static size_t filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to) {
-        if (base::CPU::instance()->has_avx512f()) {
-            return t_filter_range<T, true>(filter, dst_data, src_data, from, to);
-        } else {
-            return t_filter_range<T, false>(filter, dst_data, src_data, from, to);
-        }
+        return column_filter_range::filter_range<T>(filter, dst_data, src_data, from, to);
     }
 
     template <typename T>
