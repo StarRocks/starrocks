@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -33,7 +35,9 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
@@ -42,6 +46,7 @@ import com.starrocks.catalog.combinator.AggStateCombinator;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -56,6 +61,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.spm.SPMFunctions;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -556,6 +562,10 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.equals(FunctionSet.PERCENTILE_CONT)) {
+            adjustPercentileContDecimalRate(functionCallExpr);
+        }
+
         // ds_hll_count_distinct
         if (fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT)) {
             int argSize = functionCallExpr.getChildren().size();
@@ -625,6 +635,70 @@ public class FunctionAnalyzer {
                 }
             }
         }
+    }
+
+    private static void adjustPercentileContDecimalRate(FunctionCallExpr functionCallExpr) {
+        if (!(functionCallExpr.getFn() instanceof AggregateFunction)) {
+            return;
+        }
+        if (functionCallExpr.getChildren().size() != 2) {
+            return;
+        }
+        Expr valueExpr = functionCallExpr.getChild(0);
+        Expr rateExpr = functionCallExpr.getChild(1);
+        if (!valueExpr.getType().isDecimalV3() || !rateExpr.getType().isDecimalV3()) {
+            return;
+        }
+
+        ScalarType valueType = (ScalarType) valueExpr.getType();
+        int rateScale = getPercentileContRateScale(rateExpr);
+        if (rateScale < 0) {
+            return;
+        }
+
+        int ratePrecision = rateScale + 1;
+        PrimitiveType primitiveType = valueType.getPrimitiveType();
+        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(primitiveType);
+        if (ratePrecision > maxPrecision) {
+            throw new SemanticException(String.format(
+                    "percentile_cont rate scale(%d) is too large for %s (max precision %d)",
+                    rateScale, primitiveType, maxPrecision), rateExpr.getPos());
+        }
+
+        ScalarType rateType = ScalarType.createDecimalV3Type(primitiveType, ratePrecision, rateScale);
+        try {
+            if (!rateExpr.getType().matchesType(rateType)) {
+                functionCallExpr.castChild(rateType, 1);
+            }
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage(), rateExpr.getPos());
+        }
+
+        AggregateFunction fn = (AggregateFunction) functionCallExpr.getFn();
+        AggregateFunction newFn = (AggregateFunction) fn.copy();
+        newFn.setArgsType(new Type[] {valueType, rateType});
+        newFn.setRetType(valueType);
+        functionCallExpr.setFn(newFn);
+        functionCallExpr.setType(valueType);
+    }
+
+    private static int getPercentileContRateScale(Expr expr) {
+        if (expr.getType().isDecimalV3()) {
+            return ((ScalarType) expr.getType()).getScalarScale();
+        }
+        if (!expr.getType().isFloatingPointType()) {
+            return -1;
+        }
+        Expr current = expr;
+        while (current instanceof CastExpr) {
+            current = current.getChild(0);
+        }
+        if (current instanceof LiteralExpr) {
+            double value = ((LiteralExpr) current).getDoubleValue();
+            BigDecimal decimal = new BigDecimal(Double.toString(value));
+            return DecimalLiteral.getRealScale(decimal);
+        }
+        return -1;
     }
 
     private static Optional<Long> extractIntegerValue(Expr expr) {
