@@ -1056,15 +1056,12 @@ public class QueryOptimizer extends Optimizer {
 
     private OptExpression dynamicRewrite(ConnectContext connectContext, TaskContext rootTaskContext,
                                          OptExpression result) {
-        // update the existRequiredDistribution value in optExpression. The next rules need it to determine
-        // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
-        result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
-
-        // this rule must be put after MarkParentRequiredDistributionRule
         if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinOptimizeV2()) {
+            result = new MarkParentRequiredDistributionRule(false).rewrite(result, rootTaskContext);
             result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
         }
 
+        result = new MarkParentRequiredDistributionRule(true).rewrite(result, rootTaskContext);
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
 
         OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
