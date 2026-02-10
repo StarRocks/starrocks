@@ -182,6 +182,14 @@ std::chrono::sys_time<std::chrono::microseconds> TimestampValue::to_sys_time() c
            std::chrono::seconds{second} + std::chrono::microseconds{microsecond};
 }
 
+inline DateValue::operator TimestampValue() const {
+    return TimestampValue{date::to_timestamp(_julian)};
+}
+
+inline TimestampValue::operator DateValue() const {
+    return DateValue{timestamp::to_julian(_timestamp)};
+}
+
 template <bool end>
 void TimestampValue::floor_to_microsecond_period(long period) {
     int64_t microseconds = ((timestamp::to_julian(_timestamp) - date::AD_EPOCH_JULIAN) * SECS_PER_DAY * USECS_PER_SEC) +

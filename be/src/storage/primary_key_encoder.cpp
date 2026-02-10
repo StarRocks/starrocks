@@ -48,7 +48,7 @@
 #include "gutil/stringprintf.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/tablet_schema.h"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 
 namespace starrocks {
 

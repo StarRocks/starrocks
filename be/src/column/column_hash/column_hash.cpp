@@ -17,7 +17,9 @@
 #include <cstring>
 #include <string>
 #include <type_traits>
+#include <typeindex>
 
+#include "base/hash/hash_util.hpp"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
@@ -30,7 +32,6 @@
 #include "column/struct_column.h"
 #include "common/status.h"
 #include "types/time_types.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 

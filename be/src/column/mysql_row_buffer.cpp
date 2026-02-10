@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/mysql_row_buffer.h"
+#include "column/mysql_row_buffer.h"
 
 #include <fmt/compile.h>
 #include <fmt/format.h>

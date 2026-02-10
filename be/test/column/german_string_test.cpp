@@ -16,18 +16,11 @@
 
 #include <gtest/gtest.h>
 
-#include <iostream>
+#include <iterator>
+#include <memory>
 #include <random>
 #include <string>
-#include <tuple>
-
-#include "base/testutil/parallel_test.h"
-#include "column/binary_column.h"
-#include "column/column_helper.h"
-#include "column/const_column.h"
-#include "column/fixed_length_column.h"
-#include "column/nullable_column.h"
-#include "column/vectorized_fwd.h"
+#include <vector>
 
 namespace starrocks {
 class GermanStringExternalAllocator {

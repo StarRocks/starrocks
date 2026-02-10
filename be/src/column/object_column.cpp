@@ -15,6 +15,7 @@
 #include "column/object_column.h"
 
 #include "base/phmap/phmap.h"
+#include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
@@ -22,7 +23,6 @@
 #include "types/json_value.h"
 #include "types/percentile_value.h"
 #include "types/variant_value.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 

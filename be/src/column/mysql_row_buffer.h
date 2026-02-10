@@ -37,7 +37,7 @@
 #include "base/container/raw_container.h"
 #include "base/string/slice.h"
 #include "base/types/uint24.h"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {

@@ -18,6 +18,8 @@ add_library(ColumnCore STATIC
         column.cpp
         column_visitor.cpp
         column_visitor_mutable.cpp
+        mysql_row_buffer.cpp
+        german_string.cpp
 )
 
 add_library(Column STATIC
@@ -49,7 +51,6 @@ add_library(Column STATIC
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
         variant_column.cpp
-        german_string.cpp
         column_hash/column_hash.cpp
 )
 

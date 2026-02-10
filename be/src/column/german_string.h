@@ -25,7 +25,6 @@
 #include "base/string/memcmp.h"
 #include "base/string/slice.h"
 #include "common/memory/column_allocator.h"
-#include "runtime/mem_pool.h"
 
 namespace starrocks {
 class Slice;

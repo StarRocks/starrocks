@@ -17,7 +17,7 @@
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 
 namespace starrocks::csv {
 

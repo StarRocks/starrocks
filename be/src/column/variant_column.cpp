@@ -16,8 +16,8 @@
 
 #include <cctz/time_zone.h>
 
+#include "column/mysql_row_buffer.h"
 #include "types/variant_value.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 

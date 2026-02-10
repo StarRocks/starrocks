@@ -8,7 +8,6 @@ set(EXEC_FILES
         ./column/column_hash_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
-        ./column/german_string_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp
@@ -351,7 +350,6 @@ set(EXEC_FILES
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
-        ./util/mysql_row_buffer_test.cpp
         ./util/parse_util_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp

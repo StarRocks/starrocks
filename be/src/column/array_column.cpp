@@ -19,13 +19,13 @@
 #include "column/column_helper.h"
 #include "column/column_view/column_view.h"
 #include "column/fixed_length_column.h"
+#include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/function_helper.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 void ArrayColumn::check_or_die() const {
