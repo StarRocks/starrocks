@@ -14,8 +14,11 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
+=======
+>>>>>>> 7e707e1bb7 ([Enhancement] Let skew join v2 ignore global dict distribution marking (#68973))
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -57,6 +60,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.google.common.collect.Lists.newArrayList;
 
 /* rewrite the tree top down
  * if one shuffle join op is decided as skew, rewrite it as below and do not visit its children
@@ -180,18 +185,28 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                             localExchangerType, originalShuffleJoinOperator.getLimit());
 
             OptExpression newShuffleJoin = OptExpression.builder().setOp(newShuffleJoinOpt).setInputs(
+<<<<<<< HEAD
                             List.of(leftSplitProducerAndConsumer.splitConsumerOptForShuffleJoin,
                                     rightSplitProducerAndConsumer.splitConsumerOptForShuffleJoin))
+=======
+                            newArrayList(skewSideSplit.splitConsumerOptForShuffleJoin,
+                                    nonSkewSideSplit.splitConsumerOptForShuffleJoin))
+>>>>>>> 7e707e1bb7 ([Enhancement] Let skew join v2 ignore global dict distribution marking (#68973))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(opt.getRequiredProperties()).setCost(opt.getCost()).build();
 
             PhysicalPropertySet rightBroadcastProperty = new PhysicalPropertySet(
                     DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
             List<PhysicalPropertySet> requiredPropertiesForBroadcastJoin =
-                    Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty);
+                    newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty);
             OptExpression newBroadcastJoin = OptExpression.builder().setOp(newBroadcastJoinOpt).setInputs(
+<<<<<<< HEAD
                             List.of(leftSplitProducerAndConsumer.splitConsumerOptForBroadcastJoin,
                                     rightSplitProducerAndConsumer.splitConsumerOptForBroadcastJoin))
+=======
+                            newArrayList(skewSideSplit.splitConsumerOptForBroadcastJoin,
+                                    nonSkewSideSplit.splitConsumerOptForBroadcastJoin))
+>>>>>>> 7e707e1bb7 ([Enhancement] Let skew join v2 ignore global dict distribution marking (#68973))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(requiredPropertiesForBroadcastJoin).setCost(opt.getCost()).build();
 
@@ -229,12 +244,13 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             }
 
             OptExpression concatenateOptExp = OptExpression.builder().setOp(concatenateOperator)
-                    .setInputs(List.of(newShuffleJoin, rightChildOfConcatenate))
+                    .setInputs(newArrayList(newShuffleJoin, rightChildOfConcatenate))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setCost(opt.getCost()).build();
 
             OptExpression cteAnchorOptExp1 =
                     OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
+<<<<<<< HEAD
                             .setInputs(List.of(rightSplitProducerAndConsumer.splitProducer, concatenateOptExp))
                             .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
@@ -242,11 +258,21 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             OptExpression cteAnchorOptExp2 =
                     OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
                             .setInputs(List.of(leftSplitProducerAndConsumer.splitProducer, cteAnchorOptExp1))
+=======
+                            .setInputs(newArrayList(nonSkewSideSplit.splitProducer, concatenateOptExp))
+>>>>>>> 7e707e1bb7 ([Enhancement] Let skew join v2 ignore global dict distribution marking (#68973))
                             .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
 
             // if hit once, we give up rewriting the following subtree
+<<<<<<< HEAD
             return cteAnchorOptExp2;
+=======
+            return OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
+                    .setInputs(newArrayList(skewSideSplit.splitProducer, cteAnchorOptExp1))
+                    .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                    .setCost(opt.getCost()).build();
+>>>>>>> 7e707e1bb7 ([Enhancement] Let skew join v2 ignore global dict distribution marking (#68973))
         }
 
         private SplitProducerAndConsumer generateSplitProducerAndConsumer(OptExpression exchangeOptExp,
