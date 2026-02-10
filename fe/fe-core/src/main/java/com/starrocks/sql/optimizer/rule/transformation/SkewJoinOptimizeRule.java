@@ -327,7 +327,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         inPredicateArgs.add(skewColumn);
         // build a defensive copy and remove NULL from it
         List<ScalarOperator> nonNullSkewValues = Lists.newArrayList(skewValues);
-        nonNullSkewValues.removeIf(value -> value instanceof ConstantOperator && ((ConstantOperator) value).isNull());
+        nonNullSkewValues.removeIf(ScalarOperator::isConstantNull);
         inPredicateArgs.addAll(nonNullSkewValues);
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
@@ -369,7 +369,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
         Map<ColumnRefOperator, ScalarOperator> valueProjectMap = Maps.newHashMap();
         // use skew value to generate array
-        List<Type> skewTypes = skewValues.stream().map(ScalarOperator::getType).collect(Collectors.toList());
+        List<com.starrocks.type.Type> skewTypes =
+                skewValues.stream().map(v -> v.getType()).collect(Collectors.toList());
         ArrayType arrayType = new ArrayType(TypeManager.getCommonType(
                 skewTypes.toArray(new Type[0]), 0, skewTypes.size()));
         ArrayOperator arrayOperator = new ArrayOperator(arrayType, true, skewValues);
