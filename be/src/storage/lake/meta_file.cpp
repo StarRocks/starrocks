@@ -20,7 +20,9 @@
 #include "base/container/raw_container.h"
 #include "base/utility/defer_op.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "storage/del_vector.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
@@ -722,6 +724,63 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
     }
     VLOG(2) << fmt::format("get_del_vec not found, segmentid {} tablet_meta {}", segment_id,
                            metadata.delvec_meta().ShortDebugString());
+    return Status::OK();
+}
+
+Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
+                          int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
+                          std::vector<uint64_t>* offsets) {
+    if (old_delvec_files.empty()) {
+        return Status::OK();
+    }
+
+    offsets->clear();
+    offsets->reserve(old_delvec_files.size());
+
+    bool need_encrypt = false;
+    for (const auto& file_info : old_delvec_files) {
+        if (file_info.delvec_file.has_encryption_meta() && !file_info.delvec_file.encryption_meta().empty()) {
+            need_encrypt = true;
+            break;
+        }
+    }
+
+    const std::string new_file_name = gen_delvec_filename(txn_id);
+    const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    std::string new_encryption_meta;
+    if (need_encrypt) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        new_encryption_meta.swap(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
+
+    uint64_t total_size = 0;
+    for (const auto& file_info : old_delvec_files) {
+        offsets->push_back(total_size);
+        RandomAccessFileOptions ropts;
+        if (file_info.delvec_file.has_encryption_meta() && !file_info.delvec_file.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(ropts.encryption_info,
+                             KeyCache::instance().unwrap_encryption_meta(file_info.delvec_file.encryption_meta()));
+        }
+        const std::string src_path = tablet_mgr->delvec_location(file_info.tablet_id, file_info.delvec_file.name());
+        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(ropts, src_path));
+        ASSIGN_OR_RETURN(auto content, reader->read_all());
+        RETURN_IF_ERROR(writer->append(Slice(content.data(), content.size())));
+        total_size += content.size();
+    }
+
+    RETURN_IF_ERROR(writer->close());
+
+    new_delvec_file->set_name(new_file_name);
+    new_delvec_file->set_size(total_size);
+    if (need_encrypt) {
+        new_delvec_file->set_encryption_meta(std::move(new_encryption_meta));
+    } else {
+        new_delvec_file->clear_encryption_meta();
+    }
+    new_delvec_file->set_shared(false);
     return Status::OK();
 }
 

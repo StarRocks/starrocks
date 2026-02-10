@@ -24,6 +24,7 @@
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -69,6 +70,22 @@ public:
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
 
 protected:
+    void ensure_kek_in_key_cache() {
+        if (KeyCache::instance().get_key("0000000000000000") != nullptr) {
+            return;
+        }
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+        auto kek = root_encryption_key->generate_key().value();
+        kek->set_id(2);
+        KeyCache::instance().add_key(root_encryption_key);
+        KeyCache::instance().add_key(kek);
+    }
+
     constexpr static const char* const kTestDir = "./lake_meta_test";
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
@@ -92,6 +109,53 @@ TEST_F(MetaFileTest, test_meta_rw) {
 
     // 3. read meta from meta file
     ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, 10));
+}
+
+TEST_F(MetaFileTest, test_merge_delvec_files_empty) {
+    std::vector<DelvecFileInfo> old_delvec_files;
+    FileMetaPB new_delvec_file;
+    std::vector<uint64_t> offsets;
+
+    EXPECT_OK(merge_delvec_files(_tablet_manager.get(), old_delvec_files, 1, 1, &new_delvec_file, &offsets));
+    EXPECT_TRUE(offsets.empty());
+}
+
+TEST_F(MetaFileTest, test_merge_delvec_files_encrypted) {
+    ensure_kek_in_key_cache();
+
+    const int64_t tablet_id = 2001;
+    const int64_t new_tablet_id = 2002;
+    const int64_t txn_id = 5;
+
+    ASSIGN_OR_ABORT(auto pair, KeyCache::instance().create_plain_random_encryption_meta_pair());
+    const std::string content = "encrypted-delvec";
+    const std::string file_name = "delvec-encrypted";
+
+    const std::string file_path = _tablet_manager->delvec_location(tablet_id, file_name);
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    wopts.encryption_info = pair.info;
+    ASSIGN_OR_ABORT(auto writer, fs::new_writable_file(wopts, file_path));
+    ASSERT_OK(writer->append(Slice(content)));
+    ASSERT_OK(writer->close());
+
+    DelvecFileInfo file_info;
+    file_info.tablet_id = tablet_id;
+    file_info.delvec_file.set_name(file_name);
+    file_info.delvec_file.set_size(content.size());
+    file_info.delvec_file.set_encryption_meta(pair.encryption_meta);
+
+    std::vector<DelvecFileInfo> old_delvec_files{file_info};
+    FileMetaPB new_delvec_file;
+    std::vector<uint64_t> offsets;
+
+    EXPECT_OK(merge_delvec_files(_tablet_manager.get(), old_delvec_files, new_tablet_id, txn_id, &new_delvec_file,
+                                 &offsets));
+    ASSERT_EQ(1, offsets.size());
+    EXPECT_EQ(0, offsets[0]);
+    EXPECT_FALSE(new_delvec_file.name().empty());
+    EXPECT_EQ(static_cast<int64_t>(content.size()), new_delvec_file.size());
+    EXPECT_FALSE(new_delvec_file.encryption_meta().empty());
+    EXPECT_FALSE(new_delvec_file.shared());
 }
 
 TEST_F(MetaFileTest, test_delvec_rw) {
