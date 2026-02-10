@@ -19,6 +19,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
+import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeInfo;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -2611,5 +2612,19 @@ public class LowCardinalityTest2 extends PlanTestBase {
         } finally {
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testCreateDecodeInfoDoesNotReturnSharedMutableSingleton() {
+        DecodeInfo empty1 = DecodeInfo.create();
+        DecodeInfo empty2 = DecodeInfo.create();
+
+        DecodeInfo d1 = empty1.createDecodeInfo();
+        d1.getDecodeStringColumns().union(new com.starrocks.sql.optimizer.base.ColumnRefSet(1));
+
+        DecodeInfo d2 = empty2.createDecodeInfo();
+        Assertions.assertTrue(d2.getOutputStringColumns().isEmpty());
+        Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
+        Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
     }
 }
