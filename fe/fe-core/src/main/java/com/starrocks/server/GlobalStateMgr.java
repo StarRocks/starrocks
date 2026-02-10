@@ -220,6 +220,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
@@ -272,6 +273,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -1380,6 +1382,18 @@ public class GlobalStateMgr {
         createBuiltinStorageVolume();
         resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
         keyMgr.initDefaultMasterKey();
+
+        // trigger actions after transferring to leader
+        triggerOnTransferToLeader();
+    }
+
+    private void triggerOnTransferToLeader() {
+        try {
+            // trigger to load mv's plan cache async
+            CachingMvPlanContextBuilder.getInstance().triggerPendingMVPlanCacheLoads();
+        } catch (Throwable t) {
+            LOG.warn("Failed to trigger loading mv's plan cache", t);
+        }
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1759,7 +1773,14 @@ public class GlobalStateMgr {
 
         // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
         boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
-        for (MaterializedView mv : topoOrder) {
+        int size = topoOrder.size();
+        for (int i = 0; i < size; i++) {
+            MaterializedView mv = topoOrder.get(i);
+            String dbName = Optional.ofNullable(localMetastore.getDb(mv.getDbId()))
+                    .map(Database::getFullName)
+                    .orElse(String.valueOf(mv.getDbId()));
+            LOG.info("start to reload mv {}/{}: {}.{} after load image, isReloadAsync:{}",
+                    i + 1, size, dbName, mv.getName(), isReloadAsync);
             // set `postLoadImage` flag to true to indicate that this is called after image loading
             mv.onReload(isReloadAsync);
         }
