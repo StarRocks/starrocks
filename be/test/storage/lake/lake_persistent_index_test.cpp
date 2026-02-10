@@ -16,10 +16,6 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
->>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/datum.h"
