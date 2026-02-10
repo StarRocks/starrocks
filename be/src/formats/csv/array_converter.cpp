@@ -27,14 +27,33 @@ Status ArrayConverter::write_string(OutputStream* os, const Column& column, size
 
     auto begin = offsets.get_data()[row_num];
     auto end = offsets.get_data()[row_num + 1];
+    char collection_delim = ',';
+    bool is_hive_format = false;
 
-    RETURN_IF_ERROR(os->write('['));
+    if (options.array_format_type == ArrayFormatType::kHive) {
+        collection_delim = HiveTextArrayReader::get_collection_delimiter(options.array_hive_collection_delimiter,
+                                                                         options.array_hive_mapkey_delimiter,
+                                                                         options.array_hive_nested_level);
+        is_hive_format = true;
+    } else {
+        RETURN_IF_ERROR(os->write('['));
+    }
+
     for (auto i = begin; i < end; i++) {
-        RETURN_IF_ERROR(_element_converter->write_quoted_string(os, elements, i, options));
+        if (is_hive_format) {
+            Options sub_options = options;
+            sub_options.array_hive_nested_level++;
+            // In Hive, we should use write_string() instead of write_quoted_string
+            RETURN_IF_ERROR(_element_converter->write_string(os, elements, i, sub_options));
+        } else {
+            RETURN_IF_ERROR(_element_converter->write_quoted_string(os, elements, i, options));
+        }
         if (i + 1 < end) {
-            RETURN_IF_ERROR(os->write(','));
+            RETURN_IF_ERROR(os->write(collection_delim));
         }
     }
+    RETURN_IF(is_hive_format, Status::OK());
+
     return os->write(']');
 }
 
