@@ -60,7 +60,6 @@ public class SkewJoinV2Test extends PlanTestBase {
                 "  OutPut Partition: RANDOM\n" +
                 "  OutPut Exchange Id: 06\n" +
                 "  Split expr: [1: v4, BIGINT, true] IN (1, 2)");
->>>>>>> f16e7202ea ([BugFix] Fix possible bugs with skew join v2 (#67611))
     }
 
     @Test
