@@ -53,7 +53,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "storage/olap_tuple.h"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 #include "types/datetime_value.h"
 #include "types/timestamp_value.h"
 

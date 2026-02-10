@@ -18,7 +18,7 @@
 
 #include "base/utility/mysql_global.h"
 #include "fmt/compile.h"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 #include "types/decimalv2_value.h"
 #include "types/timestamp_value.h"
 

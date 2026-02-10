@@ -56,7 +56,7 @@
 #include "common/config.h"
 #include "gutil/casts.h"
 #include "gutil/strings/numbers.h"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 #include "types/datetime_value.h"
 #include "types/datum.h"
 #include "types/decimalv2_value.h"
