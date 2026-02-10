@@ -125,6 +125,7 @@ import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TPersistentIndexType;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -3345,5 +3346,17 @@ public class OlapTable extends Table {
 
     public boolean isRangeDistribution() {
         return defaultDistributionInfo instanceof RangeDistributionInfo;
+    }
+
+    public TPrimaryKeyEncodingType getPrimaryKeyEncodingType() {
+        if (getKeysType() != KeysType.PRIMARY_KEYS) {
+            return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE;
+        }
+
+        if (!isCloudNativeTableOrMaterializedView()) {
+            return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
+        }
+
+        return isRangeDistribution() ? TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2 : TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
     }
 }
