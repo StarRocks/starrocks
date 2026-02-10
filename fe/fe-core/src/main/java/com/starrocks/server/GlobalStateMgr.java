@@ -220,12 +220,7 @@ import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.TableRef;
-import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
->>>>>>> 3b41776925 ([BugFix] Fix mv onReload visit external catalog bugs (#68926))
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;

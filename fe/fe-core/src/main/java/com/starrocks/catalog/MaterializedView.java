@@ -2223,69 +2223,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Preconditions.checkArgument(refBaseTablePartitionSlotsOpt.isPresent() &&
                     !refBaseTablePartitionSlotsOpt.get().isEmpty(), String.format("Ref base table " +
                     "partition column slots should not be empty:%s", refBaseTablePartitionSlotsOpt));
-<<<<<<< HEAD
         }
     }
 
     public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
-=======
-
-            String columnsSummary = formatPartitionColumns(refBaseTablePartitionColumnsOpt.get());
-            String exprsSummary = formatPartitionExprs(refBaseTablePartitionExprsOpt.get());
-            String slotsSummary = formatPartitionSlots(refBaseTablePartitionSlotsOpt.get());
-            LOG.info("Materialized view {} ref base table partition summary: columns={}, exprs={}, slots={}",
-                    name, columnsSummary, exprsSummary, slotsSummary);
-        } else {
-            LOG.info("Materialized view {} is un-partitioned", name);
-        }
-    }
-
-    private static String formatPartitionColumns(Map<Table, List<Column>> columns) {
-        return columns.entrySet().stream()
-                .map(entry -> entry.getKey().getName() + "=[" +
-                        entry.getValue().stream().map(Column::getName).collect(Collectors.joining(", ")) + "]")
-                .collect(Collectors.joining("; "));
-    }
-
-    private static String formatPartitionExprs(Map<Table, List<Expr>> exprs) {
-        return exprs.entrySet().stream()
-                .map(entry -> entry.getKey().getName() + "(" + entry.getValue().size() + ")")
-                .collect(Collectors.joining("; "));
-    }
-
-    private static String formatPartitionSlots(Map<Table, List<SlotRef>> slots) {
-        return slots.entrySet().stream()
-                .map(entry -> entry.getKey().getName() + "(" + entry.getValue().size() + ")")
-                .collect(Collectors.joining("; "));
-    }
-
-    public synchronized Pair<Optional<Expr>, Optional<ScalarOperator>> analyzeMVRetentionCondition(
-            ConnectContext connectContext, String retentionCondition) {
-        PartitionInfo partitionInfo = getPartitionInfo();
-        if (partitionInfo.isUnPartitioned()) {
-            return null;
-        }
-
-        final Map<Table, List<Column>> refBaseTablePartitionColumns = getRefBaseTablePartitionColumns(false);
-        if (refBaseTablePartitionColumns == null || refBaseTablePartitionColumns.size() != 1) {
-            return null;
-        }
-        Table refBaseTable = refBaseTablePartitionColumns.keySet().iterator().next();
-        Optional<Expr> retentionConditionExprOpt =
-                MaterializedViewAnalyzer.analyzeMVRetentionCondition(connectContext, this, refBaseTable, retentionCondition);
-        Optional<ScalarOperator> retentionConditionScalarOpOpt = MaterializedViewAnalyzer.analyzeMVRetentionConditionOperator(
-                connectContext, this, refBaseTable, retentionConditionExprOpt);
-        return Pair.create(retentionConditionExprOpt, retentionConditionScalarOpOpt);
-    }
-
-    public void setMVRetentionCondition(Optional<Expr> retentionConditionExprOpt,
-                                        Optional<ScalarOperator> retentionConditionScalarOpOpt) {
-        this.retentionConditionExprOpt = retentionConditionExprOpt;
-        this.retentionConditionScalarOpOpt = retentionConditionScalarOpOpt;
-    }
-
-    public synchronized void analyzeAndSetMVRetentionCondition(ConnectContext connectContext) {
->>>>>>> 3b41776925 ([BugFix] Fix mv onReload visit external catalog bugs (#68926))
         PartitionInfo partitionInfo = getPartitionInfo();
         if (partitionInfo.isUnPartitioned()) {
             return;
