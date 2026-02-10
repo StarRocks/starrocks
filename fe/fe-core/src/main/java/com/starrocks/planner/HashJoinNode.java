@@ -81,7 +81,7 @@ public class HashJoinNode extends JoinNode {
     }
 
     public void setSkewJoin(boolean skewJoin) {
-        isSkewJoin = skewJoin ;
+        this.isSkewJoin = skewJoin;
     }
 
     public boolean isSkewShuffleJoin() {
