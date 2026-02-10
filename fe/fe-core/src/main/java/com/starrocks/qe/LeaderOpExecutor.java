@@ -166,8 +166,10 @@ public class LeaderOpExecutor {
             // Put the result of leader execution into the connectContext of the current follower
             // to mark the transaction being executed in the current connection
             if (parsedStmt instanceof BeginStmt || parsedStmt instanceof CommitStmt || parsedStmt instanceof RollbackStmt) {
-                if (result.isSetTxn_id()) {
-                    ctx.setTxnId(result.getTxn_id());
+                if (ctx.getSessionVariable().isEnableSqlTransaction()) {
+                    if (result.isSetTxn_id()) {
+                        ctx.setTxnId(result.getTxn_id());
+                    }
                 }
             }
         } finally {

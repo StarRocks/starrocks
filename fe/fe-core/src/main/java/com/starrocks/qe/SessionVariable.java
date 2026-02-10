@@ -186,6 +186,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TX_READ_ONLY = "tx_read_only";
     public static final String TRANSACTION_ISOLATION = "transaction_isolation";
     public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
+    // Enable SQL transaction capability. If false, only keep syntax without enabling transaction behavior.
+    public static final String ENABLE_SQL_TRANSACTION = "enable_sql_transaction";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
     public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
@@ -1244,6 +1246,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // this is used to make mysql client happy
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
     private boolean autoCommit = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_SQL_TRANSACTION)
+    private boolean enableSqlTransaction = true;
+
+    public boolean isEnableSqlTransaction() {
+        return enableSqlTransaction;
+    }
+
+    public void setEnableSqlTransaction(boolean enableSqlTransaction) {
+        this.enableSqlTransaction = enableSqlTransaction;
+    }
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = TX_ISOLATION)
