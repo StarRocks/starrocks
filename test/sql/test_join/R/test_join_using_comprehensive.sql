@@ -165,6 +165,32 @@ INSERT INTO t8 VALUES
 (80, 't8_80');
 -- result:
 -- !result
+SELECT id, v1
+FROM t1 FULL OUTER JOIN (SELECT 1 AS id) s1 USING(id)
+ORDER BY id, v1;
+-- result:
+None	t1_null
+1	t1_1
+2	t1_2
+3	t1_3
+10	t1_10
+-- !result
+SELECT id, v1, v2
+FROM t1 FULL OUTER JOIN (SELECT 1 AS id) s1 USING(id)
+        FULL OUTER JOIN t2 USING(id)
+        FULL OUTER JOIN (SELECT 9 AS id) s2 USING(id)
+ORDER BY id, v1, v2;
+-- result:
+None	None	t2_null
+None	t1_null	None
+1	t1_1	t2_1
+2	t1_2	t2_2
+3	t1_3	None
+4	None	t2_4
+9	None	None
+10	t1_10	None
+20	None	t2_20
+-- !result
 SELECT id, v1, v2, v3, v4, v5, v6
 FROM t1 FULL OUTER JOIN t2 USING(id)
         FULL OUTER JOIN t3 USING(id)
