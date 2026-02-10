@@ -415,6 +415,49 @@ TEST_P(SpillMemTableSinkTest, test_flush_data_size_with_slot_idx) {
     ASSERT_EQ(10, groups[0].slot_idx);
 }
 
+// Test that merge_blocks_to_segments() handles the case where the spiller is empty
+// (simulating eager merge having consumed all block groups).
+// Uses SyncPoint to deterministically clear block groups before the empty check,
+// avoiding any dependency on async thread pool behavior.
+TEST_P(SpillMemTableSinkTest, test_merge_blocks_after_eager_merge_consumed_all) {
+    if (!GetParam().enable_load_spill_parallel_merge) {
+        GTEST_SKIP();
+    }
+
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(),
+                                                                 kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    auto tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr.get(), tablet_id, _tablet_schema,
+                                                                         txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    // Flush 2 chunks normally (no eager merge, threshold is high by default)
+    auto chunk0 = gen_data(kChunkSize, 0);
+    auto chunk1 = gen_data(kChunkSize, 1);
+    starrocks::SegmentPB segment;
+    ASSERT_OK(sink.flush_chunk(*chunk0, &segment, false));
+    ASSERT_OK(sink.flush_chunk(*chunk1, &segment, false));
+    ASSERT_EQ(2, block_manager->block_container()->block_groups().size());
+
+    // Use SyncPoint to clear all block groups at the start of merge_blocks_to_segments(),
+    // deterministically simulating eager merge having consumed all groups.
+    SyncPoint::GetInstance()->SetCallBack("SpillMemTableSink::merge_blocks_to_segments", [&](void*) {
+        std::lock_guard<std::mutex> lg(*block_manager->block_container()->block_groups_mutex());
+        block_manager->block_container()->block_groups().clear();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("SpillMemTableSink::merge_blocks_to_segments");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // With the fix, merge_blocks_to_segments() calls merge_task_results() when spiller is empty,
+    // instead of returning OK without collecting any results.
+    ASSERT_OK(sink.merge_blocks_to_segments());
+}
+
 INSTANTIATE_TEST_SUITE_P(SpillMemTableSinkTest, SpillMemTableSinkTest,
                          ::testing::Values(SpillMemTableSinkTestParams{false, 1073741824},
                                            SpillMemTableSinkTestParams{true, 1024}));
