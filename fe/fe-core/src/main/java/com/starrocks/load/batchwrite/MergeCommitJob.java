@@ -134,6 +134,10 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
         return streamLoadInfo.getWarehouseId();
     }
 
+    public String getWarehouseName() {
+        return warehouseName;
+    }
+
     public int getBatchWriteParallel() {
         return batchWriteParallel;
     }

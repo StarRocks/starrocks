@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -55,6 +56,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.Utils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpMethod;
@@ -194,9 +196,12 @@ public class LoadAction extends RestBaseAction {
         if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
         } else {
-            Optional<String> userWarehouseName = getUserDefaultWarehouse(request);
-            if (userWarehouseName.isPresent() && warehouseManager.warehouseExists(userWarehouseName.get())) {
-                warehouseName = userWarehouseName.get();
+            ConnectContext ctx = request.getConnectContext();
+            if (ctx != null) {
+                Optional<String> userWarehouseName = Utils.getUserDefaultWarehouse(ctx.getCurrentUserIdentity());
+                if (userWarehouseName.isPresent() && warehouseManager.warehouseExists(userWarehouseName.get())) {
+                    warehouseName = userWarehouseName.get();
+                }
             }
         }
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
@@ -220,9 +225,10 @@ public class LoadAction extends RestBaseAction {
             BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
         TableId tableId = new TableId(dbName, tableName);
         StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
-        String user = Optional.ofNullable(request.getConnectContext()).map(ConnectContext::getQualifiedUser).orElse("");
-        RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState()
-                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params, user);
+        ConnectContext ctx = request.getConnectContext();
+        UserIdentity userIdentity = ctx != null ? ctx.getCurrentUserIdentity() : null;
+        RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState().getBatchWriteMgr().requestCoordinatorBackends(
+                tableId, params, userIdentity);
         if (!result.isOk()) {
             BatchWriteResponseResult responseResult = new BatchWriteResponseResult(
                     result.getStatus().status_code.name(), ActionStatus.FAILED,
