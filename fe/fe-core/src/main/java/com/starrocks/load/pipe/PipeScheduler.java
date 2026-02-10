@@ -16,6 +16,7 @@ package com.starrocks.load.pipe;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.metric.PipeMetricMgr;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -45,6 +46,9 @@ public class PipeScheduler extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        // Refresh pipe state gauges on each run (leader only)
+        PipeMetricMgr.refreshPipeStateGauges();
+
         try {
             process();
         } catch (Throwable e) {
@@ -71,6 +75,7 @@ public class PipeScheduler extends FrontendDaemon {
         List<Pipe> pipes = pipeManager.getRunnablePipes();
         for (Pipe pipe : pipes) {
             try {
+                PipeMetricMgr.incPipeSchedule(pipe.getPipeId().getDbId(), pipe.getType().name());
                 pipe.schedule();
             } catch (Throwable e) {
                 LOG.warn("Failed to execute pipe {} due to ", pipe, e);

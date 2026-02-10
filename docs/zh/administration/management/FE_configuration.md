@@ -3865,7 +3865,13 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：在物化视图创建和 CTAS 操作中，是否优先对固定长度的 VARCHAR 列使用 STRING 类型。
 - 引入版本：v4.0.0
 
+##### pipe_metric_expire_minutes
 
-
+- 默认值：4320
+- 类型：Int
+- 单位：分钟
+- 是否动态：是
+- 描述：Pipe 指标的过期时间（分钟）。如果在此期间没有更新指标，它将被移除。
+- 引入版本：v4.1.0
 
 <EditionSpecificFEItem />

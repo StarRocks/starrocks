@@ -4497,6 +4497,13 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
 - Introduced in: v4.0.0
 
+##### pipe_metric_expire_minutes
 
+- Default: 4320
+- Type: Int
+- Unit: Minute
+- Is mutable: Yes
+- Description: The expiration time (in minutes) for pipe metrics. If a metric is not updated within this period, it will be removed.
+- Introduced in: v4.1.0
 
 <EditionSpecificFEItem />

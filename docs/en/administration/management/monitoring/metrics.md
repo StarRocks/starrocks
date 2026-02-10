@@ -1973,3 +1973,60 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: microsecond
 - Type: Summary
 - Description: Time spent waiting for merge commit load operations to finish.
+
+### Pipe Metrics
+
+#### starrocks_fe_pipe_creation
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of pipes created.
+
+#### starrocks_fe_pipe_drop
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of pipes dropped.
+
+#### starrocks_fe_pipe_alter
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of pipes altered.
+
+#### starrocks_fe_pipe_schedule_count
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of pipe schedule calls.
+
+#### starrocks_fe_pipe_state_count
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of pipes in each state. Labeled by `db_id`, `pipe_type`, and `status` (SUSPEND, RUNNING, FINISHED, ERROR).
+
+### starrocks_fe_pipe_complete_tasks
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of completed pipe subtasks. Labeled by `db_id`、`pipe_type`, adn `done_status` (SUCCESS, ERROR).
+
+### starrocks_fe_pipe_loaded_files
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total loaded files.
+
+### starrocks_fe_pipe_loaded_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Total loaded bytes.
+
+### starrocks_fe_pipe_loaded_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Description: Total loaded rows.
+
