@@ -214,64 +214,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     }
 
     @Override
-<<<<<<< HEAD
-=======
-    public OptExpression visitPhysicalUnion(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
-        PhysicalUnionOperator unionOp = optExpression.getOp().cast();
-        DecodeInfo info = context.operatorDecodeInfo.get(unionOp);
-        if (info == null) {
-            info = DecodeInfo.empty();
-        }
-        final DecodeInfo finalInfo = info;
-        List<Map<ColumnRefOperator, ConstantOperator>> constantMappings =
-                context.unionDictionaryManager.generateConstantEncodingMap(
-                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), context.allStringColumns);
-        List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
-        for (int i = 0; i < optExpression.arity(); ++i) {
-            Map<ColumnRefOperator, ConstantOperator> constantMapping = constantMappings.get(i);
-            HashMap<ColumnRefOperator, ColumnRefOperator> columnMapping = Maps.newHashMap();
-            constantMapping.forEach((key, value) ->
-                    columnMapping.put(key, factory.create(value, value.getType(), value.isNullable())));
-            unionOp.getChildOutputColumns().get(i).forEach(c -> columnMapping.putIfAbsent(c,
-                    finalInfo.inputStringColumns.contains(c.getId()) ?
-                            context.stringRefToDictRefMap.getOrDefault(c, c) : c)
-            );
-            newChildOutputColumns.add(unionOp.getChildOutputColumns().get(i).stream().map(columnMapping::get).toList());
-            if (constantMapping.isEmpty()) {
-                continue;
-            }
-            PhysicalProjectOperator projectOp = new PhysicalProjectOperator(
-                    unionOp.getChildOutputColumns().get(i).stream().distinct().collect(Collectors.toMap(
-                            columnMapping::get,
-                            c -> constantMapping.containsKey(c) ? constantMapping.get(c) : columnMapping.get(c))),
-                    Map.of()
-            );
-            LogicalProperty property = new LogicalProperty(optExpression.getInputs().get(i).getLogicalProperty());
-            property.setOutputColumns(new ColumnRefSet(projectOp.getOutputColumns()));
-            OptExpression newChild = OptExpression.builder().with(optExpression.getInputs().get(i)).setOp(projectOp)
-                    .setLogicalProperty(property).setInputs(List.of(optExpression.getInputs().get(i))).build();
-            optExpression.setChild(i, newChild);
-        }
-        List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
-                c -> context.allStringColumns.contains(c.getId())
-                        ? context.stringRefToDictRefMap.get(c) : c).toList();
-
-        ColumnRefSet inputColumns = new ColumnRefSet();
-        inputColumns.union(finalInfo.inputStringColumns);
-        unionOp.getOutputColumnRefOp().stream().map(ColumnRefOperator::getId).filter(context.allStringColumns::contains)
-                .forEach(inputColumns::union);
-        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), inputColumns);
-        Projection newProjection = rewriteProjection(unionOp.getProjection(), inputColumns);
-
-        PhysicalUnionOperator newUnionOp = new PhysicalUnionOperator(newColumnRefOp, newChildOutputColumns,
-                unionOp.isUnionAll(), unionOp.getLimit(), newPredicate, newProjection,
-                unionOp.isFromIcebergEqualityDeleteRewrite());
-        return rewriteOptExpression(optExpression, newUnionOp, finalInfo.outputStringColumns);
-    }
-
-
-    @Override
->>>>>>> 31afe19e0c ([BugFix] Fix low-cardinality rewrite NPE caused by shared DecodeInfo (#68799))
     public OptExpression visitPhysicalHashAggregate(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         // rewrite multi-stage aggregate
         PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
@@ -521,18 +463,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 fnOutputs.set(i, output);
                 fragmentUseDictExprs.union(input);
             }
-<<<<<<< HEAD
-            function = (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST,
-                    fnInputs.stream().map(ScalarOperator::getType).toArray(Type[]::new), function.getArgNames(),
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-=======
             Type[] argTypes = new Type[fnInputs.size()];
             for (int j = 0; j < fnInputs.size(); j++) {
                 argTypes[j] = fnInputs.get(j).getType();
             }
-            function = (TableFunction) ExprUtils.getBuiltinFunction(
+            function = (TableFunction) Expr.getBuiltinFunction(
                     FunctionSet.UNNEST, argTypes, function.getArgNames(), Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
->>>>>>> 31afe19e0c ([BugFix] Fix low-cardinality rewrite NPE caused by shared DecodeInfo (#68799))
             function.setIsLeftJoin(tableFunc.getFn().isLeftJoin());
         }
 
@@ -773,13 +709,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 return Optional.empty();
             }
 
-<<<<<<< HEAD
-            ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator;
             if (stringRefToDictRefMap.containsKey(columnRef) && supportColumns.containsAll(columnRef.getUsedColumns())) {
-=======
-            if (stringRefToDictRefMap.containsKey(columnRef) && supportColumns.containsAll(
-                    getUsedColumns(columnRef, context))) {
->>>>>>> 31afe19e0c ([BugFix] Fix low-cardinality rewrite NPE caused by shared DecodeInfo (#68799))
                 return Optional.of(stringRefToDictRefMap.get(columnRef));
             }
 

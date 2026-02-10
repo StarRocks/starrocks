@@ -645,39 +645,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return DecodeInfo.empty();
         }
         DistributionSpec dist = optExpression.getRequiredProperties().get(0).getDistributionProperty().getSpec();
-<<<<<<< HEAD
-=======
-        if (setOp instanceof PhysicalUnionOperator && ((PhysicalUnionOperator) setOp).isUnionAll()) {
-            Preconditions.checkState(!(dist instanceof HashDistributionSpec));
-            DecodeInfo result = DecodeInfo.create();
-            result.inputStringColumns.union(context.outputStringColumns);
-            for (int i = 0; i < setOp.getOutputColumnRefOp().size(); ++i) {
-                final int finalI = i;
-                List<ColumnRefOperator> childColumns = setOp.getChildOutputColumns().stream()
-                        .map(l -> l.get(finalI)).toList();
-                List<Integer> childColumnIds = childColumns.stream().map(ColumnRefOperator::getId).toList();
-                boolean isCandidate = childColumns.stream().allMatch(
-                        c -> context.outputStringColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
-                int outputColumnId = setOp.getOutputColumnRefOp().get(i).getId();
-                Integer useChildId;
-                if (isCandidate && (useChildId = unionDictionaryManager.mergeDictionaries(childColumnIds)) != null) {
-                    childColumnIds.stream().filter(context.outputStringColumns::contains).forEach(c -> {
-                        result.usedStringColumns.union(c);
-                        expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
-                    });
-                    stringRefToDefineExprMap.put(outputColumnId, childColumns.stream()
-                            .filter(c -> c.getId() == useChildId).findAny().orElseThrow());
-                    expressionStringRefCounter.put(outputColumnId, 1);
-                    result.outputStringColumns.union(outputColumnId);
-                } else {
-                    childColumns.stream().filter(c -> context.outputStringColumns.contains(c))
-                            .forEach(result.decodeStringColumns::union);
-                }
-            }
-            result.inputStringColumns.except(result.decodeStringColumns);
-            return result;
-        }
->>>>>>> 31afe19e0c ([BugFix] Fix low-cardinality rewrite NPE caused by shared DecodeInfo (#68799))
+
         if (!(dist instanceof HashDistributionSpec)) {
             return visit(optExpression, context);
         }
