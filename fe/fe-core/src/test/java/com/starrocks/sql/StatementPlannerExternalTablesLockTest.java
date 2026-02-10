@@ -273,4 +273,168 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
     }
+
+    @Test
+    public void testNestedSubqueryWithSameNameCTE() throws Exception {
+        // Test that CTE in nested subquery doesn't affect external table pre-resolution in outer query.
+        // Scenario: Outer query uses external table "tbl0", nested subquery has CTE with same name "tbl0".
+        // The external table should still be pre-resolved (not skipped due to CTE name collision).
+        String sql = "select * from jdbc0.partitioned_db0.tbl0 t " +
+                     "where exists (with tbl0 as (select * from t0) select * from tbl0)";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            StatementPlanner.plan(stmt, connectContext);
+            // Success: External table was correctly pre-resolved despite nested CTE having same name
+        } catch (Exception e) {
+            throw new RuntimeException("Nested subquery with same-name CTE test failed: " + e.getMessage(), e);
+        }
+    }
+
+    @Test
+    public void testNestedSubqueryCTEDoesNotPolluteOuterScope() throws Exception {
+        // Test that CTE defined in WHERE clause subquery doesn't pollute outer scope.
+        // This verifies the session-based approach works correctly.
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch allowReturn = new CountDownLatch(1);
+        AtomicInteger getTableCalls = new AtomicInteger();
+
+        // Replace jdbc0 metadata with a blocking one
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) gsm.getMetadataMgr();
+        Map<String, String> props = new HashMap<>();
+        props.put(JDBCResource.TYPE, "jdbc");
+        props.put(JDBCResource.DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        props.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+        props.put(JDBCResource.USER, "root");
+        props.put(JDBCResource.PASSWORD, "123456");
+        props.put(JDBCResource.CHECK_SUM, "xxxx");
+        props.put(JDBCResource.DRIVER_URL, "xxxx");
+        BlockingJDBCMetadata blocking = new BlockingJDBCMetadata(props, started, allowReturn, getTableCalls);
+        metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME, blocking);
+
+        // Outer query uses external table "tbl0", nested subquery has CTE "tbl0"
+        String sql = "select * from t0 join jdbc0.partitioned_db0.tbl0 on true " +
+                     "where exists (with tbl0 as (select * from t0) select * from tbl0)";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+
+        AtomicBoolean lockCalled = new AtomicBoolean(false);
+        PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+            @Override
+            public void lock() {
+                lockCalled.set(true);
+            }
+
+            @Override
+            public void unlock() {
+                // no-op
+            }
+        };
+
+        AtomicBoolean finished = new AtomicBoolean(false);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        Thread t = new Thread(() -> {
+            try {
+                StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+                finished.set(true);
+            } catch (Throwable t0) {
+                error.set(t0);
+            }
+        });
+        t.start();
+
+        // Wait for getTable to be called
+        Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+        // CRITICAL: While external metadata is blocked, we must NOT take meta lock
+        Assertions.assertFalse(lockCalled.get(),
+                "Meta lock was acquired while external metadata was blocked! " +
+                        "This indicates CTE in nested subquery incorrectly prevented external table pre-resolution.");
+
+        allowReturn.countDown();
+        t.join(TimeUnit.SECONDS.toMillis(20));
+
+        if (error.get() != null) {
+            throw new RuntimeException(error.get());
+        }
+        Assertions.assertTrue(finished.get());
+        Assertions.assertTrue(lockCalled.get());
+        // Verify getTable was called only once (pre-resolved, not called again during analysis)
+        Assertions.assertEquals(1, getTableCalls.get(),
+                "getTable was called " + getTableCalls.get() + " times, expected 1. " +
+                        "This indicates CTE scoping issue prevented proper pre-resolution.");
+    }
+
+    @Test
+    public void testCteReferenceNotResolvedAsExternalTableInExternalCatalog() throws Exception {
+        String originalCatalog = connectContext.getCurrentCatalog();
+        String originalDb = connectContext.getDatabase();
+        try {
+            connectContext.setCurrentCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            connectContext.setDatabase(MockedJDBCMetadata.MOCKED_PARTITIONED_DB_NAME);
+
+            CountDownLatch started = new CountDownLatch(1);
+            CountDownLatch allowReturn = new CountDownLatch(1);
+            AtomicInteger getTableCalls = new AtomicInteger();
+
+            // Replace jdbc0 metadata with a blocking one
+            GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+            MockedMetadataMgr metadataMgr = (MockedMetadataMgr) gsm.getMetadataMgr();
+            Map<String, String> props = new HashMap<>();
+            props.put(JDBCResource.TYPE, "jdbc");
+            props.put(JDBCResource.DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+            props.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+            props.put(JDBCResource.USER, "root");
+            props.put(JDBCResource.PASSWORD, "123456");
+            props.put(JDBCResource.CHECK_SUM, "xxxx");
+            props.put(JDBCResource.DRIVER_URL, "xxxx");
+            BlockingJDBCMetadata blocking = new BlockingJDBCMetadata(props, started, allowReturn, getTableCalls);
+            metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME, blocking);
+
+            String sql = "with tbl0 as (select * from jdbc0.partitioned_db0.tbl0) " +
+                         "select * from default_catalog.test.t0 join tbl0 on true";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+
+            AtomicBoolean lockCalled = new AtomicBoolean(false);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+                @Override
+                public void lock() {
+                    lockCalled.set(true);
+                }
+
+                @Override
+                public void unlock() {
+                    // no-op
+                }
+            };
+
+            AtomicBoolean finished = new AtomicBoolean(false);
+            AtomicReference<Throwable> error = new AtomicReference<>();
+            Thread t = new Thread(() -> {
+                try {
+                    StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+                    finished.set(true);
+                } catch (Throwable t0) {
+                    error.set(t0);
+                }
+            });
+            t.start();
+
+            // getTable should be called only for the CTE definition table, not for the CTE reference
+            Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(lockCalled.get(), "Meta lock was acquired while external metadata was blocked.");
+
+            allowReturn.countDown();
+            t.join(TimeUnit.SECONDS.toMillis(20));
+
+            if (error.get() != null) {
+                throw new RuntimeException(error.get());
+            }
+            Assertions.assertTrue(finished.get());
+            Assertions.assertTrue(lockCalled.get());
+            Assertions.assertEquals(1, getTableCalls.get(),
+                    "CTE reference was incorrectly resolved as external table.");
+        } finally {
+            connectContext.setCurrentCatalog(originalCatalog);
+            connectContext.setDatabase(originalDb);
+        }
+    }
 }
