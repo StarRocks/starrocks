@@ -44,7 +44,17 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
                                                       GlobalEnv::GetInstance()->compaction_mem_tracker());
 }
 
-SpillMemTableSink::~SpillMemTableSink() = default;
+SpillMemTableSink::~SpillMemTableSink() {
+    // IMPORTANT: Destruction order matters here!
+    // _pipeline_merge_context holds tasks that access _load_chunk_spiller's data.
+    // We must destroy _pipeline_merge_context first to ensure all parallel merge tasks
+    // complete (via ThreadPoolToken::shutdown()) before destroying _load_chunk_spiller.
+    // Without this explicit order, the default destructor would destroy _load_chunk_spiller
+    // first (reverse declaration order), causing use-after-free when running tasks try to
+    // access the spiller's data (e.g., BlockGroupIterator accessing ColumnarSerde).
+    _pipeline_merge_context.reset();
+    _load_chunk_spiller.reset();
+}
 
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
                                       int64_t* flush_data_size, int64_t slot_idx) {
@@ -128,7 +138,11 @@ Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const C
 Status SpillMemTableSink::merge_blocks_to_segments() {
     TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
-    RETURN_IF(_load_chunk_spiller->empty(), Status::OK());
+    if (_load_chunk_spiller->empty()) {
+        // Eager merge in flush_chunk() may have already consumed all block groups.
+        // Must merge their results into the parent writer before returning.
+        return _pipeline_merge_context->merge_task_results();
+    }
 
     // Manual flush control needed because we're coordinating multiple parallel writers
     _writer->set_auto_flush(false);
