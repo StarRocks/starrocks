@@ -17,8 +17,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "base/url_coding.h"
 #include "script/script.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 
