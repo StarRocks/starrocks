@@ -1099,10 +1099,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new TNotifyForwardDeploymentFinishedRespone().setStatus(status);
     }
 
-    private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
+    private UserIdentity checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
         if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
-            return;
+            return UserIdentity.ROOT;
         }
         ConnectContext context = new ConnectContext();
         AuthenticationHandler.authenticate(context, user, clientIp, passwd.getBytes(StandardCharsets.UTF_8));
@@ -1113,6 +1113,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
         }
+        return currentUser;
     }
 
     private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
@@ -1638,12 +1639,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (table == null) {
                 throw new StarRocksException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
             }
-            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+            UserIdentity userIdentity = checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
             TableId tableId = new TableId(request.getDb(), request.getTbl());
             StreamLoadKvParams params = new StreamLoadKvParams(request.getParams());
             RequestLoadResult loadResult = GlobalStateMgr.getCurrentState().getBatchWriteMgr().requestLoad(
-                            tableId, params, request.getUser(), request.getBackend_id(), request.getBackend_host());
+                            tableId, params, userIdentity, request.getBackend_id(), request.getBackend_host());
             result.setStatus(loadResult.getStatus());
             if (loadResult.isOk()) {
                 result.setLabel(loadResult.getValue());
