@@ -832,14 +832,20 @@ public class ShowMaterializedViewStatus {
         //     the base table and supports multi table in MV definition.
         //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
         //     table and only supports single table in MV definition.
-        final Map<String, List<TaskRunStatus>> taskNameToStatusMap = mvs.isEmpty()
-                ? Maps.newHashMap()
-                : GlobalStateMgr.getCurrentState().getTaskManager()
-                .listMVRefreshedTaskRunStatus(dbName,
-                        mvs.stream()
-                                .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
-                                .collect(Collectors.toSet())
-                );
+        final Map<String, List<TaskRunStatus>> taskNameToStatusMap = Maps.newHashMap();
+        if (!mvs.isEmpty()) {
+            try {
+                taskNameToStatusMap.putAll(GlobalStateMgr.getCurrentState().getTaskManager()
+                        .listMVRefreshedTaskRunStatus(dbName,
+                                mvs.stream()
+                                        .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
+                                        .collect(Collectors.toSet())
+                        ));
+            } catch (Exception e) {
+                LOG.warn("Failed to list MV refreshed task run status, fallback to unknown status. db: {}",
+                        dbName, e);
+            }
+        }
         // async materialized views
         mvs.forEach(mvTable ->
                 rowSets.add(getASyncMVStatus(dbName, mvTable, taskNameToStatusMap.getOrDefault(
