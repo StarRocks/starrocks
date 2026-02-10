@@ -135,7 +135,7 @@ public:
     }
 
     // only nullable aggregate can support nullable immediate input.
-    bool support_nullable_immediate_input() const { return true; }
+    bool support_nullable_immediate_input() const override { return true; }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         // Scalar function compute will return non-nullable column
