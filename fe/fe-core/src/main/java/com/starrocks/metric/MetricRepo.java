@@ -745,6 +745,9 @@ public final class MetricRepo {
         initCloneMetrics();
 
         updateMetrics();
+
+        PipeMetricMgr.startPipeMetricCleanTimer();
+
         hasInit = true;
 
         if (Config.enable_metric_calculator) {
@@ -1341,5 +1344,9 @@ public final class MetricRepo {
     public static void addMetric(Metric<?> metric) {
         init();
         STARROCKS_METRIC_REGISTER.addMetric(metric);
+    }
+
+    public static void removeMetric(Metric<?> metric) {
+        STARROCKS_METRIC_REGISTER.removeMetric(metric);
     }
 }

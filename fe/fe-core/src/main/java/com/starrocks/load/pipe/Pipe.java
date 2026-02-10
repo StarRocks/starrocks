@@ -33,6 +33,7 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
+import com.starrocks.metric.PipeMetricMgr;
 import com.starrocks.persist.AlterPipeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -409,6 +410,7 @@ public class Pipe implements GsonPostProcessable {
                     changedLoadStatus.loadingFiles -= task.getPiece().getNumFiles();
                 }
                 if (task.isError()) {
+                    PipeMetricMgr.incPipeCompleteTasks(getPipeId().getDbId(), type.name(), "ERROR", 1);
                     failedTaskExecutionCount++;
                     if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
                         changeStateAction = () -> changeState(State.ERROR, false);
@@ -420,6 +422,12 @@ public class Pipe implements GsonPostProcessable {
                     changedLoadStatus.loadedBytes += piece.getTotalBytes();
                     changedLoadStatus.loadRows += piece.getTotalRows();
                     changedLoadStatus.lastLoadedTime = LocalDateTime.now(ZoneId.systemDefault());
+
+                    long dbId = getPipeId().getDbId();
+                    PipeMetricMgr.incPipeCompleteTasks(dbId, type.name(), "SUCCESS", 1);
+                    PipeMetricMgr.incPipeLoadedFiles(dbId, type.name(), piece.getNumFiles());
+                    PipeMetricMgr.incPipeLoadedBytes(dbId, type.name(), piece.getTotalBytes());
+                    PipeMetricMgr.incPipeLoadedRows(dbId, type.name(), piece.getTotalRows());
                 }
             }
             for (long taskId : removeTaskId) {
@@ -650,6 +658,10 @@ public class Pipe implements GsonPostProcessable {
 
     public Type getType() {
         return type;
+    }
+
+    public String getTypeName() {
+        return type.name();
     }
 
     public TableName getTargetTable() {

@@ -1686,7 +1686,7 @@ displayed_sidebar: docs
 ### pipe_prepare_pool_queue_len
 
 - 单位：个
-- 描述：Pipeline Prepare 线程池中排队的任务数量（瞬时值）。
+- 描述：Pipeline 准备线程池中排队的任务数量（瞬时值）。
 
 ### starrocks_be_exec_state_report_active_threads
 
@@ -1971,4 +1971,60 @@ displayed_sidebar: docs
 
 - 单位：微秒
 - 类型：Summary
-- 描述：等待 merge commit 导入完成的耗时。
+- 描述：等待 merge commit 导入操作完成的时间。
+
+### Pipe Metrics
+
+#### starrocks_fe_pipe_creation
+
+- 单位：个
+- 类型：累计值
+- 描述：创建的 Pipe 数量。按 `db_id` 和 `pipe_type` 标签分类。
+
+#### starrocks_fe_pipe_drop
+
+- 单位：个
+- 类型：累计值
+- 描述：删除的 Pipe 数量。按 `db_id` 和 `pipe_type` 标签分类。
+
+#### starrocks_fe_pipe_alter
+
+- 单位：个
+- 类型：累计值
+- 描述：修改的 Pipe 数量。按 `db_id` 和 `pipe_type` 标签分类。
+
+#### starrocks_fe_pipe_schedule_count
+
+- 单位：个
+- 类型：累计值
+- 描述：Pipe 调度调用次数。按 `db_id` 和 `pipe_type` 标签分类。
+
+#### starrocks_fe_pipe_state_count
+
+- 单位：个
+- 类型：瞬时值
+- 描述：各状态的 Pipe 数量。按 `db_id`、`pipe_type` 和 `status` (SUSPEND, RUNNING, FINISHED, ERROR) 标签分类。
+
+#### starrocks_fe_pipe_complete_tasks
+
+- 单位：个
+- 类型：累计值
+- 描述：完成的 Pipe 子任务数量。按 `db_id`、`pipe_type` 和 `done_status` (SUCCESS, ERROR) 标签分类。
+
+#### starrocks_fe_pipe_loaded_files
+
+- 单位：个
+- 类型：累计值
+- 描述：Pipe 加载的文件总数。按 `db_id` 和 `pipe_type` 标签分类。
+
+#### starrocks_fe_pipe_loaded_bytes
+
+- 单位：Byte
+- 类型：累计值
+- 描述：Pipe 加载的总字节数。按 `db_id` 和 `pipe_type` 标签分类。
+
+#### starrocks_fe_pipe_loaded_rows
+
+- 单位：行
+- 类型：累计值
+- 描述：Pipe 加载的总行数。按 `db_id` 和 `pipe_type` 标签分类。

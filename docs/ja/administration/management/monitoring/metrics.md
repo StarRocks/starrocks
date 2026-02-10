@@ -1970,3 +1970,60 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: microsecond
 - タイプ: Summary
 - 説明: merge commit のロード操作が完了するまで待機する時間。
+
+### Pipe Metrics
+
+#### starrocks_fe_pipe_creation
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 作成されたパイプの数。`db_id` と `pipe_type` でラベル付けされます。
+
+#### starrocks_fe_pipe_drop
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 削除されたパイプの数。`db_id` と `pipe_type` でラベル付けされます。
+
+#### starrocks_fe_pipe_alter
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 変更されたパイプの数。`db_id` と `pipe_type` でラベル付けされます。
+
+#### starrocks_fe_pipe_schedule_count
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: パイプのスケジュール呼び出し回数。`db_id` と `pipe_type` でラベル付けされます。
+
+#### starrocks_fe_pipe_state_count
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: 各状態のパイプ数。`db_id`、`pipe_type`、`status` (SUSPEND, RUNNING, FINISHED, ERROR) でラベル付けされます。
+
+#### starrocks_fe_pipe_complete_tasks
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 完了したパイプ・サブタスク数。`db_id`、`pipe_type`、`done_status` (SUCCESS, ERROR) でラベル付けされます。
+
+#### starrocks_fe_pipe_loaded_files
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: パイプによるロード済みファイル総数。`db_id` と `pipe_type` でラベル付けされます。
+
+#### starrocks_fe_pipe_loaded_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: パイプによるロード済み総バイト数。`db_id` と `pipe_type` でラベル付けされます。
+
+#### starrocks_fe_pipe_loaded_rows
+
+- 単位: Rows
+- タイプ: Cumulative
+- 説明: パイプによるロード済み総行数。`db_id` と `pipe_type` でラベル付けされます。
+

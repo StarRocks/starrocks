@@ -20,6 +20,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.metric.PipeMetricMgr;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
@@ -88,6 +89,7 @@ public class PipeManager {
             opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_CREATE);
             opEntry.setPipeJson(pipe.toJson());
             GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry, wal -> putPipe(pipe));
+            PipeMetricMgr.incPipeCreation(pipe.getPipeId().getDbId(), pipe.getType().name());
         } finally {
             lock.writeLock().unlock();
         }
@@ -124,6 +126,7 @@ public class PipeManager {
         opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_DROP);
         opEntry.setPipeJson(pipe.toJson());
         GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry, wal -> removePipe(pipe));
+        PipeMetricMgr.incPipeDrop(pipe.getPipeId().getDbId(), pipe.getType().name());
     }
 
     public void dropPipesOfDb(String dbName, long dbId) {
@@ -172,6 +175,7 @@ public class PipeManager {
                 pipe.alterProperties(setProperty.getProperties());
                 LOG.info("alter pipe {} properties {}", pipe, setProperty.getProperties());
             }
+            PipeMetricMgr.incPipeAlter(pipe.getPipeId().getDbId(), pipe.getType().name());
         } finally {
             lock.writeLock().unlock();
         }

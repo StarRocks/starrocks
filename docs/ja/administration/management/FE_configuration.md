@@ -3872,6 +3872,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: マテリアライズドビューの作成とCTAS操作において、固定長のVARCHAR列に対してSTRING型を優先するかどうか。
 - 導入バージョン: v4.0.0
 
+##### pipe_metric_expire_minutes
 
+- デフォルト: 4320
+- タイプ: Int
+- 単位: Minute
+- 変更可能: はい
+- 説明: Pipe メトリクスの有効期限（分）。この期間内にメトリクスが更新されない場合、削除されます。
+- 導入バージョン: v4.1.0
 
 <EditionSpecificFEItem />

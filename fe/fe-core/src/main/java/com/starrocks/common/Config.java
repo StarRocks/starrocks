@@ -4305,4 +4305,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_hudi_lib_internal_metadata_table = true;
+
+    @ConfField(mutable = true, comment = "The expiration time (in minutes) for pipe metrics. " +
+            "If a metric is not updated within this period, it will be removed. Default is 3 days.")
+    public static int pipe_metric_expire_minutes = 3 * 24 * 60; // 3 days
 }
