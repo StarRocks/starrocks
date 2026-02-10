@@ -16,10 +16,10 @@ package com.starrocks.http;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.http.rest.LoadAction;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
@@ -37,6 +37,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Utils;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -100,7 +101,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         new MockUp<BatchWriteMgr>() {
             @Mock
             public RequestCoordinatorBackendResult requestCoordinatorBackends(
-                    TableId tableId, StreamLoadKvParams params, String user) {
+                    TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity) {
                 return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
             }
         };
@@ -121,7 +122,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         new MockUp<BatchWriteMgr>() {
             @Mock
             public RequestCoordinatorBackendResult requestCoordinatorBackends(
-                    TableId tableId, StreamLoadKvParams params, String user) {
+                    TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity) {
                 TStatus status = new TStatus();
                 status.setStatus_code(TStatusCode.INTERNAL_ERROR);
                 status.addToError_msgs("artificial failure");
@@ -567,9 +568,9 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             }
         };
 
-        new MockUp<LoadAction>() {
+        new MockUp<Utils>() {
             @Mock
-            public Optional<String> getUserDefaultWarehouse(BaseRequest request) {
+            public Optional<String> getUserDefaultWarehouse(UserIdentity userIdentity) {
                 return Optional.of("user_wh");
             }
         };

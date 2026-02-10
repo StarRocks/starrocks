@@ -50,8 +50,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Optional;
 
-import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-
 public class StreamLoadInfo {
 
     private static final Logger LOG = LogManager.getLogger(StreamLoadInfo.class);
@@ -280,21 +278,19 @@ public class StreamLoadInfo {
     }
 
     public static StreamLoadInfo fromHttpStreamLoadRequest(
-            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params)
+            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params, CRAcquireContext acquireContext)
             throws StarRocksException {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
                 params.getFileType().orElse(TFileType.FILE_STREAM),
                 params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
         streamLoadInfo.setOptionalFromStreamLoad(params);
-        String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
 
         // acquire compute resource from warehouse
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
         streamLoadInfo.setComputeResource(computeResource);
         LOG.info("Acquired compute resource for stream load, warehouse: {}, resource: {}",
-                warehouseName, computeResource);
+                acquireContext.getWarehouseId(), computeResource);
 
         return streamLoadInfo;
     }
