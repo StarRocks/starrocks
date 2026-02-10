@@ -713,8 +713,12 @@ public class HdfsFsManager {
         Preconditions.checkArgument(cloudConfiguration != null);
         WildcardURI pathUri = new WildcardURI(path);
 
-        String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toConfString());
+        String scheme = pathUri.getUri().getScheme();
+        String authority = pathUri.getUri().getAuthority();
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(scheme), "URI scheme must not be null or empty: %s", path);
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(authority), "URI authority must not be null or empty: %s", path);
+        String uriIdentity = scheme + "://" + authority;
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(uriIdentity, cloudConfiguration.toConfString());
 
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
         HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
