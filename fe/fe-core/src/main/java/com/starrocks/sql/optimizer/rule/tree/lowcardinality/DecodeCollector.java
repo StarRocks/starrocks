@@ -361,7 +361,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             OptExpression child = optExpression.inputAt(0);
             context = collectImpl(child, optExpression);
         } else {
-            context = new DecodeInfo();
+            context = DecodeInfo.create();
             for (int i = 0; i < optExpression.arity(); ++i) {
                 OptExpression child = optExpression.inputAt(i);
                 context.addChildInfo(collectImpl(child, optExpression));
@@ -518,9 +518,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private DecodeInfo visitPhysicalSetOperation(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
         DistributionSpec dist = optExpression.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+
         if (!(dist instanceof HashDistributionSpec)) {
             return visit(optExpression, context);
         }
@@ -556,7 +557,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visitPhysicalAnalytic(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
         PhysicalWindowOperator windowOp = optExpression.getOp().cast();
         DecodeInfo info = context.createOutputInfo();
@@ -657,7 +658,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visitPhysicalHashAggregate(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
         PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
         DecodeInfo info = context.createOutputInfo();
@@ -722,7 +723,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visitPhysicalTableFunction(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
         DecodeInfo info = context.createOutputInfo();
         PhysicalTableFunctionOperator tableFunc = optExpression.getOp().cast();
@@ -762,7 +763,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visitPhysicalDistribution(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
         return context.createOutputInfo();
     }
@@ -775,14 +776,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
 
         if (table.hasForbiddenGlobalDict()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
         if (table.inputHasTempPartition(scan.getSelectedPartitionId())) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
 
         // check dict column
-        DecodeInfo info = new DecodeInfo();
+        DecodeInfo info = DecodeInfo.create();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             // Condition 1:
             if (!supportAndEnabledLowCardinality(column.getType())) {
@@ -824,7 +825,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         if (info.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
 
         return info;
@@ -882,18 +883,18 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visitPhysicalHiveScan(OptExpression optExpression, DecodeInfo context) {
         if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
         PhysicalHiveScanOperator scan = optExpression.getOp().cast();
         HiveTable table = (HiveTable) scan.getTable();
 
         // only support parquet
         if (table.getStorageFormat() == null || !table.getStorageFormat().equals(HiveStorageFormat.PARQUET)) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
 
         // check dict column
-        DecodeInfo info = new DecodeInfo();
+        DecodeInfo info = DecodeInfo.create();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             // don't collect partition columns
             if (table.getPartitionColumnNames().contains(column.getName())) {
@@ -909,7 +910,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         if (info.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
 
         return info;
@@ -918,7 +919,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visitPhysicalIcebergScan(OptExpression optExpression, DecodeInfo context) {
         if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
 
         PhysicalIcebergScanOperator scan = optExpression.getOp().cast();
@@ -927,11 +928,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         // only support parquet
         if (!table.getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT).
                 equalsIgnoreCase("parquet")) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
 
         // check dict column
-        DecodeInfo info = new DecodeInfo();
+        DecodeInfo info = DecodeInfo.create();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             if (table.getPartitionColumnNames().contains(column.getName())) {
                 continue;
@@ -946,7 +947,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         if (info.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
+            return DecodeInfo.empty();
         }
 
         return info;
