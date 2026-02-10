@@ -720,13 +720,13 @@ insert into t1(c_key, c_bigint) values (1, null), (2, 1), (3, 2), (4, -1);
 insert into t2(c_key, c_int) values (1, 1), (2, 2), (3, 3);
 -- result:
 -- !result
-function: assert_explain_contains("select count(*) from t1 left join [skew|t1.c_bigint(1,2,null)] t2 on abs(t1.c_bigint)=abs(t2.c_int)", "SplitCastDataSink", "IN (abs[(1)", "IN (")
+select count(*) from t1 left join [skew|t1.c_bigint(1,2,null)] t2 on abs(t1.c_bigint)=abs(t2.c_int);
 -- result:
-None
+4
 -- !result
-function: assert_explain_contains("select count(*) from t1 left join [skew|t1.c_bigint(null)] t2 on abs(t1.c_bigint)=abs(t2.c_int)", "SplitCastDataSink")
+select count(*) from t1 left join [skew|t1.c_bigint(null)] t2 on abs(t1.c_bigint)=abs(t2.c_int);
 -- result:
-None
+4
 -- !result
 truncate table t1;
 -- result:
@@ -1249,38 +1249,38 @@ insert into t_mcv_r select (generate_series % 2502) + 1, 1 from table(generate_s
 -- !result
 [UC] analyze full table t_mcv_l;
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_mcv_l	analyze	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_mcv_l	analyze	status	OK
 -- !result
 [UC] analyze full table t_mcv_r;
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_mcv_r	analyze	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_mcv_r	analyze	status	OK
 -- !result
 [UC] analyze table t_mcv_l update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_mcv_l	histogram	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_mcv_l	histogram	status	OK
 -- !result
 [UC] analyze table t_mcv_r update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_mcv_r	histogram	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_mcv_r	histogram	status	OK
 -- !result
-function: assert_explain_contains("select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k", "SplitCastDataSink")
+select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k;
 -- result:
-None
+74985
 -- !result
-function: assert_explain_contains("select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k", "IN (1, 2)")
+select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k;
 -- result:
-None
+74985
 -- !result
-function: assert_explain_contains("with l as (select (cast(k as bigint) + 10) as k2, v from t_mcv_l), r as (select (cast(k as bigint) + 10) as k2, v from t_mcv_r) select count(*) from l join[shuffle] r on l.k2 = r.k2", "SplitCastDataSink", "IN (11, 12)")
+with l as (select (cast(k as bigint) + 10) as k2, v from t_mcv_l), r as (select (cast(k as bigint) + 10) as k2, v from t_mcv_r) select count(*) from l join[shuffle] r on l.k2 = r.k2;
 -- result:
-None
+74985
 -- !result
 set skew_join_data_skew_threshold = 0.9;
 -- result:
 -- !result
-function: assert_explain_not_contains("select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k", "SplitCastDataSink")
+select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k;
 -- result:
-None
+74985
 -- !result
 set skew_join_data_skew_threshold = 0.1;
 -- result:
@@ -1288,13 +1288,13 @@ set skew_join_data_skew_threshold = 0.1;
 set skew_join_mcv_single_threshold = 0.3;
 -- result:
 -- !result
-function: assert_explain_contains("select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k", "SplitCastDataSink", "IN (1)")
+select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k;
 -- result:
-None
+74985
 -- !result
-function: assert_explain_not_contains("select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k", "IN (1, 2)")
+select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k;
 -- result:
-None
+74985
 -- !result
 set skew_join_mcv_single_threshold = 0.05;
 -- result:
@@ -1302,9 +1302,9 @@ set skew_join_mcv_single_threshold = 0.05;
 set skew_join_mcv_min_input_rows = 20000;
 -- result:
 -- !result
-function: assert_explain_not_contains("select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k", "SplitCastDataSink")
+select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k;
 -- result:
-None
+74985
 -- !result
 set skew_join_mcv_min_input_rows = 1000;
 -- result:
@@ -1347,23 +1347,23 @@ insert into t_mcv_r2 select generate_series + 2, 1 from table(generate_series(1,
 -- !result
 [UC] analyze full table t_mcv_l2;
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_mcv_l2	analyze	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_mcv_l2	analyze	status	OK
 -- !result
 [UC] analyze full table t_mcv_r2;
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_mcv_r2	analyze	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_mcv_r2	analyze	status	OK
 -- !result
 [UC] analyze table t_mcv_r2 update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_mcv_r2	histogram	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_mcv_r2	histogram	status	OK
 -- !result
-function: assert_explain_contains("select count(*) from t_mcv_l2 join[shuffle] t_mcv_r2 on t_mcv_l2.k = t_mcv_r2.k", "SplitCastDataSink", "IN (1, 2)")
+select count(*) from t_mcv_l2 join[shuffle] t_mcv_r2 on t_mcv_l2.k = t_mcv_r2.k;
 -- result:
-None
+20000
 -- !result
-function: assert_explain_not_contains("select count(*) from t_mcv_l2 left join[shuffle] t_mcv_r2 on t_mcv_l2.k = t_mcv_r2.k", "SplitCastDataSink")
+select count(*) from t_mcv_l2 left join[shuffle] t_mcv_r2 on t_mcv_l2.k = t_mcv_r2.k;
 -- result:
-None
+21998
 -- !result
 drop table t_mcv_l2;
 -- result:
@@ -1409,23 +1409,23 @@ insert into t_null_r select (generate_series % 2000) + 1, 1 from table(generate_
 -- !result
 [UC] analyze full table t_null_l;
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_null_l	analyze	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_null_l	analyze	status	OK
 -- !result
 [UC] analyze full table t_null_r;
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_null_r	analyze	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_null_r	analyze	status	OK
 -- !result
 [UC] analyze table t_null_l update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_null_l	histogram	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_null_l	histogram	status	OK
 -- !result
 [UC] analyze table t_null_r update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
 -- result:
-test_db_5f945d55a63b4408a30c60ccc09dd5c1.t_null_r	histogram	status	OK
+test_db_1eb2f4314fa241568c5c075412608bc1.t_null_r	histogram	status	OK
 -- !result
-function: assert_explain_contains("select count(*) from t_null_l left join[shuffle] t_null_r on t_null_l.k = t_null_r.k", "SplitCastDataSink", "([1: k, BIGINT, true] IN (1, 2)) OR ([1: k, BIGINT, true] IS NULL)")
+select count(*) from t_null_l left join[shuffle] t_null_r on t_null_l.k = t_null_r.k;
 -- result:
-None
+22000
 -- !result
 drop table t_null_l;
 -- result:
