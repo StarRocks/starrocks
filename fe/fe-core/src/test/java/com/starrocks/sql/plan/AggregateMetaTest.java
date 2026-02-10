@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
@@ -22,6 +23,7 @@ import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -127,5 +129,54 @@ public class AggregateMetaTest extends PlanTestBase {
         String descTbl = getDescTbl(sql);
         assertContains(descTbl, "TSlotDescriptor(id:6, parent:0, " +
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))])");
+    }
+
+    @Test
+    public void testDisableCountMetaFastPathForRangeDistributionTable() throws Exception {
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public long getRowCount() {
+                return 3;
+            }
+        };
+        new MockUp<TabletStatMgr>() {
+            @Mock
+            public boolean workTimeIsMustAfter(LocalDateTime time) {
+                return true;
+            }
+        };
+
+        boolean oldEnableRangeDistribution = connectContext.getSessionVariable().isEnableRangeDistribution();
+        boolean oldEnableRewriteSimpleAggToMetaScan = connectContext.getSessionVariable().isEnableRewriteSimpleAggToMetaScan();
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        connectContext.getSessionVariable().setEnableRangeDistribution(true);
+        try {
+            String createTableSql = "CREATE TABLE `t_range_dist_dup` (\n" +
+                    "  `k1` int NULL COMMENT \"\",\n" +
+                    "  `v1` int NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(createTableSql, (tbl) -> {
+                OlapTable table = getOlapTable((String) tbl);
+                Assertions.assertTrue(table.isRangeDistribution(), "Expect range distribution table: " + tbl);
+
+                String plan = getFragmentPlan("SELECT COUNT(*) FROM " + tbl);
+                assertContains(plan, "OlapScanNode", "TABLE: " + tbl);
+                assertNotContains(plan, "MetaScan");
+                assertNotContains(plan, "constant exprs");
+
+                // COUNT(1) has the same semantics as COUNT(*) and may share the same fast path
+                plan = getFragmentPlan("SELECT COUNT(1) FROM " + tbl);
+                assertContains(plan, "OlapScanNode", "TABLE: " + tbl);
+                assertNotContains(plan, "MetaScan");
+                assertNotContains(plan, "constant exprs");
+            });
+        } finally {
+            connectContext.getSessionVariable().setEnableRangeDistribution(oldEnableRangeDistribution);
+            connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(oldEnableRewriteSimpleAggToMetaScan);
+        }
     }
 }
