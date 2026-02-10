@@ -18,14 +18,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
 #include <limits>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
->>>>>>> c07a0a4538 ([Feature] Implement tablet merge metadata with delvec merge and rssid_offset (#68591))
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -38,6 +32,7 @@
 #include "storage/variant_tuple.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {
