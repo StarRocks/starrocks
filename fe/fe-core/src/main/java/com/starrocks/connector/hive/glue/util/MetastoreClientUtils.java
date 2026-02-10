@@ -27,13 +27,19 @@ import org.apache.hadoop.hive.metastore.api.InvalidObjectException;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import software.amazon.awssdk.services.glue.model.ResourceShareType;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.hadoop.hive.metastore.TableType.EXTERNAL_TABLE;
 
 public final class MetastoreClientUtils {
+    private static final Logger LOG = LogManager.getLogger(MetastoreClientUtils.class);
+
     private MetastoreClientUtils() {
         // static util class should not be instantiated
     }
@@ -135,5 +141,30 @@ public final class MetastoreClientUtils {
         }
         // This case defaults to using the caller's account Id as Catalog Id.
         return null;
+    }
+
+    /**
+     * Gets the ResourceShareType for AWS Glue GetDatabases API.
+     * Valid values: ALL, FOREIGN, FEDERATED
+     * <p>
+     * When not specified (null or empty), AWS Glue defaults to returning only local databases.
+     * To include shared databases, explicitly set this to ALL.
+     *
+     * @param conf Hadoop configuration
+     * @return Optional containing ResourceShareType if specified and valid, empty Optional otherwise
+     * @see <a href="https://docs.aws.amazon.com/glue/latest/webapi/API_GetDatabases.html">AWS Glue GetDatabases API</a>
+     */
+    public static Optional<ResourceShareType> getResourceShareType(Configuration conf) {
+        String resourceShareType = conf.get(CloudConfigurationConstants.AWS_GLUE_RESOURCE_SHARE_TYPE);
+        if (StringUtils.isNotEmpty(resourceShareType)) {
+            try {
+                return Optional.of(ResourceShareType.valueOf(resourceShareType.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                LOG.warn("Invalid aws.glue.resource_share_type value: '{}'. Valid values are: ALL, FOREIGN, FEDERATED. " +
+                        "AWS default behavior will be used (local databases only).", resourceShareType);
+            }
+        }
+        // Return empty Optional when not specified - AWS Glue defaults to local databases only
+        return Optional.empty();
     }
 }
