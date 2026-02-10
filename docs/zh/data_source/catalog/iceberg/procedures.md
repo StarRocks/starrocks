@@ -211,6 +211,30 @@ EXECUTE remove_orphan_files();
 
 ---
 
+### 重写 Data Manifest
+
+重写 Data Manifest 文件，并按分区合并，以避免过多小 Manifest 导致的性能下降。
+
+:::note
+此操作仅重写当前快照的 Data Manifest。
+:::
+
+#### `rewrite_manifests` 语法
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rewrite_manifests()
+```
+
+#### 示例
+
+重写当前快照的 Data Manifest：
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rewrite_manifests()
+```
+
 ## 表管理
 
 ### Add files
