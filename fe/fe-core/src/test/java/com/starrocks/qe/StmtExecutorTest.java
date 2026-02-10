@@ -20,14 +20,20 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -445,5 +451,204 @@ public class StmtExecutorTest {
                 ConnectContext.remove();
             }
         }
+    }
+
+    @Test
+    public void testTransactionStmtWithSqlTransactionDisabled() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(new TUniqueId(1, 2));
+
+        // Disable SQL transaction
+        ctx.getSessionVariable().setEnableSqlTransaction(false);
+
+        // Test 1: BEGIN statement when transaction is disabled - should return OK
+        {
+            StatementBase stmt = SqlParser.parseSingleStatement("BEGIN", SqlModeHelper.MODE_DEFAULT);
+            Assertions.assertTrue(stmt instanceof BeginStmt);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+            executor.execute();
+
+            Assertions.assertFalse(ctx.getState().isError());
+            Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+        }
+
+        // Test 2: COMMIT statement when transaction is disabled and txnId is 0 - should return OK
+        {
+            ctx.setTxnId(0);
+            ctx.setQueryId(UUIDUtil.genUUID());
+            StatementBase stmt = SqlParser.parseSingleStatement("COMMIT", SqlModeHelper.MODE_DEFAULT);
+            Assertions.assertTrue(stmt instanceof CommitStmt);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+            executor.execute();
+
+            Assertions.assertFalse(ctx.getState().isError());
+            Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+        }
+
+        // Test 3: ROLLBACK statement when transaction is disabled and txnId is 0 - should return OK
+        {
+            ctx.setTxnId(0);
+            ctx.setQueryId(UUIDUtil.genUUID());
+            StatementBase stmt = SqlParser.parseSingleStatement("ROLLBACK", SqlModeHelper.MODE_DEFAULT);
+            Assertions.assertTrue(stmt instanceof RollbackStmt);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+            executor.execute();
+
+            Assertions.assertFalse(ctx.getState().isError());
+            Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+        }
+    }
+
+    @Test
+    public void testTransactionStmtWithSqlTransactionEnabled() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(new TUniqueId(3, 4));
+
+        // Enable SQL transaction (default is true)
+        ctx.getSessionVariable().setEnableSqlTransaction(true);
+
+        // Test 1: BEGIN statement when transaction is enabled
+        {
+            StatementBase stmt = SqlParser.parseSingleStatement("BEGIN", SqlModeHelper.MODE_DEFAULT);
+            Assertions.assertTrue(stmt instanceof BeginStmt);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+            executor.execute();
+
+            // Should not be error state
+            Assertions.assertFalse(ctx.getState().isError());
+            // Verify txnId is set
+            Assertions.assertNotEquals(0, ctx.getTxnId());
+
+            // Cleanup
+            long txnId = ctx.getTxnId();
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(txnId);
+            ctx.setTxnId(0);
+        }
+
+        // Test 2: COMMIT statement when transaction is enabled
+        {
+            // First begin a transaction
+            ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(new TUniqueId(5, 6));
+            StatementBase beginStmt = SqlParser.parseSingleStatement("BEGIN", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor beginExecutor = new StmtExecutor(ctx, beginStmt);
+            beginExecutor.execute();
+            long txnId = ctx.getTxnId();
+            Assertions.assertNotEquals(0, txnId);
+
+            // Then commit
+            ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(new TUniqueId(7, 8));
+            StatementBase commitStmt = SqlParser.parseSingleStatement("COMMIT", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor commitExecutor = new StmtExecutor(ctx, commitStmt);
+            commitExecutor.execute();
+
+            // Should not be error state
+            Assertions.assertFalse(ctx.getState().isError());
+            // TxnId should be cleared after commit
+            Assertions.assertEquals(0, ctx.getTxnId());
+        }
+
+        // Test 3: ROLLBACK statement when transaction is enabled
+        {
+            // First begin a transaction
+            ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(new TUniqueId(9, 10));
+            StatementBase beginStmt = SqlParser.parseSingleStatement("BEGIN", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor beginExecutor = new StmtExecutor(ctx, beginStmt);
+            beginExecutor.execute();
+            long txnId = ctx.getTxnId();
+            Assertions.assertNotEquals(0, txnId);
+
+            // Then rollback
+            ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(new TUniqueId(11, 12));
+            StatementBase rollbackStmt = SqlParser.parseSingleStatement("ROLLBACK", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor rollbackExecutor = new StmtExecutor(ctx, rollbackStmt);
+            rollbackExecutor.execute();
+
+            // Should not be error state
+            Assertions.assertFalse(ctx.getState().isError());
+            // TxnId should be cleared after rollback
+            Assertions.assertEquals(0, ctx.getTxnId());
+        }
+    }
+
+    @Test
+    public void testCommitRollbackWithTxnIdWhenTransactionDisabled() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+
+        // First enable transaction and begin
+        ctx.getSessionVariable().setEnableSqlTransaction(true);
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(new TUniqueId(13, 14));
+        StatementBase beginStmt = SqlParser.parseSingleStatement("BEGIN", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor beginExecutor = new StmtExecutor(ctx, beginStmt);
+        beginExecutor.execute();
+        long txnId = ctx.getTxnId();
+        Assertions.assertNotEquals(0, txnId);
+
+        // Now disable transaction but txnId is still set
+        ctx.getSessionVariable().setEnableSqlTransaction(false);
+
+        // COMMIT should still work because txnId != 0
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(new TUniqueId(15, 16));
+        StatementBase commitStmt = SqlParser.parseSingleStatement("COMMIT", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor commitExecutor = new StmtExecutor(ctx, commitStmt);
+        commitExecutor.execute();
+
+        // Should not be error state
+        Assertions.assertFalse(ctx.getState().isError());
+        // TxnId should be cleared after commit
+        Assertions.assertEquals(0, ctx.getTxnId());
+    }
+
+    @Test
+    public void testRollbackWithTxnIdWhenTransactionDisabled() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+
+        // First enable transaction and begin
+        ctx.getSessionVariable().setEnableSqlTransaction(true);
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(new TUniqueId(17, 18));
+        StatementBase beginStmt = SqlParser.parseSingleStatement("BEGIN", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor beginExecutor = new StmtExecutor(ctx, beginStmt);
+        beginExecutor.execute();
+        long txnId = ctx.getTxnId();
+        Assertions.assertNotEquals(0, txnId);
+
+        // Now disable transaction but txnId is still set
+        ctx.getSessionVariable().setEnableSqlTransaction(false);
+
+        // ROLLBACK should still work because txnId != 0
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(new TUniqueId(19, 20));
+        StatementBase rollbackStmt = SqlParser.parseSingleStatement("ROLLBACK", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor rollbackExecutor = new StmtExecutor(ctx, rollbackStmt);
+        rollbackExecutor.execute();
+
+        // Should not be error state
+        Assertions.assertFalse(ctx.getState().isError());
+        // TxnId should be cleared after rollback
+        Assertions.assertEquals(0, ctx.getTxnId());
     }
 }
