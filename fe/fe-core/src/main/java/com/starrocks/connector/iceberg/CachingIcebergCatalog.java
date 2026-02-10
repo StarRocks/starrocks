@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -97,13 +98,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.catalogName = catalogName;
         this.delegate = delegate;
         this.icebergProperties = icebergProperties;
-        boolean enableCache = icebergProperties.isEnableIcebergMetadataCache();
+        Preconditions.checkArgument(icebergProperties.isEnableIcebergMetadataCache(),
+                "CachingIcebergCatalog should only be instantiated when metadata cache is enabled");
         long tableCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
                 icebergProperties.getIcebergTableCacheMemoryUsageRatio());
         this.databases = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
-                NEVER_CACHE,
-                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
+                NEVER_CACHE, DEFAULT_CACHE_NUM).build();
         this.tables = newCacheBuilder(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec())
@@ -155,8 +156,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     }
                 });
         this.partitionCache = newCacheBuilderWithMaximumSize(
-                icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
-                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
+                icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE, DEFAULT_CACHE_NUM).build(
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
@@ -175,7 +175,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         long deleteFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
                 icebergProperties.getIcebergDeleteFileCacheMemoryUsageRatio());
 
-        this.dataFileCache = enableCache ? Caffeine.newBuilder()
+        this.dataFileCache = Caffeine.newBuilder()
                 .executor(executorService)
                 .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
                 .weigher((Weigher<String, Set<DataFile>>) (String key, Set<DataFile> files) -> {
@@ -192,8 +192,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                             value != null ? value.size() : 0,
                             cause));
                 })
-                .build() : null;
-        this.deleteFileCache = enableCache ? Caffeine.newBuilder()
+                .build();
+        this.deleteFileCache = Caffeine.newBuilder()
                 .executor(executorService)
                 .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
                 .weigher((Weigher<String, Set<DeleteFile>>) (String key, Set<DeleteFile> files) -> {
@@ -210,7 +210,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                             value != null ? value.size() : 0,
                             cause));
                 })
-                .build() : null;
+                .build();
 
         this.backgroundExecutor = executorService;
     }

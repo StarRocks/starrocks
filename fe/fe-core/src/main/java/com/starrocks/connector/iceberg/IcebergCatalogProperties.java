@@ -57,7 +57,6 @@ public class IcebergCatalogProperties {
     private final Map<String, String> properties;
     private IcebergCatalogType catalogType;
     private boolean enableIcebergMetadataCache;
-    private boolean enableIcebergTableCache;
     private long icebergMetaCacheTtlSec;
     private int icebergJobPlanningThreadNum;
     private int backgroundIcebergJobPlanningThreadNum;
@@ -98,7 +97,6 @@ public class IcebergCatalogProperties {
 
     private void initIcebergMetadataCache() {
         this.enableIcebergMetadataCache = PropertyUtil.propertyAsBoolean(properties, ENABLE_ICEBERG_METADATA_CACHE, true);
-        this.enableIcebergTableCache = PropertyUtil.propertyAsBoolean(properties, ENABLE_ICEBERG_TABLE_CACHE, true);
 
         // one day default, for all meta including tables.
         this.icebergMetaCacheTtlSec = PropertyUtil.propertyAsLong(properties, ICEBERG_META_CACHE_TTL, 24L * 60 * 60); 
@@ -145,7 +143,7 @@ public class IcebergCatalogProperties {
     }
 
     public boolean enableIcebergTableCache() {
-        return enableIcebergTableCache;
+        return icebergTableCacheMemoryUsageRatio > 0;
     }
 
     public long getIcebergMetaCacheTtlSec() {
@@ -177,7 +175,7 @@ public class IcebergCatalogProperties {
     }
 
     public boolean isEnableIcebergTableCache() {
-        return enableIcebergTableCache;
+        return icebergTableCacheMemoryUsageRatio > 0;
     }
 
     public double getIcebergDataFileCacheMemoryUsageRatio() {
