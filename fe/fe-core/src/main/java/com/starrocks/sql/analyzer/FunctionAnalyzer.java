@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -33,7 +35,9 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
@@ -42,6 +46,7 @@ import com.starrocks.catalog.combinator.AggStateCombinator;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -660,10 +665,10 @@ public class FunctionAnalyzer {
                     rateScale, primitiveType, maxPrecision), rateExpr.getPos());
         }
 
-        ScalarType rateType = TypeFactory.createDecimalV3Type(primitiveType, ratePrecision, rateScale);
+        ScalarType rateType = ScalarType.createDecimalV3Type(primitiveType, ratePrecision, rateScale);
         try {
             if (!rateExpr.getType().matchesType(rateType)) {
-                ExprCastFunction.castChild(functionCallExpr, rateType, 1);
+                functionCallExpr.castChild(rateType, 1);
             }
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage(), rateExpr.getPos());
