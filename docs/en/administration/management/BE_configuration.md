@@ -1250,6 +1250,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Specifies whether to enable parallel spill merge within a single tablet. Enabling this can improve the performance of spill merge during data loading.
 - Introduced in: -
 
+##### enable_parallel_memtable_finalize
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Specifies whether to enable parallel memtable finalize when loading data to lake tables (shared-data mode). When enabled, the memtable finalize operation (sort/aggregate) is moved from the write thread to the flush thread, allowing the write thread to continue inserting data into a new memtable while the previous one is being finalized and flushed in parallel. This can significantly improve load throughput by overlapping CPU-intensive finalize operations with I/O-bound flush operations. Note that this optimization is automatically disabled when auto-increment columns need to be filled, as auto-increment ID assignment must happen before the memtable is submitted for flush.
+- Introduced in: -
+
 ##### enable_stream_load_verbose_log
 
 - Default: false
