@@ -115,6 +115,41 @@ protected:
         return Status::OK();
     }
 
+    Status create_test_sstable_with_rssid(const std::string& filename, int start_key, int count, uint32_t rssid_base,
+                                          PersistentIndexSstablePB* sst_pb) {
+        sstable::Options options;
+        std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), filename);
+        ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(filepath));
+        sstable::TableBuilder builder(options, wf.get());
+
+        std::string first_key;
+        std::string last_key;
+        for (int i = 0; i < count; i++) {
+            std::string key = fmt::format("key_{:016X}", start_key + i);
+            if (i == 0) first_key = key;
+            if (i == count - 1) last_key = key;
+            IndexValuesWithVerPB index_value_pb;
+            auto* value = index_value_pb.add_values();
+            value->set_version(1);
+            value->set_rssid(rssid_base + i);
+            value->set_rowid(i);
+            builder.Add(Slice(key), Slice(index_value_pb.SerializeAsString()));
+        }
+        RETURN_IF_ERROR(builder.Finish());
+        uint64_t filesize = builder.FileSize();
+        RETURN_IF_ERROR(wf->sync());
+        RETURN_IF_ERROR(wf->close());
+
+        sst_pb->set_filename(filename);
+        sst_pb->set_filesize(filesize);
+        if (count > 0) {
+            sst_pb->mutable_range()->set_start_key(first_key);
+            sst_pb->mutable_range()->set_end_key(last_key);
+        }
+
+        return Status::OK();
+    }
+
     // Helper to create PersistentIndexSstable object
     StatusOr<std::unique_ptr<PersistentIndexSstable>> open_sstable(const PersistentIndexSstablePB& sst_pb) {
         RandomAccessFileOptions opts;
@@ -450,6 +485,33 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_multi_get_partial_match) {
     for (int i = 0; i < 3; i++) {
         ASSERT_TRUE(found_key_indexes.count(i) > 0);
         ASSERT_EQ(i * 10, values[i].get_value());
+    }
+}
+
+TEST_F(LakePersistentIndexFilesetTest, test_multi_get_rssid_offset) {
+    PersistentIndexSstablePB sst_pb;
+    ASSERT_OK(create_test_sstable_with_rssid("test_sst_offset.sst", 0, 3, 10, &sst_pb));
+    sst_pb.set_rssid_offset(7);
+
+    ASSIGN_OR_ABORT(auto sst, open_sstable(sst_pb));
+
+    std::vector<std::string> key_strs;
+    std::vector<Slice> keys;
+    KeyIndexSet key_indexes;
+    for (int i = 0; i < 3; ++i) {
+        key_strs.emplace_back(fmt::format("key_{:016X}", i));
+        keys.emplace_back(key_strs.back());
+        key_indexes.insert(i);
+    }
+
+    std::vector<IndexValue> values(keys.size(), IndexValue(NullIndexValue));
+    KeyIndexSet found_key_indexes;
+    ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found_key_indexes));
+    ASSERT_EQ(key_indexes.size(), found_key_indexes.size());
+
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(values[i].get_rssid(), 10U + static_cast<uint32_t>(i) + 7U);
+        EXPECT_EQ(values[i].get_rowid(), static_cast<uint32_t>(i));
     }
 }
 
