@@ -20,13 +20,13 @@
 #include <span>
 #include <unordered_map>
 
-#include "base/testutil/sync_point.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
 #include "storage/variant_tuple.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 
