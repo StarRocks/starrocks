@@ -16,7 +16,7 @@ package com.starrocks.http.rest.v2;
 
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.http.StarRocksHttpTestCase;
-import com.starrocks.http.rest.v2.vo.ClusterOverview;
+import com.starrocks.http.rest.v2.vo.ClusterSummaryRestResult;
 import com.starrocks.persist.gson.GsonUtils;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -29,30 +29,30 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 public class ClusterOverviewActionV2Test extends StarRocksHttpTestCase {
 
-    private static final String CLUSTER_OVERVIEW_URI = "/api/v2/cluster_overview";
+    private static final String CLUSTER_SUMMARY_URI = "/api/v2/cluster_summary";
 
     @Test
-    public void testGetClusterOverview() throws IOException {
+    public void testGetClusterSummary() throws IOException {
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
-                .url("http://localhost:" + HTTP_PORT + CLUSTER_OVERVIEW_URI)
+                .url("http://localhost:" + HTTP_PORT + CLUSTER_SUMMARY_URI)
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
-        RestBaseResultV2<ClusterOverview> resp = parseResponseBody(respStr);
-        ClusterOverview clusterOverview = resp.getResult();
+        RestBaseResultV2<ClusterSummaryRestResult> resp = parseResponseBody(respStr);
+        ClusterSummaryRestResult clusterSummaryRestResult = resp.getResult();
         Assertions.assertEquals(200, response.code());
         Assertions.assertTrue(respStr.contains("64"));
-        Assertions.assertNotNull(clusterOverview);
+        Assertions.assertNotNull(clusterSummaryRestResult);
     }
 
 
-    private static RestBaseResultV2<ClusterOverview> parseResponseBody(String body) {
+    private static RestBaseResultV2<ClusterSummaryRestResult> parseResponseBody(String body) {
         try {
             return GsonUtils.GSON.fromJson(
                     body,
-                    new TypeToken<RestBaseResultV2<ClusterOverview>>() {
+                    new TypeToken<RestBaseResultV2<ClusterSummaryRestResult>>() {
                     }.getType());
         } catch (Exception e) {
             fail(e.getMessage() + ", resp: " + body);

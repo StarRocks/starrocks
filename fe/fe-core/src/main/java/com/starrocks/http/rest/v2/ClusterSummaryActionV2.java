@@ -20,7 +20,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
-import com.starrocks.http.rest.v2.vo.ClusterOverview;
+import com.starrocks.http.rest.v2.vo.ClusterSummaryRestResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
@@ -30,14 +30,35 @@ import io.netty.handler.codec.http.HttpMethod;
 
 import java.util.Map;
 
-public class ClusterOverviewActionV2 extends RestBaseAction {
+// This class is a RESTFUL interface to get cluster summary.
+// Usage:
+// wget get http://fe_host:fe_http_port/api/v2/cluster_summary;
+//
+//{
+//   "code": 200,
+//   "message": "OK",
+//   "result": {
+//   "dbCount": 64,
+//   "tableCount": 1280,
+//   "diskUsedCapacity": 549755813888,
+//   "diskAvailableCapacity": 1099511627776,
+//   "diskTotalCapacity": 1649267441664,
+//   "totalBackendNum": 8,
+//   "aliveBackendNum": 8,
+//   "totalCnNum": 4,
+//   "aliveCnNum": 4,
+//   "totalFeNum": 3,
+//   "aliveFeNum": 3
+//   }
+//}
+public class ClusterSummaryActionV2 extends RestBaseAction {
 
-    public ClusterOverviewActionV2(ActionController controller) {
+    public ClusterSummaryActionV2(ActionController controller) {
         super(controller);
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
-        controller.registerHandler(HttpMethod.GET, "/api/v2/cluster_overview", new ClusterOverviewActionV2(controller));
+        controller.registerHandler(HttpMethod.GET, "/api/v2/cluster_summary", new ClusterSummaryActionV2(controller));
     }
 
     @Override
@@ -59,21 +80,21 @@ public class ClusterOverviewActionV2 extends RestBaseAction {
         long availableCapacity = getAvailableCapacity(backendMap);
         long totalCapacity = getTotalCapacity(backendMap);
 
-        ClusterOverview clusterOverview = new ClusterOverview(
-                (long) infoService.getAllDbs().size(),
-                tableCount,
-                dataUsedCapacity,
-                availableCapacity,
-                totalCapacity,
-                (long) clusterInfo.getBackends().size(),
-                (long) clusterInfo.getAliveBackendNumber(),
-                (long) clusterInfo.getComputeNodes().size(),
-                (long) clusterInfo.getAliveComputeNodeNumber(),
-                (long) nodeMgr.getAllFrontends().size(),
-                nodeMgr.getAliveFrontendsCnt()
-        );
+        ClusterSummaryRestResult clusterSummaryRestResult = new ClusterSummaryRestResult.Builder()
+                .dbCount((long) infoService.getAllDbs().size())
+                .tableCount(tableCount)
+                .diskUsedCapacity(dataUsedCapacity)
+                .diskAvailableCapacity(availableCapacity)
+                .diskTotalCapacity(totalCapacity)
+                .totalBackendNum((long) clusterInfo.getBackends().size())
+                .aliveBackendNum((long) clusterInfo.getAliveBackendNumber())
+                .totalCnNum((long) clusterInfo.getComputeNodes().size())
+                .aliveCnNum((long) clusterInfo.getAliveComputeNodeNumber())
+                .totalFeNum((long) nodeMgr.getAllFrontends().size())
+                .aliveFeNum(nodeMgr.getAliveFrontendsCnt())
+                .build();
 
-        sendResult(request, response, new RestBaseResultV2<>(clusterOverview));
+        sendResult(request, response, new RestBaseResultV2<>(clusterSummaryRestResult));
     }
 
     private int getTblCount(LocalMetastore infoService) {
