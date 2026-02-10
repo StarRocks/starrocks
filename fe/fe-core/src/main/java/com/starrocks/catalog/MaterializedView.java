@@ -37,8 +37,6 @@ import com.starrocks.backup.Status;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
-import com.starrocks.catalog.LightWeightDeltaLakeTable;
-import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
@@ -1193,6 +1191,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private void onReload(boolean isReloadAsync,
                           boolean desiredActive,
                           boolean isThrowException) {
+        // Only skip reload during FE startup/checkpoint scenarios (isReloadAsync=true).
+        if (isReloadAsync && hasReloaded()) {
+            return;
+        }
         try {
             // set inactive first to avoid inconsistent state during reloading
             this.active = false;
@@ -1201,9 +1203,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // reload mv required metadata synchronously
             onReloadImpl();
             // if desired to be active, check whether you can be active
-            if (desiredActive) {
-                checkAndSetActive(isReloadAsync);
-            }
+            checkAndSetActive(isReloadAsync, desiredActive);
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
             // only set inactive when it is desired to be active
@@ -1221,7 +1221,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
-    private void checkAndSetActive(boolean isReloadAsync) {
+    private void checkAndSetActive(boolean isReloadAsync, boolean desiredActive) {
         // to avoid blocking the main replay thread and reduce fe restart time, check isActive asynchronously,
         // this method is time costing because:
         // - if mv contains external base tables, it may need to connect external systems to check table existence
@@ -1230,8 +1230,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (isReloadAsync) {
             CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
                 try {
-                    InactiveReason reason = checkIsActiveOnLoadBlocking();
-                    setInActiveReason(reason);
+                    onReloadImplHeavy();
+
+                    if (desiredActive) {
+                        InactiveReason reason = checkIsActiveOnLoadBlocking();
+                        setInActiveReason(reason);
+                    }
                 } catch (Throwable e) {
                     LOG.error("check and set active failed for mv: {}", this, e);
                     setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
@@ -1241,8 +1245,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 return null;
             });
         } else {
-            InactiveReason reason = checkIsActiveOnLoadBlocking();
-            setInActiveReason(reason);
+            onReloadImplHeavy();
+
+            if (desiredActive) {
+                InactiveReason reason = checkIsActiveOnLoadBlocking();
+                setInActiveReason(reason);
+            }
         }
     }
 
@@ -1276,19 +1284,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     private void onReloadImpl() {
         long startMillis = System.currentTimeMillis();
-        // analyze partition info
-        analyzePartitionInfo();
-        // analyze mv partition exprs
-        analyzePartitionExprs();
-
-        if (tableProperty != null) {
-            tableProperty.buildConstraint();
-        }
-        
-        // register constraints from global state manager
-        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
-        globalConstraintManager.registerConstraint(this);
-
         // register into mv metrics
         try {
             MaterializedViewMetricsRegistry.getInstance().registerMetricsEntity(getMvId());
@@ -1303,7 +1298,29 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Check whether this materialized view can be active on load.
+     * This method needs to visit external catalog to analyze partition exprs,
+     * so it should be called in an async load thread.
+     */
+    private void onReloadImplHeavy() {
+        // analyze partition info
+        analyzePartitionInfo();
+
+        // analyze mv partition exprs
+        analyzePartitionExprs();
+
+        if (tableProperty != null) {
+            tableProperty.buildConstraint();
+        }
+
+        // register constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.registerConstraint(this);
+    }
+
+    /**
+     * Check whether this materialized view can be active on load, since this method may
+     * visit external systems and recursively reload base mvs, it may cost some time.
+     *
      * @return InactiveReason, which contains whether this mv is active and the reason if not active.
      */
     private InactiveReason checkIsActiveOnLoadBlocking() {
@@ -2207,10 +2224,69 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Preconditions.checkArgument(refBaseTablePartitionSlotsOpt.isPresent() &&
                     !refBaseTablePartitionSlotsOpt.get().isEmpty(), String.format("Ref base table " +
                     "partition column slots should not be empty:%s", refBaseTablePartitionSlotsOpt));
+<<<<<<< HEAD
         }
     }
 
     public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
+=======
+
+            String columnsSummary = formatPartitionColumns(refBaseTablePartitionColumnsOpt.get());
+            String exprsSummary = formatPartitionExprs(refBaseTablePartitionExprsOpt.get());
+            String slotsSummary = formatPartitionSlots(refBaseTablePartitionSlotsOpt.get());
+            LOG.info("Materialized view {} ref base table partition summary: columns={}, exprs={}, slots={}",
+                    name, columnsSummary, exprsSummary, slotsSummary);
+        } else {
+            LOG.info("Materialized view {} is un-partitioned", name);
+        }
+    }
+
+    private static String formatPartitionColumns(Map<Table, List<Column>> columns) {
+        return columns.entrySet().stream()
+                .map(entry -> entry.getKey().getName() + "=[" +
+                        entry.getValue().stream().map(Column::getName).collect(Collectors.joining(", ")) + "]")
+                .collect(Collectors.joining("; "));
+    }
+
+    private static String formatPartitionExprs(Map<Table, List<Expr>> exprs) {
+        return exprs.entrySet().stream()
+                .map(entry -> entry.getKey().getName() + "(" + entry.getValue().size() + ")")
+                .collect(Collectors.joining("; "));
+    }
+
+    private static String formatPartitionSlots(Map<Table, List<SlotRef>> slots) {
+        return slots.entrySet().stream()
+                .map(entry -> entry.getKey().getName() + "(" + entry.getValue().size() + ")")
+                .collect(Collectors.joining("; "));
+    }
+
+    public synchronized Pair<Optional<Expr>, Optional<ScalarOperator>> analyzeMVRetentionCondition(
+            ConnectContext connectContext, String retentionCondition) {
+        PartitionInfo partitionInfo = getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return null;
+        }
+
+        final Map<Table, List<Column>> refBaseTablePartitionColumns = getRefBaseTablePartitionColumns(false);
+        if (refBaseTablePartitionColumns == null || refBaseTablePartitionColumns.size() != 1) {
+            return null;
+        }
+        Table refBaseTable = refBaseTablePartitionColumns.keySet().iterator().next();
+        Optional<Expr> retentionConditionExprOpt =
+                MaterializedViewAnalyzer.analyzeMVRetentionCondition(connectContext, this, refBaseTable, retentionCondition);
+        Optional<ScalarOperator> retentionConditionScalarOpOpt = MaterializedViewAnalyzer.analyzeMVRetentionConditionOperator(
+                connectContext, this, refBaseTable, retentionConditionExprOpt);
+        return Pair.create(retentionConditionExprOpt, retentionConditionScalarOpOpt);
+    }
+
+    public void setMVRetentionCondition(Optional<Expr> retentionConditionExprOpt,
+                                        Optional<ScalarOperator> retentionConditionScalarOpOpt) {
+        this.retentionConditionExprOpt = retentionConditionExprOpt;
+        this.retentionConditionScalarOpOpt = retentionConditionScalarOpOpt;
+    }
+
+    public synchronized void analyzeAndSetMVRetentionCondition(ConnectContext connectContext) {
+>>>>>>> 3b41776925 ([BugFix] Fix mv onReload visit external catalog bugs (#68926))
         PartitionInfo partitionInfo = getPartitionInfo();
         if (partitionInfo.isUnPartitioned()) {
             return;

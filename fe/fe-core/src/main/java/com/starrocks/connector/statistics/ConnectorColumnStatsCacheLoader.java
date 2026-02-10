@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnBasicStatsCacheLoader;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.statistic.StatisticExecutor;
@@ -48,6 +49,10 @@ public class ConnectorColumnStatsCacheLoader implements
     public @NonNull CompletableFuture<Optional<ConnectorTableColumnStats>> asyncLoad(@NonNull ConnectorTableColumnKey cacheKey,
                                                                                      @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            if (!GlobalStateMgr.getCurrentState().isReady()) {
+                LOG.debug("Skip loading connector column stats before catalog ready: {}", cacheKey);
+                return Optional.empty();
+            }
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
@@ -78,6 +83,11 @@ public class ConnectorColumnStatsCacheLoader implements
             // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
             for (ConnectorTableColumnKey cacheKey : keys) {
                 result.put(cacheKey, Optional.empty());
+            }
+
+            if (!GlobalStateMgr.getCurrentState().isReady()) {
+                LOG.debug("Skip loading connector column stats before catalog ready, size: {}", result.size());
+                return result;
             }
 
             try {
