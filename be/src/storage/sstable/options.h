@@ -9,7 +9,6 @@
 #include <string>
 
 #include "storage/del_vector.h"
-#include "storage/sstable/sstable_predicate_fwd.h"
 
 namespace starrocks {
 class Cache;
@@ -131,8 +130,6 @@ struct ReadOptions {
     uint64_t max_rss_rowid = 0;
 
     ReadIOStat* stat = nullptr;
-
-    SstablePredicateSPtr predicate = nullptr;
 
     // When sst was generated during data write & compaction process,
     // these two fields are used to indicate the shared rssid & version
