@@ -155,7 +155,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                         "sql_project_exprs:6->5: col_decimal128p20s3 * 3.14)";
 
         String plan = UtFrameUtils.getPlanThriftString(ctx, sql);
-        System.out.println(plan);
         Assertions.assertTrue(plan.contains(expectString));
     }
 
