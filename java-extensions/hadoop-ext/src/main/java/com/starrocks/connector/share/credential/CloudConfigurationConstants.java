@@ -77,6 +77,10 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
     // https://docs.aws.amazon.com/glue/latest/dg/aws-glue-api-catalog-databases.html
     public static final String AWS_GLUE_CATALOG_ID = "aws.glue.catalog_id";
+    // Resource share type for GetDatabases API: ALL, FOREIGN, FEDERATED
+    // Default is ALL to include both local and shared databases
+    // https://docs.aws.amazon.com/glue/latest/webapi/API_GetDatabases.html
+    public static final String AWS_GLUE_RESOURCE_SHARE_TYPE = "aws.glue.resource_share_type";
 
     // Credential for Azure storage
     // For Azure Blob Storage
