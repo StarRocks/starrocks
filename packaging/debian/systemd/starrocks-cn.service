@@ -8,10 +8,8 @@ User=starrocks
 Group=starrocks
 RuntimeDirectory=starrocks
 Environment="STARROCKS_HOME=/usr/lib/starrocks/cn"
-# CN uses the same start_cn.sh found in the BE bin folder
 ExecStart=/usr/lib/starrocks/cn/bin/start_cn.sh
 Restart=on-failure
-# Matches the high limit requested for BE
 LimitNOFILE=262144
 LimitMEMLOCK=infinity
 
