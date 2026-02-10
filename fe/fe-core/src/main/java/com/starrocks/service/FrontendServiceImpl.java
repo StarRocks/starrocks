@@ -1105,7 +1105,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return UserIdentity.ROOT;
         }
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, user, clientIp, passwd.getBytes(StandardCharsets.UTF_8));
+        UserIdentity currentUser = AuthenticationHandler.authenticate(
+                context, user, clientIp, passwd.getBytes(StandardCharsets.UTF_8));
         // check INSERT action on table
         try {
             Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
