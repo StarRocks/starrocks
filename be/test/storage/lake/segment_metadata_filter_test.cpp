@@ -204,20 +204,26 @@ TEST_F(SegmentMetadataFilterTest, test_le_no_overlap) {
     ASSERT_FALSE(SegmentMetadataFilter::may_contain(meta, pred_tree, *_tablet_schema));
 }
 
-// Test: Second sort key column predicate.
+// Test: Second sort key column predicate should NOT be used for pruning.
+// sort_key_min/max are composite tuple values (first/last row in sort order).
+// Only the leading sort key column (position 0) has correct per-column min/max.
+// For non-leading columns, the tuple values are NOT per-column min/max.
 TEST_F(SegmentMetadataFilterTest, test_second_sort_key_column) {
-    // Segment has c0 range [10, 100], c1 range [20, 200]
+    // Segment composite tuple: min=(10, 20), max=(100, 200)
+    // But c1's actual per-column min/max in the segment could be anything.
     SegmentMetadataPB meta = create_segment_meta({10, 20}, {100, 200});
 
-    // Predicate: c1 = 50 (within range)
+    // Predicate: c1 = 50
+    // Non-leading sort key column cannot be used for pruning, must return may_contain=true.
     std::unique_ptr<ColumnPredicate> pred1(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "50"));
     PredicateTree pred_tree1 = create_pred_tree_with_column_pred(pred1.get());
     ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree1, *_tablet_schema));
 
-    // Predicate: c1 = 5 (outside range)
+    // Predicate: c1 = 5 (appears outside composite tuple range, but we cannot prune)
+    // Because composite tuple min/max != per-column min/max for non-leading columns.
     std::unique_ptr<ColumnPredicate> pred2(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "5"));
     PredicateTree pred_tree2 = create_pred_tree_with_column_pred(pred2.get());
-    ASSERT_FALSE(SegmentMetadataFilter::may_contain(meta, pred_tree2, *_tablet_schema));
+    ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree2, *_tablet_schema));
 }
 
 // Test: Non-sort-key column predicate - cannot filter.
@@ -233,14 +239,14 @@ TEST_F(SegmentMetadataFilterTest, test_non_sort_key_column) {
     ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *_tablet_schema));
 }
 
-// Test: AND predicate tree - any child can prune.
+// Test: AND predicate tree - c1 is non-leading sort key, cannot prune.
 TEST_F(SegmentMetadataFilterTest, test_and_predicate_any_can_prune) {
-    // Segment has c0 range [10, 100], c1 range [20, 200]
+    // Segment composite tuple: min=(10, 20), max=(100, 200)
     SegmentMetadataPB meta = create_segment_meta({10, 20}, {100, 200});
 
     // Predicate: c0 = 50 AND c1 = 5
-    // c0 = 50 is within range, c1 = 5 is outside range.
-    // For AND, if any child can prune, the whole AND can prune.
+    // c0 = 50 is within range (cannot prune).
+    // c1 is non-leading sort key column, cannot be used for pruning.
     std::unique_ptr<ColumnPredicate> pred1(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "50"));
     std::unique_ptr<ColumnPredicate> pred2(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "5"));
 
@@ -249,7 +255,26 @@ TEST_F(SegmentMetadataFilterTest, test_and_predicate_any_can_prune) {
     root.add_child(PredicateColumnNode(pred2.get()));
     PredicateTree pred_tree = PredicateTree::create(std::move(root));
 
-    // c1 = 5 can prune, so should return false
+    // Neither can prune: c0=50 is in range, c1 is non-leading. Should return true.
+    ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *_tablet_schema));
+}
+
+// Test: AND predicate - leading sort key outside range can still prune.
+TEST_F(SegmentMetadataFilterTest, test_and_predicate_leading_key_can_prune) {
+    // Segment composite tuple: min=(10, 20), max=(100, 200)
+    SegmentMetadataPB meta = create_segment_meta({10, 20}, {100, 200});
+
+    // Predicate: c0 = 5 AND c1 = 50
+    // c0 = 5 is outside range for leading sort key, CAN prune.
+    std::unique_ptr<ColumnPredicate> pred1(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "5"));
+    std::unique_ptr<ColumnPredicate> pred2(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "50"));
+
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(pred1.get()));
+    root.add_child(PredicateColumnNode(pred2.get()));
+    PredicateTree pred_tree = PredicateTree::create(std::move(root));
+
+    // c0 = 5 can prune (leading key outside range), so should return false.
     ASSERT_FALSE(SegmentMetadataFilter::may_contain(meta, pred_tree, *_tablet_schema));
 }
 
@@ -504,6 +529,131 @@ TEST_F(SegmentMetadataFilterTest, test_in_predicate_partial_inside) {
 
     // 50 is within range, should match
     ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *_tablet_schema));
+}
+
+// Test: Non-leading sort key with custom ORDER BY — the exact bug scenario.
+// Table: PRIMARY KEY(c0, c1) ORDER BY(c2, c0, c1)
+// sort_key_idxes = [2, 0, 1]
+// Query: WHERE c0 = X
+// c0 is at sort_key_pos=1 (non-leading). The composite tuple min/max at position 1
+// are NOT the actual per-column min/max of c0. Must NOT prune.
+TEST_F(SegmentMetadataFilterTest, test_non_leading_sort_key_custom_order_by) {
+    // Create schema: c0 INT (key), c1 INT (key), c2 INT (not key)
+    // ORDER BY(c2, c0, c1) => sort_key_idxes = [2, 0, 1]
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(2);
+
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    auto* c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("c1");
+    c1->set_type("INT");
+    c1->set_is_key(true);
+    c1->set_is_nullable(false);
+
+    auto* c2 = schema_pb.add_column();
+    c2->set_unique_id(2);
+    c2->set_name("c2");
+    c2->set_type("INT");
+    c2->set_is_key(false);
+    c2->set_is_nullable(false);
+    c2->set_aggregation("NONE");
+
+    // ORDER BY(c2, c0, c1) => sort_key_idxes = [2, 0, 1]
+    schema_pb.add_sort_key_idxes(2);
+    schema_pb.add_sort_key_idxes(0);
+    schema_pb.add_sort_key_idxes(1);
+
+    auto custom_schema = TabletSchema::create(schema_pb);
+
+    // Simulate a segment sorted by (c2, c0, c1).
+    // Composite min row: (c2=1, c0=500, c1=10)  — first row in sort order
+    // Composite max row: (c2=99, c0=50, c1=90)   — last row in sort order
+    // Actual c0 values in segment could range from e.g. 10 to 900.
+    // The composite tuple gives c0 "min"=500, c0 "max"=50 — which is WRONG as per-column min/max.
+    SegmentMetadataPB meta;
+    auto* min_tuple = meta.mutable_sort_key_min();
+    *min_tuple->add_values() = make_int_variant(1);   // c2 min (leading, correct)
+    *min_tuple->add_values() = make_int_variant(500); // c0 from first row (NOT per-column min)
+    *min_tuple->add_values() = make_int_variant(10);  // c1 from first row (NOT per-column min)
+    auto* max_tuple = meta.mutable_sort_key_max();
+    *max_tuple->add_values() = make_int_variant(99); // c2 max (leading, correct)
+    *max_tuple->add_values() = make_int_variant(50); // c0 from last row (NOT per-column max)
+    *max_tuple->add_values() = make_int_variant(90); // c1 from last row (NOT per-column max)
+    meta.set_num_rows(100);
+
+    // Predicate: c2 = 50 (leading sort key, within range [1, 99]) — should not prune.
+    {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "50"));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *custom_schema));
+    }
+
+    // Predicate: c2 = 200 (leading sort key, outside range [1, 99]) — should prune.
+    {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "200"));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        ASSERT_FALSE(SegmentMetadataFilter::may_contain(meta, pred_tree, *custom_schema));
+    }
+
+    // Predicate: c0 = 100 (non-leading sort key)
+    // Composite tuple gives c0 "range" [500, 50] which is nonsensical.
+    // Before the fix, this would incorrectly prune the segment.
+    // After the fix, non-leading columns must NOT prune.
+    {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "100"));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *custom_schema));
+    }
+
+    // Predicate: c0 = 500 (equals composite min row's c0 value)
+    // Still non-leading, must NOT prune.
+    {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "500"));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *custom_schema));
+    }
+
+    // Predicate: c1 = 5 (non-leading, position 2 in sort key)
+    // Must NOT prune.
+    {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "5"));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *custom_schema));
+    }
+
+    // AND predicate: c2 = 200 AND c0 = 100
+    // c2 = 200 can prune (leading, outside range). c0 = 100 cannot (non-leading).
+    // AND: if any child can prune, the whole AND prunes.
+    {
+        std::unique_ptr<ColumnPredicate> pred1(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "200"));
+        std::unique_ptr<ColumnPredicate> pred2(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "100"));
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode(pred1.get()));
+        root.add_child(PredicateColumnNode(pred2.get()));
+        PredicateTree pred_tree = PredicateTree::create(std::move(root));
+        ASSERT_FALSE(SegmentMetadataFilter::may_contain(meta, pred_tree, *custom_schema));
+    }
+
+    // AND predicate: c2 = 50 AND c0 = 100
+    // c2 = 50 cannot prune (in range). c0 = 100 cannot (non-leading).
+    // Should not prune.
+    {
+        std::unique_ptr<ColumnPredicate> pred1(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "50"));
+        std::unique_ptr<ColumnPredicate> pred2(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "100"));
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode(pred1.get()));
+        root.add_child(PredicateColumnNode(pred2.get()));
+        PredicateTree pred_tree = PredicateTree::create(std::move(root));
+        ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *custom_schema));
+    }
 }
 
 } // namespace starrocks::lake

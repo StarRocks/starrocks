@@ -60,27 +60,15 @@ struct MetadataPruner {
 
         const ColumnId column_id = col_pred->column_id();
 
-        // Find the position of column_id in sort_key_idxes.
-        // The tuple values are stored in sort_key_idxes order, not column ID order.
-        // For example, if sort_key_idxes = [2, 0, 1], then:
-        //   tuple[0] = value of column 2 (first sort key)
-        //   tuple[1] = value of column 0 (second sort key)
-        //   tuple[2] = value of column 1 (third sort key)
-        int sort_key_pos = -1;
-        for (size_t i = 0; i < sort_key_idxes.size(); i++) {
-            if (sort_key_idxes[i] == column_id) {
-                sort_key_pos = static_cast<int>(i);
-                break;
-            }
-        }
-
-        // If column is not in sort key, cannot filter using this metadata.
-        if (sort_key_pos < 0) {
+        // Only the leading sort key column has correct per-column min/max from the
+        // composite sort_key_min/max tuples. Non-leading columns' tuple values are NOT
+        // actual per-column min/max, so we restrict pruning to the leading sort key only.
+        if (sort_key_idxes.empty() || sort_key_idxes[0] != column_id) {
             return false;
         }
 
-        // Build ZoneMapDetail for this column using its position in the sort key tuple.
-        auto detail_or = build_zone_map_detail(min_tuple, max_tuple, sort_key_pos);
+        // Build ZoneMapDetail using position 0 (the leading sort key) in the tuple.
+        auto detail_or = build_zone_map_detail(min_tuple, max_tuple, /*column_idx=*/0);
         if (!detail_or.ok()) {
             return false;
         }
