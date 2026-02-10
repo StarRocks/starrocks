@@ -69,8 +69,8 @@ private:
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info);
 
-TxnLogPtr convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
-                          const PublishTabletInfo& publish_tablet_info);
+StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
+                                    const PublishTabletInfo& publish_tablet_info);
 
 Status publish_resharding_tablet(TabletManager* tablet_manager, const ReshardingTabletInfoPB& resharding_tablet,
                                  int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,

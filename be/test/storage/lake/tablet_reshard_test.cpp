@@ -31,6 +31,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/variant_tuple.h"
 #include "util/filesystem_util.h"
@@ -348,6 +349,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
         ASSERT_TRUE(it != tablet_metadatas.end());
         auto* meta = it->second.get();
         ASSERT_EQ(1, meta->rowsets_size());
+        ASSERT_TRUE(meta->rowsets(0).has_range());
+        EXPECT_EQ(meta->rowsets(0).range().SerializeAsString(), meta->range().SerializeAsString());
         EXPECT_GT(meta->rowsets(0).num_rows(), 0);
         EXPECT_GT(meta->rowsets(0).data_size(), 0);
     }
@@ -408,6 +411,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
                                               txn_info, false, tablet_metadatas, tablet_ranges));
 
     auto merged = tablet_metadatas.at(new_tablet_id);
+    ASSERT_TRUE(merged->has_range());
     const int64_t offset = static_cast<int64_t>(meta1->next_rowset_id()) - 1;
     const uint32_t expected_rowset_id = static_cast<uint32_t>(1 + offset);
 
@@ -415,6 +419,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
     for (const auto& rowset : merged->rowsets()) {
         if (rowset.id() == expected_rowset_id) {
             found_rowset = true;
+            ASSERT_TRUE(rowset.has_range());
+            EXPECT_EQ(rowset.range().SerializeAsString(), meta2->range().SerializeAsString());
             ASSERT_TRUE(rowset.has_max_compact_input_rowset_id());
             EXPECT_EQ(static_cast<uint32_t>(3 + offset), rowset.max_compact_input_rowset_id());
             ASSERT_EQ(1, rowset.del_files_size());
@@ -423,6 +429,17 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
         }
     }
     ASSERT_TRUE(found_rowset);
+
+    bool found_rowset_from_meta1 = false;
+    for (const auto& rowset : merged->rowsets()) {
+        if (rowset.id() == 10) {
+            found_rowset_from_meta1 = true;
+            ASSERT_TRUE(rowset.has_range());
+            EXPECT_EQ(rowset.range().SerializeAsString(), meta1->range().SerializeAsString());
+            break;
+        }
+    }
+    ASSERT_TRUE(found_rowset_from_meta1);
 
     auto rowset_schema_it = merged->rowset_to_schema().find(expected_rowset_id);
     ASSERT_TRUE(rowset_schema_it != merged->rowset_to_schema().end());
@@ -901,6 +918,152 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_segment_overflow) {
     auto st = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
                                               txn_info, false, tablet_metadatas, tablet_ranges);
     EXPECT_TRUE(st.is_invalid_argument());
+}
+
+TEST_F(LakeTabletReshardTest, test_split_cross_publish_sets_rowset_range_in_txn_log) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t old_tablet_id = next_id();
+    const int64_t new_tablet_id = next_id();
+
+    prepare_tablet_dirs(old_tablet_id);
+    prepare_tablet_dirs(new_tablet_id);
+
+    auto old_meta = std::make_shared<TabletMetadataPB>();
+    old_meta->set_id(old_tablet_id);
+    old_meta->set_version(base_version);
+    old_meta->set_next_rowset_id(2);
+    auto* old_range = old_meta->mutable_range();
+    old_range->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+    old_range->set_lower_bound_included(true);
+    old_range->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+    old_range->set_upper_bound_included(false);
+
+    auto* old_rowset = old_meta->add_rowsets();
+    old_rowset->set_id(1);
+    old_rowset->set_overlapped(false);
+    old_rowset->set_num_rows(2);
+    old_rowset->set_data_size(100);
+    old_rowset->add_segments("segment.dat");
+    old_rowset->add_segment_size(100);
+
+    auto new_meta = std::make_shared<TabletMetadataPB>(*old_meta);
+    new_meta->set_id(new_tablet_id);
+    new_meta->set_version(base_version);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(old_meta));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(new_meta));
+
+    TxnLogPB log;
+    log.set_tablet_id(old_tablet_id);
+    log.set_txn_id(100);
+    auto* op_write_rowset = log.mutable_op_write()->mutable_rowset();
+    op_write_rowset->set_overlapped(false);
+    op_write_rowset->set_num_rows(1);
+    op_write_rowset->set_data_size(1);
+    op_write_rowset->add_segments("x.dat");
+    op_write_rowset->add_segment_size(1);
+
+    EXPECT_OK(_tablet_manager->put_txn_log(log));
+
+    lake::PublishTabletInfo tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet_id, new_tablet_id);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(100);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(1);
+    txn_info.set_force_publish(false);
+
+    auto published_or = lake::publish_version(_tablet_manager.get(), tablet_info, base_version, new_version,
+                                              std::span<const TxnInfoPB>(&txn_info, 1), false);
+    ASSERT_OK(published_or.status());
+
+    ASSIGN_OR_ABORT(auto published_meta, _tablet_manager->get_tablet_metadata(new_tablet_id, new_version));
+    ASSERT_GT(published_meta->rowsets_size(), 0);
+    const auto& added_rowset = published_meta->rowsets(published_meta->rowsets_size() - 1);
+    ASSERT_TRUE(added_rowset.has_range());
+    EXPECT_EQ(added_rowset.range().SerializeAsString(), published_meta->range().SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for_splitting) {
+    auto base_metadata = std::make_shared<TabletMetadataPB>();
+    base_metadata->set_id(next_id());
+    base_metadata->set_version(1);
+    base_metadata->set_next_rowset_id(1);
+    base_metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+    base_metadata->mutable_range()->set_lower_bound_included(true);
+    base_metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+    base_metadata->mutable_range()->set_upper_bound_included(false);
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    txn_log->set_tablet_id(base_metadata->id());
+    txn_log->set_txn_id(1000);
+
+    auto set_range = [&](TabletRangePB* range, int lower, int upper) {
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        range->set_upper_bound_included(false);
+    };
+    auto fill_rowset = [&](RowsetMetadataPB* rowset, const std::string& segment_name, int lower, int upper) {
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(1);
+        rowset->add_segments(segment_name);
+        rowset->add_segment_size(1);
+        set_range(rowset->mutable_range(), lower, upper);
+    };
+    auto fill_sstable = [&](PersistentIndexSstablePB* sstable, const std::string& filename) {
+        sstable->set_filename(filename);
+        sstable->set_filesize(1);
+        sstable->set_shared(false);
+    };
+    auto expect_shared_and_range = [&](const RowsetMetadataPB& rowset, int lower, int upper) {
+        ASSERT_EQ(rowset.segments_size(), rowset.shared_segments_size());
+        for (int i = 0; i < rowset.shared_segments_size(); ++i) {
+            EXPECT_TRUE(rowset.shared_segments(i));
+        }
+        TabletRangePB expected_range;
+        set_range(&expected_range, lower, upper);
+        EXPECT_TRUE(rowset.has_range());
+        EXPECT_EQ(expected_range.SerializeAsString(), rowset.range().SerializeAsString());
+    };
+
+    // op_write
+    fill_rowset(txn_log->mutable_op_write()->mutable_rowset(), "op_write.dat", 5, 15);
+    // op_compaction
+    fill_rowset(txn_log->mutable_op_compaction()->mutable_output_rowset(), "op_compaction.dat", 12, 25);
+    fill_sstable(txn_log->mutable_op_compaction()->mutable_output_sstable(), "op_compaction.sst");
+    fill_sstable(txn_log->mutable_op_compaction()->add_output_sstables(), "op_compaction_1.sst");
+    // op_schema_change
+    fill_rowset(txn_log->mutable_op_schema_change()->add_rowsets(), "op_schema_change.dat", 0, 30);
+    // op_replication
+    fill_rowset(txn_log->mutable_op_replication()->add_op_writes()->mutable_rowset(), "op_replication.dat", 18, 30);
+    // op_parallel_compaction
+    auto* op_parallel_compaction = txn_log->mutable_op_parallel_compaction();
+    fill_rowset(op_parallel_compaction->add_subtask_compactions()->mutable_output_rowset(),
+                "op_parallel_compaction.dat", 19, 21);
+    fill_sstable(op_parallel_compaction->mutable_output_sstable(), "op_parallel_compaction.sst");
+    fill_sstable(op_parallel_compaction->add_output_sstables(), "op_parallel_compaction_1.sst");
+
+    lake::PublishTabletInfo publish_tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, txn_log->tablet_id(),
+                                                next_id());
+    ASSIGN_OR_ABORT(auto converted, convert_txn_log(txn_log, base_metadata, publish_tablet_info));
+
+    EXPECT_EQ(publish_tablet_info.get_tablet_id_in_metadata(), converted->tablet_id());
+    expect_shared_and_range(converted->op_write().rowset(), 10, 15);
+    expect_shared_and_range(converted->op_compaction().output_rowset(), 12, 20);
+    ASSERT_TRUE(converted->op_compaction().has_output_sstable());
+    EXPECT_TRUE(converted->op_compaction().output_sstable().shared());
+    ASSERT_EQ(1, converted->op_compaction().output_sstables_size());
+    EXPECT_TRUE(converted->op_compaction().output_sstables(0).shared());
+    expect_shared_and_range(converted->op_schema_change().rowsets(0), 10, 20);
+    expect_shared_and_range(converted->op_replication().op_writes(0).rowset(), 18, 20);
+    expect_shared_and_range(converted->op_parallel_compaction().subtask_compactions(0).output_rowset(), 19, 20);
+    ASSERT_TRUE(converted->op_parallel_compaction().has_output_sstable());
+    EXPECT_TRUE(converted->op_parallel_compaction().output_sstable().shared());
+    ASSERT_EQ(1, converted->op_parallel_compaction().output_sstables_size());
+    EXPECT_TRUE(converted->op_parallel_compaction().output_sstables(0).shared());
 }
 
 } // namespace starrocks
