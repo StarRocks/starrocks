@@ -32,6 +32,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
@@ -129,6 +130,14 @@ public class TableSnapshotRestoreHandlerTest {
         Assertions.assertEquals(updatedPartition.getId(),
                 table.getPhysicalPartitionIdToPartitionId().get(updatedPhysicalPartition.getId()));
         Assertions.assertFalse(table.getPhysicalPartitionIdToPartitionId().containsKey(originalPhysicalPartitionId));
+
+        // Check materialized index
+        Assertions.assertEquals(
+                table.getBaseIndexMetaId(), (long) Deencapsulation.getField(updatedPhysicalPartition, "baseIndexMetaId"));
+        MaterializedIndex baseIndex = updatedPhysicalPartition.getLatestBaseIndex();
+        Assertions.assertNotNull(baseIndex);
+        Assertions.assertEquals(baseIndex, updatedPhysicalPartition.getLatestIndex(table.getBaseIndexMetaId()));
+        Assertions.assertEquals(baseIndex, updatedPhysicalPartition.getIndex(baseIndex.getId()));
     }
 
     private LakeTable createLakeTable() {
