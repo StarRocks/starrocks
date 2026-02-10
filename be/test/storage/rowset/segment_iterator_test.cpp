@@ -30,7 +30,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/olap_common.h"
-#include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -614,6 +613,7 @@ TEST_F(SegmentIteratorTest, testBasicColumnHashIsCongruentFilter) {
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     ASSERT_TRUE(res_chunk->num_rows() == 6);
     ASSERT_TRUE(res_chunk->num_columns() == num_columns);
+<<<<<<< HEAD
 
     std::vector<uint32_t> hashes(num_rows, 0);
     res_chunk->get_column_by_id(0)->crc32_hash(&(hashes)[0], 0, num_rows);
@@ -668,6 +668,8 @@ TEST_F(SegmentIteratorTest, testBasicColumnHashIsCongruentFilter) {
             ASSERT_EQ(binary_1->get_slice(i), Slice(values[index_mod_1[i]]));
         }
     }
+=======
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 }
 
 // Test CHAR column storage with VARCHAR predicate zone map filtering after fast schema evolution

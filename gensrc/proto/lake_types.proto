@@ -38,6 +38,39 @@ message DelvecPagePB {
     optional int64 crc32c_gen_version = 5;
 }
 
+<<<<<<< HEAD
+=======
+message PersistentIndexSstableRangePB {
+    // key range is [start_key, end_key].
+    optional bytes start_key = 1;
+    optional bytes end_key = 2;
+}
+
+message PersistentIndexSstablePB {
+    optional int64 version = 1; // Deprecated
+    optional string filename = 2;
+    optional int64 filesize = 3;
+    // used for rebuild point of persistent index
+    optional uint64 max_rss_rowid = 4;
+    optional bytes encryption_meta = 5;
+    // Whether this file shared by multiple tablets
+    optional bool shared = 6 [default=false];
+    // For sstable generated during data write & compaction process.
+    optional uint32 shared_rssid = 8;
+    optional int64 shared_version = 9;
+    // For sstable generated during compaction process.
+    optional DelvecPagePB delvec = 10;
+    optional PersistentIndexSstableRangePB range = 11;
+    // This file's fileset id. All files under same fileset should be non-overlapped.
+    optional PUniqueId fileset_id = 12;
+}
+
+message PersistentIndexSstableMetaPB {
+    // sstables are ordered with the smaller version on the left.
+    repeated PersistentIndexSstablePB sstables = 1;
+}
+
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 message DelvecCacheKeyPB {
     optional int64 id = 1;
     optional DelvecPagePB delvec_page = 2;
@@ -121,8 +154,12 @@ message RowsetMetadataPB {
     repeated int64 bundle_file_offsets = 14;
     // Whether segments are shared by multiple tablets
     repeated bool shared_segments = 15;
+<<<<<<< HEAD
     // Record Predicate use for filtering all segments for the current rowset
     optional RecordPredicatePB record_predicate = 16;
+=======
+    repeated SegmentMetadataPB segment_metas = 17;
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,

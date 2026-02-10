@@ -253,8 +253,12 @@ set(STORAGE_FILES
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
+<<<<<<< HEAD
     sstable/sstable_predicate.cpp
     sstable/sstable_predicate_utils.cpp
+=======
+    lake/tablet_write_log_manager.cpp
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp
@@ -276,9 +280,18 @@ set(STORAGE_FILES
     index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
     index/vector/tenann/tenann_index_utils.cpp
+<<<<<<< HEAD
     record_predicate/record_predicate_helper.cpp
     record_predicate/column_hash_is_congruent.cpp
     lake/table_schema_service.cpp)
+=======
+    lake/table_schema_service.cpp
+    index/inverted/builtin/builtin_plugin.cpp
+    index/inverted/builtin/builtin_inverted_writer.cpp
+    index/inverted/builtin/builtin_inverted_reader.cpp
+    index/inverted/builtin/builtin_inverted_index_iterator.cpp
+    index/inverted/builtin/builtin_simple_analyzer.cpp)
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)

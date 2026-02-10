@@ -50,9 +50,23 @@ public:
         assert(iter_);
         return iter_->max_rss_rowid();
     }
+<<<<<<< HEAD
     SstablePredicateSPtr predicate() const {
         assert(iter_);
         return iter_->predicate();
+=======
+    uint32_t shared_rssid() const {
+        assert(iter_);
+        return iter_->shared_rssid();
+    }
+    int64_t shared_version() const {
+        assert(iter_);
+        return iter_->shared_version();
+    }
+    DelVectorPtr delvec() const {
+        assert(iter_);
+        return iter_->delvec();
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
     }
     void Next() {
         assert(iter_);

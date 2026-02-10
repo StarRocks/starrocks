@@ -32,8 +32,15 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
+<<<<<<< HEAD
 class Condition;
 struct OlapReaderStatistics;
+=======
+class ColumnAccessPath;
+class DeltaColumnGroupLoader;
+class DelvecLoader;
+class ObjectPool;
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 class RuntimeProfile;
 class TabletSchema;
 class DeltaColumnGroupLoader;
@@ -63,8 +70,11 @@ public:
 
     DisjunctivePredicates delete_predicates;
 
+<<<<<<< HEAD
     RecordPredicateSPtr record_predicate;
 
+=======
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
     // used for updatable tablet to get delvec
     std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;

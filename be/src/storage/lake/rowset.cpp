@@ -24,7 +24,6 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
-#include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -230,19 +229,21 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
     }
     seg_options.reader_type = options.reader_type;
+<<<<<<< HEAD
     if (_metadata->has_record_predicate()) {
         ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
     }
+=======
+    seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.has_preaggregation = options.has_preaggregation;
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);
-    // Append the columns with delete condition and record predicate to segment schema.
+    // Append the columns with delete condition to segment schema.
     std::set<ColumnId> need_added_column;
     seg_options.delete_predicates.get_column_ids(&need_added_column);
-    if (_metadata->has_record_predicate()) {
-        RETURN_IF_ERROR(RecordPredicateHelper::get_column_ids(*seg_options.record_predicate, seg_options.tablet_schema,
-                                                              &need_added_column));
-    }
 
     for (ColumnId cid : need_added_column) {
         const TabletColumn& col = options.tablet_schema->column(cid);
@@ -336,12 +337,29 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
 
+<<<<<<< HEAD
     if (_metadata->has_record_predicate()) {
         ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
         RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
     }
 
     for (auto& seg_ptr : segments) {
+=======
+    SeekRange tablet_range;
+    if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
+        // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
+        // and the data in tablet_metadata->range() has the same lifetime as the rowset
+        ASSIGN_OR_RETURN(tablet_range,
+                         TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
+    }
+
+    for (int i = 0; i < segments.size(); i++) {
+        auto& seg_ptr = segments[i];
+        seg_options.tablet_range = std::nullopt;
+        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
+            seg_options.tablet_range = tablet_range;
+        }
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -376,12 +394,29 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
 
+<<<<<<< HEAD
     if (_metadata->has_record_predicate()) {
         ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
         RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
     }
 
     for (auto& seg_ptr : segments) {
+=======
+    SeekRange tablet_range;
+    if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
+        // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
+        // and the data in tablet_metadata->range() has the same lifetime as the rowset
+        ASSIGN_OR_RETURN(tablet_range,
+                         TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
+    }
+
+    for (int i = 0; i < segments.size(); i++) {
+        auto& seg_ptr = segments[i];
+        seg_options.tablet_range = std::nullopt;
+        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
+            seg_options.tablet_range = tablet_range;
+        }
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;

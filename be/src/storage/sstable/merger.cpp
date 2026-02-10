@@ -128,9 +128,25 @@ public:
         return current_->max_rss_rowid();
     }
 
+<<<<<<< HEAD
     SstablePredicateSPtr predicate() const override {
         assert(Valid());
         return current_->predicate();
+=======
+    uint32_t shared_rssid() const override {
+        assert(Valid());
+        return current_->shared_rssid();
+    }
+
+    int64_t shared_version() const override {
+        assert(Valid());
+        return current_->shared_version();
+    }
+
+    DelVectorPtr delvec() const override {
+        assert(Valid());
+        return current_->delvec();
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
     }
 
 private:

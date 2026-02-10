@@ -17,7 +17,12 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
+<<<<<<< HEAD
 #include "storage/sstable/sstable_predicate_utils.h"
+=======
+#include "storage/sstable/filter_policy.h"
+#include "storage/sstable/table_builder.h"
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 
 namespace starrocks {
 class TxnLogPB;

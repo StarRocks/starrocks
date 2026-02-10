@@ -8,7 +8,11 @@
 #include <memory>
 #include <string>
 
+<<<<<<< HEAD
 #include "storage/sstable/sstable_predicate_fwd.h"
+=======
+#include "storage/del_vector.h"
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 
 namespace starrocks {
 class Cache;
@@ -130,7 +134,20 @@ struct ReadOptions {
 
     ReadIOStat* stat = nullptr;
 
+<<<<<<< HEAD
     SstablePredicateSPtr predicate = nullptr;
+=======
+    // When sst was generated during data write & compaction process,
+    // these two fields are used to indicate the shared rssid & version
+    uint32_t shared_rssid = 0;
+    int64_t shared_version = 0;
+
+    // Mark rows that have been deleted in this sst
+    DelVectorPtr delvec = nullptr;
+
+    // Use for multi-thread read scenario, to avoid multiple threads read same file concurrently
+    RandomAccessFile* file = nullptr;
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 };
 
 // Options that control write operations

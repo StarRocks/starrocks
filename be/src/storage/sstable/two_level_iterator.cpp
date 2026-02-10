@@ -122,7 +122,6 @@ public:
     }
 
     uint64_t max_rss_rowid() const override { return options_.max_rss_rowid; }
-    SstablePredicateSPtr predicate() const override { return options_.predicate; }
 
 private:
     void SaveError(const Status& s) {

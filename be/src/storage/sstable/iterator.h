@@ -5,8 +5,12 @@
 #pragma once
 
 #include "common/status.h"
+<<<<<<< HEAD
 #include "storage/sstable/sstable_predicate_fwd.h"
 #include "util/slice.h"
+=======
+#include "storage/del_vector.h"
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 
 namespace starrocks::sstable {
 
@@ -64,6 +68,7 @@ public:
     // Return the max rss_rowid the iterator contains.
     virtual uint64_t max_rss_rowid() const { return 0; };
 
+<<<<<<< HEAD
     /*
      * Return predicate the iterator contains.
      * Currently, predicate is available for TwoLevelIterator and MergingIterator, because such
@@ -76,6 +81,12 @@ public:
      * evaluation by themselves wherever they want to use it.
     */
     virtual SstablePredicateSPtr predicate() const { return nullptr; }
+=======
+    // Return the shared rssid & version the iterator contains.
+    virtual uint32_t shared_rssid() const { return 0; };
+    virtual int64_t shared_version() const { return 0; };
+    virtual DelVectorPtr delvec() const { return nullptr; };
+>>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 
     // Clients are allowed to register function/arg1/arg2 triples that
     // will be invoked when this iterator is destroyed.
