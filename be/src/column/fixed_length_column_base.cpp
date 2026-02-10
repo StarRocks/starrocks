@@ -20,14 +20,15 @@
 #include "base/types/int128.h"
 #include "base/types/int256.h"
 #include "column/column_filter_range.h"
+#include "column/column_sorter_comparator.h"
 #include "column/mysql_row_buffer.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
-#include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "util/value_generator.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 

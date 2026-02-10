@@ -65,8 +65,7 @@ PARALLEL_TEST(ColumnFilterRangeTest, zero_and_one_masks) {
 
     std::vector<int32_t> values_one = {100, 200, 300, 400, 500};
     Filter one_filter(values_one.size(), 1);
-    size_t one_size =
-            column_filter_range::filter_range<int32_t>(one_filter, values_one.data(), 2, values_one.size());
+    size_t one_size = column_filter_range::filter_range<int32_t>(one_filter, values_one.data(), 2, values_one.size());
     EXPECT_EQ(values_one.size(), one_size);
     EXPECT_EQ(100, values_one[0]);
     EXPECT_EQ(200, values_one[1]);

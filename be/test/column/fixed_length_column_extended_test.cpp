@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "column/fixed_length_column.h"
-
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"

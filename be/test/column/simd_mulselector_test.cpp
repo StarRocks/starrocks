@@ -21,7 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
 #include "types/logical_type.h"
-#include "util/value_generator.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 

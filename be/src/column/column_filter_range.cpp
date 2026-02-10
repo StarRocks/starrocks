@@ -28,8 +28,8 @@
 #include "base/phmap/phmap.h"
 #include "base/simd/simd.h"
 #include "base/types/decimal12.h"
-#include "base/types/int96.h"
 #include "base/types/int256.h"
+#include "base/types/int96.h"
 #include "base/types/uint24.h"
 #include "types/date_value.h"
 #include "types/decimalv2_value.h"
@@ -149,8 +149,8 @@ size_t t_filter_range(const Filter& filter, T* dst_data, const T* src_data, size
 }
 
 // Explicit instantiation for t_filter_range
-#define INSTANTIATE_T_FILTER_RANGE(T)                                                                  \
-    template size_t t_filter_range<T, true>(const Filter&, T*, const T*, size_t, size_t);            \
+#define INSTANTIATE_T_FILTER_RANGE(T)                                                     \
+    template size_t t_filter_range<T, true>(const Filter&, T*, const T*, size_t, size_t); \
     template size_t t_filter_range<T, false>(const Filter&, T*, const T*, size_t, size_t);
 
 INSTANTIATE_T_FILTER_RANGE(int8_t)

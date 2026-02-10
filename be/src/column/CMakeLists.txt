@@ -23,6 +23,8 @@ add_library(ColumnCore STATIC
         german_string.cpp
         object_column.cpp
         variant_column.cpp
+        fixed_length_column_base.cpp
+        fixed_length_column.cpp
 )
 
 add_library(Column STATIC
@@ -39,8 +41,6 @@ add_library(Column STATIC
         datum_convert.cpp
         datum_tuple.cpp
         field.cpp
-        fixed_length_column_base.cpp
-        fixed_length_column.cpp
         nullable_column.cpp
         schema.cpp
         binary_column.cpp
