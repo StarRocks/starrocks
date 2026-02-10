@@ -1250,7 +1250,12 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
         Map<String, ScalarOperator> leftExprMap = new HashMap<>();
         Map<String, ScalarOperator> rightExprMap = new HashMap<>();
+<<<<<<< HEAD
         
+=======
+        List<Pair<ScalarOperator, ScalarOperator>> predicatePairs = new ArrayList<>();
+
+>>>>>>> b6bec6f429 ([BugFix] Fix FULL OUTER JOIN USING with constant subqueries (#69028))
         for (ScalarOperator conjunct : conjuncts) {
             Preconditions.checkState(conjunct instanceof BinaryPredicateOperator,
                     "USING join should only have binary predicates, but got: %s", conjunct.getClass());
@@ -1261,7 +1266,12 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             
             ScalarOperator leftExpr = binaryPred.getChild(0);
             ScalarOperator rightExpr = binaryPred.getChild(1);
+<<<<<<< HEAD
             
+=======
+            predicatePairs.add(new Pair<>(leftExpr, rightExpr));
+
+>>>>>>> b6bec6f429 ([BugFix] Fix FULL OUTER JOIN USING with constant subqueries (#69028))
             String leftColName = extractBaseColumnName(leftExpr);
             String rightColName = extractBaseColumnName(rightExpr);
             
@@ -1273,11 +1283,24 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             }
         }
 
+        int fallbackIdx = 0;
         for (String colName : usingColumns) {
             String lowerColName = colName.toLowerCase();
             ScalarOperator leftExpr = leftExprMap.get(lowerColName);
             ScalarOperator rightExpr = rightExprMap.get(lowerColName);
+<<<<<<< HEAD
             
+=======
+
+            if (leftExpr == null || rightExpr == null) {
+                if (fallbackIdx < predicatePairs.size()) {
+                    Pair<ScalarOperator, ScalarOperator> fallback = predicatePairs.get(fallbackIdx++);
+                    leftExpr = leftExpr == null ? fallback.first : leftExpr;
+                    rightExpr = rightExpr == null ? fallback.second : rightExpr;
+                }
+            }
+
+>>>>>>> b6bec6f429 ([BugFix] Fix FULL OUTER JOIN USING with constant subqueries (#69028))
             if (leftExpr != null && rightExpr != null) {
                 Type commonType = Type.getCommonType(leftExpr.getType(), rightExpr.getType());
                 if (!commonType.isValid()) {
