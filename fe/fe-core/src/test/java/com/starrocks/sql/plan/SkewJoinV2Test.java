@@ -247,6 +247,59 @@ public class SkewJoinV2Test extends PlanTestBase {
     }
 
     @Test
+    public void testSkewJoinV2WithLowCardinality() throws Exception {
+        boolean oldMockDictManager = FeConstants.USE_MOCK_DICT_MANAGER;
+        boolean oldLowCardinality = connectContext.getSessionVariable().isEnableLowCardinalityOptimize();
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+
+            String sql = "select " +
+                    "s1.S_ADDRESS, s2.S_ADDRESS from supplier s1 " +
+                    "join[skew|s1.S_SUPPKEY(1,2)] supplier s2 on s1.S_SUPPKEY = s2.S_SUPPKEY";
+            String plan = getVerboseExplain(sql);
+            assertCContains(plan, "11:Decode\n" +
+                    "  |  <dict id 17> : <string id 3>\n" +
+                    "  |  <dict id 18> : <string id 11>\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  10:UNION\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [17: S_ADDRESS, INT, false] | [18: S_ADDRESS, INT, false]\n" +
+                    "  |      [17: S_ADDRESS, INT, false] | [18: S_ADDRESS, INT, false]\n" +
+                    "  |  pass-through-operands: all\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  |----9:Project\n" +
+                    "  |    |  output columns:\n" +
+                    "  |    |  17 <-> [17: S_ADDRESS, INT, false]\n" +
+                    "  |    |  18 <-> [18: S_ADDRESS, INT, false]\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    8:HASH JOIN\n" +
+                    "  |    |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |    |  equal join conjunct: [1: S_SUPPKEY, INT, false] = [9: S_SUPPKEY, INT, false]\n" +
+                    "  |    |  build runtime filters:\n" +
+                    "  |    |  - filter_id = 1, build_expr = (9: S_SUPPKEY), remote = false\n" +
+                    "  |    |  output columns: 17, 18\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    |----7:EXCHANGE\n" +
+                    "  |    |       distribution type: BROADCAST\n" +
+                    "  |    |       cardinality: 1\n" +
+                    "  |    |    \n" +
+                    "  |    6:EXCHANGE\n" +
+                    "  |       distribution type: ROUND_ROBIN\n" +
+                    "  |       cardinality: 1\n" +
+                    "  |       probe runtime filters:\n" +
+                    "  |       - filter_id = 1, probe_expr = (1: S_SUPPKEY)");
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = oldMockDictManager;
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(oldLowCardinality);
+        }
+    }
+
+    @Test
     public void testSkewJoinV2WithComplexPredicate1() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on abs(v1) = abs(v4) ";
         String sqlPlan = getVerboseExplain(sql);

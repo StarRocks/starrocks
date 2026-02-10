@@ -14,7 +14,6 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -64,6 +63,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.google.common.collect.Lists.newArrayList;
 
 /* rewrite the tree top down
  * if one shuffle join op is decided as skew, rewrite it as below and do not visit its children
@@ -225,7 +226,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     localExchangerType, originalShuffleJoinOperator.getLimit());
 
             OptExpression newShuffleJoin = OptExpression.builder().setOp(newShuffleJoinOpt).setInputs(
-                            List.of(skewSideSplit.splitConsumerOptForShuffleJoin,
+                            newArrayList(skewSideSplit.splitConsumerOptForShuffleJoin,
                                     nonSkewSideSplit.splitConsumerOptForShuffleJoin))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(opt.getRequiredProperties()).setCost(opt.getCost()).build();
@@ -233,9 +234,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalPropertySet rightBroadcastProperty = new PhysicalPropertySet(
                     DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
             List<PhysicalPropertySet> requiredPropertiesForBroadcastJoin =
-                    Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty);
+                    newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty);
             OptExpression newBroadcastJoin = OptExpression.builder().setOp(newBroadcastJoinOpt).setInputs(
-                            List.of(skewSideSplit.splitConsumerOptForBroadcastJoin,
+                            newArrayList(skewSideSplit.splitConsumerOptForBroadcastJoin,
                                     nonSkewSideSplit.splitConsumerOptForBroadcastJoin))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(requiredPropertiesForBroadcastJoin).setCost(opt.getCost()).build();
@@ -271,19 +272,19 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             }
 
             OptExpression concatenateOptExp = OptExpression.builder().setOp(concatenateOperator)
-                    .setInputs(List.of(newShuffleJoin, rightChildOfConcatenate))
+                    .setInputs(newArrayList(newShuffleJoin, rightChildOfConcatenate))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setCost(opt.getCost()).build();
 
             OptExpression cteAnchorOptExp1 =
                     OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                            .setInputs(List.of(nonSkewSideSplit.splitProducer, concatenateOptExp))
+                            .setInputs(newArrayList(nonSkewSideSplit.splitProducer, concatenateOptExp))
                             .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
 
             // if hit once, we give up rewriting the following subtree
             return OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                    .setInputs(List.of(skewSideSplit.splitProducer, cteAnchorOptExp1))
+                    .setInputs(newArrayList(skewSideSplit.splitProducer, cteAnchorOptExp1))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setCost(opt.getCost()).build();
         }
