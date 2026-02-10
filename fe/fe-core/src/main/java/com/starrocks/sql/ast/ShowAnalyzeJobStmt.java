@@ -26,6 +26,11 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
+>>>>>>> 62dafc7f05 ([Enhancement] support where/order/limit in show stmt (#68834))
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 
@@ -35,7 +40,7 @@ import java.util.List;
 
 public class ShowAnalyzeJobStmt extends ShowStmt {
 
-    public ShowAnalyzeJobStmt(Predicate predicate, List<OrderByElement> orderByElements,
+    public ShowAnalyzeJobStmt(Expr predicate, List<OrderByElement> orderByElements,
                               LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;
