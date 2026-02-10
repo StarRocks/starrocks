@@ -22,7 +22,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+
+import java.util.Map;
 
 public class TaskAnalyzer {
 
@@ -42,6 +45,16 @@ public class TaskAnalyzer {
         submitTaskStmt.setCatalogName(catalogName);
         submitTaskStmt.setDbName(dbName);
         analyzeTaskSchedule(submitTaskStmt.getSchedule());
+    }
+
+    public static void analyzeAlterTaskStmt(AlterTaskStmt alterTaskStmt) {
+        if (alterTaskStmt.getAction() == AlterTaskStmt.AlterAction.SET) {
+            analyzeTaskProperties(alterTaskStmt.getProperties());
+        }
+    }
+
+    public static void analyzeTaskProperties(Map<String, String> properties) {
+        // do nothing
     }
 
     private static void analyzeTaskSchedule(TaskSchedule schedule) {
