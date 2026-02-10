@@ -672,7 +672,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForAddConst() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         // one bucket [1,3) with total 100 rows plus two MCV values
         Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L)), Map.of("1", 20480L, "2", 10240L));
         ColumnStatistic kStats = ColumnStatistic.builder()
@@ -689,9 +689,9 @@ public class ExpressionStatisticsCalculatorTest {
                 .build();
 
         // expr: cast(k as BIGINT) + 10
-        CastOperator cast = new CastOperator(IntegerType.BIGINT, k);
+        CastOperator cast = new CastOperator(Type.BIGINT, k);
         ConstantOperator c10 = ConstantOperator.createBigint(10);
-        CallOperator add = new CallOperator(FunctionSet.ADD, IntegerType.BIGINT, Lists.newArrayList(cast, c10));
+        CallOperator add = new CallOperator(FunctionSet.ADD, Type.BIGINT, Lists.newArrayList(cast, c10));
 
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
@@ -705,7 +705,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForAddConst_commutativeShiftsBuckets() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         // one bucket [1,3) with total 100 rows plus two MCV values
         Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L)), Map.of("1", 20480L, "2", 10240L));
         ColumnStatistic kStats = ColumnStatistic.builder()
@@ -722,9 +722,9 @@ public class ExpressionStatisticsCalculatorTest {
                 .build();
 
         // expr: 10 + cast(k as BIGINT)
-        CastOperator cast = new CastOperator(IntegerType.BIGINT, k);
+        CastOperator cast = new CastOperator(Type.BIGINT, k);
         ConstantOperator c10 = ConstantOperator.createBigint(10);
-        CallOperator add = new CallOperator(FunctionSet.ADD, IntegerType.BIGINT, Lists.newArrayList(c10, cast));
+        CallOperator add = new CallOperator(FunctionSet.ADD, Type.BIGINT, Lists.newArrayList(c10, cast));
 
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
@@ -738,7 +738,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForSubtractConst() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(new Bucket(10, 12, 100L, 0L)), Map.of("10", 10L, "11", 5L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(100)
@@ -747,9 +747,9 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CastOperator cast = new CastOperator(IntegerType.BIGINT, k);
+        CastOperator cast = new CastOperator(Type.BIGINT, k);
         ConstantOperator c10 = ConstantOperator.createBigint(10);
-        CallOperator sub = new CallOperator(FunctionSet.SUBTRACT, IntegerType.BIGINT, Lists.newArrayList(cast, c10));
+        CallOperator sub = new CallOperator(FunctionSet.SUBTRACT, Type.BIGINT, Lists.newArrayList(cast, c10));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(sub, stats);
 
         Assertions.assertNotNull(exprStats.getHistogram());
@@ -761,7 +761,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForSubtractConstMinusX_doesNotShiftBuckets() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L)), Map.of("1", 7L, "2", 3L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(100)
@@ -770,10 +770,10 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CastOperator cast = new CastOperator(IntegerType.BIGINT, k);
+        CastOperator cast = new CastOperator(Type.BIGINT, k);
         ConstantOperator c10 = ConstantOperator.createBigint(10);
         // expr: 10 - cast(k)
-        CallOperator sub = new CallOperator(FunctionSet.SUBTRACT, IntegerType.BIGINT, Lists.newArrayList(c10, cast));
+        CallOperator sub = new CallOperator(FunctionSet.SUBTRACT, Type.BIGINT, Lists.newArrayList(c10, cast));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(sub, stats);
 
         Assertions.assertNotNull(exprStats.getHistogram());
@@ -786,7 +786,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForUnaryNegative() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(), Map.of("1", 100L, "2", 50L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(200)
@@ -795,7 +795,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, IntegerType.INT, Lists.newArrayList(k));
+        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, Type.INT, Lists.newArrayList(k));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(neg, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
         Assertions.assertEquals(100L, exprStats.getHistogram().getMCV().get("-1"));
@@ -804,7 +804,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForUnaryNegative_transformsBuckets() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L)), Map.of("1", 100L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(100)
@@ -813,7 +813,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, IntegerType.INT, Lists.newArrayList(k));
+        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, Type.INT, Lists.newArrayList(k));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(neg, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
         Assertions.assertEquals(100L, exprStats.getHistogram().getMCV().get("-1"));
@@ -824,7 +824,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForUnaryNegative_transformsBuckets_multiBucketCumulativeCounts() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         // two buckets with cumulative counts: [1,3) count=100, [3,5) count=250
         Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L), new Bucket(3, 5, 250L, 0L)),
                 Map.of("1", 10L, "4", 20L));
@@ -835,7 +835,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, IntegerType.INT, Lists.newArrayList(k));
+        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, Type.INT, Lists.newArrayList(k));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(neg, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
         Assertions.assertEquals(2, exprStats.getHistogram().getBuckets().size());
@@ -854,7 +854,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForUnaryAbs_collisionMerge() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(), Map.of("-1", 100L, "1", 200L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(300)
@@ -863,7 +863,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CallOperator abs = new CallOperator(FunctionSet.ABS, IntegerType.INT, Lists.newArrayList(k));
+        CallOperator abs = new CallOperator(FunctionSet.ABS, Type.INT, Lists.newArrayList(k));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(abs, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
         Assertions.assertEquals(300L, exprStats.getHistogram().getMCV().get("1"));
@@ -871,7 +871,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForUnaryAbs_transformsBucketsWhenAllNonPositive() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(new Bucket(-3, -1, 100L, 0L)), Map.of("-2", 10L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(100)
@@ -880,7 +880,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CallOperator abs = new CallOperator(FunctionSet.ABS, IntegerType.INT, Lists.newArrayList(k));
+        CallOperator abs = new CallOperator(FunctionSet.ABS, Type.INT, Lists.newArrayList(k));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(abs, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
         Assertions.assertEquals(10L, exprStats.getHistogram().getMCV().get("2"));
@@ -891,7 +891,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForUnaryAbs_identityWhenAllNonNegativeBuckets() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L), new Bucket(3, 5, 250L, 0L)),
                 Map.of("2", 10L, "4", 20L));
         Statistics stats = Statistics.builder()
@@ -901,7 +901,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CallOperator abs = new CallOperator(FunctionSet.ABS, IntegerType.INT, Lists.newArrayList(k));
+        CallOperator abs = new CallOperator(FunctionSet.ABS, Type.INT, Lists.newArrayList(k));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(abs, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
         Assertions.assertEquals(2, exprStats.getHistogram().getBuckets().size());
@@ -918,7 +918,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationForUnaryPositive_identity() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(), Map.of("1", 10L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(10)
@@ -927,15 +927,15 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(hist).build())
                 .build();
 
-        CallOperator pos = new CallOperator(FunctionSet.POSITIVE, IntegerType.INT, Lists.newArrayList(k));
+        CallOperator pos = new CallOperator(FunctionSet.POSITIVE, Type.INT, Lists.newArrayList(k));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(pos, stats);
         Assertions.assertNotNull(exprStats.getHistogram());
         Assertions.assertEquals(10L, exprStats.getHistogram().getMCV().get("1"));
     }
 
     @Test
-    public void testMcvPropagationFailClosedForNonIntegerType() {
-        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+    public void testMcvPropagationFailClosedForNonType() {
+        ColumnRefOperator k = new ColumnRefOperator(1, Type.INT, "k", true);
         Histogram hist = new Histogram(List.of(), Map.of("1", 10L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(10)
@@ -945,7 +945,7 @@ public class ExpressionStatisticsCalculatorTest {
                 .build();
 
         // expr type is DOUBLE => should not propagate histogram/MCV
-        CallOperator add = new CallOperator(FunctionSet.ADD, FloatType.DOUBLE,
+        CallOperator add = new CallOperator(FunctionSet.ADD, Type.DOUBLE,
                 Lists.newArrayList(k, ConstantOperator.createInt(1)));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
         Assertions.assertNull(exprStats.getHistogram());
@@ -953,8 +953,8 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testMcvPropagationFailClosedForNoConstSide() {
-        ColumnRefOperator k1 = new ColumnRefOperator(1, IntegerType.INT, "k1", true);
-        ColumnRefOperator k2 = new ColumnRefOperator(2, IntegerType.INT, "k2", true);
+        ColumnRefOperator k1 = new ColumnRefOperator(1, Type.INT, "k1", true);
+        ColumnRefOperator k2 = new ColumnRefOperator(2, Type.INT, "k2", true);
         Histogram hist = new Histogram(List.of(), Map.of("1", 10L));
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(10)
@@ -966,7 +966,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .build())
                 .build();
 
-        CallOperator add = new CallOperator(FunctionSet.ADD, IntegerType.BIGINT, Lists.newArrayList(k1, k2));
+        CallOperator add = new CallOperator(FunctionSet.ADD, Type.BIGINT, Lists.newArrayList(k1, k2));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
         Assertions.assertNull(exprStats.getHistogram());
     }
