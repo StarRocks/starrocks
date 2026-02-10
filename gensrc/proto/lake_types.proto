@@ -61,6 +61,8 @@ message PersistentIndexSstablePB {
     optional PersistentIndexSstableRangePB range = 11;
     // This file's fileset id. All files under same fileset should be non-overlapped.
     optional PUniqueId fileset_id = 12;
+    // Offset applied to rssid when reusing sstables across tablets (e.g., tablet merge).
+    optional int32 rssid_offset = 13 [default = 0];
 }
 
 message PersistentIndexSstableMetaPB {

@@ -102,6 +102,15 @@ protected:
         return seg_name;
     }
 
+    std::string generate_segment_file_for_tablet(int64_t tablet_id, int64_t txn_id) {
+        auto seg_name = lake::gen_segment_filename(txn_id);
+        auto seg_path = _tablet_mgr->segment_location(tablet_id, seg_name);
+        ASSIGN_OR_ABORT(auto f, fs::new_writable_file(seg_path));
+        CHECK_OK(f->append(seg_path));
+        CHECK_OK(f->close());
+        return seg_name;
+    }
+
     TuplePB generate_sort_key(int value) {
         DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(value));
         VariantTuple tuple;
@@ -109,6 +118,75 @@ protected:
         TuplePB tuplePB;
         tuple.to_proto(&tuplePB);
         return tuplePB;
+    }
+
+    void create_tablet_metadata_with_range(int64_t tablet_id, int64_t version, int lower_key, int upper_key) {
+        auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(version);
+        metadata->set_next_rowset_id(2);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        rowset->add_segments("seg_" + std::to_string(tablet_id) + "_0");
+        rowset->add_segment_size(100);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
+        segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
+        segment_meta->set_num_rows(10);
+
+        auto* range = metadata->mutable_range();
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower_key));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key(upper_key));
+        range->set_upper_bound_included(false);
+
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+    }
+
+    void create_pk_tablet_with_delvec_range(int64_t tablet_id, int64_t version, int lower_key, int upper_key) {
+        auto metadata = lake::generate_simple_tablet_metadata(PRIMARY_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(version);
+        metadata->set_next_rowset_id(2);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        rowset->add_segments("seg_" + std::to_string(tablet_id) + "_0");
+        rowset->add_segment_size(100);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
+        segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
+        segment_meta->set_num_rows(10);
+
+        auto* range = metadata->mutable_range();
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower_key));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key(upper_key));
+        range->set_upper_bound_included(false);
+
+        _tablet_id = metadata->id();
+        auto tablet = std::make_shared<lake::Tablet>(_tablet_mgr, _tablet_id);
+        lake::MetaFileBuilder builder(*tablet, metadata);
+
+        DelVector dv;
+        dv.set_empty();
+        std::shared_ptr<DelVector> ndv;
+        std::vector<uint32_t> del_ids;
+        del_ids.reserve(3);
+        for (uint32_t i = 0; i < 3; ++i) {
+            del_ids.push_back(i);
+        }
+        dv.add_dels_as_new_version(del_ids, metadata->version(), &ndv);
+        builder.append_delvec(ndv, rowset->id());
+
+        ASSERT_OK(builder.finalize(next_id()));
     }
 
     TxnLog generate_write_txn_log(int num_segments, int64_t num_rows, int64_t data_size) {
@@ -1195,38 +1273,18 @@ TEST_F(LakeServiceTest, test_splitting_tablet_split_count_too_large_fallback) {
 }
 
 TEST_F(LakeServiceTest, test_publish_merging_tablet) {
-    {
-        auto txn_log = generate_write_txn_log(1, 100, 100);
-        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    const int64_t old_tablet_id_1 = _tablet_id;
+    const int64_t old_tablet_id_2 = next_id();
+    const int64_t new_tablet_id = next_id();
 
-        PublishVersionRequest publish_request;
-        publish_request.set_base_version(1);
-        publish_request.set_new_version(2);
-        publish_request.add_tablet_ids(_tablet_id);
-        auto* txn_info = publish_request.add_txn_infos();
-        txn_info->set_txn_id(txn_log.txn_id());
-
-        {
-            PublishVersionResponse response;
-            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
-            ASSERT_EQ(0, response.failed_tablets_size());
-            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        }
-
-        {
-            publish_request.set_enable_aggregate_publish(true);
-            PublishVersionResponse response;
-            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
-            ASSERT_EQ(0, response.failed_tablets_size());
-            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        }
-    }
+    create_tablet_metadata_with_range(old_tablet_id_1, 2, 0, 50);
+    create_tablet_metadata_with_range(old_tablet_id_2, 2, 50, 100);
 
     ReshardingTabletInfoPB resharding_tablet_info;
     auto* merging_tablet_info = resharding_tablet_info.mutable_merging_tablet_info();
-    merging_tablet_info->add_old_tablet_ids(_tablet_id);
-    merging_tablet_info->add_old_tablet_ids(_tablet_id);
-    merging_tablet_info->set_new_tablet_id(next_id());
+    merging_tablet_info->add_old_tablet_ids(old_tablet_id_1);
+    merging_tablet_info->add_old_tablet_ids(old_tablet_id_2);
+    merging_tablet_info->set_new_tablet_id(new_tablet_id);
 
     {
         PublishVersionRequest publish_request;
@@ -1282,48 +1340,158 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
             EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
         }
 
-        // Failed due to not implemented
         {
             PublishVersionResponse response;
             _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
-            ASSERT_EQ(2, response.failed_tablets_size());
-            EXPECT_NE(0, response.status().status_code());
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(1, response.tablet_ranges_size());
+            ASSERT_EQ(0, response.tablet_metas_size());
+
+            ASSIGN_OR_ABORT(auto old_metadata_1, _tablet_mgr->get_tablet_metadata(old_tablet_id_1, 3));
+            ASSERT_EQ(3, old_metadata_1->version());
+            ASSERT_EQ(old_metadata_1->rowsets(0).segments_size(), old_metadata_1->rowsets(0).shared_segments_size());
+            EXPECT_TRUE(old_metadata_1->rowsets(0).shared_segments(0));
+
+            ASSIGN_OR_ABORT(auto old_metadata_2, _tablet_mgr->get_tablet_metadata(old_tablet_id_2, 3));
+            ASSERT_EQ(3, old_metadata_2->version());
+            ASSERT_EQ(old_metadata_2->rowsets(0).segments_size(), old_metadata_2->rowsets(0).shared_segments_size());
+            EXPECT_TRUE(old_metadata_2->rowsets(0).shared_segments(0));
+
+            ASSIGN_OR_ABORT(auto new_metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
+            ASSERT_EQ(new_tablet_id, new_metadata->id());
+            ASSERT_EQ(2, new_metadata->rowsets_size());
+            ASSERT_EQ(3, new_metadata->next_rowset_id());
+            ASSERT_TRUE(new_metadata->has_range());
+            ASSERT_TRUE(new_metadata->range().has_lower_bound());
+            ASSERT_TRUE(new_metadata->range().has_upper_bound());
+            EXPECT_EQ(new_metadata->range().lower_bound().SerializeAsString(),
+                      generate_sort_key(0).SerializeAsString());
+            EXPECT_EQ(new_metadata->range().upper_bound().SerializeAsString(),
+                      generate_sort_key(100).SerializeAsString());
         }
 
         {
             publish_request.set_enable_aggregate_publish(true);
             PublishVersionResponse response;
             _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
-            ASSERT_EQ(2, response.failed_tablets_size());
-            EXPECT_NE(0, response.status().status_code());
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(3, response.tablet_metas_size());
+            ASSERT_EQ(1, response.tablet_ranges_size());
         }
     }
 
     // Test cross publish
     {
-        auto txn_log = generate_write_txn_log(1, 100, 100);
-        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
-
         PublishVersionRequest publish_request;
         publish_request.set_base_version(3);
         publish_request.set_new_version(4);
-        publish_request.add_txn_ids(txn_log.txn_id());
+        int64_t txn_id = next_id();
+
+        TxnLog log1;
+        log1.set_tablet_id(old_tablet_id_1);
+        log1.set_partition_id(_partition_id);
+        log1.set_txn_id(txn_id);
+        log1.mutable_op_write()->mutable_rowset()->add_segments(
+                generate_segment_file_for_tablet(old_tablet_id_1, txn_id));
+        log1.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
+        auto* seg_meta1 = log1.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        seg_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        seg_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(10));
+        seg_meta1->set_num_rows(10);
+        log1.mutable_op_write()->mutable_rowset()->set_data_size(100);
+        log1.mutable_op_write()->mutable_rowset()->set_num_rows(10);
+        log1.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log1));
+
+        TxnLog log2;
+        log2.set_tablet_id(old_tablet_id_2);
+        log2.set_partition_id(_partition_id);
+        log2.set_txn_id(txn_id);
+        log2.mutable_op_write()->mutable_rowset()->add_segments(
+                generate_segment_file_for_tablet(old_tablet_id_2, txn_id));
+        log2.mutable_op_write()->mutable_rowset()->add_segment_size(1024);
+        auto* seg_meta2 = log2.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        seg_meta2->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        seg_meta2->mutable_sort_key_max()->CopyFrom(generate_sort_key(60));
+        seg_meta2->set_num_rows(10);
+        log2.mutable_op_write()->mutable_rowset()->set_data_size(100);
+        log2.mutable_op_write()->mutable_rowset()->set_num_rows(10);
+        log2.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log2));
+
+        publish_request.add_txn_ids(txn_id);
         publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
 
         {
             PublishVersionResponse response;
             _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
-            ASSERT_EQ(2, response.failed_tablets_size());
-            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
         }
 
         {
             publish_request.set_enable_aggregate_publish(true);
             PublishVersionResponse response;
             _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
-            ASSERT_EQ(2, response.failed_tablets_size());
-            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
         }
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_merging_tablet_pk_delvec_merge) {
+    const int64_t old_tablet_id_1 = next_id();
+    const int64_t old_tablet_id_2 = next_id();
+    const int64_t new_tablet_id = next_id();
+
+    create_pk_tablet_with_delvec_range(old_tablet_id_1, 2, 0, 50);
+    create_pk_tablet_with_delvec_range(old_tablet_id_2, 2, 50, 100);
+
+    ReshardingTabletInfoPB resharding_tablet_info;
+    auto* merging_tablet_info = resharding_tablet_info.mutable_merging_tablet_info();
+    merging_tablet_info->add_old_tablet_ids(old_tablet_id_1);
+    merging_tablet_info->add_old_tablet_ids(old_tablet_id_2);
+    merging_tablet_info->set_new_tablet_id(new_tablet_id);
+
+    PublishVersionRequest publish_request;
+    publish_request.set_base_version(2);
+    publish_request.set_new_version(3);
+    auto* txn_info = publish_request.add_txn_infos();
+    txn_info->set_txn_id(next_id());
+    txn_info->set_txn_type(TXN_TABLET_RESHARD);
+    txn_info->set_combined_txn_log(false);
+    txn_info->set_commit_time(12345);
+    txn_info->set_force_publish(false);
+    publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+    ASSERT_EQ(0, response.failed_tablets_size());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    ASSIGN_OR_ABORT(auto old_meta_1, _tablet_mgr->get_tablet_metadata(old_tablet_id_1, 2));
+    ASSIGN_OR_ABORT(auto old_meta_2, _tablet_mgr->get_tablet_metadata(old_tablet_id_2, 2));
+
+    uint64_t old_size_sum = 0;
+    for (const auto& [_, file] : old_meta_1->delvec_meta().version_to_file()) {
+        old_size_sum += file.size();
+    }
+    for (const auto& [_, file] : old_meta_2->delvec_meta().version_to_file()) {
+        old_size_sum += file.size();
+    }
+
+    ASSIGN_OR_ABORT(auto new_meta, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
+    ASSERT_EQ(1, new_meta->delvec_meta().version_to_file_size());
+    ASSERT_EQ(2, new_meta->delvec_meta().delvecs_size());
+    auto iter = new_meta->delvec_meta().version_to_file().find(3);
+    ASSERT_TRUE(iter != new_meta->delvec_meta().version_to_file().end());
+    EXPECT_EQ(old_size_sum, iter->second.size());
+
+    for (const auto& [_, page] : new_meta->delvec_meta().delvecs()) {
+        EXPECT_EQ(3, page.version());
+        EXPECT_LE(page.offset() + page.size(), iter->second.size());
     }
 }
 
