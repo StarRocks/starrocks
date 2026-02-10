@@ -207,6 +207,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         // 8. all agg columns have zonemap index and are not null
         // 9. no deletion happens
         // 10. no partition pruning happens
+        // 11. for range distribution table, disable COUNT(*) fast path because row count statistics may be inaccurate
         if (table.getKeysType() != KeysType.DUP_KEYS) {
             return false;
         }
@@ -228,6 +229,16 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         }
         if (aggregationOperator.getPredicate() != null) {
             return false;
+        }
+        if (table.isRangeDistribution()) {
+            boolean hasCountStar = aggregationOperator.getAggregations().values().stream().anyMatch(aggregator -> {
+                AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
+                return aggregateFunction.functionName().equals(FunctionSet.COUNT) && aggregator.getUsedColumns().isEmpty();
+            });
+            // range distribution table may not have accurate row count statistics, which can lead to incorrect COUNT(*)
+            if (hasCountStar) {
+                return false;
+            }
         }
         MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByMetaId(table.getBaseIndexMetaId());
         boolean hasSchemaChange = currentIndexMeta.getSchemaVersion() > 0;
