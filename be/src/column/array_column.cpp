@@ -17,7 +17,6 @@
 #include <cstdint>
 
 #include "column/column_helper.h"
-#include "column/column_view/column_view.h"
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
@@ -123,7 +122,7 @@ void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
 
 void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_array_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     for (uint32_t i = 0; i < size; i++) {

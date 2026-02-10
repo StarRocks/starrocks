@@ -15,8 +15,6 @@
 #include "column/nullable_column.h"
 
 #include "base/simd/simd.h"
-#include "column/column_helper.h"
-#include "column/column_view/column_view.h"
 #include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
@@ -92,7 +90,7 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
 
 void NullableColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());

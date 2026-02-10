@@ -319,5 +319,15 @@ TEST(ColumnBaseTest, EmptyNullInComplexColumnRejectsScalarColumn) {
     EXPECT_THROW(col.empty_null_in_complex_column(null_data, offsets), std::runtime_error);
 }
 
+TEST(ColumnBaseTest, AppendSelectiveToFailsOnNonViewColumn) {
+    TestIntColumn src;
+    src.append_value(1);
+    TestIntColumn dst;
+    uint32_t indexes[] = {0};
+
+    EXPECT_DEATH(src.append_selective_to(dst, indexes, 0, 1),
+                 "append_selective_to is only supported by view-like columns");
+}
+
 } // namespace
 } // namespace starrocks

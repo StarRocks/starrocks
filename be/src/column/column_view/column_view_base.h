@@ -71,7 +71,7 @@ public:
 
     MutableColumnPtr clone_empty() const override { return _default_column->clone_empty(); }
 
-    virtual void append_to(Column& dest_column, const uint32_t* indexes, uint32_t from, uint32_t count) const;
+    void append_selective_to(Column& dest, const uint32_t* indexes, uint32_t from, uint32_t size) const override;
 
     const uint8_t* raw_data() const override { NOT_SUPPORT(); }
 

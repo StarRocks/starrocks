@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
-add_library(ColumnCore STATIC
+ADD_BE_LIB(ColumnCore
         column.cpp
         column_filter_range.cpp
         column_visitor.cpp
@@ -25,32 +25,32 @@ add_library(ColumnCore STATIC
         variant_column.cpp
         fixed_length_column_base.cpp
         fixed_length_column.cpp
+        binary_column.cpp
+        const_column.cpp
+        nullable_column.cpp
+        decimalv3_column.cpp
+        json_column.cpp
+        adaptive_nullable_column.cpp
+        type_traits.cpp
+        column_view/column_view_base.cpp
 )
 
-add_library(Column STATIC
+ADD_BE_LIB(Column
         array_column.cpp
         array_view_column.cpp
-        adaptive_nullable_column.cpp
         chunk.cpp
         chunk_extra_data.cpp
         column_access_path.cpp
         column_helper.cpp
         append_with_mask.cpp
         column_viewer.cpp
-        const_column.cpp
         datum_convert.cpp
         datum_tuple.cpp
         field.cpp
-        nullable_column.cpp
         schema.cpp
-        binary_column.cpp
-        decimalv3_column.cpp
-        json_column.cpp
         map_column.cpp
         struct_column.cpp
         stream_chunk.cpp
-        type_traits.cpp
-        column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
         column_hash/column_hash.cpp
 )
