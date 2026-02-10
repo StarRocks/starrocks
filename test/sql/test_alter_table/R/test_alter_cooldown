@@ -18,6 +18,9 @@ PROPERTIES (
 );
 -- result:
 -- !result
+ADMIN SET FRONTEND CONFIG ("tablet_sched_storage_cooldown_second" = "15552000");
+-- result:
+-- !result
 INSERT INTO t0 VALUES ('2025-06-20','1',20,20), ('2025-06-21','1',21,21), ('2025-06-22','1',22,22), ('2025-06-23','1',23,23), ('2025-06-24','1',24,24);
 -- result:
 -- !result
@@ -25,5 +28,8 @@ ALTER TABLE t0 SET ("storage_cooldown_ttl" = "2 DAY");
 -- result:
 -- !result
 INSERT INTO t0 VALUES ('2025-06-25','1',25,25);
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("tablet_sched_storage_cooldown_second" = "-1");
 -- result:
 -- !result
