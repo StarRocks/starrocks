@@ -37,19 +37,19 @@ CANCEL ALTER TABLE 语句可以取消正在执行的 ALTER TABLE 操作，包括
 
 1. 取消数据库 `example_db` 中 `example_table` 的修改列操作。
 
-```SQL
+   ```SQL
    CANCEL ALTER TABLE COLUMN FROM example_db.example_table;
    ```
 
 2.  取消数据库 `example_db` 中 `example_table` 的表结构优化操作。
 
-```SQL
+   ```SQL
    CANCEL ALTER TABLE OPTIMIZE FROM example_db.example_table;
    ```
 
 3. 取消当前数据库中 `example_table` 的添加或删除 rollup index 的操作。
 
-```SQL
+   ```SQL
    CANCEL ALTER TABLE ROLLUP FROM example_table;
    ```
 
