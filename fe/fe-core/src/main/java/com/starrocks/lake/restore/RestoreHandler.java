@@ -390,11 +390,8 @@ public class RestoreHandler {
                 for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
                     MaterializedIndex idx = physicalPartition.getIndex(entry2.getKey());
                     origIdToIndex.put(entry2.getKey(), idx);
-                    long newIdxId = tableForRestore.getIndexNameToMetaId().get(entry2.getValue());
-                    if (newIdxId != tableForRestore.getBaseIndexMetaId()) {
-                        // Not base table, delete old index
-                        physicalPartition.deleteMaterializedIndexByMetaId(entry2.getKey());
-                    }
+                    // Delete old indexes
+                    physicalPartition.deleteMaterializedIndexByMetaId(entry2.getKey());
                 }
                 for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
                     MaterializedIndex idx = origIdToIndex.get(entry2.getKey());
@@ -412,8 +409,11 @@ public class RestoreHandler {
                     if (newIdxId == tableForRestore.getBaseIndexMetaId()) {
                         physicalPartition.setShardGroupId(newShardGroupId);
                     }
-                    if (newIdxId != tableForRestore.getBaseIndexMetaId()) {
-                        // Not base table, reset
+                    if (newIdxId == tableForRestore.getBaseIndexMetaId()) {
+                        // Set base index
+                        physicalPartition.setBaseIndex(idx);
+                    } else {
+                        // Create rollup index
                         physicalPartition.createRollupIndex(idx);
                     }
 
