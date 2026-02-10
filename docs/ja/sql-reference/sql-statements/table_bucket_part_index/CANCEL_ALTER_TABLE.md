@@ -61,6 +61,6 @@ CANCEL ALTER TABLE は、実行中の ALTER TABLE 操作の実行をキャンセ
 
    :::
 
-```SQL
+   ```SQL
    CANCEL ALTER TABLE ROLLUP FROM example_table (12345, 12346);
    ```
