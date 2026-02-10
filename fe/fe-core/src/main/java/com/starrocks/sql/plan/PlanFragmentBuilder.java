@@ -3064,7 +3064,7 @@ public class PlanFragmentBuilder {
             setNullableForJoin(joinOperator, leftFragment, rightFragment, context);
 
             JoinNode joinNode;
-            if (node instanceof PhysicalHashJoinOperator) {
+            if (node instanceof PhysicalHashJoinOperator physicalHashJoinOperator) {
                 joinNode = new HashJoinNode(
                         context.getNextNodeId(),
                         leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
@@ -3085,11 +3085,11 @@ public class PlanFragmentBuilder {
                 }
                 joinNode.setCommonSlotMap(commonSlotMap);
                 // set skew join, this is used by runtime filter
-                PhysicalHashJoinOperator physicalHashJoinOperator = (PhysicalHashJoinOperator) node;
                 boolean isSkewJoin = physicalHashJoinOperator.getSkewColumn() != null;
                 if (isSkewJoin) {
                     HashJoinNode hashJoinNode = (HashJoinNode) joinNode;
-                    hashJoinNode.setSkewJoin(isSkewJoin);
+                    hashJoinNode.setSkewJoin(true);
+                    hashJoinNode.setSkewSideChildIndex(physicalHashJoinOperator.getSkewSideChildIndex());
                     if (physicalHashJoinOperator.getSkewJoinFriend().isPresent()) {
                         PhysicalHashJoinOperator skewJoinFriend = physicalHashJoinOperator.getSkewJoinFriend().get();
                         if (distributionMode == JoinNode.DistributionMode.BROADCAST &&

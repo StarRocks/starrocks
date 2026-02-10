@@ -96,6 +96,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected boolean canLocalShuffle = false;
     protected Map<SlotId, Expr> commonSlotMap;
 
+    // Only meaningful for skew join: 0=left child, 1=right child, -1=unknown/not skew join.
+    // TODO: Support runtime filters for right-skew joins safely, instead of disabling them.
+    protected int skewSideChildIndex = -1;
+
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
     }
@@ -156,6 +160,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         PlanNode inner = getChild(1);
         if (!joinOp.isAnyInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
+        }
+
+        // TODO: Enable RF for right-skew joins once we can guarantee GRF contains skew values or
+        //       RF pushdown won't cross the split boundary into the skew branch.
+        if (this instanceof HashJoinNode hashJoinNode) {
+            if (hashJoinNode.isSkewJoin() && getSkewSideChildIndex() == 1) {
+                return;
+            }
         }
 
         if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
@@ -465,6 +477,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     public void setCommonSlotMap(Map<SlotId, Expr> commonSlotMap) {
         this.commonSlotMap = commonSlotMap;
+    }
+
+    public int getSkewSideChildIndex() {
+        return skewSideChildIndex;
+    }
+
+    public void setSkewSideChildIndex(int skewSideChildIndex) {
+        this.skewSideChildIndex = skewSideChildIndex;
     }
 
     @Override
