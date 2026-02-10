@@ -129,11 +129,6 @@ public:
         return children_[current_index_].max_rss_rowid();
     }
 
-    SstablePredicateSPtr predicate() const override {
-        assert(Valid());
-        return children_[current_index_].predicate();
-    }
-
     uint32_t shared_rssid() const override {
         assert(Valid());
         return children_[current_index_].shared_rssid();

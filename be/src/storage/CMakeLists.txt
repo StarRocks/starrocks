@@ -266,8 +266,6 @@ set(STORAGE_FILES
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
     lake/tablet_write_log_manager.cpp
-    sstable/sstable_predicate.cpp
-    sstable/sstable_predicate_utils.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp
@@ -291,8 +289,6 @@ set(STORAGE_FILES
     index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
     index/vector/tenann/tenann_index_utils.cpp
-    record_predicate/record_predicate_helper.cpp
-    record_predicate/column_hash_is_congruent.cpp
     lake/table_schema_service.cpp
     index/inverted/builtin/builtin_plugin.cpp
     index/inverted/builtin/builtin_inverted_writer.cpp
