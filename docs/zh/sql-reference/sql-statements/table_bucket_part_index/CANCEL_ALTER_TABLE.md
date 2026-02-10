@@ -33,7 +33,7 @@ CANCEL ALTER TABLE 语句可以取消正在执行的 ALTER TABLE 操作，包括
 - `db_name`：可选。表所属的数据库的名称。如果未指定此参数，则默认使用您当前的数据库。
 - `table_name`：必需。表名。
 
-## Examples
+## 示例
 
 1. 取消数据库 `example_db` 中 `example_table` 的修改列操作。
 
