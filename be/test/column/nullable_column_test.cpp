@@ -21,8 +21,10 @@
 
 #include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
+#include "column/column_view/column_view_helper.h"
 #include "column/fixed_length_column.h"
 #include "exec/sorting/sorting.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -410,6 +412,37 @@ PARALLEL_TEST(NullableColumnTest, test_replicate) {
     ASSERT_EQ(4, c2->get(4).get_int32());
     ASSERT_EQ(4, c2->get(5).get_int32());
     ASSERT_EQ(4, c2->get(6).get_int32());
+}
+
+PARALLEL_TEST(NullableColumnTest, test_append_selective_from_nullable_view) {
+    TypeDescriptor type_desc(LogicalType::TYPE_INT);
+    auto view_column = ColumnViewHelper::create_column_view(type_desc, true, 0, 0);
+    ASSERT_TRUE(view_column.has_value());
+
+    auto src_col1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    src_col1->append_datum((int32_t)10);
+    src_col1->append_datum({});
+    src_col1->append_datum((int32_t)30);
+    view_column.value()->append(*src_col1);
+
+    auto src_col2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    src_col2->append_datum((int32_t)40);
+    src_col2->append_datum({});
+    view_column.value()->append(*src_col2);
+
+    auto dst_col = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    std::vector<uint32_t> indexes = {4, 1, 0, 3};
+    dst_col->append_selective(*view_column.value(), indexes.data(), 0, indexes.size());
+
+    ASSERT_EQ(indexes.size(), dst_col->size());
+    ASSERT_TRUE(dst_col->has_null());
+    ASSERT_EQ(2, dst_col->null_count());
+    ASSERT_TRUE(dst_col->is_null(0));
+    ASSERT_TRUE(dst_col->is_null(1));
+    ASSERT_FALSE(dst_col->is_null(2));
+    ASSERT_FALSE(dst_col->is_null(3));
+    ASSERT_EQ(10, dst_col->get(2).get_int32());
+    ASSERT_EQ(40, dst_col->get(3).get_int32());
 }
 
 PARALLEL_TEST(NullableColumnTest, test_remove_first_n_values) {

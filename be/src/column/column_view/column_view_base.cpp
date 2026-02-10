@@ -170,7 +170,8 @@ void ColumnViewBase::_append_selective(int habitat_idx, const ColumnPtr& src,
     std::ranges::copy(index_container, _row_idx.begin() + off);
 }
 
-void ColumnViewBase::append_to(Column& dest_column, const uint32_t* indexes, uint32_t from, uint32_t count) const {
+void ColumnViewBase::append_selective_to(Column& dest_column, const uint32_t* indexes, uint32_t from,
+                                         uint32_t count) const {
     _to_view();
     DCHECK(from + count <= _num_rows);
     if (_concat_column) {
