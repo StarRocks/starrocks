@@ -64,6 +64,9 @@ struct MinMaxNAggregateState {
 
     template <bool IsDeepCopy>
     void process(MemPool* mem_pool, const CppType& value) {
+        if (UNLIKELY(n <= 0)) {
+            return;
+        }
         if (heap.size() < static_cast<size_t>(n)) {
             // Heap not full, add directly
             auto copied_value = _copy<IsDeepCopy>(mem_pool, value);

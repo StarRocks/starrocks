@@ -215,9 +215,23 @@ public:
         DCHECK(column->is_binary());
 
         const Slice slice = column->get(row_num).get_slice();
-        double rate = *reinterpret_cast<double*>(slice.data);
-        size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
-        auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
+        constexpr size_t kHeaderSize = sizeof(double) + sizeof(size_t);
+        if (UNLIKELY(slice.size < kHeaderSize)) {
+            ctx->set_error("Invalid percentile_cont merge data: insufficient header");
+            return;
+        }
+        double rate = *reinterpret_cast<const double*>(slice.data);
+        size_t items_size = *reinterpret_cast<const size_t*>(slice.data + sizeof(double));
+        if (UNLIKELY(items_size > (std::numeric_limits<size_t>::max() - kHeaderSize) / sizeof(InputCppType))) {
+            ctx->set_error("Invalid percentile_cont merge data: items size overflow");
+            return;
+        }
+        size_t payload_size = items_size * sizeof(InputCppType);
+        if (UNLIKELY(slice.size < kHeaderSize + payload_size)) {
+            ctx->set_error("Invalid percentile_cont merge data: payload size mismatch");
+            return;
+        }
+        auto data_ptr = slice.data + kHeaderSize;
         auto& grid = this->data(state).grid;
 
         typename PercentileStateTypes<LT>::ItemType vec;
