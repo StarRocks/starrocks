@@ -24,10 +24,16 @@ struct CSVWriterOptions : FileWriterOptions {
     std::string column_terminated_by = ",";
     std::string line_terminated_by = "\n";
     bool include_header = false;
+    std::string collection_delim = ",";
+    std::string mapkey_delim = ",";
+    bool is_hive = false;
 
     inline static std::string COLUMN_TERMINATED_BY = "column_terminated_by";
     inline static std::string LINE_TERMINATED_BY = "line_terminated_by";
     inline static std::string INCLUDE_HEADER = "include_header";
+    inline static std::string COLLECTION_DELIM = "collection_delim";
+    inline static std::string MAPKEY_DELIM = "mapkey_delim";
+    inline static std::string IS_HIVE = "is_hive";
 };
 
 // The primary purpose of this class is to support hive + csv. Use with caution in other cases.
@@ -61,6 +67,7 @@ private:
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
     std::shared_ptr<CSVWriterOptions> _writer_options;
     const std::function<void()> _rollback_action;
+    std::shared_ptr<csv::Converter::Options> _converter_options;
 
     int64_t _num_rows = 0;
     bool _header_written = false;
