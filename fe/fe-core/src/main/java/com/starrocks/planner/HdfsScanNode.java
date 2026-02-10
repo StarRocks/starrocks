@@ -62,16 +62,11 @@ public class HdfsScanNode extends ScanNode {
 
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
-    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         hiveTable = (HiveTable) desc.getTable();
         setupCloudCredential();
-    }
-
-    public HDFSScanNodePredicates getScanNodePredicates() {
-        return scanNodePredicates;
     }
 
     public HiveTable getHiveTable() {

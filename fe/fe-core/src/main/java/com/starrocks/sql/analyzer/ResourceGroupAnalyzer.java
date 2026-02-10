@@ -316,6 +316,33 @@ public class ResourceGroupAnalyzer {
                     }
                     continue;
                 }
+
+                if (key.equalsIgnoreCase(ResourceGroup.PLAN_SCAN_PARTITIONS_LIMIT)) {
+                    long planScanPartitionLimit = Long.parseLong(value);
+                    if (planScanPartitionLimit < 0) {
+                        throw new SemanticException("plan_scan_partitions_limit should greater than 0 or equal to 0");
+                    }
+                    resourceGroup.setPlanScanPartitionsLimit(planScanPartitionLimit);
+                    continue;
+                }
+
+                if (key.equalsIgnoreCase(ResourceGroup.PLAN_SCAN_TABLETS_LIMIT)) {
+                    long planScanTabletsLimit = Long.parseLong(value);
+                    if (planScanTabletsLimit < 0) {
+                        throw new SemanticException("plan_scan_tablets_limit should greater than 0 or equal to 0");
+                    }
+                    resourceGroup.setPlanScanTabletsLimit(planScanTabletsLimit);
+                    continue;
+                }
+
+                if (key.equalsIgnoreCase(ResourceGroup.PLAN_SCAN_ROWS_LIMIT)) {
+                    long planScanRowsLimit = Long.parseLong(value);
+                    if (planScanRowsLimit < 0) {
+                        throw new SemanticException("plan_scan_rows_limit should greater than 0 or equal to 0");
+                    }
+                    resourceGroup.setPlanScanRowsLimit(planScanRowsLimit);
+                    continue;
+                }
             } catch (NumberFormatException exception) {
                 throw new SemanticException(String.format("The value type of the property `%s` must be a valid numeric type, " +
                         "but it is set to `%s`", e.getKey(), e.getValue()));
@@ -397,11 +424,15 @@ public class ResourceGroupAnalyzer {
                     tempResourceGroup.getBigQueryMemLimit() == null &&
                     tempResourceGroup.getBigQueryScanRowsLimit() == null &&
                     tempResourceGroup.getSpillMemLimitThreshold() == null &&
-                    tempResourceGroup.getWarehouses() == null) {
+                    tempResourceGroup.getWarehouses() == null &&
+                    tempResourceGroup.getPlanScanPartitionsLimit() == null &&
+                    tempResourceGroup.getPlanScanRowsLimit() == null &&
+                    tempResourceGroup.getPlanScanTabletsLimit() == null) {
                 throw new SemanticException("At least one of ('cpu_weight','cpu_weight_percent'," +
                         "'exclusive_cpu_cores','exclusive_cpu_percent','mem_limit','max_cpu_cores','concurrency_limit'," +
                         "'big_query_mem_limit', 'big_query_scan_rows_limit','big_query_cpu_second_limit'," +
-                        "'spill_mem_limit_threshold','warehouses') should be specified");
+                        "'spill_mem_limit_threshold','warehouses', 'plan_scan_partitions_limit', 'plan_scan_rows_limit'," +
+                        "'plan_scan_tablets_limit') should be specified");
             }
         }
 

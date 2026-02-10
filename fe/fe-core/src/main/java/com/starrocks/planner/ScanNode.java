@@ -38,6 +38,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
@@ -47,6 +48,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -82,6 +84,17 @@ public abstract class ScanNode extends PlanNode {
     protected TvrVersionRange tvrVersionRange;
 
     private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
+
+    protected long selectedPartitionNum = -1;
+
+    protected final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+
+    protected Long planScanPartitionsLimit = -1L;
+
+    protected Long planScanRowsLimit = -1L;
+
+    protected Long planScanTabletsLimit = -1L;
+
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -145,7 +158,7 @@ public abstract class ScanNode extends PlanNode {
         return false;
     }
 
-    public boolean hasMoreScanRanges() {
+    public boolean hasMoreScanRanges() throws DdlException {
         return false;
     }
 
@@ -275,5 +288,25 @@ public abstract class ScanNode extends PlanNode {
 
     public Map<SlotId, Expr> getHeavyExprs() {
         return heavyExprs;
+    }
+
+    public long getSelectedPartitionNum() {
+        return selectedPartitionNum;
+    }
+
+    public HDFSScanNodePredicates getScanNodePredicates() {
+        return scanNodePredicates;
+    }
+
+    public void setPlanScanPartitionsLimit(Long planScanPartitionsLimit) {
+        this.planScanPartitionsLimit = planScanPartitionsLimit;
+    }
+
+    public void setPlanScanRowsLimit(Long planScanRowsLimit) {
+        this.planScanRowsLimit = planScanRowsLimit;
+    }
+
+    public void setPlanScanTabletsLimit(Long planScanTabletsLimit) {
+        this.planScanTabletsLimit = planScanTabletsLimit;
     }
 }

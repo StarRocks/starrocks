@@ -501,7 +501,6 @@ public class AuditEvent {
             auditEvent.preparedStmtId = preparedStmtId;
             return this;
         }
-
         public AuditEvent build() {
             this.auditEvent.calculateCacheHitRatio();
             return this.auditEvent;

@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -37,7 +38,6 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -56,20 +56,19 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.util.ScanLimitChecker.checkScanLimit;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
 
     protected final IcebergTable icebergTable;
-    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private ScalarOperator icebergJobPlanningPredicate = null;
     private CloudConfiguration cloudConfiguration = null;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
     private volatile boolean reachLimit = false;
-    private int selectedPartitionCount = -1;
     private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
@@ -89,12 +88,19 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
-    public boolean hasMoreScanRanges() {
+    public boolean hasMoreScanRanges() throws DdlException {
         if (scanRangeSource == null) {
             return false;
         }
 
-        return !reachLimit && scanRangeSource.hasMoreOutput();
+        boolean hasMore = scanRangeSource.hasMoreOutput();
+
+        if (!hasMore) {
+            checkScanLimit(getCardinality(), planScanRowsLimit, "scan rows");
+            checkScanLimit(scanRangeSource.selectedPartitionCount(), planScanPartitionsLimit, "scan partitions");
+        }
+
+        return !reachLimit && hasMore;
     }
 
     @Override
@@ -259,9 +265,6 @@ public class IcebergScanNode extends ScanNode {
         return tableFullMORParams;
     }
 
-    public HDFSScanNodePredicates getScanNodePredicates() {
-        return scanNodePredicates;
-    }
 
     public void setBucketProperties(List<BucketProperty> bucketProperties) {
         this.bucketProperties = Optional.of(bucketProperties);
@@ -348,20 +351,20 @@ public class IcebergScanNode extends ScanNode {
                     icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
                     icebergTable.getCatalogTableName(), requestContext);
 
-            if (selectedPartitionCount == -1) {
+            if (selectedPartitionNum == -1) {
                 if (scanRangeSource != null) {
                     // we have to consume all scan ranges to know how many partition been selected.
                     while (scanRangeSource.hasMoreOutput()) {
                         scanRangeSource.getOutputs(1000);
                     }
-                    selectedPartitionCount = scanRangeSource.selectedPartitionCount();
+                    selectedPartitionNum = scanRangeSource.selectedPartitionCount();
                 } else {
-                    selectedPartitionCount = 0;
+                    selectedPartitionNum = 0;
                 }
             }
 
             output.append(prefix).append(
-                    String.format("partitions=%s/%s", selectedPartitionCount,
+                    String.format("partitions=%s/%s", selectedPartitionNum,
                             partitionNames.isEmpty() ? 1 : partitionNames.size()));
             output.append("\n");
 
