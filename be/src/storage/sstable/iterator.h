@@ -6,11 +6,7 @@
 
 #include "common/status.h"
 #include "storage/del_vector.h"
-<<<<<<< HEAD
-#include "storage/sstable/sstable_predicate_fwd.h"
 #include "util/slice.h"
-=======
->>>>>>> 8862b06c89 ([Refactor] Remove unused record predicate metadata and dead predicate code (#69050))
 
 namespace starrocks::sstable {
 
