@@ -139,6 +139,11 @@ public:
         return children_[current_index_].shared_version();
     }
 
+    int32_t rssid_offset() const override {
+        assert(Valid());
+        return children_[current_index_].rssid_offset();
+    }
+
     DelVectorPtr delvec() const override {
         assert(Valid());
         return children_[current_index_].delvec();

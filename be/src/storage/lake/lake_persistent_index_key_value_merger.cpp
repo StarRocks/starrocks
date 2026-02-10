@@ -60,6 +60,16 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
             index_value_ver.mutable_values(i)->set_rssid(iter_ptr->shared_rssid());
         }
     }
+    if (iter_ptr->rssid_offset() != 0) {
+        const int32_t rssid_offset = iter_ptr->rssid_offset();
+        for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
+            const int64_t rssid = static_cast<int64_t>(index_value_ver.values(i).rssid()) + rssid_offset;
+            index_value_ver.mutable_values(i)->set_rssid(static_cast<uint32_t>(rssid));
+        }
+        const uint64_t low = max_rss_rowid & 0xffffffffULL;
+        const int64_t high = static_cast<int64_t>(max_rss_rowid >> 32) + rssid_offset;
+        max_rss_rowid = (static_cast<uint64_t>(high) << 32) | low;
+    }
 
     auto version = index_value_ver.values(0).version();
     auto index_value = build_index_value(index_value_ver.values(0));
