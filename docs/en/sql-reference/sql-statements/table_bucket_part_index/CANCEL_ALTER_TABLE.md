@@ -10,17 +10,17 @@ CANCEL ALTER TABLE cancels the execution of the ongoing ALTER TABLE operation, i
 - Optimize table schema (from v3.2), including modifying the bucketing method and the number of buckets.
 - Create and delete the rollup index.
 
-> **NOTICE**
->
-> - This statement is a synchronous operation.
-> - This statement requires you to have the `ALTER_PRIV` privilege on the table.
-> - This statement only supports canceling asynchronous operations using ALTER TABLE (as mentioned above) and does not support canceling synchronous operations using ALTER TABLE, such as rename.
+:::note
+- This statement is a synchronous operation.
+- This statement requires you to have the `ALTER_PRIV` privilege on the table.
+- This statement only supports canceling asynchronous operations using ALTER TABLE (as mentioned above) and does not support canceling synchronous operations using ALTER TABLE, such as rename.
+:::
 
 ## Syntax
 
-   ```SQL
-   CANCEL ALTER TABLE { COLUMN | OPTIMIZE | ROLLUP } FROM [db_name.]table_name
-   ```
+```SQL
+CANCEL ALTER TABLE { COLUMN | OPTIMIZE | ROLLUP } FROM [db_name.]table_name [ (rollup_job_id [, rollup_job_id]) ]
+```
 
 ## Parameters
 
@@ -28,10 +28,11 @@ CANCEL ALTER TABLE cancels the execution of the ongoing ALTER TABLE operation, i
 
   - If `COLUMN` is specified, this statement cancels operations of modifying columns.
   - If `OPTIMIZE` is specified, this statement cancels operations of optimizing table schema.
-  - If `ROLLUP` is specified, this statement cancels operations of adding or deleting the rollup index.
+  - If `ROLLUP` is specified, this statement cancels operations of adding or deleting the rollup index. You can further specify `rollup_job_id` to cancel specific rollup jobs.
 
 - `db_name`: optional. The name of the database to which the table belongs. If this parameter is not specified, your current database is used by default.
 - `table_name`: required. The table name.
+- `rollup_job_id`: optional. The ID of the rollup job. You can get the rollup job ID using [SHOW ALTER MATERIALIZED VIEW](../materialized_view/SHOW_ALTER_MATERIALIZED_VIEW.md).
 
 ## Examples
 
@@ -54,12 +55,6 @@ CANCEL ALTER TABLE cancels the execution of the ongoing ALTER TABLE operation, i
    ```
 
 4. Cancel specific rollup alterations for `example_table` in the current database using their job IDs.
-
-   :::tip
-
-   You can get the job IDs of your rollups with [`SHOW ALTER MATERIALIZED VIEW](../materialized_view/SHOW_ALTER_MATERIALIZED_VIEW.md)
-
-   :::
 
    ```SQL
    CANCEL ALTER TABLE ROLLUP FROM example_table (12345, 12346);
