@@ -53,9 +53,6 @@ message PersistentIndexSstablePB {
     optional bytes encryption_meta = 5;
     // Whether this file shared by multiple tablets
     optional bool shared = 6 [default=false];
-    // Filter out rows which do not satisfy the predicate
-    // when reading this specific sstable
-    optional PersistentIndexSstablePredicatePB predicate = 7;
     // For sstable generated during data write & compaction process.
     optional uint32 shared_rssid = 8;
     optional int64 shared_version = 9;
@@ -161,8 +158,6 @@ message RowsetMetadataPB {
     repeated int64 bundle_file_offsets = 14;
     // Whether segments are shared by multiple tablets
     repeated bool shared_segments = 15;
-    // Record Predicate use for filtering all segments for the current rowset
-    optional RecordPredicatePB record_predicate = 16;
     repeated SegmentMetadataPB segment_metas = 17;
 }
 

@@ -128,11 +128,6 @@ public:
         return current_->max_rss_rowid();
     }
 
-    SstablePredicateSPtr predicate() const override {
-        assert(Valid());
-        return current_->predicate();
-    }
-
     uint32_t shared_rssid() const override {
         assert(Valid());
         return current_->shared_rssid();

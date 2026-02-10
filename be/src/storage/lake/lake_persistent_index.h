@@ -20,7 +20,6 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
-#include "storage/sstable/sstable_predicate_utils.h"
 #include "storage/sstable/table_builder.h"
 
 namespace starrocks {

@@ -33,7 +33,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/olap_common.h"
-#include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -755,60 +754,6 @@ TEST_F(SegmentIteratorTest, testBasicColumnHashIsCongruentFilter) {
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     ASSERT_TRUE(res_chunk->num_rows() == 6);
     ASSERT_TRUE(res_chunk->num_columns() == num_columns);
-
-    std::vector<uint32_t> hashes(num_rows, 0);
-    res_chunk->get_column_by_id(0)->crc32_hash(&(hashes)[0], 0, num_rows);
-    std::vector<uint32_t> mod_values;
-    std::vector<uint32_t> index_mod_0;
-    std::vector<uint32_t> index_mod_1;
-    for (int i = 0; i < hashes.size(); ++i) {
-        int cur_mod = hashes[i] % 2;
-        if (cur_mod == 0) {
-            index_mod_0.push_back(i);
-        } else {
-            index_mod_1.push_back(i);
-        }
-    }
-
-    {
-        // test remainder = 0
-        RecordPredicatePB record_predicate_pb;
-        record_predicate_pb.set_type(RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT);
-        auto column_hash_is_congruent_pb = record_predicate_pb.mutable_column_hash_is_congruent();
-        column_hash_is_congruent_pb->set_modulus(2);
-        column_hash_is_congruent_pb->set_remainder(0);
-        column_hash_is_congruent_pb->add_column_names("c0");
-        seg_options.record_predicate = std::move(RecordPredicateHelper::create(record_predicate_pb).value());
-        auto chunk_iter_mod_0 = new_segment_iterator(segment, vec_schema, seg_options);
-        auto res_chunk_mod_0 = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
-        ASSERT_OK(chunk_iter_mod_0->get_next(res_chunk_mod_0.get()));
-        ASSERT_TRUE(res_chunk_mod_0->num_rows() == index_mod_0.size());
-        ASSERT_TRUE(res_chunk_mod_0->num_columns() == num_columns);
-        auto binary_0 = down_cast<const BinaryColumn*>(res_chunk_mod_0->get_column_raw_ptr_by_index(0));
-        for (int i = 0; i < index_mod_0.size(); ++i) {
-            ASSERT_EQ(binary_0->get_slice(i), Slice(values[index_mod_0[i]]));
-        }
-    }
-
-    {
-        // test remainder = 1
-        RecordPredicatePB record_predicate_pb;
-        record_predicate_pb.set_type(RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT);
-        auto column_hash_is_congruent_pb = record_predicate_pb.mutable_column_hash_is_congruent();
-        column_hash_is_congruent_pb->set_modulus(2);
-        column_hash_is_congruent_pb->set_remainder(1);
-        column_hash_is_congruent_pb->add_column_names("c0");
-        seg_options.record_predicate = std::move(RecordPredicateHelper::create(record_predicate_pb).value());
-        auto chunk_iter_mod_1 = new_segment_iterator(segment, vec_schema, seg_options);
-        auto res_chunk_mod_1 = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
-        ASSERT_OK(chunk_iter_mod_1->get_next(res_chunk_mod_1.get()));
-        ASSERT_TRUE(res_chunk_mod_1->num_rows() == index_mod_1.size());
-        ASSERT_TRUE(res_chunk_mod_1->num_columns() == num_columns);
-        auto binary_1 = down_cast<const BinaryColumn*>(res_chunk_mod_1->get_column_raw_ptr_by_index(0));
-        for (int i = 0; i < index_mod_1.size(); ++i) {
-            ASSERT_EQ(binary_1->get_slice(i), Slice(values[index_mod_1[i]]));
-        }
-    }
 }
 
 // Test CHAR column storage with VARCHAR predicate zone map filtering after fast schema evolution

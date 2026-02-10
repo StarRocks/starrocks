@@ -18,7 +18,6 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
-#include "storage/sstable/sstable_predicate_utils.h"
 #include "storage/sstable/table_builder.h"
 
 namespace starrocks {
@@ -80,7 +79,6 @@ private:
     bool _merge_base_level = false;
     TabletManager* _tablet_mgr = nullptr;
     int64_t _tablet_id = 0;
-    sstable::CachedPredicateEvaluator _predicate_evaluator;
     // Enable multiple output files. We will generate multiple output files when
     // data volume larger than pk_index_target_file_size.
     bool _enable_multiple_output_files = false;
