@@ -4,7 +4,7 @@ set -e
 # --- Configuration & Arguments ---
 # $1: Version (default: 4.0.4)
 # $2: FE Source directory (default: ../../out/fe)
-# $3: BE Source directory (default: ../../out/be)
+# $3: BE/CN Source directory (default: ../../out/be)
 
 VERSION=${1:-"4.0.4"}
 ARCH="amd64"
@@ -24,7 +24,7 @@ rm -rf target
 mkdir -p target
 
 # Processing Loop
-for COMP in "fe" "be"; do
+for COMP in "fe" "be" "cn"; do
     PACKAGE_NAME="starrocks-$COMP"
     STAGING_DIR="target/${PACKAGE_NAME}_${VERSION}_${ARCH}"
     SRC_DIR=$([ "$COMP" == "fe" ] && echo "$FE_SOURCE" || echo "$BE_SOURCE")
@@ -59,12 +59,21 @@ for COMP in "fe" "be"; do
     cp -r "$SRC_DIR/conf/"* "$STAGING_DIR/etc/starrocks/$COMP/"
     ln -s "/etc/starrocks/$COMP" "$STAGING_DIR/usr/lib/starrocks/$COMP/conf"
 
+    # Cleanup either BE or CN
+    if [ "$COMP" == "be" ]; then
+        rm -f "$STAGING_DIR/etc/starrocks/be/cn.conf"
+    elif [ "$COMP" == "cn" ]; then
+        rm -f "$STAGING_DIR/etc/starrocks/cn/be.conf"
+    fi
+
     # Path Patching (LSB)
     echo "Patching $COMP.conf for standard paths..."
     CONF_FILE="$STAGING_DIR/etc/starrocks/$COMP/$COMP.conf"
 
     if [ "$COMP" == "fe" ]; then
         sed "${SED_I[@]}" "s|^#\?meta_dir.*|meta_dir = /var/lib/starrocks/fe/meta|" "$CONF_FILE"
+    elif [ "$COMP" == "cn" ]; then
+        sed "${SED_I[@]}" "s|^#\?storage_root_path.*|storage_root_path = /var/lib/starrocks/cn/cache|" "$CONF_FILE"
     else
         sed "${SED_I[@]}" "s|^#\?storage_root_path.*|storage_root_path = /var/lib/starrocks/be/storage|" "$CONF_FILE"
     fi
@@ -83,8 +92,7 @@ for COMP in "fe" "be"; do
     
 
     echo "Generating conffiles for $COMP..."
-    find "$STAGING_DIR/etc/starrocks/$COMP" -type f | sed "s|^$STAGING_DIR||" > "$STAGING_DIR/DEBIAN/conffiles"
-    echo "" >> "$STAGING_DIR/DEBIAN/conffiles"
+    find "$STAGING_DIR/etc/starrocks/$COMP" -type f | sed "s|^$STAGING_DIR||" | grep . > "$STAGING_DIR/DEBIAN/conffiles"
 
     # Inject Systemd
     if [ -f "systemd/starrocks-$COMP.service" ]; then
