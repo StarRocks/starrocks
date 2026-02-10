@@ -135,7 +135,7 @@ public class QueryTransformer {
             }
         }
 
-        builder = distinct(builder, queryBlock.isDistinct(), queryBlock.getOutputExpression());
+        builder = distinct(builder, queryBlock, queryBlock.isDistinct(), queryBlock.getOutputExpression());
         // add project to express order by expression
         builder = project(builder, Iterables.concat(queryBlock.getOrderByExpressions(), queryBlock.getOutputExpression()));
         List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
@@ -180,9 +180,10 @@ public class QueryTransformer {
         Scope scope = queryBlock.getOrderScope();
         ExpressionMapping outputTranslations = new ExpressionMapping(scope);
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+        List<Expr> outputExprList = Lists.newArrayList(outputExpression);
 
         int outputExprIdx = 0;
-        for (Expr expression : outputExpression) {
+        for (Expr expression : outputExprList) {
             Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
             ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
                     subOpt.getExpressionMapping(), columnRefFactory,
@@ -652,10 +653,37 @@ public class QueryTransformer {
         return subOpt.withNewRoot(sortOperator);
     }
 
-    private OptExprBuilder distinct(OptExprBuilder subOpt, boolean isDistinct, List<Expr> outputExpressions) {
+    private OptExprBuilder distinct(OptExprBuilder subOpt, SelectRelation queryBlock,
+                                    boolean isDistinct, List<Expr> outputExpressions) {
         if (isDistinct) {
             // Add project before DISTINCT to express select item
             subOpt = project(subOpt, outputExpressions);
+
+            // For duplicated output expressions under DISTINCT, bind their aliases to a single canonical column
+            // to keep ORDER BY keys consistent with DISTINCT output.
+            List<String> outputNames = queryBlock.getColumnOutputNames();
+            Map<Expr, Integer> outputExprCounts = Maps.newHashMap();
+            for (Expr expr : outputExpressions) {
+                outputExprCounts.put(expr, outputExprCounts.getOrDefault(expr, 0) + 1);
+            }
+            for (int i = 0; i < outputExpressions.size() && i < outputNames.size(); i++) {
+                Expr expr = outputExpressions.get(i);
+                if (outputExprCounts.getOrDefault(expr, 0) <= 1) {
+                    continue;
+                }
+                ColumnRefOperator canonicalColumn = (ColumnRefOperator) SqlToScalarOperatorTranslator
+                        .translate(expr, subOpt.getExpressionMapping(), columnRefFactory);
+
+                TableName resolveTableName = queryBlock.getResolveTableName();
+                if (expr instanceof SlotRef) {
+                    resolveTableName = queryBlock.getRelation().getResolveTableName();
+                }
+                SlotRef qualifiedAlias = new SlotRef(resolveTableName, outputNames.get(i));
+                SlotRef unqualifiedAlias = new SlotRef(null, outputNames.get(i));
+                subOpt.getExpressionMapping().getExpressionToColumns().put(unqualifiedAlias, canonicalColumn);
+                subOpt.getExpressionMapping().getExpressionToColumns().put(qualifiedAlias, canonicalColumn);
+            }
+
             List<ColumnRefOperator> groupByColumns = Lists.newArrayList();
             for (Expr expr : outputExpressions) {
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator
