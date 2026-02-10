@@ -45,6 +45,7 @@ import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
@@ -77,6 +78,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
@@ -194,6 +196,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     private Coordinator coord;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPAddress;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPPort;
+    @IgnoreMemoryTrack
     private OlapTable table;
     private long taskDeadlineMs;
     private boolean isCommitting;
@@ -907,14 +910,15 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     public void unprotectedExecute(HttpHeaders headers) throws StarRocksException {
         try (var scope = context.bindScope()) {
-            do_unprotectedExecute(headers);
+            doUnprotectedExecute(headers);
         }
     }
 
-    private void do_unprotectedExecute(HttpHeaders headers) throws StarRocksException {
+    private void doUnprotectedExecute(HttpHeaders headers) throws StarRocksException {
         streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
         streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
-                loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams);
+                loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams, acquireContext);
         if (table == null) {
             getTable();
         }

@@ -17,6 +17,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/common.h"
+#include "runtime/logconfig.h"
 #include "util/stack_util.h"
 
 namespace starrocks::pipeline {

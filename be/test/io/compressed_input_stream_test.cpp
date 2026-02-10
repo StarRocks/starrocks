@@ -15,15 +15,16 @@
 #include "io/compressed_input_stream.h"
 
 #include <gtest/gtest.h>
+#include <lz4/lz4frame.h>
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_posix.h"
 #include "io/string_input_stream.h"
 #include "io_test_base.h"
-#include "testutil/assert.h"
 #include "util/compression/block_compression.h"
-#include "util/compression/stream_compression.h"
+#include "util/compression/stream_decompressor.h"
 namespace starrocks::io {
 
 class CompressedInputStreamTest : public ::testing::Test {
@@ -50,10 +51,10 @@ protected:
         return std::shared_ptr<InputStream>(new StringInputStream(std::move(compressed_data)));
     }
 
-    std::shared_ptr<StreamCompression> LZ4F_decompressor() {
-        std::unique_ptr<StreamCompression> dec;
-        CHECK(StreamCompression::create_decompressor(CompressionTypePB::LZ4_FRAME, &dec).ok());
-        return std::shared_ptr<StreamCompression>(dec.release());
+    std::shared_ptr<StreamDecompressor> LZ4F_decompressor() {
+        auto dec = StreamDecompressor::create_decompressor(CompressionTypePB::LZ4_FRAME);
+        CHECK(dec.ok());
+        return std::shared_ptr<StreamDecompressor>(std::move(dec).value().release());
     }
 
     void test_lz4f_cases(const TestCase& t) {
@@ -77,12 +78,12 @@ protected:
         ASSERT_TRUE(st.ok()) << st.status().message();
         auto file = std::move(st.value());
 
-        using DecompressorPtr = std::shared_ptr<StreamCompression>;
-        std::unique_ptr<StreamCompression> dec;
-        StreamCompression::create_decompressor(type, &dec);
+        using DecompressorPtr = std::shared_ptr<StreamDecompressor>;
+        auto dec = StreamDecompressor::create_decompressor(type);
+        ASSERT_TRUE(dec.ok());
 
         auto compressed_input_stream = std::make_shared<io::CompressedInputStream>(
-                file->stream(), DecompressorPtr(dec.release()), ctx.decompressor_buffer_size);
+                file->stream(), DecompressorPtr(std::move(dec).value().release()), ctx.decompressor_buffer_size);
 
         std::vector<char> vec_buf(ctx.read_buffer_size + 1);
         char* buf = vec_buf.data();
@@ -101,7 +102,71 @@ protected:
         ReadContext ctx;
         read_compressed_file_ctx(type, path, out, ctx);
     }
+
+    std::string gen_normal_frame();
+    std::string gen_empty_frame();
 };
+
+std::string CompressedInputStreamTest::gen_normal_frame() {
+    char src[9] = {};
+    size_t compressed_len = LZ4F_compressFrameBound(sizeof(src), nullptr);
+    std::unique_ptr<char[]> compressed_buf(new char[compressed_len]);
+
+    LZ4F_preferences_t pref = LZ4F_INIT_PREFERENCES;
+    pref.frameInfo.contentSize = sizeof(src);
+    size_t compressed_size = LZ4F_compressFrame(compressed_buf.get(), compressed_len, src, sizeof(src), &pref);
+    EXPECT_EQ(LZ4F_isError(compressed_size), 0);
+    return std::string(compressed_buf.get(), compressed_size);
+}
+
+std::string CompressedInputStreamTest::gen_empty_frame() {
+    size_t compressed_len = LZ4F_compressFrameBound(0, nullptr);
+    std::unique_ptr<char[]> compressed_buf(new char[compressed_len]);
+
+    size_t compressed_size = LZ4F_compressFrame(compressed_buf.get(), compressed_len, nullptr, 0, nullptr);
+    EXPECT_EQ(LZ4F_isError(compressed_size), 0);
+    return std::string(compressed_buf.get(), compressed_size);
+}
+
+TEST_F(CompressedInputStreamTest, test_lz4_bug_1268_1) {
+    // read partial data from compressed stream
+    std::string compressed_str1 = gen_normal_frame();
+    auto input_stream = std::make_shared<StringInputStream>(compressed_str1);
+    auto f = std::make_shared<CompressedInputStream>(input_stream, LZ4F_decompressor(), 15);
+    std::string decompressed_data(1024, '\0');
+    ASSERT_OK(f->read(decompressed_data.data(), 5));
+    f.reset();
+
+    // read another compressed data
+    std::string compressed_str2 = gen_empty_frame();
+    Slice compressed_slice2(compressed_str2);
+    std::string decompressed_str2;
+    decompressed_str2.resize(8192);
+    Slice decompressed_slice2(decompressed_str2);
+    const BlockCompressionCodec* codec = nullptr;
+    EXPECT_OK(get_block_compression_codec(LZ4_FRAME, &codec));
+    EXPECT_OK(codec->decompress(compressed_slice2, &decompressed_slice2));
+}
+
+TEST_F(CompressedInputStreamTest, test_lz4_bug_1268_2) {
+    // read partial data from compressed stream
+    std::string compressed_str1 = gen_normal_frame();
+    auto input_stream = std::make_shared<StringInputStream>(compressed_str1);
+    auto f = std::make_shared<CompressedInputStream>(input_stream, LZ4F_decompressor(), 9);
+    std::string decompressed_data(1024, '\0');
+    ASSERT_OK(f->read(decompressed_data.data(), 5));
+    f.reset();
+
+    // read empty frame
+    std::string empty_frame = gen_empty_frame();
+    const BlockCompressionCodec* codec = nullptr;
+    EXPECT_OK(get_block_compression_codec(LZ4_FRAME, &codec));
+    Slice compressed_slice(empty_frame);
+    std::string decompressed_str;
+    decompressed_str.resize(1024);
+    Slice decompressed_slice2(decompressed_str);
+    ASSERT_OK(codec->decompress(compressed_slice, &decompressed_slice2));
+}
 
 // NOLINTNEXTLINE
 TEST_F(CompressedInputStreamTest, test_LZ4F) {

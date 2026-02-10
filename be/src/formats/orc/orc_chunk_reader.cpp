@@ -21,6 +21,8 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/simd/simd.h"
+#include "base/time/timezone_utils.h"
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
@@ -34,10 +36,8 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "orc_schema_builder.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/stack_util.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 

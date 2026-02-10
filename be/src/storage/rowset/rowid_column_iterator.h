@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "base/container/raw_container.h"
 #include "gutil/casts.h"
 #include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/common.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 

@@ -59,8 +59,8 @@ TEST_F(TabletTest, test_concurrent_add_remove_committed_rowsets) {
     rs_meta_pb->set_end_version(1);
     rs_meta_pb->mutable_tablet_schema()->CopyFrom(schema_pb);
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
-    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta);
     DataDir data_dir("./data_dir");
+    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta, data_dir.get_meta());
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, &data_dir);
     tablet->set_data_dir(&data_dir);
     tablet->add_committed_rowset(rowset);

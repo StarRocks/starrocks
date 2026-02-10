@@ -17,11 +17,11 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/peer_cache_engine.h"
 #include "common/logging.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

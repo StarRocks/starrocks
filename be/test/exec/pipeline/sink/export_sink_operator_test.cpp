@@ -18,12 +18,12 @@
 #include <filesystem>
 #include <thread>
 
+#include "base/concurrency/await.h"
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
-#include "util/await.h"
 
 namespace starrocks::pipeline {
 

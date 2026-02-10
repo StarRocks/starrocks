@@ -14,11 +14,11 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 
+#include "common/simdjson_util.h"
 #include "formats/avro/nullable_column.h"
 #include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
 #include "util/compression/compression_utils.h"
-#include "util/simdjson_util.h"
 
 namespace starrocks {
 

@@ -16,6 +16,8 @@
 
 #include <string_view>
 
+#include "base/container/raw_container.h"
+#include "base/string/slice.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -24,8 +26,6 @@
 #include "exprs/json_functions.h"
 #include "fs/fs.h"
 #include "runtime/stream_load/load_stream_mgr.h"
-#include "util/raw_container.h"
-#include "util/slice.h"
 #ifdef __cplusplus
 extern "C" {
 #endif

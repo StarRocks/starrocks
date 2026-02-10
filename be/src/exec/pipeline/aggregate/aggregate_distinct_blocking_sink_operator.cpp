@@ -14,8 +14,8 @@
 
 #include "aggregate_distinct_blocking_sink_operator.h"
 
+#include "base/concurrency/race_detect.h"
 #include "runtime/current_thread.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 

@@ -373,6 +373,7 @@ jobs:
         with:
           pattern: BUILD-RESULT-*
           path: outputs
+          merge-multiple: false
 
       - name: Analyse Build Artifact
         id: analyse_artifact

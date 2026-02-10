@@ -52,6 +52,8 @@ public:
     bool greater_than(const VariantTuple& key) const;
 
     bool contains(const VariantTuple& key) const { return !(less_than(key) || greater_than(key)); }
+    // Strictly inside the open interval of this range.
+    bool strictly_contains(const VariantTuple& key) const;
 
     void to_proto(TabletRangePB* tablet_range_pb) const;
 
@@ -80,6 +82,16 @@ inline bool TabletRange::greater_than(const VariantTuple& key) const {
 
     int result = _lower_bound.compare(key);
     return result > 0 || (result == 0 && lower_bound_excluded());
+}
+
+inline bool TabletRange::strictly_contains(const VariantTuple& key) const {
+    if (!is_minimum() && key.compare(_lower_bound) <= 0) {
+        return false;
+    }
+    if (!is_maximum() && key.compare(_upper_bound) >= 0) {
+        return false;
+    }
+    return true;
 }
 
 inline void TabletRange::to_proto(TabletRangePB* tablet_range_pb) const {

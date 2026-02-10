@@ -221,6 +221,7 @@ public class FunctionSet {
     public static final String ENDS_WITH = "ends_with";
     public static final String FIND_IN_SET = "find_in_set";
     public static final String GROUP_CONCAT = "group_concat";
+    public static final String STRING_AGG = "string_agg";
     public static final String FORMAT_BYTES = "format_bytes";
     public static final String INSTR = "instr";
     public static final String LCASE = "lcase";
@@ -235,6 +236,7 @@ public class FunctionSet {
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String REGEXP_EXTRACT = "regexp_extract";
     public static final String REGEXP_REPLACE = "regexp_replace";
+    public static final String REGEXP_POSITION = "regexp_position";
     public static final String REPEAT = "repeat";
     public static final String REPLACE = "replace";
     public static final String REVERSE = "reverse";
@@ -275,6 +277,7 @@ public class FunctionSet {
     public static final String JSON_REMOVE = "json_remove";
     public static final String JSON_SET = "json_set";
     public static final String JSON_PRETTY = "json_pretty";
+    public static final String IS_JSON_SCALAR = "is_json_scalar";
 
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
@@ -325,6 +328,8 @@ public class FunctionSet {
     public static final String MIN_BY = "min_by";
     public static final String MIN_BY_V2 = "min_by_v2";
     public static final String MIN = "min";
+    public static final String MIN_N = "min_n";
+    public static final String MAX_N = "max_n";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_APPROX_WEIGHTED = "percentile_approx_weighted";
     public static final String PERCENTILE_CONT = "percentile_cont";
@@ -689,6 +694,7 @@ public class FunctionSet {
                     .addAll(FloatType.FLOAT_TYPES)
                     .addAll(DecimalType.DECIMAL_TYPES)
                     .addAll(STRING_TYPES)
+                    .add(VarbinaryType.VARBINARY)
                     .add(DateType.DATE)
                     .add(DateType.DATETIME)
                     .add(DecimalType.DECIMALV2)
@@ -1323,6 +1329,17 @@ public class FunctionSet {
             // Max
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
+
+            // min_n(value, n) - returns an array of n minimum values
+            Type arrayType = new ArrayType(t);
+            addBuiltin(AggregateFunction.createBuiltin(MIN_N,
+                    Lists.newArrayList(t, IntegerType.INT), arrayType, VarbinaryType.VARBINARY,
+                    false, false, false));
+
+            // max_n(value, n) - returns an array of n maximum values
+            addBuiltin(AggregateFunction.createBuiltin(MAX_N,
+                    Lists.newArrayList(t, IntegerType.INT), arrayType, VarbinaryType.VARBINARY,
+                    false, false, false));
 
             // MAX_BY
             for (Type t1 : SUPPORTED_TYPES) {

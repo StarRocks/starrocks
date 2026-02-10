@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
@@ -25,11 +26,10 @@
 #include "exprs/clone_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
 #include "types/type_checker_manager.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

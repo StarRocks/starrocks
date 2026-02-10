@@ -18,6 +18,7 @@
 #include <cmath>
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -33,7 +34,6 @@
 #include "exprs/literal.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

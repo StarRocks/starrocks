@@ -17,11 +17,11 @@
 
 #include <gtest/gtest.h>
 
+#include "base/url_coding.h"
 #include "common/logging.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/utils.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 

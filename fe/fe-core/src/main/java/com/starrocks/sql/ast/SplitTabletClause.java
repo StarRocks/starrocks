@@ -76,14 +76,16 @@ public class SplitTabletClause extends AlterTableClause {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("SPLIT TABLET\n");
         if (partitionNames != null) {
+            sb.append("SPLIT TABLET ");
             sb.append(partitionNames.toString());
             sb.append('\n');
-        }
-        if (tabletList != null) {
+        } else if (tabletList != null) {
+            sb.append("SPLIT ");
             sb.append(tabletList.toString());
             sb.append('\n');
+        } else {
+            sb.append("SPLIT TABLET\n");
         }
         if (properties != null && !properties.isEmpty()) {
             sb.append("PROPERTIES (\n").append(new PrintableMap<>(properties, "=", true, true)).append(")");

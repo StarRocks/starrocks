@@ -221,8 +221,7 @@ SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& m
     desc.__set_colName(meta.col_name);
     desc.__set_slotIdx(meta.id);
     desc.__set_isMaterialized(true);
-    desc.__set_nullIndicatorByte(0);
-    desc.__set_nullIndicatorBit(-1);
+    desc.__set_isNullable(true);
 
     return {desc};
 }

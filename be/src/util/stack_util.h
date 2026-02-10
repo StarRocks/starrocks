@@ -21,12 +21,9 @@
 #include <typeinfo>
 #include <vector>
 
-namespace starrocks {
+#include "common/stack_util.h"
 
-// Returns the stack trace as a string from the current location.
-// Note: there is a libc bug that causes this not to work on 64 bit machines
-// for recursive calls.
-std::string get_stack_trace();
+namespace starrocks {
 
 std::vector<int> get_thread_id_list();
 bool install_stack_trace_sighandler();

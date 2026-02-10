@@ -18,7 +18,9 @@
 
 #include <sstream>
 
+#include "base/hash/hash_util.hpp"
 #include "column/column_view/column_view.h"
+#include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
@@ -26,8 +28,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/hash_util.hpp"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 

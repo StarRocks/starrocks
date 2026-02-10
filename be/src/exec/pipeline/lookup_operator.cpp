@@ -17,6 +17,9 @@
 #include <memory>
 #include <variant>
 
+#include "base/container/raw_container.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/global_types.h"
@@ -47,10 +50,7 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
-#include "util/defer_op.h"
-#include "util/raw_container.h"
 #include "util/runtime_profile.h"
-#include "util/time.h"
 
 namespace starrocks::pipeline {
 

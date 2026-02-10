@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -99,6 +100,7 @@ import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -243,6 +245,7 @@ import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -409,6 +412,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TableSampleClause;
+import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.ast.TaskName;
@@ -2116,6 +2120,31 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitAlterTaskStatement(com.starrocks.sql.parser.StarRocksParser.AlterTaskStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TaskName taskName = qualifiedNameToTaskName(qualifiedName);
+        boolean ifExists = context.IF() != null;
+
+        AlterTaskStmt.AlterAction action;
+        Map<String, String> properties = null;
+        if (context.RESUME() != null) {
+            action = AlterTaskStmt.AlterAction.RESUME;
+        } else if (context.SUSPEND() != null) {
+            action = AlterTaskStmt.AlterAction.SUSPEND;
+        } else {
+            action = AlterTaskStmt.AlterAction.SET;
+            // get properties
+            List<com.starrocks.sql.parser.StarRocksParser.PropertyContext> propertyContextList = null;
+            com.starrocks.sql.parser.StarRocksParser.PropertyListContext propertyListContext = context.propertyList();
+            if (propertyListContext != null) {
+                propertyContextList = propertyListContext.property();
+            }
+            properties = getProperties(propertyContextList, true);
+        }
+        return new AlterTaskStmt(taskName, ifExists, action, properties, createPos(context));
+    }
+
+    @Override
     public ParseNode visitDropTaskStatement(com.starrocks.sql.parser.StarRocksParser.DropTaskStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TaskName taskName = qualifiedNameToTaskName(qualifiedName);
@@ -2767,6 +2796,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitAdminShowAutomatedSnapshotStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminShowAutomatedSnapshotStatementContext context) {
+        return new AdminShowAutomatedSnapshotStmt(createPos(context));
+    }
+
+    @Override
     public ParseNode visitAdminShowReplicaDistributionStatement(
             com.starrocks.sql.parser.StarRocksParser.AdminShowReplicaDistributionStatementContext context) {
         Token start = context.qualifiedName().start;
@@ -3192,15 +3227,24 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitAnalyzeProfileStatement(
             com.starrocks.sql.parser.StarRocksParser.AnalyzeProfileStatementContext context) {
-        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        String queryId;
         List<Integer> planNodeIds = Lists.newArrayList();
+
+        if (context.string() != null) {
+            // Traditional string literal query_id
+            StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+            queryId = stringLiteral.getStringValue();
+        } else {
+            queryId = ConnectContext.get() == null ? "" : ConnectContext.get().getLastQueryId().toString();
+        }
+
         if (context.INTEGER_VALUE() != null) {
             planNodeIds = context.INTEGER_VALUE().stream()
                     .map(ParseTree::getText)
                     .map(Integer::parseInt)
                     .collect(toList());
         }
-        return new AnalyzeProfileStmt(stringLiteral.getStringValue(), planNodeIds, createPos(context));
+        return new AnalyzeProfileStmt(queryId, planNodeIds, createPos(context));
     }
 
     // ------------------------------------------- Resource Group Statement --------------------------------------------
@@ -5239,6 +5283,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 createPos(context));
     }
 
+    @Override
+    public ParseNode visitMergeTabletClause(com.starrocks.sql.parser.StarRocksParser.MergeTabletClauseContext context) {
+        return new MergeTabletClause(
+                context.partitionNames() == null ? null : (PartitionRef) visit(context.partitionNames()),
+                context.tabletGroupList() == null ? null : (TabletGroupList) visit(context.tabletGroupList()),
+                getCaseSensitiveProperties(context.properties()),
+                createPos(context));
+    }
+
     // ---------Alter partition clause---------
 
     @Override
@@ -6457,6 +6510,20 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitTabletGroupList(com.starrocks.sql.parser.StarRocksParser.TabletGroupListContext context) {
+        List<List<Long>> tabletIdGroups = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.Integer_listContext integerListContext :
+                context.integer_list()) {
+            List<Long> tabletIds = new ArrayList<>();
+            for (TerminalNode integerValueNode : integerListContext.INTEGER_VALUE()) {
+                tabletIds.add(Long.parseLong(integerValueNode.getText()));
+            }
+            tabletIdGroups.add(tabletIds);
+        }
+        return new TabletGroupList(tabletIdGroups, createPos(context));
+    }
+
+    @Override
     public ParseNode visitKeyPartitionList(com.starrocks.sql.parser.StarRocksParser.KeyPartitionListContext context) {
         List<String> partitionColNames = Lists.newArrayList();
         List<Expr> partitionColValues = Lists.newArrayList();
@@ -7577,21 +7644,35 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Expr left = (Expr) visit(context.left);
         Expr right = (Expr) visit(context.right);
         NodePosition pos = createPos(context);
+        ArithmeticExpr.Operator operator = getArithmeticBinaryOperator(context.operator);
         if (left instanceof IntervalLiteral) {
-            return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), right,
-                    ((IntervalLiteral) left).getValue(),
+            IntervalLiteral interval = (IntervalLiteral) left;
+            if (operator.isMultiplyOrDivide()) {
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, value, right);
+                return new IntervalLiteral(arithmetic, interval.getUnitIdentifier(), pos);
+            }
+            return new TimestampArithmeticExpr(operator, right, ((IntervalLiteral) left).getValue(),
                     ((IntervalLiteral) left).getUnitIdentifier().getDescription(),
                     true, pos);
         }
 
         if (right instanceof IntervalLiteral) {
-            return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), left,
-                    ((IntervalLiteral) right).getValue(),
+            IntervalLiteral interval = (IntervalLiteral) right;
+            if (operator.isMultiplyOrDivide()) {
+                if (operator == ArithmeticExpr.Operator.DIVIDE) {
+                    throw new ParsingException("Do not support Expr divide IntervalLiteral syntax");
+                }
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, left, value);
+                return new IntervalLiteral(arithmetic, interval.getUnitIdentifier(), pos);
+            }
+            return new TimestampArithmeticExpr(operator, left, ((IntervalLiteral) right).getValue(),
                     ((IntervalLiteral) right).getUnitIdentifier().getDescription(),
                     false, pos);
         }
 
-        return new ArithmeticExpr(getArithmeticBinaryOperator(context.operator), left, right, pos);
+        return new ArithmeticExpr(operator, left, right, pos);
     }
 
     private static ArithmeticExpr.Operator getArithmeticBinaryOperator(Token operator) {
@@ -7899,6 +7980,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
         String functionName;
         boolean isGroupConcat = false;
+        boolean isStringAgg = false;
         boolean isLegacyGroupConcat = false;
         boolean isDistinct = false;
         if (context.aggregationFunction().COUNT() != null) {
@@ -7918,6 +8000,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
             isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
+        } else if (context.aggregationFunction().STRING_AGG() != null) {
+            // STRING_AGG is an alias for GROUP_CONCAT with PostgreSQL syntax
+            // STRING_AGG(expr, delimiter) -> GROUP_CONCAT(expr SEPARATOR delimiter)
+            functionName = FunctionSet.GROUP_CONCAT;
+            isGroupConcat = true;
+            isStringAgg = true;
         } else {
             functionName = FunctionSet.MAX;
         }
@@ -7939,7 +8027,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
         }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
-        if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
+        if (isGroupConcat && !isStringAgg && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
             if (isLegacyGroupConcat) {
                 if (exprs.size() == 1) {
                     Expr sepExpr;
@@ -8125,6 +8213,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new FunctionCallExpr("floor", visit(context.expression(), Expr.class), pos);
         } else if (context.CEIL() != null) {
             return new FunctionCallExpr("ceil", visit(context.expression(), Expr.class), pos);
+        } else if (context.LAST_QUERY_ID() != null) {
+            return new FunctionCallExpr("last_query_id", Lists.newArrayList(), pos);
         }
 
         String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";

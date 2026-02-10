@@ -37,6 +37,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/string/faststring.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -52,10 +53,9 @@
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
 #include "storage/short_key_index.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
 #include "util/crc32c.h"
-#include "util/faststring.h"
-#include "util/json.h"
 
 namespace starrocks {
 

@@ -35,22 +35,23 @@
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/await.h"
+#include "base/concurrency/countdown_latch.h"
+#include "base/concurrency/spinlock.h"
+#include "base/metrics.h"
+#include "base/random/random.h"
+#include "base/testutil/assert.h"
+#include "base/time/monotime.h"
+#include "base/utility/scoped_cleanup.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "gutil/atomicops.h"
 #include "gutil/port.h"
 #include "gutil/ref_counted.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
 #include "gutil/walltime.h"
-#include "testutil/assert.h"
-#include "util/await.h"
-#include "util/countdown_latch.h"
-#include "util/metrics.h"
-#include "util/monotime.h"
-#include "util/random.h"
-#include "util/scoped_cleanup.h"
-#include "util/spinlock.h"
 
 using std::atomic;
 using std::shared_ptr;

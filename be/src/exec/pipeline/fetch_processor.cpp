@@ -20,6 +20,8 @@
 #include <vector>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
+#include "base/uuid/uuid_generator.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -36,10 +38,8 @@
 #include "runtime/lookup_stream_mgr.h"
 #include "serde/column_array_serde.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
 #include "util/disposable_closure.h"
 #include "util/runtime_profile.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks::pipeline {
 
@@ -93,6 +93,10 @@ bool FetchProcessor::has_output() const {
 }
 
 bool FetchProcessor::is_finished() const {
+    // Consumer (e.g. LIMIT) requested finish; source operator can finish without draining the queue.
+    if (_is_source_finishing) {
+        return true;
+    }
     if (_is_sink_complete) {
         std::shared_lock l(_queue_mu);
         if (_queue.empty()) {
@@ -101,6 +105,16 @@ bool FetchProcessor::is_finished() const {
         }
     }
     return false;
+}
+
+void FetchProcessor::set_source_finishing() {
+    _is_source_finishing = true;
+    // Release unconsumed batch units and current unit immediately so process mem tracker
+    // drops when the consumer finishes early (e.g. LIMIT) instead of when the fragment is destroyed.
+    std::unique_lock l(_queue_mu);
+    std::queue<BatchUnitPtr> empty;
+    _queue.swap(empty);
+    _current_unit = std::make_shared<BatchUnit>();
 }
 
 Status FetchProcessor::set_sink_finishing(RuntimeState* state) {

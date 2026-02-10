@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "exec/spill/spill_fwd.h"
 #include "runtime/runtime_state.h"
-#include "util/slice.h"
 
 namespace starrocks::spill {
 

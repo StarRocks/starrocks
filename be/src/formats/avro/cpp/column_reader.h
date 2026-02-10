@@ -19,7 +19,7 @@
 #include <avrocpp/GenericDatum.hh>
 
 #include "common/status.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

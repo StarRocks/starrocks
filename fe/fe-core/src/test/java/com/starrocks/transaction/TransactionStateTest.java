@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -315,6 +316,18 @@ public class TransactionStateTest {
         assertEquals(2, loadedIndexes.size());
         assertEquals(indexId11, loadedIndexes.get(0).getId());
         assertEquals(indexId21, loadedIndexes.get(1).getId());
+
+        // Add same physicalPartitionId with 2 specific latest indexes failed
+        loadedIndexIds = Lists.newArrayList(indexId12, indexId22);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId11, loadedIndexes.get(0).getId()); // Still indexId11
+        assertEquals(indexId21, loadedIndexes.get(1).getId()); // Still indexId21
+
+        // Clear loadedTblPartitionIndexes
+        Map<Long, Map<Long, List<Long>>> loadedTblPartitionIndexes = Deencapsulation.getField(txn, "loadedTblPartitionIndexes");
+        loadedTblPartitionIndexes.clear();
 
         // Add 2 specific latest indexes
         loadedIndexIds = Lists.newArrayList(indexId12, indexId22);

@@ -15,20 +15,21 @@
 #include "storage/lake/rowset.h"
 
 #include <future>
+#include <unordered_set>
 
 #include "column/datum_convert.h"
+#include "common/config.h"
 #include "runtime/current_thread.h"
-#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/lake_delvec_loader.h"
+#include "storage/lake/segment_metadata_filter.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
-#include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -38,6 +39,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -248,22 +250,15 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
     }
     seg_options.reader_type = options.reader_type;
-    if (_metadata->has_record_predicate()) {
-        ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
-    }
     seg_options.enable_gin_filter = options.enable_gin_filter;
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
     seg_options.has_preaggregation = options.has_preaggregation;
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);
-    // Append the columns with delete condition and record predicate to segment schema.
+    // Append the columns with delete condition to segment schema.
     std::set<ColumnId> need_added_column;
     seg_options.delete_predicates.get_column_ids(&need_added_column);
-    if (_metadata->has_record_predicate()) {
-        RETURN_IF_ERROR(RecordPredicateHelper::get_column_ids(*seg_options.record_predicate, seg_options.tablet_schema,
-                                                              &need_added_column));
-    }
 
     for (ColumnId cid : need_added_column) {
         const TabletColumn& col = options.tablet_schema->column(cid);
@@ -280,9 +275,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     }
 
     std::vector<ChunkIteratorPtr> segment_iterators;
-    if (options.stats) {
-        options.stats->segments_read_count += num_segments();
-    }
 
     SeekRange tablet_range;
     if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
@@ -292,13 +284,48 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
                          TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
     }
 
+    // Check if segment metadata filter can be used.
+    // Apply metadata filter BEFORE loading segments to avoid loading unnecessary segment footers.
+    bool use_metadata_filter = config::enable_lake_segment_metadata_filter && metadata().segment_metas_size() > 0 &&
+                               !options.pred_tree_for_zone_map.empty() && options.tablet_schema != nullptr;
+
+    std::unordered_set<int> skip_segment_idxs;
+    if (use_metadata_filter) {
+        for (int i = 0; i < metadata().segment_metas_size() && i < num_segments(); i++) {
+            const auto& segment_meta = metadata().segment_metas(i);
+            if (!SegmentMetadataFilter::may_contain(segment_meta, options.pred_tree_for_zone_map,
+                                                    *options.tablet_schema)) {
+                skip_segment_idxs.insert(i);
+                if (options.stats) {
+                    // Use num_rows from segment metadata if available, otherwise use 0
+                    int64_t filtered_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
+                    options.stats->segment_metadata_filtered += filtered_rows;
+                    options.stats->segments_metadata_filtered++;
+                }
+                VLOG(2) << "Skipped segment " << i << " by metadata filter, rowset: " << metadata().id();
+            }
+        }
+    }
+
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr));
+    const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
+    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+
+    // Update segments_read_count after filtering
+    if (options.stats) {
+        options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
+    }
+
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];
+        // Skip segments that were filtered by metadata filter (nullptr placeholders)
+        if (seg_ptr == nullptr) {
+            continue;
+        }
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
+
         seg_options.tablet_range = std::nullopt;
         if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
             seg_options.tablet_range = tablet_range;
@@ -371,11 +398,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
 
-    if (_metadata->has_record_predicate()) {
-        ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
-        RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
-    }
-
     SeekRange tablet_range;
     if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
         // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
@@ -423,11 +445,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.version = version;
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
-
-    if (_metadata->has_record_predicate()) {
-        ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
-        RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
-    }
 
     SeekRange tablet_range;
     if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
@@ -496,7 +513,8 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache,
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                             std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments) {
+                             std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
+                             const std::unordered_set<int>* skip_segment_idxs) {
 #if !defined BE_TEST && !defined(BUILD_FORMAT_LIB)
     RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
 #endif
@@ -525,10 +543,28 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     const auto& files_to_offset = metadata().bundle_file_offsets();
     int index = 0;
 
-    std::vector<std::future<std::pair<StatusOr<SegmentPtr>, std::string>>> segment_futures;
-    auto check_status = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name, int seg_id) -> Status {
+    // When parallel loading is enabled, we need to preserve the index mapping between
+    // segments vector and metadata. We use a vector of (index, future) pairs to track
+    // which index each loaded segment should be placed at.
+    std::vector<std::pair<int, std::future<std::pair<StatusOr<SegmentPtr>, std::string>>>> segment_futures;
+
+    // Pre-allocate segments vector to maintain correct index mapping.
+    // This is necessary because when parallel loading is enabled with skip_segment_idxs,
+    // we need to ensure segments[i] corresponds to metadata segment i.
+    bool use_index_mapping = _parallel_load && skip_segment_idxs != nullptr && !skip_segment_idxs->empty();
+    int base_idx = segments->size();
+    if (use_index_mapping) {
+        segments->resize(base_idx + metadata().segments_size());
+    }
+
+    auto check_status_at_index = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name, int seg_id,
+                                     int target_idx) -> Status {
         if (segment_or.ok()) {
-            segments->emplace_back(std::move(segment_or.value()));
+            if (use_index_mapping) {
+                (*segments)[target_idx] = std::move(segment_or.value());
+            } else {
+                segments->emplace_back(std::move(segment_or.value()));
+            }
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
             LOG(WARNING) << "Ignored lost segment " << seg_name;
         } else {
@@ -539,6 +575,19 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     };
 
     for (const auto& seg_name : metadata().segments()) {
+        int current_idx = base_idx + seg_id;
+
+        // Skip segments that are filtered by metadata filter
+        if (skip_segment_idxs != nullptr && skip_segment_idxs->count(seg_id) > 0) {
+            if (!use_index_mapping) {
+                segments->emplace_back(nullptr);
+            }
+            // When use_index_mapping is true, the slot is already nullptr from resize
+            index++;
+            seg_id++;
+            continue;
+        }
+
         std::string segment_path;
         auto lake_io_opts = seg_options.lake_io_opts;
         if (lake_io_opts.location_provider) {
@@ -566,6 +615,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         index++;
 
         if (_parallel_load) {
+            int captured_idx = current_idx;
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
                 auto result = _tablet_mgr->load_segment(segment_info, seg_id, lake_io_opts,
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
@@ -580,26 +630,28 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
                              << ", try to load segment serially, seg_id: " << seg_id;
                 auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id, &footer_size_hint, lake_io_opts,
                                                             lake_io_opts.fill_metadata_cache, _tablet_schema);
-                if (auto status = check_status(segment_or, seg_name, seg_id); !status.ok()) {
+                if (auto status = check_status_at_index(segment_or, seg_name, seg_id, captured_idx); !status.ok()) {
                     return status;
                 }
+            } else {
+                segment_futures.emplace_back(captured_idx, task->get_future());
             }
             seg_id++;
-            segment_futures.push_back(task->get_future());
         } else {
             auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id, &footer_size_hint, lake_io_opts,
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
-            if (auto status = check_status(segment_or, seg_name, seg_id); !status.ok()) {
+            if (auto status = check_status_at_index(segment_or, seg_name, seg_id, current_idx); !status.ok()) {
                 return status;
             }
             seg_id++;
         }
     }
 
-    for (int i = 0; i < segment_futures.size(); i++) {
-        auto result_pair = segment_futures[i].get();
+    for (auto& [target_idx, future] : segment_futures) {
+        auto result_pair = future.get();
         auto segment_or = result_pair.first;
-        if (auto status = check_status(segment_or, result_pair.second, i); !status.ok()) {
+        if (auto status = check_status_at_index(segment_or, result_pair.second, target_idx - base_idx, target_idx);
+            !status.ok()) {
             return status;
         }
     }

@@ -1090,10 +1090,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new TNotifyForwardDeploymentFinishedRespone().setStatus(status);
     }
 
-    private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
+    private UserIdentity checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
         if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
-            return;
+            return UserIdentity.ROOT;
         }
         UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
                 passwd.getBytes(StandardCharsets.UTF_8));
@@ -1107,6 +1107,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
         }
+        return currentUser;
     }
 
     private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
@@ -1631,12 +1632,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (table == null) {
                 throw new StarRocksException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
             }
-            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+            UserIdentity userIdentity = checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
             TableId tableId = new TableId(request.getDb(), request.getTbl());
             StreamLoadKvParams params = new StreamLoadKvParams(request.getParams());
-            RequestLoadResult loadResult = GlobalStateMgr.getCurrentState()
-                    .getBatchWriteMgr().requestLoad(tableId, params, request.getBackend_id(), request.getBackend_host());
+            RequestLoadResult loadResult = GlobalStateMgr.getCurrentState().getBatchWriteMgr().requestLoad(
+                            tableId, params, userIdentity, request.getBackend_id(), request.getBackend_host());
             result.setStatus(loadResult.getStatus());
             if (loadResult.isOk()) {
                 result.setLabel(loadResult.getValue());
@@ -1920,6 +1921,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
+        long txnId = request.getTxn_id();
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        if (txnState == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("immutable partition failed. error: txn %d does not exist", txnId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
@@ -1987,8 +1997,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
-                    buildPartitions(olapTable, physicalPartition, partitions, tPartition);
-                    buildTablets(physicalPartition, tablets, olapTable, computeResource);
+                    buildPartitions(olapTable, physicalPartition, partitions, tPartition, txnState);
+                    buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState);
                 }
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
@@ -2007,7 +2017,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildPartitions(OlapTable olapTable, PhysicalPartition physicalPartition,
-                                        List<TOlapTablePartition> partitions, TOlapTablePartition tPartition) {
+                                        List<TOlapTablePartition> partitions, TOlapTablePartition tPartition,
+                                        TransactionState txnState) {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
@@ -2059,25 +2070,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
+
+        List<Long> indexIds = Lists.newArrayList();
         for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            // Because multiple versions of a materialized index cannot be loaded simultaneously,
+            // the `TOlapTableIndexTablets.index_id` is set to the `index meta id`.
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getMetaId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
                 tTablet.setId(tablet.getId());
-                tTablet.setRange(tablet.getRange().toThrift());
+                if (tablet.getRange() != null) {
+                    tTablet.setRange(tablet.getRange().toThrift());
+                }
                 return tTablet;
             }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
+            indexIds.add(index.getId());
         }
         partitions.add(tPartition);
+        txnState.addPartitionLoadedIndexes(olapTable.getId(), physicalPartition.getId(), indexIds);
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
-                                     OlapTable olapTable, ComputeResource computeResource) throws StarRocksException {
+                                     OlapTable olapTable, ComputeResource computeResource, TransactionState txnState)
+            throws StarRocksException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
-                MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : txnState.getPartitionLoadedIndexes(olapTable.getId(), physicalPartition)) {
             if (olapTable.isCloudNativeTable()) {
                 for (Tablet tablet : index.getTablets()) {
                     try {
@@ -2507,11 +2526,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<Long> indexIds = Lists.newArrayList();
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
         for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            // Because multiple versions of a materialized index cannot be loaded simultaneously,
+            // the `TOlapTableIndexTablets.index_id` is set to the `index meta id`.
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getMetaId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
                 tTablet.setId(tablet.getId());
-                tTablet.setRange(tablet.getRange().toThrift());
+                if (tablet.getRange() != null) {
+                    tTablet.setRange(tablet.getRange().toThrift());
+                }
                 return tTablet;
             }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
@@ -2678,7 +2701,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 // STREAM LOAD
                 StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-                StreamLoadTask streamLoadTask = streamLoadManager.getTaskById(request.getJob_id());
+                AbstractStreamLoadTask streamLoadTask = streamLoadManager.getTaskById(request.getJob_id());
                 if (streamLoadTask != null) {
                     trackingLoadInfoList = convertStreamLoadInfoList(request);
                 }

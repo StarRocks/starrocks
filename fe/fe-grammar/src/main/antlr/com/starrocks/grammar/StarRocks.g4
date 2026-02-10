@@ -80,6 +80,7 @@ statement
 
     // Task Statement
     | submitTaskStatement
+    | alterTaskStatement
     | dropTaskStatement
 
     // Materialized View Statement
@@ -119,6 +120,7 @@ statement
     | adminSetConfigStatement
     | adminSetReplicaStatusStatement
     | adminShowConfigStatement
+    | adminShowAutomatedSnapshotStatement
     | adminShowReplicaDistributionStatement
     | adminShowReplicaStatusStatement
     | adminRepairTableStatement
@@ -689,6 +691,10 @@ submitTaskStatement
         AS (createTableAsSelectStatement | insertStatement | dataCacheSelectStatement)
     ;
 
+alterTaskStatement
+    : ALTER TASK (IF EXISTS)? qualifiedName (RESUME | SUSPEND | SET propertyList)
+    ;
+
 taskClause
     : properties
     | taskScheduleDesc
@@ -760,6 +766,10 @@ adminSetReplicaStatusStatement
     ;
 adminShowConfigStatement
     : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    ;
+
+adminShowAutomatedSnapshotStatement
+    : ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
     ;
 
 adminShowReplicaDistributionStatement
@@ -984,6 +994,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | mergeTabletClause
     | alterTableAutoIncrementClause
 
     //Alter partition clause
@@ -1245,6 +1256,16 @@ splitTabletClause
       properties?
     ;
 
+mergeTabletClause
+    : MERGE
+      (((TABLET | TABLETS) partitionNames?) | tabletGroupList)
+      properties?
+    ;
+
+tabletGroupList
+    : (TABLET | TABLETS) integer_list+
+    ;
+
 alterTableAutoIncrementClause
     : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
@@ -1463,6 +1484,8 @@ killAnalyzeStatement
 analyzeProfileStatement
     : ANALYZE PROFILE FROM string
     | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
+    | ANALYZE PROFILE FROM LAST_QUERY_ID '(' ')'
+    | ANALYZE PROFILE FROM LAST_QUERY_ID '(' ')' ',' INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 
@@ -2753,6 +2776,7 @@ aggregationFunction
     | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | ARRAY_AGG_DISTINCT '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+    | STRING_AGG '(' setQuantifier? expression ',' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     ;
 
 userVariable
@@ -2809,6 +2833,7 @@ specialFunctionExpression
     | PASSWORD '(' string ')'
     | FLOOR '(' expression ')'
     | CEIL '(' expression ')'
+    | LAST_QUERY_ID '(' ')'
     ;
 
 windowFunction
@@ -2897,6 +2922,7 @@ partitionDesc
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
     | PARTITION BY partitionExpr (',' partitionExpr)*
+    | PARTITION BY '(' partitionExpr (',' partitionExpr)* ')'
     ;
 
 listPartitionDesc
@@ -3260,7 +3286,7 @@ nonReserved
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
+    | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES

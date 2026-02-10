@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
@@ -268,10 +267,6 @@ public interface IcebergCatalog extends MemoryTrackable {
         return new HashMap<>();
     }
 
-    default List<Pair<List<Object>, Long>> getSamples() {
-        return new ArrayList<>();
-    }
-
     // --------------- partition APIs ---------------
     default Map<String, Partition> getPartitions(IcebergTable icebergTable, long snapshotId, ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
@@ -374,7 +369,10 @@ public interface IcebergCatalog extends MemoryTrackable {
         long lastUpdated = -1;
         if (row != null) {
             try {
-                lastUpdated = row.get(columnIndex, Long.class);
+                Long lastUpdatedWrapper = row.get(columnIndex, Long.class);
+                if (lastUpdatedWrapper != null) {
+                    lastUpdated = lastUpdatedWrapper;
+                }
             } catch (Exception e) {
                 logger.error("Failed to get last_updated_at for partition [{}] of table [{}] " +
                                 "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);

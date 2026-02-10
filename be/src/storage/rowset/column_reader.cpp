@@ -52,9 +52,9 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
+#include "types/type_descriptor.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
@@ -127,6 +127,7 @@ ColumnReader::~ColumnReader() {
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
+    _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {

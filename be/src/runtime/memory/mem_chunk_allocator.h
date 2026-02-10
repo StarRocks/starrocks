@@ -40,9 +40,9 @@
 #include <memory>
 #include <vector>
 
-namespace starrocks {
+#include "common/mem_chunk.h"
 
-struct MemChunk;
+namespace starrocks {
 class ChunkArena;
 class MemTracker;
 

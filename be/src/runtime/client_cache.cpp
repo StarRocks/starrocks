@@ -39,6 +39,7 @@
 #include <memory>
 #include <sstream>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/FrontendService.h"
 #include "util/hash_util.hpp"

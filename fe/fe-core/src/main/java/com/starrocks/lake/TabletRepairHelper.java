@@ -19,6 +19,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -43,6 +46,7 @@ import com.starrocks.proto.TabletMetadataEntry;
 import com.starrocks.proto.TabletMetadataPB;
 import com.starrocks.proto.TabletMetadataRepairStatus;
 import com.starrocks.proto.TabletResult;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -50,6 +54,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,6 +73,18 @@ public class TabletRepairHelper {
 
     private static final long BATCH_VERSION_NUM = 5L;
     private static final String SST_FILE_SUFFIX = ".sst";
+
+    private static ShowResultSetMetaData DRY_RUN_REPAIR_RESULT_META_DATA;
+
+    static {
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        builder.addColumn(new Column("PartitionId", TypeFactory.createVarcharType(20)));
+        builder.addColumn(new Column("VisibleVersion", TypeFactory.createVarcharType(20)));
+        builder.addColumn(new Column("RepairStatus", TypeFactory.createVarcharType(60)));
+        builder.addColumn(new Column("TabletRecoverInfo", TypeFactory.createVarcharType(65535)));
+        builder.addColumn(new Column("ErrorMsg", TypeFactory.createVarcharType(65535)));
+        DRY_RUN_REPAIR_RESULT_META_DATA = builder.build();
+    }
 
     // the version range [minVersion, maxVersion] is used to find valid tablet metadatas, both are included
     record PhysicalPartitionInfo(
@@ -585,24 +602,8 @@ public class TabletRepairHelper {
         return tabletErrors;
     }
 
-    /**
-     * Repairs the tablet metadata for a single physical partition.
-     * This function attempts to find valid tablet metadata for all tablets within the given physical partition.
-     * It iterates through versions to retrieve tablet metadatas from compute nodes by batches.
-     * If valid metadata is found for all tablets, or
-     * if `allowEmptyTabletRecovery` is true and empty metadata can be created for missing tablets,
-     * it then sends these valid metadatas to the compute nodes to perform the repair operation.
-     *
-     * @param info                     Information about the physical partition.
-     * @param enforceConsistentVersion Whether to enforce consistent metadata version across all tablets.
-     * @param allowEmptyTabletRecovery Whether to allow creating empty metadata for tablets without valid metadata.
-     * @param isFileBundling           Whether file bundling is enabled for the table.
-     * @return A map of tablet IDs to error messages for any tablets that failed to repair.
-     * @throws Exception If an error occurs during the repair process.
-     */
-    private static Map<Long, String> repairPhysicalPartition(PhysicalPartitionInfo info, boolean enforceConsistentVersion,
-                                                             boolean allowEmptyTabletRecovery, boolean isFileBundling)
-            throws Exception {
+    private static Map<Long, TabletMetadataPB> getValidTabletMetadatas(PhysicalPartitionInfo info,
+                                                                       boolean enforceConsistentVersion) throws Exception {
         List<Long> allTablets = info.allTablets;
         Set<Long> unverifiedTablets = info.unverifiedTablets;
         long partitionMaxVersion = info.maxVersion;
@@ -626,6 +627,28 @@ public class TabletRepairHelper {
                 break;
             }
         }
+        return tabletToValidMetadata;
+    }
+
+    /**
+     * Repairs the tablet metadata for a single physical partition.
+     * This function attempts to find valid tablet metadata for all tablets within the given physical partition.
+     * It iterates through versions to retrieve tablet metadatas from compute nodes by batches.
+     * If valid metadata is found for all tablets, or
+     * if `allowEmptyTabletRecovery` is true and empty metadata can be created for missing tablets,
+     * it then sends these valid metadatas to the compute nodes to perform the repair operation.
+     *
+     * @param info                     Information about the physical partition.
+     * @param enforceConsistentVersion Whether to enforce consistent metadata version across all tablets.
+     * @param allowEmptyTabletRecovery Whether to allow creating empty metadata for tablets without valid metadata.
+     * @param isFileBundling           Whether file bundling is enabled for the table.
+     * @return A map of tablet IDs to error messages for any tablets that failed to repair.
+     * @throws Exception If an error occurs during the repair process.
+     */
+    private static Map<Long, String> repairPhysicalPartition(PhysicalPartitionInfo info, boolean enforceConsistentVersion,
+                                                             boolean allowEmptyTabletRecovery, boolean isFileBundling)
+            throws Exception {
+        Map<Long, TabletMetadataPB> tabletToValidMetadata = getValidTabletMetadatas(info, enforceConsistentVersion);
 
         // check the valid tablet metadata, and create empty tablet metadata if no valid metadata is found
         checkOrCreateEmptyTabletMetadata(info, tabletToValidMetadata, enforceConsistentVersion, allowEmptyTabletRecovery);
@@ -705,5 +728,89 @@ public class TabletRepairHelper {
                             partitionErrorsSize, partitionErrorsSize > 1 ? "s" : "",
                             errorMsgsSize, errorMsgsSize > 1 ? "s" : "", Joiner.on(", ").join(errorMsgs)));
         }
+    }
+
+    public static ShowResultSetMetaData getDryRunRepairResultMetaData() {
+        return DRY_RUN_REPAIR_RESULT_META_DATA;
+    }
+
+    private static class TabletRecoverInfo {
+        @SerializedName("tabletId")
+        public long tabletId;
+        @SerializedName("recoverVersion")
+        public long recoverVersion;
+
+        public TabletRecoverInfo(long tabletId, long recoverVersion) {
+            this.tabletId = tabletId;
+            this.recoverVersion = recoverVersion;
+        }
+    }
+
+    enum RepairStatus {
+        NORMAL,         // All tablets meta and data files are normal
+        UNKNOWN,        // Dry run repair exception
+        RECOVERABLE,    // Tablet has missing meta or data files, and is recoverable
+        UNRECOVERABLE   // Tablet has missing meta or data files, and is unrecoverable
+    }
+
+    /**
+     * Return the repair plan without executing it
+     */
+    public static List<List<String>> dryRunRepair(AdminRepairTableStmt stmt, Database db, OlapTable table,
+                                                  List<String> partitionNames, ComputeResource computeResource)
+            throws StarRocksException {
+        boolean enforceConsistentVersion = stmt.isEnforceConsistentVersion();
+        boolean allowEmptyTabletRecovery = stmt.isAllowEmptyTabletRecovery();
+        Gson gson = new Gson();
+
+        // get physical partition ids in db table read lock
+        List<Long> physicalPartitionIds = getPhysicalPartitionIds(db, table, partitionNames);
+
+        List<List<String>> result = Lists.newArrayList();
+        for (Long physicalPartitionId : physicalPartitionIds) {
+            long visibleVersion = -1;
+            RepairStatus repairStatus = RepairStatus.UNKNOWN;
+            List<TabletRecoverInfo> tabletRecoverInfos = Lists.newArrayList();
+            String errorMsg = "";
+
+            try {
+                PhysicalPartitionInfo info =
+                        getPhysicalPartitionInfo(db, table, physicalPartitionId, enforceConsistentVersion, computeResource);
+                visibleVersion = info.maxVersion;
+
+                Map<Long, TabletMetadataPB> validMetadatas = getValidTabletMetadatas(info, enforceConsistentVersion);
+
+                // check the valid tablet metadata, and create empty tablet metadata if no valid metadata is found
+                checkOrCreateEmptyTabletMetadata(info, validMetadatas, enforceConsistentVersion, allowEmptyTabletRecovery);
+
+                // physical partition is recoverable
+                repairStatus = RepairStatus.RECOVERABLE;
+                errorMsg = "";
+                for (Long tabletId : info.allTablets) {
+                    TabletMetadataPB metadata = validMetadatas.get(tabletId);
+                    Preconditions.checkNotNull(metadata);
+                    long recoverVersion = metadata.version;
+                    tabletRecoverInfos.add(new TabletRecoverInfo(tabletId, recoverVersion));
+                }
+            } catch (AlreadyExistsException e) {
+                repairStatus = RepairStatus.NORMAL;
+                tabletRecoverInfos.clear();
+                errorMsg = "";
+            } catch (StarRocksException e) {
+                repairStatus = RepairStatus.UNRECOVERABLE;
+                tabletRecoverInfos.clear();
+                errorMsg = e.getMessage();
+            } catch (Exception e) {
+                LOG.warn("Fail to dry run repair tablet metadata for partition {}", physicalPartitionId, e);
+                repairStatus = RepairStatus.UNKNOWN;
+                tabletRecoverInfos.clear();
+                errorMsg = String.format("ERROR: %s", e.getMessage());
+            }
+
+            result.add(Lists.newArrayList(String.valueOf(physicalPartitionId), String.valueOf(visibleVersion),
+                    repairStatus.name(), gson.toJson(tabletRecoverInfos), errorMsg));
+        }
+
+        return result;
     }
 }

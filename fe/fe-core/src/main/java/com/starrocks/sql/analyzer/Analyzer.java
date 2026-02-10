@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -42,6 +43,7 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -361,6 +363,12 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitAlterTaskStatement(AlterTaskStmt statement, ConnectContext context) {
+            TaskAnalyzer.analyzeAlterTaskStmt(statement);
+            return null;
+        }
+
         public static void analyzeSubmitTask(SubmitTaskStmt statement, ConnectContext context) {
             StatementBase workhouse = analyzeSubmitTaskWorkhorse(statement, context);
             analyzeSubmitTaskOnly(workhouse, statement, context);
@@ -456,6 +464,13 @@ public class Analyzer {
         @Override
         public Void visitAdminShowConfigStatement(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
             AdminStmtAnalyzer.analyze(adminShowConfigStmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                             ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
 

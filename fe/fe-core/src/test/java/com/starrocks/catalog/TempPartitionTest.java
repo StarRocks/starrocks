@@ -45,14 +45,20 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.util.EitherOr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -63,6 +69,8 @@ import java.io.File;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TempPartitionTest extends StarRocksTestBase {
 
@@ -734,6 +742,87 @@ public class TempPartitionTest extends StarRocksTestBase {
         // now base range is [min, 10), [50, 60) -> p1,tp5
         checkShowPartitionsResultNum("db3.tbl3", false, 2);
         checkShowPartitionsResultNum("db3.tbl3", true, 0);
+    }
+
+    @Test
+    public void testReplacePartitionTriggerMvRefresh() throws Exception {
+        starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase("db_mv_replace").useDatabase("db_mv_replace")
+                .withTable("CREATE TABLE db_mv_replace.base_tbl (k1 int, v1 int)\n" +
+                        "PARTITION BY RANGE(k1) (\n" +
+                        "PARTITION p1 VALUES LESS THAN('10'),\n" +
+                        "PARTITION p2 VALUES LESS THAN('20')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("CREATE MATERIALIZED VIEW db_mv_replace.mv_base\n" +
+                        "REFRESH ASYNC AS\n" +
+                        "SELECT k1, v1 FROM db_mv_replace.base_tbl;");
+
+        ctx.setDatabase("db_mv_replace");
+
+        AtomicInteger refreshCalls = new AtomicInteger();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public String refreshMaterializedView(String dbName, String mvName, boolean force,
+                                                  EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
+                                                  int priority, boolean mergeRedundant, boolean isManual) {
+                if ("mv_base".equalsIgnoreCase(mvName)) {
+                    refreshCalls.incrementAndGet();
+                }
+                return null;
+            }
+        };
+
+        String addTempPartition = "alter table db_mv_replace.base_tbl add temporary partition tp1 values less than('10');";
+        alterTableWithNewAnalyzer(addTempPartition, false);
+
+        String replacePartition = "alter table db_mv_replace.base_tbl replace partition(p1) " +
+                "with temporary partition(tp1) properties('strict_range' = 'false', 'use_temp_partition_name' = 'false');";
+        alterTableWithNewAnalyzer(replacePartition, false);
+
+        Assertions.assertEquals(1, refreshCalls.get());
+    }
+
+    @Test
+    public void testReplacePartitionExcludedTriggerTables() throws Exception {
+        starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase("db_mv_exclude").useDatabase("db_mv_exclude")
+                .withTable("CREATE TABLE db_mv_exclude.base_tbl (k1 int, v1 int)\n" +
+                        "PARTITION BY RANGE(k1) (\n" +
+                        "PARTITION p1 VALUES LESS THAN('10'),\n" +
+                        "PARTITION p2 VALUES LESS THAN('20')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("CREATE MATERIALIZED VIEW db_mv_exclude.mv_excluded\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES (\n" +
+                        "\"excluded_trigger_tables\" = \"base_tbl\"\n" +
+                        ")\n" +
+                        "AS SELECT k1, v1 FROM db_mv_exclude.base_tbl;");
+
+        ctx.setDatabase("db_mv_exclude");
+
+        AtomicInteger refreshCalls = new AtomicInteger();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public String refreshMaterializedView(String dbName, String mvName, boolean force,
+                                                  EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
+                                                  int priority, boolean mergeRedundant, boolean isManual) {
+                refreshCalls.incrementAndGet();
+                return null;
+            }
+        };
+
+        String addTempPartition = "alter table db_mv_exclude.base_tbl add temporary partition tp1 values less than('10');";
+        alterTableWithNewAnalyzer(addTempPartition, false);
+
+        String replacePartition = "alter table db_mv_exclude.base_tbl replace partition(p1) " +
+                "with temporary partition(tp1) properties('strict_range' = 'false', 'use_temp_partition_name' = 'false');";
+        alterTableWithNewAnalyzer(replacePartition, false);
+
+        Assertions.assertEquals(0, refreshCalls.get());
     }
 
     @Test

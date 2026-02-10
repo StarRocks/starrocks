@@ -16,6 +16,9 @@
 
 #include <bvar/bvar.h>
 
+#include "base/concurrency/countdown_latch.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
@@ -28,11 +31,8 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/countdown_latch.h"
-#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
-#include "util/time.h"
 
 namespace starrocks {
 

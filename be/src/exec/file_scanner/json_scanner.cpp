@@ -24,6 +24,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/simdjson_util.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -34,9 +35,8 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #include "util/runtime_profile.h"
-#include "util/simdjson_util.h"
 
 namespace starrocks {
 
@@ -305,7 +305,11 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
 Status JsonReader::open() {
     Status st = _read_and_parse_json();
     if (!st.ok()) {
-        _append_error_msg("", st.to_string());
+        // Timeout can happen when reading from a TimeBoundedStreamLoadPipe (e.g. merge-commit).
+        // It's a retryable condition and should not be written into user-facing error logs.
+        if (!st.is_time_out()) {
+            _append_error_msg("", st.to_string());
+        }
         return st;
     }
     _empty_parser = false;

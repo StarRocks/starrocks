@@ -81,11 +81,12 @@ public class SlotDescriptor {
     // if false, this slot cannot be NULL
     private boolean isNullable;
 
+    // if true, this slot represents a virtual column (e.g., _tablet_id_)
+    private boolean isVirtualColumn = false;
+
     // physical layout parameters
     private int byteSize;
     private int byteOffset;  // within tuple
-    private int nullIndicatorByte;  // index into byte array
-    private int nullIndicatorBit; // index within byte
     private int slotIdx;          // index within tuple struct
 
     // used for load to get more information of varchar and decimal
@@ -113,13 +114,12 @@ public class SlotDescriptor {
         this.id = id;
         this.parent = parent;
         this.byteOffset = src.byteOffset;
-        this.nullIndicatorBit = src.nullIndicatorBit;
-        this.nullIndicatorByte = src.nullIndicatorByte;
         this.slotIdx = src.slotIdx;
         this.isMaterialized = src.isMaterialized;
         this.isOutputColumn = src.isOutputColumn;
         this.column = src.column;
         this.isNullable = src.isNullable;
+        this.isVirtualColumn = src.isVirtualColumn;
         this.byteSize = src.byteSize;
         this.type = src.type;
     }
@@ -176,6 +176,9 @@ public class SlotDescriptor {
         } else {
             this.type = this.originType.clone();
         }
+
+        // Set isVirtualColumn based on the column's virtual column status
+        this.isVirtualColumn = column.isVirtual();
     }
 
     public boolean isMaterialized() {
@@ -200,12 +203,6 @@ public class SlotDescriptor {
 
     public void setIsNullable(boolean value) {
         isNullable = value;
-        // NullIndicatorBit is deprecated in BE, we mock bit to avoid BE crash
-        if (isNullable) {
-            nullIndicatorBit = 0;
-        } else {
-            nullIndicatorBit = -1;
-        }
     }
 
     public String getLabel() {
@@ -239,11 +236,6 @@ public class SlotDescriptor {
 
     // TODO
     public TSlotDescriptor toThrift() {
-        if (isNullable) {
-            nullIndicatorBit = 1;
-        } else {
-            nullIndicatorBit = -1;
-        }
         Preconditions.checkState(isMaterialized, "isMaterialized must be true");
         TSlotDescriptor tSlotDescriptor = new TSlotDescriptor();
         tSlotDescriptor.setId(id.asInt());
@@ -270,8 +262,6 @@ public class SlotDescriptor {
         }
         tSlotDescriptor.setColumnPos(-1);
         tSlotDescriptor.setByteOffset(-1);
-        tSlotDescriptor.setNullIndicatorByte(-1);
-        tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
         String colName = "";
         if (column != null) {
             colName = column.isShadowColumn() ? column.getName() : column.getColumnId().getId();
@@ -281,6 +271,7 @@ public class SlotDescriptor {
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);
         tSlotDescriptor.setIsNullable(isNullable);
+        tSlotDescriptor.setIs_virtual_column(isVirtualColumn);
         return tSlotDescriptor;
     }
 
@@ -290,10 +281,9 @@ public class SlotDescriptor {
         String parentTupleId = (parent == null) ? "null" : parent.getId().toString();
         return MoreObjects.toStringHelper(this).add("id", id.asInt()).add("parent", parentTupleId)
                 .add("col", colStr).add("type", typeStr).add("materialized", isMaterialized)
-                .add("isOutputColumns", isOutputColumn)
+                .add("isOutputColumns", isOutputColumn).add("isNullable", isNullable)
+                .add("isVirtualColumn", isVirtualColumn)
                 .add("byteSize", byteSize).add("byteOffset", byteOffset)
-                .add("nullIndicatorByte", nullIndicatorByte)
-                .add("nullIndicatorBit", nullIndicatorBit)
                 .add("slotIdx", slotIdx).toString();
     }
 

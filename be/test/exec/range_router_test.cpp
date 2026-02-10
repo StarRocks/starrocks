@@ -20,17 +20,17 @@
 #include <tuple>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
 #include "storage/type_utils.h"
-#include "testutil/assert.h"
+#include "types/datum.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

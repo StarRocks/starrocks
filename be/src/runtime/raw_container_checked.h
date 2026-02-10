@@ -15,9 +15,9 @@
 #pragma once
 #include <vector>
 
+#include "base/container/raw_container.h"
 #include "common/status.h"
 #include "runtime/current_thread.h"
-#include "util/raw_container.h"
 
 namespace starrocks::raw {
 

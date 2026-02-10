@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "fs/fs_memory.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/bitshuffle_page.h"
-#include "testutil/assert.h"
 #include "util/compression/block_compression.h"
 
 namespace starrocks {

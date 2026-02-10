@@ -14,11 +14,11 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "common/logging.h"
 #include "fs/encrypt_file.h"
 #include "io/array_input_stream.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks::io {
 

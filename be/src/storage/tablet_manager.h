@@ -44,6 +44,7 @@
 #include <vector>
 
 #include "agent/status.h"
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -54,7 +55,6 @@
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/tablet.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 
@@ -280,6 +280,7 @@ private:
     void sweep_shutdown_tablet(const DroppedTabletInfo& info, std::vector<DroppedTabletInfo>& finished_tablets);
 
     std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard);
+    std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard, KeysType keys_type);
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);

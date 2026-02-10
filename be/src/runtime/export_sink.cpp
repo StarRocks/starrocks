@@ -37,6 +37,7 @@
 #include <memory>
 #include <sstream>
 
+#include "base/time/time.h"
 #include "column/column.h"
 #include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
@@ -45,7 +46,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
-#include "util/time.h"
 
 namespace starrocks {
 

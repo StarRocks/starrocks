@@ -19,9 +19,9 @@
 #include <sstream>
 #include <utility>
 
+#include "base/string/slice.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 

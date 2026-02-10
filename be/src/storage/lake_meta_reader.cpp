@@ -27,6 +27,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/rowset.h"
+#include "storage/virtual_column_utils.h"
 
 namespace starrocks {
 
@@ -56,7 +57,7 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     TabletSchemaCSPtr tablet_schema = base_schema;
     if (read_params.column_access_paths != nullptr && !read_params.column_access_paths->empty()) {
         TabletSchemaSPtr tmp_schema = TabletSchema::copy(*base_schema);
-        int field_number = tmp_schema->num_columns();
+        int field_number = read_params.next_uniq_id;
         for (auto& path : *read_params.column_access_paths) {
             int root_column_index = tmp_schema->field_index(path->path());
             RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
@@ -76,6 +77,7 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
         tablet_schema = tmp_schema;
     }
 
+    ASSIGN_OR_RETURN(tablet_schema, extend_schema_by_virtual_columns(tablet_schema));
     RETURN_IF_ERROR(_build_collect_context(tablet_schema, read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(tablet, read_params));
 

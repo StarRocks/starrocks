@@ -330,6 +330,8 @@ public class HdfsFsManager {
     // arguments for obs
     public static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
     public static final String FS_OBS_SECRET_KEY = "fs.obs.secret.key";
+    public static final String FS_OBS_ACCESS_KEY_UNDERSCORE = "fs.obs.access_key";
+    public static final String FS_OBS_SECRET_KEY_UNDERSCORE = "fs.obs.secret_key";
     protected static final String FS_OBS_ENDPOINT = "fs.obs.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
@@ -713,8 +715,12 @@ public class HdfsFsManager {
         Preconditions.checkArgument(cloudConfiguration != null);
         WildcardURI pathUri = new WildcardURI(path);
 
-        String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toConfString());
+        String scheme = pathUri.getUri().getScheme();
+        String authority = pathUri.getUri().getAuthority();
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(scheme), "URI scheme must not be null or empty: %s", path);
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(authority), "URI authority must not be null or empty: %s", path);
+        String uriIdentity = scheme + "://" + authority;
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(uriIdentity, cloudConfiguration.toConfString());
 
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
         HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);

@@ -18,6 +18,7 @@
 #include "exec/short_circuit.h"
 
 #include "column/column_helper.h"
+#include "column/mysql_row_buffer.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "connector/connector.h"

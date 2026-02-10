@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -36,8 +37,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "runtime/types.h"
-#include "util/defer_op.h"
+#include "types/type_descriptor.h"
 #include "util/runtime_profile.h"
 #ifdef __cplusplus
 extern "C" {

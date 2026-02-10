@@ -53,13 +53,13 @@
 #include <mutex>
 #include <string>
 
+#include "base/utility/scoped_cleanup.h"
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 #include "gutil/atomicops.h"
 #include "gutil/dynamic_annotations.h"
 #include "gutil/once.h"
 #include "gutil/strings/substitute.h"
-#include "util/scoped_cleanup.h"
 
 namespace starrocks {
 

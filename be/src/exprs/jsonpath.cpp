@@ -27,7 +27,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
+#include "types/json_value.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {

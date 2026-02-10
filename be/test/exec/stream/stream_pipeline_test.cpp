@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -25,7 +26,6 @@
 #include "exec/stream/stream_operators_test.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
-#include "testutil/assert.h"
 #include "testutil/desc_tbl_helper.h"
 
 namespace starrocks::stream {

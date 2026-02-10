@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "base/phmap/btree.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -25,7 +26,6 @@
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/table.h"
 #include "storage/storage_engine.h"
-#include "util/phmap/btree.h"
 
 namespace starrocks {
 

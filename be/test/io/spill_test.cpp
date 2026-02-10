@@ -24,6 +24,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -54,9 +56,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 #include "util/uid_util.h"
 

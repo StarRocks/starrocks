@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 
 namespace starrocks::workgroup {
 

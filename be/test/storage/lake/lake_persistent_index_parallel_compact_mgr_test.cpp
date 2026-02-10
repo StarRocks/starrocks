@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
@@ -30,7 +31,6 @@
 #include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
 
 namespace starrocks::lake {
 

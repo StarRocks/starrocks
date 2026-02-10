@@ -27,7 +27,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
-#include "util/compression/stream_compression.h"
+#include "util/compression/stream_decompressor.h"
 namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
@@ -355,9 +355,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
     // if compression
     // input_stream = DecompressInputStream(input_stream)
     if (options.compression_type != CompressionTypePB::NO_COMPRESSION) {
-        using DecompressorPtr = std::shared_ptr<StreamCompression>;
-        std::unique_ptr<StreamCompression> dec;
-        RETURN_IF_ERROR(StreamCompression::create_decompressor(options.compression_type, &dec));
+        using DecompressorPtr = std::shared_ptr<StreamDecompressor>;
+        ASSIGN_OR_RETURN(auto dec, StreamDecompressor::create_decompressor(options.compression_type));
         auto compressed_input_stream =
                 std::make_shared<io::CompressedInputStream>(input_stream, DecompressorPtr(dec.release()));
         input_stream = std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);

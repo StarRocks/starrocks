@@ -27,18 +27,18 @@
 #include <istream>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "fs/s3/poco_common.h"
 #include "io/s3_zero_copy_iostream.h"
-#include "util/defer_op.h"
 
 namespace starrocks::poco {
 
 PocoHttpClient::PocoHttpClient(const Aws::Client::ClientConfiguration& clientConfiguration)
         : timeouts(ConnectionTimeouts(
-                  Poco::Timespan(clientConfiguration.connectTimeoutMs * 1000),     // connection timeout.
-                  Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000), // send timeout.
-                  Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000)  // receive timeout.
+                  Poco::Timespan(clientConfiguration.connectTimeoutMs * 1000), // connection timeout.
+                  Poco::Timespan(clientConfiguration.requestTimeoutMs * 1000), // send timeout.
+                  Poco::Timespan(clientConfiguration.requestTimeoutMs * 1000)  // receive timeout.
                   )) {}
 
 std::shared_ptr<Aws::Http::HttpResponse> PocoHttpClient::MakeRequest(

@@ -20,6 +20,7 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "base/string/string_parser.hpp"
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column.h"
 #include "column/column_access_path.h"
@@ -47,10 +48,10 @@
 #include "storage/projection_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
+#include "storage/virtual_column_utils.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 #include "util/runtime_profile.h"
-#include "util/string_parser.hpp"
 #include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
@@ -184,6 +185,10 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT,
                                            _get_counter_min_max_type("SegmentZoneMapFilterRows"), segment_init_name);
+    _seg_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentMetadataFilterRows", TUnit::UNIT, segment_init_name);
+    _segs_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentsMetadataFiltered", TUnit::UNIT, segment_init_name);
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, segment_init_name);
     _zm_filtered_counter =
@@ -352,6 +357,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
         int32_t index;
+        // TODO: port vector index column to virtual column
         if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
             index = _tablet_schema->num_columns();
             _params.vector_search_option->vector_column_id = index;
@@ -401,7 +407,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
 Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
         int32_t index = _tablet_schema->field_index(col_name);
-        if (index < 0) {
+        if (index < 0 && !is_virtual_column(col_name)) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
             LOG(WARNING) << ss.str();
@@ -616,7 +622,7 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
     }
 
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
-    int field_number = tmp_schema->num_columns();
+    int field_number = _scan_ctx->next_unique_id();
     for (auto& path : *access_paths) {
         if (!path->is_extended()) {
             continue;
@@ -692,6 +698,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     // Extend the tablet_schema with access path columns
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
+    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
@@ -895,6 +902,8 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
 
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
+    COUNTER_UPDATE(_seg_metadata_filtered_counter, _reader->stats().segment_metadata_filtered);
+    COUNTER_UPDATE(_segs_metadata_filtered_counter, _reader->stats().segments_metadata_filtered);
     COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_vector_index_filtered_counter, _reader->stats().rows_vector_index_filtered);

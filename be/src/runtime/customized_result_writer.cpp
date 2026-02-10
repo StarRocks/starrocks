@@ -14,6 +14,7 @@
 
 #include "runtime/customized_result_writer.h"
 
+#include "base/string/faststring.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -21,7 +22,6 @@
 #include "gen_cpp/Row_types.h"
 #include "runtime/buffer_control_block.h"
 #include "types/logical_type.h"
-#include "util/faststring.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {

@@ -19,6 +19,8 @@
 #include <ctime>
 #include <set>
 
+#include "base/phmap/btree.h"
+#include "base/testutil/assert.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -30,9 +32,7 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
-#include "testutil/assert.h"
 #include "util/lru_cache.h"
-#include "util/phmap/btree.h"
 
 namespace starrocks::lake {
 

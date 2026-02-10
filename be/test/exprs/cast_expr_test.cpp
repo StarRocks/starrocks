@@ -19,6 +19,7 @@
 
 #include <limits>
 
+#include "base/string/slice.h"
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -29,14 +30,13 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/time_types.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
-#include "util/json.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

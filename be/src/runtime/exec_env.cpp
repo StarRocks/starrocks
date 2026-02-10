@@ -40,10 +40,15 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "base/time/time.h"
+#include "base/utility/pretty_printer.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "common/mem_chunk.h"
 #include "common/process_exit.h"
+#include "common/system/cpu_info.h"
+#include "common/system/mem_info.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -95,15 +100,12 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+#include "types/hll.h"
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/cpu_info.h"
-#include "util/mem_info.h"
 #include "util/parse_util.h"
-#include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -157,6 +159,26 @@ static StatusOr<int64_t> calc_max_consistency_memory(int64_t process_mem_limit) 
     }
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
+
+namespace {
+
+bool allocate_hll_registers_with_mem_chunk_allocator(size_t size, void* /*ctx*/, MemChunk* chunk) {
+    return MemChunkAllocator::allocate(size, chunk);
+}
+
+void free_hll_registers_with_mem_chunk_allocator(const MemChunk& chunk, void* /*ctx*/) {
+    MemChunkAllocator::free(chunk);
+}
+
+void register_hll_registers_allocator() {
+    HyperLogLog::RegistersAllocator allocator;
+    allocator.allocate = allocate_hll_registers_with_mem_chunk_allocator;
+    allocator.free = free_hll_registers_with_mem_chunk_allocator;
+    Status st = HyperLogLog::set_registers_allocator(allocator);
+    CHECK(st.ok()) << "failed to register hll registers allocator: " << st.to_string();
+}
+
+} // namespace
 
 bool GlobalEnv::_is_init = false;
 
@@ -247,6 +269,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
+    register_hll_registers_allocator();
     MemChunkAllocator::init_metrics();
 
     return Status::OK();

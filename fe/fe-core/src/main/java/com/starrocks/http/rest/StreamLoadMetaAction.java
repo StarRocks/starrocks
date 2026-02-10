@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -118,8 +119,10 @@ public class StreamLoadMetaAction extends RestBaseAction {
             BaseRequest request, BaseResponse response, String dbName, String tableName) {
         TableId tableId = new TableId(dbName, tableName);
         StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
+        ConnectContext ctx = request.getConnectContext();
+        UserIdentity userIdentity = ctx != null ? ctx.getCurrentUserIdentity() : null;
         RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState()
-                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params);
+                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params, userIdentity);
         if (!result.isOk()) {
             StreamLoadMetaResult responseResult = new StreamLoadMetaResult(
                     result.getStatus().status_code.name(), ActionStatus.FAILED,

@@ -18,6 +18,11 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/hash/unaligned_access.h"
+#include "base/orlp/pdqsort.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_fwd_decl.h"
+#include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/object_column.h"
@@ -28,11 +33,6 @@
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/orlp/pdqsort.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_fwd_decl.h"
-#include "util/slice.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -215,9 +215,23 @@ public:
         DCHECK(column->is_binary());
 
         const Slice slice = column->get(row_num).get_slice();
-        double rate = *reinterpret_cast<double*>(slice.data);
-        size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
-        auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
+        constexpr size_t kHeaderSize = sizeof(double) + sizeof(size_t);
+        if (UNLIKELY(slice.size < kHeaderSize)) {
+            ctx->set_error("Invalid percentile_cont merge data: insufficient header");
+            return;
+        }
+        double rate = *reinterpret_cast<const double*>(slice.data);
+        size_t items_size = *reinterpret_cast<const size_t*>(slice.data + sizeof(double));
+        if (UNLIKELY(items_size > (std::numeric_limits<size_t>::max() - kHeaderSize) / sizeof(InputCppType))) {
+            ctx->set_error("Invalid percentile_cont merge data: items size overflow");
+            return;
+        }
+        size_t payload_size = items_size * sizeof(InputCppType);
+        if (UNLIKELY(slice.size < kHeaderSize + payload_size)) {
+            ctx->set_error("Invalid percentile_cont merge data: payload size mismatch");
+            return;
+        }
+        auto data_ptr = slice.data + kHeaderSize;
         auto& grid = this->data(state).grid;
 
         typename PercentileStateTypes<LT>::ItemType vec;
@@ -270,7 +284,7 @@ public:
         auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
-        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
+        const auto& src_column = *down_cast<const InputColumnType*>(src[0].get());
         const InputCppType* src_data = src_column.immutable_data().data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
@@ -393,7 +407,7 @@ public:
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
 
-        auto src_column = *down_cast<const BinaryColumn*>(src[0].get());
+        const auto& src_column = *down_cast<const BinaryColumn*>(src[0].get());
         const auto& src_data = src_column.get_proxy_data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
@@ -671,7 +685,7 @@ public:
         bytes.resize(new_size);
         unsigned char* cur = bytes.data() + old_size;
 
-        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
+        const auto& src_column = *down_cast<const InputColumnType*>(src[0].get());
         const InputCppType* src_data = src_column.immutable_data().data();
 
         size_t cur_size = old_size;

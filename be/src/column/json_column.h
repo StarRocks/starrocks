@@ -21,8 +21,8 @@
 #include "column/column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 
 namespace starrocks {
 
@@ -38,7 +38,7 @@ public:
 
     JsonColumn() = default;
     explicit JsonColumn(size_t size) : SuperClass(size) {}
-    JsonColumn(const JsonColumn& rhs) : SuperClass(rhs) {}
+    DISALLOW_COPY(JsonColumn);
 
     JsonColumn(JsonColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {
         _flat_columns = std::move(rhs._flat_columns);

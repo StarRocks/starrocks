@@ -16,10 +16,10 @@
 
 #include <memory>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks::pipeline {
 Status WaitSourceOperator::prepare(RuntimeState* state) {

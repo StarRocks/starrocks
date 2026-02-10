@@ -101,6 +101,9 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                     long shadowTabletId = globalStateMgr.getNextId();
 
                     LocalTablet shadowTablet = new LocalTablet(shadowTabletId);
+                    if (table.isRangeDistribution()) {
+                        shadowTablet.setRange(originTablet.getRange());
+                    }
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     addedTablets.add(shadowTablet);
 

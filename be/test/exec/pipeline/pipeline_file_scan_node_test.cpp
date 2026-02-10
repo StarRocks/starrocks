@@ -20,9 +20,13 @@
 #include <random>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
@@ -41,10 +45,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
+#include "util/starrocks_metrics.h"
 #include "util/thrift_util.h"
 
 // TODO: test multi thread
@@ -58,6 +59,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        StarRocksMetrics::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
 

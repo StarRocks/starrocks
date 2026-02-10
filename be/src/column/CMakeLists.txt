@@ -14,31 +14,37 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
+add_library(ColumnCore STATIC
+        column.cpp
+        column_filter_range.cpp
+        column_visitor.cpp
+        column_visitor_mutable.cpp
+        mysql_row_buffer.cpp
+        german_string.cpp
+        object_column.cpp
+        variant_column.cpp
+        fixed_length_column_base.cpp
+        fixed_length_column.cpp
+)
+
 add_library(Column STATIC
         array_column.cpp
         array_view_column.cpp
         adaptive_nullable_column.cpp
         chunk.cpp
         chunk_extra_data.cpp
-        column.cpp
         column_access_path.cpp
         column_helper.cpp
         append_with_mask.cpp
         column_viewer.cpp
         const_column.cpp
-        datum.cpp
         datum_convert.cpp
         datum_tuple.cpp
         field.cpp
-        fixed_length_column_base.cpp
-        fixed_length_column.cpp
         nullable_column.cpp
         schema.cpp
         binary_column.cpp
-        object_column.cpp
         decimalv3_column.cpp
-        column_visitor.cpp
-        column_visitor_mutable.cpp
         json_column.cpp
         map_column.cpp
         struct_column.cpp
@@ -46,7 +52,7 @@ add_library(Column STATIC
         type_traits.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
-        variant_column.cpp
-        german_string.cpp
         column_hash/column_hash.cpp
 )
+
+target_link_libraries(Column PUBLIC ColumnCore)

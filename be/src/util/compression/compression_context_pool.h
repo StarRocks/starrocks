@@ -34,9 +34,9 @@
 #include <memory>
 #include <shared_mutex>
 
+#include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "util/moodycamel/concurrentqueue.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::compression {

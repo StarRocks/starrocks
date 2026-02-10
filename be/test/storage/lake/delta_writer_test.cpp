@@ -18,6 +18,9 @@
 
 #include <random>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -35,9 +38,6 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 

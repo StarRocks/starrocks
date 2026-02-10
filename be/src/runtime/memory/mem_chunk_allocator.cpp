@@ -34,10 +34,10 @@
 
 #include "runtime/memory/mem_chunk_allocator.h"
 
+#include "base/failpoint/fail_point.h"
+#include "common/mem_chunk.h"
 #include "runtime/current_thread.h"
-#include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/system_allocator.h"
-#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 

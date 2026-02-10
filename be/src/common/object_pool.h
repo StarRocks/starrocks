@@ -21,7 +21,7 @@
 #include <mutex>
 #include <vector>
 
-#include "util/spinlock.h"
+#include "base/concurrency/spinlock.h"
 
 namespace starrocks {
 

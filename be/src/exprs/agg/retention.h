@@ -18,9 +18,10 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/phmap/phmap_dump.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
-#include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -31,8 +32,7 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
+#include "types/datum.h"
 
 namespace starrocks {
 struct RetentionState {

@@ -17,6 +17,7 @@
 #include <memory>
 #include <queue>
 
+#include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
 #include "gutil/stl_util.h"
 #include "storage/chunk_helper.h"
@@ -28,7 +29,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet.h"
 #include "storage/union_iterator.h"
-#include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -355,8 +355,8 @@ private:
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
             entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-            auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                      stats, nullptr, _chunk_size);
+            auto res = rowset->get_segment_iterators2(schema, tablet_schema, MetaLoadMode::ALL, version, stats,
+                                                      _chunk_size);
             if (!res.ok()) {
                 return res.status();
             }
@@ -535,8 +535,8 @@ private:
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-                auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                          &non_key_stats, nullptr, _chunk_size);
+                auto res = rowset->get_segment_iterators2(schema, tablet_schema, MetaLoadMode::ALL, version,
+                                                          &non_key_stats, _chunk_size);
                 if (!res.ok()) {
                     return res.status();
                 }

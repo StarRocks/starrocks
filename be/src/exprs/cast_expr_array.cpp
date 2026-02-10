@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -25,7 +26,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/memory/memory_resource.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks {
@@ -145,7 +145,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         if (input->only_null()) {
             return ColumnHelper::create_const_null_column(rows);
         } else {
-            return ConstColumn::create(std::move(*(input->data_column())).mutate(), rows);
+            return ConstColumn::create(std::move(*(input->data_column())).clone(), rows);
         }
     }
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));

@@ -9,11 +9,10 @@
 
 #include "gutil/hash/hash.h"
 
-#include <common/logging.h>
-
 #include "gutil/hash/jenkins.h"
 #include "gutil/hash/jenkins_lookup2.h"
 #include "gutil/integral_types.h"
+#include "gutil/logging.h"
 
 // For components that ship code externally (notably the Google Search
 // Appliance) we want to change the fingerprint function so that

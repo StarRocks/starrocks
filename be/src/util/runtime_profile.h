@@ -46,12 +46,12 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/casts.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 

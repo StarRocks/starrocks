@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "base/string/string_parser.hpp"
 #include "column/column_access_path.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
@@ -32,8 +33,8 @@
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/virtual_column_utils.h"
 #include "util/starrocks_metrics.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks::connector {
 
@@ -230,7 +231,7 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
 Status LakeDataSource::init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
         int32_t index = _tablet_schema->field_index(col_name);
-        if (index < 0) {
+        if (index < 0 && !is_virtual_column(col_name)) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
             LOG(WARNING) << ss.str();
@@ -390,6 +391,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
+    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(init_global_dicts(&_params));
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
@@ -560,7 +562,7 @@ Status LakeDataSource::_extend_schema_by_access_paths() {
     }
 
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
-    int field_number = tmp_schema->num_columns();
+    int field_number = _provider->next_uniq_id();
     for (auto& path : access_paths) {
         if (!path->is_extended()) {
             continue;
@@ -758,6 +760,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
+    _seg_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentMetadataFilterRows", TUnit::UNIT, segment_init_name);
+    _segs_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentsMetadataFiltered", TUnit::UNIT, segment_init_name);
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, segment_init_name);
     _zm_filtered_counter =
@@ -805,9 +811,6 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "SegmentsReadCount", TUnit::UNIT, segment_read_name);
     _total_columns_data_page_count =
             ADD_CHILD_COUNTER(_runtime_profile, "TotalColumnsDataPageCount", TUnit::UNIT, segment_read_name);
-    _record_predicate_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "RecPredFilter", segment_read_name);
-    _record_predicate_filter_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "RecPredFilterRows", TUnit::UNIT, segment_read_name);
 
     // IO statistics
     // IOTime
@@ -899,10 +902,9 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
 
-    COUNTER_UPDATE(_record_predicate_filter_timer, _reader->stats().record_predicate_evaluate_ns);
-    COUNTER_UPDATE(_record_predicate_filter_counter, _reader->stats().rows_record_predicate_filtered);
-
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
+    COUNTER_UPDATE(_seg_metadata_filtered_counter, _reader->stats().segment_metadata_filtered);
+    COUNTER_UPDATE(_segs_metadata_filtered_counter, _reader->stats().segments_metadata_filtered);
     COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);

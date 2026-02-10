@@ -38,6 +38,7 @@
 #include <memory>
 #include <string>
 
+#include "base/phmap/phmap.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
@@ -47,7 +48,6 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/types.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

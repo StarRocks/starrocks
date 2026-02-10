@@ -18,6 +18,7 @@
 #include <arrow/type.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "benchgen/benchmark_suite.h"
 #include "benchgen/record_batch_iterator_factory.h"
 #include "benchgen/table.h"
@@ -25,8 +26,8 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
+#include "types/type_descriptor.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -35,6 +36,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        StarRocksMetrics::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
         _runtime_state = _create_runtime_state();

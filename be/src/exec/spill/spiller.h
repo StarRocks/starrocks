@@ -21,6 +21,7 @@
 #include <queue>
 #include <vector>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
@@ -36,7 +37,6 @@
 #include "fs/fs.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "util/blocking_queue.hpp"
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
 

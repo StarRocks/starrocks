@@ -18,6 +18,9 @@
 
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
@@ -26,9 +29,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

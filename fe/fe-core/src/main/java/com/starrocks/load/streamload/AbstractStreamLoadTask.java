@@ -42,7 +42,25 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
     public abstract boolean checkNeedPrepareTxn();
     public abstract boolean isDurableLoadState();
     public abstract void cancelAfterRestart();
+
+    /**
+     * Returns stream load information in Thrift format for querying information_schema.stream_loads.
+     * 
+     * <p>The returned {@link TStreamLoadInfo} objects contain all fields that match the columns defined in
+     * {@link com.starrocks.catalog.system.information.StreamLoadsSystemTable}.
+     * 
+     * @return List of TStreamLoadInfo objects containing stream load task information
+     */
     public abstract List<TStreamLoadInfo> toStreamLoadThrift();
+
+    /**
+     * Returns load information in Thrift format for querying information_schema.loads.
+     * 
+     * <p>The returned {@link TLoadInfo} objects contain all fields that match the columns defined in
+     * {@link com.starrocks.catalog.system.information.LoadsSystemTable}.
+     * 
+     * @return List of TLoadInfo objects containing load task information
+     */
     public abstract List<TLoadInfo> toThrift();
     public abstract void init();
 
@@ -58,7 +76,27 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
     public abstract long createTimeMs();
     public abstract long endTimeMs();
     public abstract long getFinishTimestampMs();
+
+    /**
+     * Returns detailed information about the stream load task for SHOW STREAM LOAD statement.
+     * 
+     * <p>Each inner List&lt;String&gt; represents one row. The field definitions and order
+     * can be found in {@link com.starrocks.sql.ast.ShowStreamLoadStmt#TITLE_NAMES}.
+     * 
+     * @return List of rows, where each row is a List&lt;String&gt; containing the fields
+     *         defined in ShowStreamLoadStmt.TITLE_NAMES
+     */
     public abstract List<List<String>> getShowInfo();
+
+    /**
+     * Returns brief information about the stream load task for SHOW PROC "/stream_loads".
+     * 
+     * <p>Each inner List&lt;String&gt; represents one row. The field definitions and order
+     * can be found in {@link com.starrocks.common.proc.StreamLoadsProcDir#TITLE_NAMES}.
+     * 
+     * @return List of rows, where each row is a List&lt;String&gt; containing the fields
+     *         defined in StreamLoadsProcDir.TITLE_NAMES
+     */
     public abstract List<List<String>> getShowBriefInfo();
     public abstract String getStringByType();
 }

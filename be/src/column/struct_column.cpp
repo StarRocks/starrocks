@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/column_view/column_view.h"
-#include "util/mysql_row_buffer.h"
+#include "column/mysql_row_buffer.h"
 
 namespace starrocks {
 

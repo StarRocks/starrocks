@@ -16,6 +16,8 @@
 
 #include <atomic>
 
+#include "base/string/faststring.h"
+#include "base/time/time.h"
 #include "column/chunk.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -23,10 +25,8 @@
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "util/compression/block_compression.h"
-#include "util/faststring.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
-#include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

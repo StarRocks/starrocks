@@ -18,8 +18,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "common/status.h"
-#include "util/slice.h"
 
 namespace starrocks {
 class ThreadPoolToken;

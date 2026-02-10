@@ -15,9 +15,9 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "exprs/mock_vectorized_expr.h" // NOLINT
 #include "exprs/string_functions.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

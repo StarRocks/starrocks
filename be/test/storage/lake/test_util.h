@@ -18,6 +18,9 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "connector/connector.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
@@ -33,9 +36,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/tablet_meta_manager.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::lake {
 

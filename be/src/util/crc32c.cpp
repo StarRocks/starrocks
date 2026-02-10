@@ -26,7 +26,7 @@
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
-#include "util/coding.h"
+#include "base/coding.h"
 
 namespace starrocks::crc32c {
 
