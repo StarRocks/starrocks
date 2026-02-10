@@ -83,7 +83,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
@@ -112,6 +111,7 @@ public class ShowStmtAnalyzer {
         private static final Logger LOGGER = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
 
         public void analyze(ShowStmt statement, ConnectContext session) {
+            analyzeShowPredicateClause(statement, session);
             analyzeShowPredicate(statement);
             visit(statement, session);
         }
@@ -546,8 +546,8 @@ public class ShowStmtAnalyzer {
         }
 
         private void analyzeShowPredicate(ShowStmt showStmt) {
-            Predicate predicate = showStmt.getPredicate();
-            if (predicate == null) {
+            Expr predicate = showStmt.getPredicate();
+            if (!showStmt.isSelfPredicate() || predicate == null) {
                 return;
             }
 
@@ -574,6 +574,46 @@ public class ShowStmtAnalyzer {
                 }
             }
         }
+
+        private void analyzeShowPredicateClause(ShowStmt showStmt, ConnectContext context) {
+            Expr predicate = showStmt.getPredicate();
+            if (showStmt.isSelfPredicate() || predicate == null) {
+                return;
+            }
+
+            // check where columns
+            ShowResultMetaFactory factory = new ShowResultMetaFactory();
+            ShowResultSetMetaData meta = factory.getMetadata(showStmt);
+            ExpressionAnalyzer.analyzeExpressionResolveSlot(showStmt.getPredicate(), context, slotRef -> {
+                int index = meta.getColumnIdx(slotRef.getColumnName().toLowerCase());
+                slotRef.setType(meta.getColumn(index).getType());
+            });
+
+            // check order by columns
+            List<OrderByElement> orderByElements = showStmt.getOrderByElements();
+            if (!showStmt.isSelfOrderBy() && orderByElements != null) {
+                List<OrderByPair> orderByPairs = new ArrayList<>();
+                for (OrderByElement orderByElement : orderByElements) {
+                    if (!(orderByElement.getExpr() instanceof SlotRef)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Show stmt only support order by column");
+                    }
+                    SlotRef slotRef = (SlotRef) orderByElement.getExpr();
+                    int index = meta.getColumnIdx(slotRef.getColumnName().toLowerCase());
+                    orderByPairs.add(new OrderByPair(index, orderByElement.getIsAsc()));
+                }
+                showStmt.setOrderByPairs(orderByPairs);
+            }
+            // check limit
+            if (!showStmt.isSelfLimit() && showStmt.getLimitElement() != null) {
+                if (!showStmt.getLimitElement().getLimitExpr().isConstant()) {
+                    throw new SemanticException("Limit expr must be constant");
+                }
+                if (!showStmt.getLimitElement().getOffsetExpr().isConstant()) {
+                    throw new SemanticException("Offset expr must be constant");
+                }
+            }
+        }
+
 
         @Override
         public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
