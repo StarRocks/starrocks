@@ -143,6 +143,7 @@ public:
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     LogicalType column_type() const { return _column_type; }
+    int32_t column_length() const { return _column_length; }
     bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }
     bool all_dict_encoded() const { return _flags & kAllDictEncodedMask; }
 
@@ -254,6 +255,7 @@ private:
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
     LogicalType _column_child_type = TYPE_UNKNOWN;
+    int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
     uint32 _column_unique_id = std::numeric_limits<uint32_t>::max();

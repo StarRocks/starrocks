@@ -478,7 +478,22 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
         ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
-        if (_column_readers[id]->column_type() == column.type()) {
+        bool need_cast = false;
+        if (_column_readers[id]->column_type() != column.type()) {
+            need_cast = true;
+        } else if (column.type() == TYPE_CHAR) {
+            // if the column is a char column, we need to check if the length of the column is the same as
+            // the length stored in the segment footer (the original length when the segment was written).
+            // Because the char column is padded with 0 to the length of the tablet column and the storage
+            // bitmap index and zone map need it.
+            // In shared-data mode, segments may be opened with a new tablet schema that has a different
+            // CHAR length than what's stored on disk, so we must compare against the segment's stored length.
+            int32_t segment_column_length = _column_readers[id]->column_length();
+            if (segment_column_length != column.length()) {
+                need_cast = true;
+            }
+        }
+        if (!need_cast) {
             return source_iter;
         } else {
             auto nullable = _column_readers[id]->is_nullable();
