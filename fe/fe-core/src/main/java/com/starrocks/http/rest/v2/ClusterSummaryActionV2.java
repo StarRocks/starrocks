@@ -32,7 +32,7 @@ import java.util.Map;
 
 // This class is a RESTFUL interface to get cluster summary.
 // Usage:
-// wget get http://fe_host:fe_http_port/api/v2/cluster_summary;
+// wget -qO- "http://fe_host:fe_http_port/api/v2/cluster_summary"
 //
 //{
 //   "code": 200,
@@ -69,11 +69,7 @@ public class ClusterSummaryActionV2 extends RestBaseAction {
         NodeMgr nodeMgr = globalState.getNodeMgr();
         SystemInfoService clusterInfo = nodeMgr.getClusterInfo();
 
-        ImmutableMap<Long, Backend> backendMap =
-                GlobalStateMgr.getCurrentState()
-                        .getNodeMgr()
-                        .getClusterInfo()
-                        .getIdToBackend();
+        ImmutableMap<Long, Backend> backendMap = clusterInfo.getIdToBackend();
 
         long tableCount = getTblCount(infoService);
         long dataUsedCapacity = getDataUsedCapacity(backendMap);
@@ -97,12 +93,11 @@ public class ClusterSummaryActionV2 extends RestBaseAction {
         sendResult(request, response, new RestBaseResultV2<>(clusterSummaryRestResult));
     }
 
-    private int getTblCount(LocalMetastore infoService) {
-        Integer tableCount = infoService.getAllDbs()
+    private long getTblCount(LocalMetastore infoService) {
+        return infoService.getAllDbs()
                 .stream()
-                .map(db -> db.getTables().size())
-                .reduce(Integer::sum).orElse(0);
-        return tableCount;
+                .mapToLong(db -> (long) db.getTables().size())
+                .sum();
     }
 
     private long getDataUsedCapacity(Map<Long, Backend> backendMap) {

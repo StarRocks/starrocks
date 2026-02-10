@@ -27,7 +27,7 @@ import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
-public class ClusterOverviewActionV2Test extends StarRocksHttpTestCase {
+public class ClusterSummaryActionV2Test extends StarRocksHttpTestCase {
 
     private static final String CLUSTER_SUMMARY_URI = "/api/v2/cluster_summary";
 
