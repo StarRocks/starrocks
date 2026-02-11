@@ -26,6 +26,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/exec_node.h"
@@ -43,7 +44,6 @@
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "types/type_descriptor.h"
-#include "util/runtime_profile.h"
 #include "utils.h"
 
 namespace starrocks::parquet {

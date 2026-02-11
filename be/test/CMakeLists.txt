@@ -352,7 +352,6 @@ set(EXEC_FILES
         ./util/metrics/file_scan_metrics_test.cpp
         ./util/parse_util_test.cpp
         ./util/rle_encoding_test.cpp
-        ./util/runtime_profile_test.cpp
         ./base/raw_container_test.cpp
         ./util/string_util_test.cpp
         ./util/thread_test.cpp

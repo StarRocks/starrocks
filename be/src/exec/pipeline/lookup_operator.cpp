@@ -23,6 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/global_types.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/olap_scan_node.h"
@@ -50,7 +51,6 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

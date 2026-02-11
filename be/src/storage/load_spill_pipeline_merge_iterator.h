@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spiller_factory.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

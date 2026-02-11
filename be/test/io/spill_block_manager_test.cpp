@@ -35,6 +35,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sorting/merge.h"
@@ -60,7 +61,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 #include "util/uid_util.h"
 
 namespace starrocks::vectorized {

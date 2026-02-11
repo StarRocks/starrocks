@@ -18,11 +18,11 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class ExprContext;

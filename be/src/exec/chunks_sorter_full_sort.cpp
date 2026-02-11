@@ -15,13 +15,13 @@
 #include "chunks_sorter_full_sort.h"
 
 #include "base/utility/defer_op.h"
+#include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(chunks_sorter_full_sort_partial_sort_bad_alloc);

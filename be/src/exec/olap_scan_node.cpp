@@ -23,6 +23,7 @@
 #include "column/column_access_path.h"
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/limit_operator.h"
@@ -46,7 +47,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/runtime_profile.h"
 
 // Print log with query id.
 #define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << tls_thread_status.query_id() << "] "

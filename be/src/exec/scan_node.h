@@ -39,9 +39,9 @@
 #include <string>
 
 #include "column/column_access_path.h"
+#include "common/runtime_profile.h"
 #include "exec/exec_node.h"
 #include "gen_cpp/InternalService_types.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

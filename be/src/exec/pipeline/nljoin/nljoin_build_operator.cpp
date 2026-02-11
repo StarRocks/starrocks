@@ -16,8 +16,8 @@
 
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/operator.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

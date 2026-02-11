@@ -20,6 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_metadata.h"
@@ -29,7 +30,6 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

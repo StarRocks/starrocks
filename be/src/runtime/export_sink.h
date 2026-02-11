@@ -36,11 +36,11 @@
 
 #include <vector>
 
+#include "common/runtime_profile.h"
 #include "exec/data_sink.h"
 #include "formats/csv/converter.h"
 #include "fs/fs.h"
 #include "io/formatted_output_stream_file.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

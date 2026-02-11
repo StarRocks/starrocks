@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
@@ -29,7 +30,6 @@
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "types/logical_type_infra.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

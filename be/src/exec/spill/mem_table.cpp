@@ -20,13 +20,13 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/chunks_sorter.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/serde.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 

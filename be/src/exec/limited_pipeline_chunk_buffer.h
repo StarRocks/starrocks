@@ -19,8 +19,8 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/chunk_buffer_memory_manager.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 template <class BufferMetrics>

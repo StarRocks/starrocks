@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/olap_scan_node.h"
 #include "runtime/current_thread.h"
@@ -28,7 +29,6 @@
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

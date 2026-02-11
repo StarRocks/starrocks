@@ -17,11 +17,11 @@
 #include <sstream>
 #include <utility>
 
+#include "common/runtime_profile.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/network_util.h"
-#include "util/runtime_profile.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

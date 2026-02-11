@@ -25,6 +25,7 @@
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/field.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/olap_scan_node.h"
@@ -51,7 +52,6 @@
 #include "storage/virtual_column_utils.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 #include "util/table_metrics.h"
 
 namespace starrocks::pipeline {

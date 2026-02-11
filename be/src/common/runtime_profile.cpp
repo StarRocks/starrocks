@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/runtime_profile.h"
+#include "common/runtime_profile.h"
 
 #include <boost/thread/thread_time.hpp>
 #include <iomanip>

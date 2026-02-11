@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
 #include "exec/pipeline/hash_partition_context.h"
@@ -31,7 +32,6 @@
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

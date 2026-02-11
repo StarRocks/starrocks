@@ -17,13 +17,13 @@
 #include <memory>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

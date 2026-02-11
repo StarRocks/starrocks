@@ -14,8 +14,8 @@
 
 #include "storage/index/vector/vector_index_writer.h"
 
+#include "common/runtime_profile.h"
 #include "fs/fs_util.h"
-#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

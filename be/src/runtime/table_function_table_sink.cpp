@@ -14,6 +14,7 @@
 
 #include "table_function_table_sink.h"
 
+#include "common/runtime_profile.h"
 #include "connector/file_chunk_sink.h"
 #include "exec/data_sink.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
@@ -23,7 +24,6 @@
 #include "formats/csv/csv_file_writer.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

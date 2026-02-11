@@ -23,6 +23,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
@@ -38,7 +39,6 @@
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "util/json_flattener.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

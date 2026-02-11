@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/mysql_row_buffer.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "connector/connector.h"
 #include "exec/scan_node.h"
@@ -31,7 +32,6 @@
 #include "service/brpc.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/runtime_profile.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {

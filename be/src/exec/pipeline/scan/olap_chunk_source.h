@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "common/runtime_profile.h"
 #include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/olap_utils.h"
@@ -29,7 +30,6 @@
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

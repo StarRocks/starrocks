@@ -36,9 +36,9 @@
 
 #include "base/failpoint/fail_point.h"
 #include "common/mem_chunk.h"
+#include "common/runtime_profile.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/system_allocator.h"
-#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

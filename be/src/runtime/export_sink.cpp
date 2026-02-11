@@ -39,13 +39,13 @@
 
 #include "base/time/time.h"
 #include "column/column.h"
+#include "common/runtime_profile.h"
 #include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
 #include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

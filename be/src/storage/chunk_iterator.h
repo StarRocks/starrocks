@@ -18,9 +18,9 @@
 
 #include "column/chunk.h"
 #include "column/schema.h"
+#include "common/runtime_profile.h"
 #include "runtime/global_dict/types.h"
 #include "storage/row_source_mask.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class Status;

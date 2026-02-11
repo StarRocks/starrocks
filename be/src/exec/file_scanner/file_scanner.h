@@ -16,10 +16,10 @@
 
 #include <string>
 
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class SequentialFile;

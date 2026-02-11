@@ -15,10 +15,10 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/chunks_sorter.h"
 #include "exec/sorting/merge.h"
 #include "exprs/expr_context.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 // Sort Chunks in memory with specified order by rules.

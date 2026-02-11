@@ -25,6 +25,7 @@
 #include "base/string/slice.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
@@ -36,7 +37,6 @@
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/compression/block_compression.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class NullableColumn;

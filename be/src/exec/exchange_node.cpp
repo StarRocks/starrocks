@@ -35,6 +35,7 @@
 #include "exec/exchange_node.h"
 
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
@@ -46,7 +47,6 @@
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

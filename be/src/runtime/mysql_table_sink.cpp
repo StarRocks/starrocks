@@ -37,9 +37,9 @@
 #include <memory>
 #include <sstream>
 
+#include "common/runtime_profile.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 #ifndef __APPLE__
 #include "runtime/mysql_table_writer.h"
 #endif

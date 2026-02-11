@@ -47,6 +47,7 @@
 
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "formats/parquet/chunk_writer.h"
@@ -56,7 +57,6 @@
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/runtime_profile.h"
 
 namespace parquet {
 class FileMetaData;

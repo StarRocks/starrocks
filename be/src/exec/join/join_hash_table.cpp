@@ -20,6 +20,7 @@
 #include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "common/system/cpu_info.h"
 #include "exec/hash_join_node.h"
@@ -28,7 +29,6 @@
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
 #include "types/logical_type_infra.h"
-#include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
 namespace starrocks {

@@ -26,6 +26,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/runtime_profile.h"
 #include "exec/file_scanner/json_scanner.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
@@ -38,7 +39,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "types/type_descriptor.h"
-#include "util/runtime_profile.h"
 #ifdef __cplusplus
 extern "C" {
 #endif

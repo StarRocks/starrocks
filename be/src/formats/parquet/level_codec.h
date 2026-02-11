@@ -23,11 +23,11 @@
 
 #include "base/bit/bit_stream_utils.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "formats/parquet/types.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/rle_encoding.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class Slice;

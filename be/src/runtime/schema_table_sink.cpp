@@ -21,6 +21,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/configbase.h"
+#include "common/runtime_profile.h"
 #include "exec/tablet_info.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
@@ -29,7 +30,6 @@
 #include "types/datum.h"
 #include "util/brpc_stub_cache.h"
 #include "util/ref_count_closure.h"
-#include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
 namespace starrocks {

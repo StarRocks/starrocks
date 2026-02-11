@@ -19,11 +19,11 @@
 #include <random>
 #include <stdexcept>
 
+#include "common/runtime_profile.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

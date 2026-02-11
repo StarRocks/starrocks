@@ -17,6 +17,7 @@ set(COMMON_TEST_FILES
     config_test.cpp
     cow_test.cpp
     process_exit_test.cpp
+    runtime_profile_test.cpp
     tracer_test.cpp
 )
 

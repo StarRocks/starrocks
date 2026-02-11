@@ -45,6 +45,7 @@
 #include "cache/mem_cache/page_cache.h"
 #include "column/column.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_starlet.h"
@@ -55,7 +56,6 @@
 #include "storage/rowset/storage_page_decoder.h"
 #include "util/compression/block_compression.h"
 #include "util/crc32c.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

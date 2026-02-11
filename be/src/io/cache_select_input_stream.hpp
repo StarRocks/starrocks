@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "io/cache_input_stream.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::io {
 
