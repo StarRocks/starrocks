@@ -369,10 +369,12 @@ bool LakePersistentIndexParallelCompactMgr::key_ranges_overlap(const std::string
 Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb,
                                                                        const TabletMetadataPtr& metadata,
                                                                        std::vector<std::string>* sample_keys) {
-    if (sstable_pb.filesize() <= config::pk_index_sstable_sample_interval_bytes) {
-        // use start key as boundary key only for small sstables
-        sample_keys->push_back(sstable_pb.range().start_key());
-    } else {
+    // Always include start_key first, because sample_keys() samples from the
+    // index block where entries correspond to the last key of each data block
+    // (via FindShortestSeparator), not the first key. Without the start_key,
+    // the first segment's seek_key may skip keys at the beginning of the SST.
+    sample_keys->push_back(sstable_pb.range().start_key());
+    if (sstable_pb.filesize() > config::pk_index_sstable_sample_interval_bytes) {
         // get sample keys from large sstables
         auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
         ASSIGN_OR_RETURN(auto sstable,
