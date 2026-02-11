@@ -22,6 +22,7 @@ set(UTIL_FILES
   arrow/starrocks_column_to_arrow.cpp
   bloom_filter.cpp
   block_split_bloom_filter.cpp
+  buffer.cpp
   brpc_stub_cache.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp

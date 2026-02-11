@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
+=======
+#include "runtime/memory/memory_allocator.h"
+
+>>>>>>> 97345b74b9c (introduce buffer)
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -20,7 +25,10 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
+<<<<<<< HEAD
 #include "runtime/memory/tracked_allocator.h"
+=======
+>>>>>>> 97345b74b9c (introduce buffer)
 
 namespace starrocks::memory {
 
@@ -51,12 +59,15 @@ TEST(JemallocAllocatorTest, ClearAndAlignment) {
 }
 
 TEST(TrackedAllocatorTest, TracksMemTrackerConsumption) {
+<<<<<<< HEAD
     struct RestoreMemTrackerSource {
         ~RestoreMemTrackerSource() { starrocks::CurrentThread::set_mem_tracker_source(nullptr, nullptr); }
     } restore_guard;
     starrocks::CurrentThread::set_mem_tracker_source([]() { return true; },
                                                      []() { return (starrocks::MemTracker*)nullptr; });
 
+=======
+>>>>>>> 97345b74b9c (introduce buffer)
     TrackedAllocator<JemallocAllocator<false>> allocator;
     starrocks::MemTracker tracker(-1, "jemalloc-ut");
     starrocks::CurrentThreadMemTrackerSetter setter(&tracker);
