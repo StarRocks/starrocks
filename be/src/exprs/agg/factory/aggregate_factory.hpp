@@ -426,7 +426,7 @@ AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
 
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakePercentileContDecimalRateAggregateFunction() {
-    return new PercentileContDecimalRateAggregateFunction<LT>();
+    return std::make_shared<PercentileContDecimalRateAggregateFunction<LT>>();
 }
 
 template <LogicalType PT>
