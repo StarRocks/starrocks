@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.thrift.PlanNodesConstants.ROW_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.SEGMENT_ID_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.TABLET_ID_COLUMN_NAME;
 
 /**
@@ -46,20 +48,19 @@ public class VirtualColumnRegistry {
     private static final List<VirtualColumnDefinition> VIRTUAL_COLUMNS = ImmutableList.of(
             new VirtualColumnDefinition(
                     TABLET_ID_COLUMN_NAME,
-                    IntegerType.INT,
+                    IntegerType.BIGINT,
                     "Tablet ID of the data block containing this row"
+            ),
+            new VirtualColumnDefinition(
+                    SEGMENT_ID_COLUMN_NAME,
+                    IntegerType.BIGINT,
+                    "Segment id"
+            ),
+            new VirtualColumnDefinition(
+                    ROW_ID_COLUMN_NAME,
+                    IntegerType.BIGINT,
+                    "Row ID within the segment"
             )
-            // Future virtual columns - uncomment to enable:
-            // new VirtualColumnDefinition(
-            //         SEGMENT_ID_COLUMN_NAME,
-            //         IntegerType.BIGINT,
-            //         "Segment ID within the tablet"
-            // ),
-            // new VirtualColumnDefinition(
-            //         ROW_ID_COLUMN_NAME,
-            //         IntegerType.BIGINT,
-            //         "Row ID within the segment"
-            // )
     );
     
     // Fast lookup map: column name (case-insensitive) -> definition

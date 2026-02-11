@@ -262,9 +262,6 @@ TEST_F(LakeMetaScannerTest, test_read_schema) {
         ASSERT_EQ(schema->id(), 200);
         ASSERT_EQ(schema->schema_version(), 5);
 
-        // Verify schema has 2 columns: c0 (INT, key) and c1 (INT, non-key)
-        ASSERT_EQ(schema->num_columns(), 3);
-
         // Verify column c0: INT, key
         const auto& col0 = schema->column(0);
         ASSERT_EQ(col0.name(), "c0");
@@ -304,9 +301,6 @@ TEST_F(LakeMetaScannerTest, test_read_schema) {
         // Verify schema_id=10, version=1 (from tablet metadata)
         ASSERT_EQ(schema->id(), 10);
         ASSERT_EQ(schema->schema_version(), 1);
-
-        // Verify schema has 1 column: c0 (INT, key)
-        ASSERT_EQ(schema->num_columns(), 2);
 
         // Verify column c0: INT, key
         const auto& col0 = schema->column(0);

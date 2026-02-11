@@ -18,9 +18,12 @@
 #include <utility>
 
 #include "column/column.h"
+#include "gen_cpp/PlanNodes_constants.h"
 #include "runtime/descriptors.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/rowid_column_iterator.h"
 #include "storage/types.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 struct VirtualColumnDefinition;
@@ -44,21 +47,46 @@ struct VirtualColumnDefinition {
     ColumnAppender appender;
 };
 
-ColumnIterator* create_tablet_iterator(const VirtualColumnFactory::Options& options,
-                                       const VirtualColumnDefinition& def) {
-    std::string tablet_id = std::to_string(options.tablet_id);
+struct TabletExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.tablet_id; }
+};
+
+struct SegmentExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.segment_id; }
+};
+
+struct RowIdExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.num_rows; }
+};
+
+template <class Extractor>
+ColumnIterator* create_iterator(const VirtualColumnFactory::Options& options, const VirtualColumnDefinition& def) {
+    auto value = Extractor().extract(options);
+    size_t schema_length = sizeof(value);
     TypeInfoPtr type_info = get_type_info(def.type);
-    return new DefaultValueColumnIterator(true, tablet_id, def.nullable, type_info, sizeof(int32_t), options.num_rows);
+    return new DefaultValueColumnIterator(true, std::to_string(value), def.nullable, type_info, schema_length,
+                                          options.num_rows);
 }
 
-Status append_tablet_column(const VirtualColumnFactory::Options& options, const VirtualColumnDefinition& def,
-                            Column* column) {
-    column->append_datum(Datum(options.tablet_id));
+ColumnIterator* create_virtual_row_id_iterator(const VirtualColumnFactory::Options& options,
+                                               const VirtualColumnDefinition& def) {
+    return new TRowIdColumnIterator<int64_t>();
+}
+
+template <class Extractor>
+Status append_datum(const VirtualColumnFactory::Options& options, const VirtualColumnDefinition& def, Column* column) {
+    column->append_datum(Datum(Extractor().extract(options)));
     return Status::OK();
 }
 
 struct VirtualColumnDefinition VIRTUAL_COLUMNS[] = {
-        VirtualColumnDefinition("_tablet_id_", TYPE_INT, false, create_tablet_iterator, append_tablet_column)};
+        VirtualColumnDefinition(PlanNodesConstants().TABLET_ID_COLUMN_NAME, TYPE_BIGINT, false,
+                                create_iterator<TabletExtractor>, append_datum<TabletExtractor>),
+        VirtualColumnDefinition(PlanNodesConstants().SEGMENT_ID_COLUMN_NAME, TYPE_BIGINT, false,
+                                create_iterator<SegmentExtractor>, append_datum<SegmentExtractor>),
+        VirtualColumnDefinition(PlanNodesConstants().ROW_ID_COLUMN_NAME, TYPE_BIGINT, false,
+                                create_virtual_row_id_iterator, append_datum<RowIdExtractor>),
+};
 
 class SlotDescriptor;
 bool is_virtual_column(const std::string_view col_name) {
