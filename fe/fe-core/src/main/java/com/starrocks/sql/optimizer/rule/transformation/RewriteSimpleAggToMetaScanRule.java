@@ -320,15 +320,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             CallOperator call = entry.getValue();
             if (call.getFnName().equals(FunctionSet.MAX) || call.getFnName().equals(FunctionSet.MIN)) {
                 List<ColumnRefOperator> minMaxRefs = call.getUsedColumns().getColumnRefOperators(factory);
-                if (minMaxRefs.size() != 1) {
-                    continue;
-                }
                 ColumnRefOperator ref = minMaxRefs.get(0);
                 if (!ref.getType().isNumericType() && !ref.getType().isDate()) {
-                    continue;
-                }
-
-                if (!scanOperator.getColRefToColumnMetaMap().containsKey(ref)) {
+                    newAggCalls.put(entry.getKey(), entry.getValue());
                     continue;
                 }
 
