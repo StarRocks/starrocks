@@ -421,7 +421,7 @@ public class OlapTable extends Table {
             olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
         }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
-        Map<String, Partition> nameToPartitions = Maps.newLinkedHashMap();
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
