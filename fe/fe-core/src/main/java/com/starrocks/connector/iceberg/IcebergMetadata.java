@@ -1498,6 +1498,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
+        finishSink(dbName, tableName, commitInfos, branch, extra, null);
+    }
+
+    @Override
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch, Object extra,
+                           ConnectContext context) {
         // Normalize db name and table name to lower case for commit queue key
         // because some catalogs are case-insensitive (e.g., Hive, Glue)
         //
@@ -1542,10 +1548,10 @@ public class IcebergMetadata implements ConnectorMetadata {
                     dataFile.isSetFile_content() &&
                             (dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES));
             if (isDeleteOperation) {
-                commitDeleteOperation(transaction, nativeTbl, dataFiles, branch, dbName, tableName, extra);
+                commitDeleteOperation(transaction, nativeTbl, dataFiles, branch, dbName, tableName, extra, context);
             } else {
                 commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite, isRewrite, extra,
-                        dbName, tableName);
+                        dbName, tableName, context);
             }
         };
 
@@ -1608,7 +1614,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private void commitDeleteOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
                                        List<TIcebergDataFile> dataFiles, String branch,
-                                       String dbName, String tableName, Object extra) {
+                                       String dbName, String tableName, Object extra,
+                                       ConnectContext context) {
         // DELETE operations - use RowDelta
         RowDelta rowDelta = transaction.newRowDelta();
         if (branch != null) {
@@ -1673,6 +1680,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             rowDelta.validateNoConflictingDataFiles();
         }
 
+        // Set audit info for the commit
+        if (context != null) {
+            updateCommitInfo(rowDelta, context);
+        }
+
         commitWithCleanup(() -> {
             rowDelta.commit();
             transaction.commitTransaction();
@@ -1683,7 +1695,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     private void commitDataOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
                                      List<TIcebergDataFile> dataFiles, String branch,
                                      boolean isOverwrite, boolean isRewrite, Object extra,
-                                     String dbName, String tableName) {
+                                     String dbName, String tableName,
+                                     ConnectContext context) {
         BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
 
         if (branch != null) {
@@ -1721,6 +1734,13 @@ public class IcebergMetadata implements ConnectorMetadata {
             ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
             ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
             ((RewriteData) batchWrite).setSnapshotId(nativeTbl.currentSnapshot().snapshotId());
+        }
+
+        // Set audit info for the commit
+        if (context != null) {
+            batchWrite.setAuditInfo("StarRocks",
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion(),
+                    context.getCurrentUserIdentity() != null ? context.getCurrentUserIdentity().getUser() : "None");
         }
 
         commitWithCleanup(() -> {
@@ -1809,6 +1829,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         void commit();
 
         void toBranch(String targetBranch);
+
+        SnapshotUpdate<?> getSnapshotUpdate();
+
+        default void setAuditInfo(String engineName, String engineVersion, String user) {
+            SnapshotUpdate<?> update = getSnapshotUpdate();
+            if (update != null) {
+                update.set(ENGINE_NAME, engineName);
+                update.set(ENGINE_VERSION, engineVersion);
+                update.set(STARROCKS_USER, user);
+            }
+        }
     }
 
     public static class Append implements BatchWrite {
@@ -1841,6 +1872,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         @Override
         public void toBranch(String targetBranch) {
             append = append.toBranch(targetBranch);
+        }
+
+        @Override
+        public SnapshotUpdate<?> getSnapshotUpdate() {
+            return append;
         }
     }
 
@@ -1910,6 +1946,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         public void toBranch(String targetBranch) {
             replace = replace.toBranch(targetBranch);
         }
+
+        @Override
+        public SnapshotUpdate<?> getSnapshotUpdate() {
+            return replace;
+        }
     }
 
     public static class RewriteData implements BatchWrite {
@@ -1946,6 +1987,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         public void setSnapshotId(long snapshotId) {
             rewriteFiles.validateFromSnapshot(snapshotId);
+        }
+
+        @Override
+        public SnapshotUpdate<?> getSnapshotUpdate() {
+            return rewriteFiles;
         }
     }
 
