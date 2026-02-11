@@ -294,6 +294,9 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");
         analyzeSuccess("select percentile_cont(tj,0.5) from tall group by tb");
         analyzeSuccess("select percentile_cont(tj, cast(0.5 as double)) from tall group by tb");
+        analyzeSuccess("select percentile_cont(tj, cast(0.5 as decimal(9, 8))) from tall group by tb");
+        analyzeFail("select percentile_cont(tj, cast(0.5 as decimal(19, 18))) from tall group by tb",
+                "percentile_cont rate scale(18) is too large");
         analyzeSuccess("select percentile_cont(1, 0.4);");
         analyzeSuccess("select percentile_cont(1, cast(0.4 as double));");
     }
