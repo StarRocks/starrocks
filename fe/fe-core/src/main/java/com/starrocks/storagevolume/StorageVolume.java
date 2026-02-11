@@ -104,6 +104,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public static final String V_SHARD_ID = "v_shard_id";
     public static final String V_SHARD_GROUP_ID = "v_shard_group_id";
 
+    @SerializedName("bsv")
+    private String baseStorageVolumeName;
+
     public static String CREDENTIAL_MASK = "******";
 
     private String dumpMaskedParams(Map<String, String> params) {
@@ -114,7 +117,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
-                         Map<String, String> params, boolean enabled, String comment) throws DdlException {
+                    Map<String, String> params, boolean enabled, String comment) throws DdlException {
         this.id = id;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
@@ -142,6 +145,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.vTabletGroupId = sv.vTabletGroupId;
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
         this.params = new HashMap<>(sv.params);
+        this.baseStorageVolumeName = sv.baseStorageVolumeName;
         validateStorageVolumeConstraints();
     }
 
@@ -207,6 +211,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public void setVTabletGroupId(long vTabletGroupId) {
         this.vTabletGroupId = vTabletGroupId;
+    }
+
+    public void setBaseStorageVolumeName(String baseStorageVolumeName) {
+        this.baseStorageVolumeName = baseStorageVolumeName;
+    }
+
+    public String getBaseStorageVolumeName() {
+        return baseStorageVolumeName;
     }
 
     public void setComment(String comment) {
@@ -350,6 +362,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 // the previous vTabletId will be cleared by StarMgrMetaSyncer
                 LOG.error("Failed to parse vTabletGroupId from properties, vTabletGroupId: {}", vTabletGroupId, e);
             }
+        }
+        if (fsInfo.hasBaseFsInfo()) {
+            storageVolume.setBaseStorageVolumeName(fsInfo.getBaseFsInfo().getFsName());
         }
 
         return storageVolume;

@@ -53,6 +53,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.lake.snapshot.ClusterSnapshotRestoredVersionMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -1288,6 +1289,43 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public List<TUniqueId> getLoadIds() {
         return loadIds;
+    }
+
+    public boolean isRestoreForcePublish() {
+        ClusterSnapshotRestoredVersionMgr restoreMgr =
+                GlobalStateMgr.getCurrentState().getClusterSnapshotRestoredVersionMgr();
+        if (restoreMgr.getRestoredCommittedVersions() == null
+                || restoreMgr.getRestoredCommittedVersions().isEmpty()) {
+            return false;
+        }
+
+        if (idToTableCommitInfos == null || idToTableCommitInfos.isEmpty()) {
+            return false;
+        }
+
+        for (Map.Entry<Long, TableCommitInfo> tableEntry : idToTableCommitInfos.entrySet()) {
+            long tableId = tableEntry.getKey();
+            TableCommitInfo tableCommitInfo = tableEntry.getValue();
+            if (tableCommitInfo == null) {
+                continue;
+            }
+            Map<Long, PartitionCommitInfo> partitionCommitInfos = tableCommitInfo.getIdToPartitionCommitInfo();
+            if (partitionCommitInfos == null || partitionCommitInfos.isEmpty()) {
+                continue;
+            }
+            for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
+                boolean isRestoreVersion = GlobalStateMgr.getCurrentState()
+                        .getClusterSnapshotRestoredVersionMgr()
+                        .isRestoreVersion(dbId,
+                                tableId,
+                                partitionCommitInfo.getPhysicalPartitionId(),
+                                partitionCommitInfo.getVersion());
+                if (isRestoreVersion) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override

@@ -91,6 +91,33 @@ public class TxnInfoHelperTest {
         assertNull(info.loadIds);
     }
 
+    @Test
+    public void testRestoreGtid() {
+        TransactionState state = Mockito.mock(TransactionState.class, Mockito.RETURNS_DEEP_STUBS);
+
+        Mockito.when(state.getTransactionId()).thenReturn(100L);
+        Mockito.when(state.isUseCombinedTxnLog()).thenReturn(false);
+        Mockito.when(state.getCommitTime()).thenReturn(10000L); // ms
+        Mockito.when(state.getSourceType()).thenReturn(TransactionState.LoadJobSourceType.FRONTEND);
+        Mockito.when(state.getTxnCommitAttachment()).thenReturn(null);
+        Mockito.when(state.getLoadIds()).thenReturn(null);
+        Mockito.when(state.getTransactionType().toProto()).thenReturn(null);
+
+        // Set restoreForcePublish to true
+        long globalTransactionId = 2000L;
+        Mockito.when(state.getGlobalTransactionId()).thenReturn(globalTransactionId);
+        Mockito.when(state.isRestoreForcePublish()).thenReturn(true);
+
+        TxnInfoPB info = TxnInfoHelper.fromTransactionState(state);
+
+        assertEquals(100L, info.txnId.longValue());
+        assertEquals(10L, info.commitTime.longValue()); // seconds
+        assertTrue(info.restoreForcePublish);
+        // restoreGtid should be globalTransactionId + 1
+        assertNotNull(info.restoreGtid);
+        assertEquals(2001L, info.restoreGtid.longValue());
+    }
+
     private static TUniqueId tid(long hi, long lo) {
         TUniqueId id = new TUniqueId();
         id.setHi(hi);

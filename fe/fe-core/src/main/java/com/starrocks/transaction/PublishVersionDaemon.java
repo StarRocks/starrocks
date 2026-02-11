@@ -117,6 +117,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (Config.skip_publish_version) {
+            return;
+        }
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             if (Config.lake_enable_batch_publish_version && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {

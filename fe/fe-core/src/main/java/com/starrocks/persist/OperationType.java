@@ -619,6 +619,8 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_CLUSTER_SNAPSHOT_LOG = 13513;
+    @IgnorableOnReplayFailed
+    public static final short OP_CLUSTER_SNAPSHOT_RESTORED_VERSION = 13514;
 
     @IgnorableOnReplayFailed
     public static final short OP_ADD_SQL_QUERY_BLACK_LIST = 13520;

@@ -26,4 +26,15 @@ bool TBackend::operator<(const TBackend& rhs) const {
     return std::tie(host, be_port, http_port) < std::tie(rhs.host, rhs.be_port, rhs.http_port);
 }
 
+// Comparator for THostPorts. Thrift declares this (in gen-cpp/Types_types.h) but
+// never defines it.
+bool TNetworkAddress::operator<(const TNetworkAddress& that) const {
+    if (this->hostname < that.hostname) {
+        return true;
+    } else if ((this->hostname == that.hostname) && (this->port < that.port)) {
+        return true;
+    }
+    return false;
+}
+
 } // namespace starrocks

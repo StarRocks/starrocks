@@ -201,8 +201,6 @@ public class StarRocksFEServer {
 
             addShutdownHook();
 
-            RestoreClusterSnapshotMgr.finishRestoring();
-
             handleGracefulExit();
 
             LOG.info("FE started successfully");

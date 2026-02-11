@@ -30,12 +30,18 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.lake.snapshot.ClusterSnapshotRestoredVersionMgr;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -44,6 +50,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -56,6 +63,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TransactionStateTest {
+
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+
+    @Mocked
+    private ClusterSnapshotRestoredVersionMgr restoreMgr;
 
     private static String fileName = "./TransactionStateTest";
 
@@ -346,5 +359,237 @@ public class TransactionStateTest {
         assertEquals(2, readLoadedIndexes.size());
         assertEquals(indexId12, readLoadedIndexes.get(0).getId());
         assertEquals(indexId22, readLoadedIndexes.get(1).getId());
+    }
+
+    @Test
+    public void testIsRestoreForcePublish() {
+        long dbId = 1000L;
+        long tableId = 2000L;
+        long physicalPartitionId = 3000L;
+        long version = 10L;
+
+        TransactionState txnState = new TransactionState(dbId, Lists.newArrayList(tableId),
+                3000, "test_label", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        // Test case 1: restoredCommittedVersions is null
+        {
+            new MockUp<GlobalStateMgr>() {
+                @Mock
+                public GlobalStateMgr getCurrentState() {
+                    return globalStateMgr;
+                }
+            };
+
+            new Expectations() {
+                {
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr();
+                    result = restoreMgr;
+                    minTimes = 0;
+
+                    restoreMgr.getRestoredCommittedVersions();
+                    result = null;
+                }
+            };
+
+            assertFalse(txnState.isRestoreForcePublish());
+        }
+
+        // Test case 2: restoredCommittedVersions is empty
+        {
+            new Expectations() {
+                {
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr();
+                    result = restoreMgr;
+                    minTimes = 0;
+
+                    restoreMgr.getRestoredCommittedVersions();
+                    result = Collections.emptyMap();
+                }
+            };
+
+            assertFalse(txnState.isRestoreForcePublish());
+        }
+
+        // Test case 3: idToTableCommitInfos is null or empty
+        {
+            Map<Long, Map<Long, Map<Long, Long>>> restoredVersions = new HashMap<>();
+            Map<Long, Map<Long, Long>> tableMap = new HashMap<>();
+            Map<Long, Long> partMap = new HashMap<>();
+            partMap.put(physicalPartitionId, version);
+            tableMap.put(tableId, partMap);
+            restoredVersions.put(dbId, tableMap);
+
+            new Expectations() {
+                {
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr();
+                    result = restoreMgr;
+                    minTimes = 0;
+
+                    restoreMgr.getRestoredCommittedVersions();
+                    result = restoredVersions;
+                }
+            };
+
+            // idToTableCommitInfos is empty
+            assertFalse(txnState.isRestoreForcePublish());
+        }
+
+        // Test case 4: tableCommitInfo is null
+        {
+            Map<Long, Map<Long, Map<Long, Long>>> restoredVersions = new HashMap<>();
+            Map<Long, Map<Long, Long>> tableMap = new HashMap<>();
+            Map<Long, Long> partMap = new HashMap<>();
+            partMap.put(physicalPartitionId, version);
+            tableMap.put(tableId, partMap);
+            restoredVersions.put(dbId, tableMap);
+
+            txnState.putIdToTableCommitInfo(tableId, null);
+
+            new Expectations() {
+                {
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr();
+                    result = restoreMgr;
+                    minTimes = 0;
+
+                    restoreMgr.getRestoredCommittedVersions();
+                    result = restoredVersions;
+                }
+            };
+
+            assertFalse(txnState.isRestoreForcePublish());
+        }
+
+        // Test case 5: partitionCommitInfos is null or empty
+        {
+            Map<Long, Map<Long, Map<Long, Long>>> restoredVersions = new HashMap<>();
+            Map<Long, Map<Long, Long>> tableMap = new HashMap<>();
+            Map<Long, Long> partMap = new HashMap<>();
+            partMap.put(physicalPartitionId, version);
+            tableMap.put(tableId, partMap);
+            restoredVersions.put(dbId, tableMap);
+
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            txnState.putIdToTableCommitInfo(tableId, tableCommitInfo);
+
+            new Expectations() {
+                {
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr();
+                    result = restoreMgr;
+                    minTimes = 0;
+
+                    restoreMgr.getRestoredCommittedVersions();
+                    result = restoredVersions;
+                }
+            };
+
+            assertFalse(txnState.isRestoreForcePublish());
+        }
+
+        // Test case 6: isRestoreVersion returns true (should return true)
+        {
+            Map<Long, Map<Long, Map<Long, Long>>> restoredVersions = new HashMap<>();
+            Map<Long, Map<Long, Long>> tableMap = new HashMap<>();
+            Map<Long, Long> partMap = new HashMap<>();
+            partMap.put(physicalPartitionId, version);
+            tableMap.put(tableId, partMap);
+            restoredVersions.put(dbId, tableMap);
+
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            PartitionCommitInfo partitionCommitInfo = 
+                    new PartitionCommitInfo(physicalPartitionId, version, System.currentTimeMillis());
+            tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+            txnState.putIdToTableCommitInfo(tableId, tableCommitInfo);
+
+            new Expectations() {
+                {
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr();
+                    result = restoreMgr;
+                    minTimes = 0;
+
+                    restoreMgr.getRestoredCommittedVersions();
+                    result = restoredVersions;
+
+                    restoreMgr.isRestoreVersion(dbId, tableId, physicalPartitionId, version);
+                    result = true;
+                }
+            };
+
+            assertTrue(txnState.isRestoreForcePublish());
+        }
+
+        // Test case 7: isRestoreVersion returns false (should return false)
+        {
+            Map<Long, Map<Long, Map<Long, Long>>> restoredVersions = new HashMap<>();
+            Map<Long, Map<Long, Long>> tableMap = new HashMap<>();
+            Map<Long, Long> partMap = new HashMap<>();
+            partMap.put(physicalPartitionId, version - 1); // version is less than committed version
+            tableMap.put(tableId, partMap);
+            restoredVersions.put(dbId, tableMap);
+
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            PartitionCommitInfo partitionCommitInfo = 
+                    new PartitionCommitInfo(physicalPartitionId, version, System.currentTimeMillis());
+            tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+            txnState.putIdToTableCommitInfo(tableId, tableCommitInfo);
+
+            new Expectations() {
+                {
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr();
+                    result = restoreMgr;
+                    minTimes = 0;
+
+                    restoreMgr.getRestoredCommittedVersions();
+                    result = restoredVersions;
+
+                    restoreMgr.isRestoreVersion(dbId, tableId, physicalPartitionId, version);
+                    result = false;
+                }
+            };
+
+            assertFalse(txnState.isRestoreForcePublish());
+        }
+
+        // Test case 8: Multiple partitions, one is restore version
+        {
+            long physicalPartitionId2 = 3001L;
+            long version2 = 20L;
+
+            Map<Long, Map<Long, Map<Long, Long>>> restoredVersions = new HashMap<>();
+            Map<Long, Map<Long, Long>> tableMap = new HashMap<>();
+            Map<Long, Long> partMap = new HashMap<>();
+            partMap.put(physicalPartitionId2, version2); // Only partition 2 is restore version
+            tableMap.put(tableId, partMap);
+            restoredVersions.put(dbId, tableMap);
+
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            PartitionCommitInfo partitionCommitInfo1 = 
+                    new PartitionCommitInfo(physicalPartitionId, version, System.currentTimeMillis());
+            PartitionCommitInfo partitionCommitInfo2 = 
+                    new PartitionCommitInfo(physicalPartitionId2, version2, System.currentTimeMillis());
+            tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo1);
+            tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo2);
+            txnState.putIdToTableCommitInfo(tableId, tableCommitInfo);
+
+            new Expectations() {
+                {
+                    globalStateMgr.getClusterSnapshotRestoredVersionMgr();
+                    result = restoreMgr;
+                    minTimes = 0;
+
+                    restoreMgr.getRestoredCommittedVersions();
+                    result = restoredVersions;
+
+                    restoreMgr.isRestoreVersion(dbId, tableId, physicalPartitionId, version);
+                    result = false;
+
+                    restoreMgr.isRestoreVersion(dbId, tableId, physicalPartitionId2, version2);
+                    result = true;
+                }
+            };
+
+            assertTrue(txnState.isRestoreForcePublish());
+        }
     }
 }

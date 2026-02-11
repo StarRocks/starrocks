@@ -151,4 +151,7 @@ public class CloudConfigurationConstants {
     public static final String TENCENT_COS_ACCESS_KEY = "tencent.cos.access_key";
     public static final String TENCENT_COS_SECRET_KEY = "tencent.cos.secret_key";
     public static final String TENCENT_COS_ENDPOINT = "tencent.cos.endpoint";
+
+    // Base Storage Volume Key
+    public static final String BASE_STOAGE_VOLUME_NAME = "base_fs_name";
 }

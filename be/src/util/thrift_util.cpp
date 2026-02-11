@@ -85,18 +85,6 @@ std::shared_ptr<apache::thrift::protocol::TProtocol> create_deserialize_protocol
     }
 }
 
-// Comparator for THostPorts. Thrift declares this (in gen-cpp/Types_types.h) but
-// never defines it.
-bool TNetworkAddress::operator<(const TNetworkAddress& that) const {
-    if (this->hostname < that.hostname) {
-        return true;
-    } else if ((this->hostname == that.hostname) && (this->port < that.port)) {
-        return true;
-    }
-
-    return false;
-};
-
 static void thrift_output_function(const char* output) {
     VLOG_QUERY << output;
 }

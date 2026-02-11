@@ -173,6 +173,11 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
+    public void updateBaseStorageVolumeName(String svName) {
+
+    }
+
+    @Override
     public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId) throws MetaNotFoundException {
         return -1;
     }

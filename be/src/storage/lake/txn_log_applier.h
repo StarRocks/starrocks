@@ -44,9 +44,12 @@ public:
 
     void observe_empty_compaction() { _has_empty_compaction = true; }
 
+    void observe_empty_publish() { _has_empty_publish = true; }
+
 protected:
     bool _has_empty_compaction = false;
     bool _skip_write_tablet_metadata = false;
+    bool _has_empty_publish = false;
 };
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,

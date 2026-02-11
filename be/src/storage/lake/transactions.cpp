@@ -210,9 +210,16 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         return std::move(cached_new_metadata);
     }
 
+    auto get_expected_gtid = [&](const TxnInfoPB& txn) {
+        if (txn.has_restore_force_publish() && txn.restore_force_publish()) {
+            return txn.restore_gtid();
+        }
+        return txn.gtid();
+    };
+
     auto new_version_metadata_or_error = [=](const Status& error) -> StatusOr<TabletMetadataPtr> {
         auto res = tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), new_version, true,
-                                                   txns.back().gtid());
+                                                   get_expected_gtid(txns.back()));
         if (res.ok()) return res;
         return error;
     };
@@ -235,7 +242,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
     if (base_version == new_version) {
         return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), new_version, true,
-                                               txns.back().gtid());
+                                               get_expected_gtid(txns.back()));
     }
 
     // Read base version metadata
@@ -274,8 +281,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     int txn_offset = base_version - ori_base_version;
     for (size_t i = txn_offset, sz = txns.size(); i < sz; i++) {
         VLOG(2) << "[publish_version] applying txn i=" << i << " txn_id=" << txns[i].txn_id()
-                << " force_publish=" << txns[i].force_publish() << " load_ids_size=" << txns[i].load_ids_size();
+                << " force_publish=" << txns[i].force_publish() << " load_ids_size=" << txns[i].load_ids_size()
+                << " restore_force_publish=" << txns[i].restore_force_publish()
+                << ", has_restore: " << txns[i].has_restore_force_publish();
         bool ignore_txn_log = false;
+        bool force_publish =
+                txns[i].force_publish() || (txns[i].has_restore_force_publish() && txns[i].restore_force_publish());
         auto txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_id_in_txn_log(), txns[i]);
 
         if (txn_log_st.status().is_not_found()) {
@@ -285,9 +296,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                 // 1. duplicate publish in mode single
                 if (txns.size() == 1) {
                     auto res = tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), new_version,
-                                                               true, txns.back().gtid());
+                                                               true, get_expected_gtid(txns.back()));
                     if (!res.ok() && res.status().is_not_found()) {
-                        if (!txns[i].force_publish()) {
+                        if (!force_publish) {
                             return txn_log_st.status();
                         } else {
                             ignore_txn_log = true;
@@ -306,10 +317,10 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                 // then txn3 is published successfully in BE and the txn_log of txn3 has been deleted, but FE do not get the response for some reason,
                 // turn the mode of publish to batch,
                 // txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped just apply txn_log of txn4 and txn5.
-                auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(),
-                                                                           base_version + 1, true, txns[0].gtid());
+                auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(
+                        tablet_info.get_tablet_id_in_metadata(), base_version + 1, true, get_expected_gtid(txns[0]));
                 if (missig_txn_log_meta.status().is_not_found()) {
-                    if (txns[i].force_publish()) {
+                    if (force_publish) {
                         // can not change `base_metadata` below, just use old one
                         ignore_txn_log = true;
                     } else {
@@ -325,7 +336,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                     base_metadata = std::move(missig_txn_log_meta).value();
                     continue;
                 }
-            } else if (txns[i].force_publish()) {
+            } else if (force_publish) {
                 ignore_txn_log = true;
             } else {
                 return new_version_metadata_or_error(txn_log_st.status());
@@ -363,6 +374,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             new_metadata->set_commit_time(commit_time);
             new_metadata->set_gtid(gtid);
 
+            if (txns[i].has_restore_force_publish() && txns[i].restore_force_publish()) {
+                tablet_mgr->update_mgr()->try_remove_primary_index_cache(tablet_info.get_tablet_id_in_metadata());
+            }
             auto init_st = log_applier->init();
             if (!init_st.ok()) {
                 if (init_st.is_already_exist()) {
@@ -377,7 +391,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         if (ignore_txn_log) {
             LOG(INFO) << "txn_log of txn: " << txns[i].txn_id() << " for tablet: " << tablet_info
                       << " not found, force publish is on, ignore txn log";
-            log_applier->observe_empty_compaction(); // record empty compaction
+            if (txns[i].force_publish()) {
+                log_applier->observe_empty_compaction(); // record empty compaction
+            }
+            if (txns[i].restore_force_publish()) {
+                log_applier->observe_empty_publish(); // record empty publish from restore
+            }
             continue;
         }
 

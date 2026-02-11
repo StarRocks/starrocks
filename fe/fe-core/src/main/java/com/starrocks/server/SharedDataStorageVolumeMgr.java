@@ -143,14 +143,57 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
     }
 
+    private FileStoreInfo getBaseFileStoreInfo(StorageVolume sv) throws DdlException {
+        String baseStorageVolumeName = sv.getBaseStorageVolumeName();
+        if (Strings.isNullOrEmpty(baseStorageVolumeName)) {
+            return null;
+        }
+        StorageVolume baseSv = getStorageVolumeByName(baseStorageVolumeName);
+        if (baseSv == null) {
+            return null;
+        }
+        return baseSv.toFileStoreInfo();
+    }
+
     @Override
     protected void updateInternalNoLock(StorageVolume sv) throws DdlException {
-        GlobalStateMgr.getCurrentState().getStarOSAgent().updateFileStore(sv.toFileStoreInfo());
+        FileStoreInfo fileStoreInfo = sv.toFileStoreInfo();
+        FileStoreInfo baseFileStoreInfo = getBaseFileStoreInfo(sv);
+        if (baseFileStoreInfo != null) {
+            fileStoreInfo = fileStoreInfo.toBuilder().setBaseFsInfo(baseFileStoreInfo).build();
+        }
+        GlobalStateMgr.getCurrentState().getStarOSAgent().updateFileStore(fileStoreInfo);
     }
 
     @Override
     protected void replaceInternalNoLock(StorageVolume sv) throws DdlException {
-        GlobalStateMgr.getCurrentState().getStarOSAgent().replaceFileStore(sv.toFileStoreInfo());
+        FileStoreInfo fileStoreInfo = sv.toFileStoreInfo();
+        FileStoreInfo baseFileStoreInfo = getBaseFileStoreInfo(sv);
+        if (baseFileStoreInfo != null) {
+            fileStoreInfo = fileStoreInfo.toBuilder().setBaseFsInfo(baseFileStoreInfo).build();
+        }
+        GlobalStateMgr.getCurrentState().getStarOSAgent().replaceFileStore(fileStoreInfo);
+    }
+
+    @Override
+    public void updateBaseStorageVolumeName(String svName) throws DdlException {
+        List<String> storageVolumeNames = listStorageVolumeNames();
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            for (String storageVolumeName : storageVolumeNames) {
+                if (storageVolumeName.equalsIgnoreCase(svName)) {
+                    continue;
+                }
+                StorageVolume sv = getStorageVolumeByName(storageVolumeName);
+                if (sv != null) {
+                    String oldBSVName = sv.getBaseStorageVolumeName();
+                    if (oldBSVName == null || !oldBSVName.equalsIgnoreCase(svName)) {
+                        sv.setBaseStorageVolumeName(svName);
+                        // Reuse updateInternalNoLock to ensure baseFsInfo is properly set
+                        updateInternalNoLock(sv);
+                    }
+                }
+            }
+        }
     }
 
     @Override

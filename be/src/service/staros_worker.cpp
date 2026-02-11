@@ -346,6 +346,10 @@ absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const Sha
         return "cachefs://";
     }
 
+    if (info.path_info.base_file_path_info_size() > 0) {
+        return "overlay://";
+    }
+
     std::string scheme = "file://";
     switch (info.path_info.fs_info().fs_type()) {
     case staros::FileStoreType::S3:

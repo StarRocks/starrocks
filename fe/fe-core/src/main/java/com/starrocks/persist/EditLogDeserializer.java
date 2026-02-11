@@ -314,6 +314,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_WAREHOUSE, DropWarehouseLog.class)
             .put(OperationType.OP_WAREHOUSE_INTERNAL_OP, WarehouseInternalOpLog.class)
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
+            .put(OperationType.OP_CLUSTER_SNAPSHOT_RESTORED_VERSION, ClusterSnapshotRestoredVersionLog.class)
             .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, SqlBlackListPersistInfo.class)
             .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
             .put(OperationType.OP_ADD_SQL_DIGEST_BLACK_LIST, SqlDigestBlackListPersistInfo.class)
