@@ -292,15 +292,8 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 return false;
             }
 
-            if (new_col->only_null()) {
-                // unfold only null columns to avoid no default values.
-                auto unfold_col = new_col->clone_empty();
-                unfold_col->append_nulls(new_col->size());
-                new_col = std::move(unfold_col);
-            } else {
-                // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
-                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
-            }
+            const auto& type_desc = _schema_mapping[i].mv_expr_ctx->root()->type();
+            new_col = ColumnHelper::unfold_const_column(type_desc, new_col->size(), new_col);
 
             if (new_schema.field(i)->is_nullable()) {
                 new_col = ColumnHelper::cast_to_nullable_column(new_col);
