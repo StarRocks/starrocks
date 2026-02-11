@@ -14,6 +14,8 @@
 
 #include "storage/chunk_variant_helper.h"
 
+#include "column/chunk.h"
+
 namespace starrocks {
 
 VariantTuple build_variant_tuple_from_chunk_row(const Chunk& chunk, size_t row_idx,
