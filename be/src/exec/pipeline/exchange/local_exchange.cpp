@@ -18,11 +18,11 @@
 #include <unordered_map>
 
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 #include "gutil/hash/hash.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,

@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "common/status.h"
-#include "util/runtime_profile.h"
 #include "util/threadpool.h"
 
 namespace starrocks {

@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
@@ -26,7 +27,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 

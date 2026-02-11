@@ -20,6 +20,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/adaptive/event.h"
@@ -40,7 +41,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
-#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {

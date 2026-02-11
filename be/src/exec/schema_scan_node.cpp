@@ -17,11 +17,11 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/scan/schema_scan_context.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

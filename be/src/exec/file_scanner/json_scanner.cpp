@@ -24,6 +24,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/simdjson_util.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
@@ -36,7 +37,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

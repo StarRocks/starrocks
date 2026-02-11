@@ -18,6 +18,7 @@ ADD_BE_LIB(Common
   configbase.cpp
   config.cpp
   memory/column_allocator.cpp
+  runtime_profile.cpp
   stack_util.cpp
   system/disk_info.cpp
   system/cpu_info.cpp

@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
@@ -34,7 +35,6 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
-#include "util/runtime_profile.h"
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
 // 1. When set_finishing(), the has_output() may be false, so add the check here.

@@ -25,6 +25,7 @@
 #include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
@@ -34,7 +35,6 @@
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "gtest/gtest.h"
-#include "util/runtime_profile.h"
 
 #pragma GCC push_options
 #pragma GCC optimize("no-inline")

@@ -27,6 +27,7 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -47,7 +48,6 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 

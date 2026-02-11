@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "base/string/faststring.h"
+#include "common/runtime_profile.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "runtime/closure_guard.h"
@@ -48,7 +49,6 @@
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
 #include "util/lru_cache.h"
-#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_util.h"
 

@@ -17,10 +17,10 @@
 #include <queue>
 
 #include "column/chunk_slice.h"
+#include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

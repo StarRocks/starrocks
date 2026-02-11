@@ -47,7 +47,6 @@ set(UTIL_FILES
   parse_util.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
-  runtime_profile.cpp
   static_asserts.cpp
   thrift_util.cpp
   thrift_client.cpp

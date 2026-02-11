@@ -17,6 +17,7 @@
 #include <functional>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/schedule/observer.h"
@@ -24,7 +25,6 @@
 #include "exprs/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class Expr;

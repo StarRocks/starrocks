@@ -21,6 +21,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
@@ -32,7 +33,6 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

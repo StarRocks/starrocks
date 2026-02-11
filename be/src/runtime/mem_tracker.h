@@ -43,8 +43,8 @@
 
 #include "base/concurrency/spinlock.h"
 #include "base/metrics.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
