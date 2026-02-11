@@ -69,6 +69,8 @@ import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -1029,6 +1031,23 @@ public class PropertyAnalyzer {
         return colocateGroup;
     }
 
+    public static String analyzeTaskPriority(Map<String, String> properties) throws AnalysisException {
+        int priority;
+        try {
+            priority = Integer.parseInt(properties.get(TaskRun.TASK_PRIORITY));
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("Task priority should between 0 and 100: " + e.getMessage());
+        }
+
+        // check priority range
+        if (priority < Constants.TaskRunPriority.LOWEST.value()
+                || priority > Constants.TaskRunPriority.HIGHEST.value()) {
+            throw new AnalysisException("Task priority should between 0 and 100.");
+        }
+        properties.remove(TaskRun.TASK_PRIORITY);
+        return String.valueOf(priority);
+    }
+
     public static long analyzeTimeout(Map<String, String> properties, long defaultTimeout) throws AnalysisException {
         long timeout = defaultTimeout;
         if (properties != null && properties.containsKey(PROPERTIES_TIMEOUT)) {
@@ -1960,6 +1979,12 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties().put(
                         PropertyAnalyzer.PROPERTIES_COMPRESSION, str);
                 properties.remove(PropertyAnalyzer.PROPERTIES_COMPRESSION);
+            }
+
+            // task priority
+            if (properties.containsKey(TaskRun.TASK_PRIORITY)) {
+                materializedView.getTableProperty().getProperties().put(
+                        TaskRun.TASK_PRIORITY, analyzeTaskPriority(properties));
             }
 
             // ORDER BY() -> sortKeys
