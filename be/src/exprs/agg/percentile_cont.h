@@ -646,7 +646,7 @@ struct PercentileDecimalRateState {
     using GridType = typename PercentileStateTypes<LT>::GridType;
 
     void update(CppType item) { items.emplace_back(item); }
-    void update_batch(const ImmBuffer<CppType> vec) {
+    void update_batch(const Buffer<CppType>& vec) {
         size_t old_size = items.size();
         items.resize(old_size + vec.size());
         memcpy(items.data() + old_size, vec.data(), vec.size() * sizeof(CppType));
@@ -851,7 +851,7 @@ public:
 
         // rate must be a constant DECIMALV3 after FE analysis
         const auto* rate_const = down_cast<const ConstColumn*>(columns[1]);
-        const auto* rate_col = down_cast<const InputColumnType*>(rate_const->data_column_raw_ptr());
+        const auto* rate_col = down_cast<const InputColumnType*>(rate_const->data_column().get());
         st.rate_scale = rate_col->scale();
 
         // denom = 10^scale
@@ -864,8 +864,6 @@ public:
             st.rate_int = rate_datum.get_int64();
         } else if constexpr (LT == TYPE_DECIMAL128) {
             st.rate_int = rate_datum.get_int128();
-        } else if constexpr (LT == TYPE_DECIMAL256) {
-            st.rate_int = rate_datum.get_int256();
         } else {
             static_assert(lt_is_decimal<LT>, "percentile_cont(decimal, decimal) only supports DECIMALV3");
         }
@@ -882,7 +880,7 @@ public:
                 size_t row_num) const override {
         this->init_state_if_needed(ctx, columns, state);
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        auto column_data = column.immutable_data();
+        const auto& column_data = column.get_data();
         this->data(state).update(column_data[row_num]);
     }
 
@@ -890,7 +888,7 @@ public:
                                    AggDataPtr __restrict state) const override {
         this->init_state_if_needed(ctx, columns, state);
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        auto column_data = column.immutable_data();
+        const auto& column_data = column.get_data();
         this->data(state).update_batch(column_data);
     }
 
@@ -983,12 +981,12 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     MutableColumnPtr& dst) const override {
+                                     ColumnPtr* dst) const override {
         if (chunk_size <= 0) {
             return;
         }
         // src[0]=value, src[1]=rate(const)
-        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
+        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
         Bytes& bytes = dst_column->get_bytes();
         constexpr size_t kMaxBinaryOffset = std::numeric_limits<uint32_t>::max();
         bool overflow_logged = false;
@@ -997,7 +995,7 @@ public:
         int32_t value_scale = value_col->scale();
 
         auto rate_col = down_cast<const ConstColumn*>(src[1].get());
-        auto rate_data_col = down_cast<const InputColumnType*>(rate_col->data_column_raw_ptr());
+        auto rate_data_col = down_cast<const InputColumnType*>(rate_col->data_column().get());
         int32_t rate_scale = rate_data_col->scale();
         InputCppType rate_int{};
         const Datum d = rate_col->get(0);
@@ -1007,12 +1005,12 @@ public:
             rate_int = d.get_int64();
         } else if constexpr (LT == TYPE_DECIMAL128) {
             rate_int = d.get_int128();
-        } else if constexpr (LT == TYPE_DECIMAL256) {
-            rate_int = d.get_int256();
+        } else {
+            static_assert(lt_is_decimal<LT>, "percentile_cont(decimal, decimal) only supports DECIMALV3");
         }
 
-        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
-        const InputCppType* src_data = src_column.immutable_data().data();
+        const auto& src_column = *down_cast<const InputColumnType*>(src[0].get());
+        const InputCppType* src_data = src_column.get_data().data();
 
         size_t header_size = sizeof(int32_t) + sizeof(int32_t) + sizeof(InputCppType) + sizeof(size_t);
         for (auto i = 0; i < chunk_size; ++i) {
