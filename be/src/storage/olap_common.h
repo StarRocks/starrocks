@@ -362,11 +362,6 @@ const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
 
-// The position index of a column in a specific TabletSchema starts from 0.
-// The position of the same column in different TabletSchema may be different, which
-// means that the same column may have a different ColumnId in different contexts, depending
-// on the TabletSchema used.
-// TODO: Change the name
 // 8 bit rowset id version
 // 56 bit, inc number from 1
 // 128 bit backend uid, it is a uuid bit, id version
