@@ -7,7 +7,6 @@ Type=simple
 User=starrocks
 Group=starrocks
 RuntimeDirectory=starrocks
-Environment="STARROCKS_HOME=/usr/lib/starrocks/fe"
 ExecStart=/usr/lib/starrocks/fe/bin/start_fe.sh
 Restart=on-failure
 LimitNOFILE=65536
