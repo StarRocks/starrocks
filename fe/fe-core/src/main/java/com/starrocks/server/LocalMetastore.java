@@ -3957,12 +3957,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     private void alterDataCacheEnable(Database db, OlapTable table,
                                       Map<String, String> properties,
                                       List<Runnable> appliers) throws DdlException {
-        // The caller (AlterJobExecutor.visitModifyTablePropertiesClause) must hold
-        // the db write lock to prevent concurrent partition additions/drops while
-        // we iterate over the partition list and update DataCacheInfo.
-        Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-
+        // We need hole lock to prevent concurrent partition additions/drops while we iterate over the partition list
+        // and update DataCacheInfo.
+        // However since the caller in AlterJobExecutor have already locked the database, we don't need to lock again here.
         boolean isEnable;
         try {
             isEnable = PropertyAnalyzer.analyzeDataCacheEnable(properties);
