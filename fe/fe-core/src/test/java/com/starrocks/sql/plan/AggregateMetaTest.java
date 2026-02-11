@@ -15,11 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.MaterializedIndex;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
->>>>>>> c0e96cea9c ([BugFix] fix missing agg function when min/max stats rewrite failed (#69149))
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
