@@ -3189,6 +3189,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .setIndexes(schemaChangeData.getIndexes())
                     .setCompressionType(schemaChangeData.getTable().getCompressionType())
                     .setCompressionLevel(schemaChangeData.getTable().getCompressionLevel())
+                    .setPrimaryKeyEncodingType(schemaChangeData.getTable().getPrimaryKeyEncodingType())
                     .build();
             job.setIndexTabletSchema(indexMetaId, indexName, schemaInfo);
         }

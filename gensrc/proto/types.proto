@@ -232,3 +232,9 @@ message TabletRangePB {
     optional bool lower_bound_included = 3;
     optional bool upper_bound_included = 4;
 }
+
+enum PrimaryKeyEncodingTypePB {
+    PK_ENCODING_TYPE_NONE = 0;
+    PK_ENCODING_TYPE_V1 = 1;
+    PK_ENCODING_TYPE_V2 = 2;
+}

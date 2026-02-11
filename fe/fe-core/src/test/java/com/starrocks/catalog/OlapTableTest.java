@@ -50,6 +50,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -576,6 +577,70 @@ public class OlapTableTest {
         HashDistributionInfo hashDistInfo = new HashDistributionInfo(1, columns);
         table.setDefaultDistributionInfo(hashDistInfo);
         Assertions.assertFalse(table.isRangeDistribution());
+    }
+
+    @Test
+    public void testGetPrimaryKeyEncodingType() {
+        OlapTable nonPrimaryKeyTable = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.AGG_KEYS;
+            }
+        };
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE,
+                nonPrimaryKeyTable.getPrimaryKeyEncodingType());
+
+        OlapTable primaryKeyNonCloudTable = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.PRIMARY_KEYS;
+            }
+
+            @Override
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return false;
+            }
+        };
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1,
+                primaryKeyNonCloudTable.getPrimaryKeyEncodingType());
+
+        OlapTable primaryKeyCloudHashTable = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.PRIMARY_KEYS;
+            }
+
+            @Override
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Override
+            public boolean isRangeDistribution() {
+                return false;
+            }
+        };
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1,
+                primaryKeyCloudHashTable.getPrimaryKeyEncodingType());
+
+        OlapTable primaryKeyCloudRangeTable = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.PRIMARY_KEYS;
+            }
+
+            @Override
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Override
+            public boolean isRangeDistribution() {
+                return true;
+            }
+        };
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2,
+                primaryKeyCloudRangeTable.getPrimaryKeyEncodingType());
     }
 
 }
