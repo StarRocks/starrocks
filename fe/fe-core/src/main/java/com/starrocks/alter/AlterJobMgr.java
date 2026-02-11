@@ -610,16 +610,13 @@ public class AlterJobMgr {
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         String inlineViewDef = alterViewInfo.getInlineViewDef();
-<<<<<<< HEAD
         List<Column> newFullSchema = alterViewInfo.getNewFullSchema();
         String comment = alterViewInfo.getComment();
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-=======
         long sqlMode = alterViewInfo.getSqlMode();
         String originalViewDef = alterViewInfo.getOriginalViewDef();
->>>>>>> 6b9d4a2bc7 ([Enhancement] Support show create view with original comments inside (#68040))
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
@@ -631,17 +628,10 @@ public class AlterJobMgr {
             } catch (StarRocksException e) {
                 throw new AlterJobException("failed to init view stmt", e);
             }
-<<<<<<< HEAD
+            view.setInlineViewDefWithSqlMode(inlineViewDef, sqlMode);
+            view.setOriginalViewDef(originalViewDef);
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-=======
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo, wal -> {
-                view.setInlineViewDefWithSqlMode(inlineViewDef, sqlMode);
-                view.setOriginalViewDef(originalViewDef);
-                view.setNewFullSchema(alterViewInfo.getNewFullSchema());
-                view.setComment(alterViewInfo.getComment());
-            });
->>>>>>> 6b9d4a2bc7 ([Enhancement] Support show create view with original comments inside (#68040))
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
             db.dropTable(viewName);
@@ -653,36 +643,7 @@ public class AlterJobMgr {
         }
     }
 
-<<<<<<< HEAD
     public void setViewSecurity(AlterViewInfo alterViewInfo, boolean isReplay) {
-=======
-    public void replayAlterView(AlterViewInfo alterViewInfo) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
-        View view = (View) GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
-
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
-        try {
-            view.setInlineViewDefWithSqlMode(alterViewInfo.getInlineViewDef(), alterViewInfo.getSqlMode());
-            view.setOriginalViewDef(alterViewInfo.getOriginalViewDef());
-            view.setNewFullSchema(alterViewInfo.getNewFullSchema());
-            view.setComment(alterViewInfo.getComment());
-            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
-                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(view.getName()), true);
-            LOG.info("modify view[{}] definition to {}", view.getName(), alterViewInfo.getInlineViewDef());
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
-        }
-    }
-
-    public void setViewSecurity(AlterViewInfo alterViewInfo) {
-        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(
-                OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo, wal -> updateViewSecurity(alterViewInfo));
-    }
-
-    public void updateViewSecurity(AlterViewInfo alterViewInfo) {
->>>>>>> 6b9d4a2bc7 ([Enhancement] Support show create view with original comments inside (#68040))
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);

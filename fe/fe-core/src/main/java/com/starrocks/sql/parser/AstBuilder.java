@@ -1766,13 +1766,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.MODIFY() != null ? AlterViewStmt.AlterDialectType.MODIFY : AlterViewStmt.AlterDialectType.NONE;
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
             AlterViewClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
-<<<<<<< HEAD
-            return new AlterViewStmt(targetTableName, isSecurity, alterDialectType, properties, alterClause, createPos(context));
-=======
             alterClause.setQueryStartIndex(context.queryStatement().start.getStartIndex());
             alterClause.setQueryStopIndex(context.queryStatement().stop.getStopIndex() + 1);
-            return new AlterViewStmt(targetTableRef, isSecurity, alterDialectType, properties, alterClause, createPos(context));
->>>>>>> 6b9d4a2bc7 ([Enhancement] Support show create view with original comments inside (#68040))
+            return new AlterViewStmt(targetTableName, isSecurity, alterDialectType, properties, alterClause, createPos(context));
         }
     }
 
