@@ -30,6 +30,18 @@
 
 namespace starrocks::lake {
 
+static std::ostream& operator<<(std::ostream& out, const std::vector<int64_t>& tablet_ids) {
+    out << '[';
+    for (size_t i = 0; i < tablet_ids.size(); ++i) {
+        if (i > 0) {
+            out << ", ";
+        }
+        out << tablet_ids[i];
+    }
+    out << ']';
+    return out;
+}
+
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info) {
     if (tablet_info.get_publish_tablet_type() == PublishTabletInfo::PUBLISH_NORMAL) {
         return out << "{tablet_id: " << tablet_info.get_tablet_id_in_metadata() << '}';
@@ -37,7 +49,7 @@ std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info
 
     return out << "{publish_tablet_type: " << (int)tablet_info.get_publish_tablet_type()
                << ", tablet_id_in_metadata: " << tablet_info.get_tablet_id_in_metadata()
-               << ", tablet_id_in_txn_log: " << tablet_info.get_tablet_id_in_txn_log() << '}';
+               << ", tablet_id_in_txn_log: " << tablet_info.get_tablet_ids_in_txn_logs() << '}';
 }
 
 static void set_all_data_files_shared(RowsetMetadataPB* rowset_metadata) {

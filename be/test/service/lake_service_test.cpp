@@ -20,6 +20,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+
 #include "base/bthreads/util.h"
 #include "base/concurrency/await.h"
 #include "base/concurrency/countdown_latch.h"
@@ -1422,13 +1424,36 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
         ASSERT_OK(_tablet_mgr->put_txn_log(log2));
 
         publish_request.add_txn_ids(txn_id);
+        publish_request.add_rebuild_pindex_tablet_ids(old_tablet_id_1);
         publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
 
         {
+            std::atomic<bool> saw_rebuild_pindex{false};
+            std::atomic<int> inspected_txn_size{0};
+            SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::publish_version:before_publish", [&](void* arg) {
+                auto* txns = static_cast<std::vector<TxnInfoPB>*>(arg);
+                if (txns == nullptr || txns->empty()) {
+                    return;
+                }
+                inspected_txn_size.store(txns->size(), std::memory_order_relaxed);
+                saw_rebuild_pindex.store((*txns)[0].rebuild_pindex(), std::memory_order_relaxed);
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::publish_version:before_publish");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
             PublishVersionResponse response;
             _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
             ASSERT_EQ(0, response.failed_tablets_size());
             EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(1, inspected_txn_size.load(std::memory_order_relaxed));
+            EXPECT_TRUE(saw_rebuild_pindex.load(std::memory_order_relaxed));
+
+            ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(old_tablet_id_1, txn_id)));
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(old_tablet_id_2, txn_id)));
         }
 
         {
@@ -1623,6 +1648,9 @@ TEST_F(LakeServiceTest, test_publish_identical_tablet) {
             EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
             ASSERT_EQ(0, response.tablet_metas_size());
             ASSERT_EQ(0, response.tablet_ranges_size());
+
+            ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_log.txn_id())));
         }
 
         {
