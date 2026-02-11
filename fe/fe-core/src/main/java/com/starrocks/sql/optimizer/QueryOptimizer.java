@@ -729,7 +729,10 @@ public class QueryOptimizer extends Optimizer {
         boolean isRewrittenSuccess = false;
         try (Timer ignored = Tracers.watchScope("MVViewRewrite")) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
-            OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
+            // Clone the tree to avoid modifying the original tree stored in QueryMaterializationContext
+            OptExpression treeWithView = MvUtils.cloneExpression(queryMaterializationContext.getQueryOptPlanWithView());
+            // Derive logical property for the cloned tree to ensure it has complete metadata
+            MvUtils.deriveLogicalProperty(treeWithView);
             OptimizerTraceUtil.logOptExpression("before ViewBasedMvRuleRewrite:\n%s", tree);
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
