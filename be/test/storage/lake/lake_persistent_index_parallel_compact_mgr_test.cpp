@@ -170,6 +170,15 @@ protected:
         return Status::OK();
     }
 
+    StatusOr<std::unique_ptr<PersistentIndexSstable>> open_sstable(const PersistentIndexSstablePB& sst_pb) {
+        RandomAccessFileOptions opts;
+        std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_pb.filename());
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, filepath));
+        auto sst = std::make_unique<PersistentIndexSstable>();
+        RETURN_IF_ERROR(sst->init(std::move(rf), sst_pb, nullptr, false));
+        return sst;
+    }
+
     constexpr static const char* const kTestDir = "test_lake_persistent_index_parallel_compact_mgr";
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
