@@ -581,9 +581,10 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
     ASSIGN_OR_RETURN(auto result,
                      LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta));
     // 3. Do parallel compaction for each candidate set.
+    bool is_merge_base_level = fileset_start_idx == 0 ? result.merge_base_level : false;
     ASSIGN_OR_RETURN(auto cb,
                      compact_mgr->async_compact(
-                             result.candidate_filesets, metadata, fileset_start_idx == 0 /* merge_base_level */,
+                             result.candidate_filesets, metadata, is_merge_base_level,
                              [&, result](const std::vector<PersistentIndexSstablePB>& sstables) {
                                  // 4. Merge output sstables into current index.
                                  //    reuse `apply_opcompaction` to do this.
