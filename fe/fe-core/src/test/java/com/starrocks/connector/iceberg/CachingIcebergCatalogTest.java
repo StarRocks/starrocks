@@ -281,14 +281,14 @@ public class CachingIcebergCatalogTest {
             {
                 props.isEnableIcebergMetadataCache(); 
                 result = true;
-                props.isEnableIcebergTableCache(); 
-                result = true;
                 props.getIcebergMetaCacheTtlSec(); 
                 result = 24L * 60 * 60;
                 props.getIcebergDataFileCacheMemoryUsageRatio(); 
                 result = 0.0;
                 props.getIcebergDeleteFileCacheMemoryUsageRatio(); 
                 result = 0.0;
+                props.isEnableIcebergTableCache();
+                result = true;
                 props.getIcebergTableCacheMemoryUsageRatio();
                 result = 1;
 
@@ -329,8 +329,8 @@ public class CachingIcebergCatalogTest {
             {
                 props.isEnableIcebergMetadataCache(); 
                 result = true;
-                props.isEnableIcebergTableCache(); 
-                result = false;
+                props.getIcebergTableCacheMemoryUsageRatio();
+                result = 0.0;
                 props.getIcebergMetaCacheTtlSec(); 
                 result = 60;
                 props.getIcebergDataFileCacheMemoryUsageRatio(); 
@@ -700,14 +700,14 @@ public class CachingIcebergCatalogTest {
             {
                 props.isEnableIcebergMetadataCache();
                 result = true;
-                props.isEnableIcebergTableCache();
-                result = true;
                 props.getIcebergMetaCacheTtlSec();
                 result = 60L;
                 props.getIcebergTableCacheRefreshIntervalSec();
                 result = 1L;
                 props.getIcebergTableCacheMemoryUsageRatio();
-                result = 1;
+                result = 1.0;
+                props.isEnableIcebergTableCache();
+                result = true;
                 props.getIcebergDataFileCacheMemoryUsageRatio();
                 result = 0.0;
                 props.getIcebergDeleteFileCacheMemoryUsageRatio();
