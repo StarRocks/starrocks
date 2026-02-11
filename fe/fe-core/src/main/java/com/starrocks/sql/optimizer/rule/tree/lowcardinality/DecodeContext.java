@@ -518,12 +518,18 @@ class DecodeContext {
                 returnType = intermediateType = newChildren.get(0).getType();
                 argTypes = List.of(newChildren.get(0).getType());
             } else {
-                argTypes = List.of(getDictifiedType(fn.getArgs()[0]));
+                argTypes = Lists.newArrayListWithCapacity(fn.getNumArgs());
+                for (int i = 0; i < fn.getNumArgs(); ++i) {
+                    argTypes.add(getDictifiedType(fn.getArgs()[i]));
+                }
                 returnType = getDictifiedType(fn.getReturnType());
                 intermediateType = getDictifiedType(fn.getIntermediateType());
             }
             AggregateFunction newFn = (AggregateFunction) fn.copy();
-            newFn.setArgsType(argTypes.subList(0, fn.getNumArgs()).toArray(Type[]::new));
+            Preconditions.checkState(argTypes.size() == fn.getNumArgs(),
+                    "argTypes size %s doesn't match numArgs %s for function %s",
+                    argTypes.size(), fn.getNumArgs(), fn.functionName());
+            newFn.setArgsType(argTypes.toArray(Type[]::new));
             newFn.setIntermediateType(intermediateType);
             newFn.setRetType(returnType);
             return newFn;
