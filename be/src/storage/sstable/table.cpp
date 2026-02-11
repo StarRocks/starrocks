@@ -96,7 +96,7 @@ Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval
     // skip interval_step keys per sample
     DCHECK(rep_->options.block_size > 0);
     size_t interval_step = sample_interval_bytes / rep_->options.block_size + 1;
-    size_t index = 0;
+    size_t index = 1; // First key is already included, so start with 1 to skip it.
     // If the key is last key in index block, it's a short successor key.
     // E.g.
     //      index block may contains ["key_0001", "key_0005", "l"]
