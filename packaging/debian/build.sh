@@ -52,7 +52,7 @@ for COMP in "fe" "be" "cn"; do
         [ -d "$SRC_DIR/spark-dpp" ] && cp -r "$SRC_DIR/spark-dpp" "$STAGING_DIR/usr/lib/starrocks/fe/"
         [ -d "$SRC_DIR/webroot" ] && cp -r "$SRC_DIR/webroot" "$STAGING_DIR/usr/lib/starrocks/fe/"
     else
-        [ -d "$SRC_DIR/www" ] && cp -r "$SRC_DIR/www" "$STAGING_DIR/usr/lib/starrocks/be/"
+        [ -d "$SRC_DIR/www" ] && cp -r "$SRC_DIR/www" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
     fi
 
     # Copy Configs and set up symlink
