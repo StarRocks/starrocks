@@ -26,10 +26,12 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.util.Util;
 
 import java.util.Comparator;
 import java.util.List;
@@ -65,6 +67,9 @@ class PiecesPlanTransformer {
 
     public boolean isSPJGPieces(OptExpression tree) {
         if (!tree.getOp().getOpType().equals(OperatorType.LOGICAL_AGGR)) {
+            return false;
+        }
+        if (Util.getStream(tree).anyMatch(op -> op instanceof LogicalMetaScanOperator)) {
             return false;
         }
         return checkTrees(tree.inputAt(0), op -> op.getOpType().equals(OperatorType.LOGICAL_PROJECT)
@@ -198,7 +203,9 @@ class PiecesPlanTransformer {
             );
 
             scan.getColumnMetaToColRefMap().forEach((c, ref) -> {
-                context.columnRefConverter.convertRef(ref, columnMetaToIdMap.get(c));
+                if (columnMetaToIdMap.get(c) != null) {
+                    context.columnRefConverter.convertRef(ref, columnMetaToIdMap.get(c));
+                }
             });
 
             pieces.algebra = scan.getTable().getUUID() + ":" + scan.getTable().getName() +

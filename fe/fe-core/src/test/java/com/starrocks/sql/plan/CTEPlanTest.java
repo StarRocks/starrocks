@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
@@ -1187,5 +1188,33 @@ public class CTEPlanTest extends PlanTestBase {
         // Should not force CTE reuse when variable is disabled
         // (CTE reuse decision will be based on other factors like ratio and consume count)
         // Note: The actual behavior depends on CTE reuse ratio and consume count
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testReuseFusionMetaUnionWithCastAndIfNull(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        connectContext.getSessionVariable().setCboExtractCommonPlan(true);
+        String sql = "SELECT cast(9 AS INT) AS c1, cast(28714 AS BIGINT) AS c2, 'k1' AS c3, " +
+                "cast(COUNT(*) AS BIGINT) AS c4, cast(0 AS BIGINT) AS c5, '00' AS c6, cast(0 AS BIGINT) AS c7, " +
+                "IFNULL(cast(MAX(`k1`) AS VARCHAR), '') AS c8, IFNULL(cast(MIN(`k1`) AS VARCHAR), '') AS c9, " +
+                "cast(-1 AS BIGINT) FROM `baseall` [_META_] " +
+                "UNION ALL " +
+                "SELECT cast(9 AS INT) AS c1, cast(28714 AS BIGINT) AS c2, 'k2' AS c3, " +
+                "cast(COUNT(*) AS BIGINT) AS c4, cast(0 AS BIGINT) AS c5, '00' AS c6, cast(0 AS BIGINT) AS c7, " +
+                "IFNULL(cast(MAX(`k2`) AS VARCHAR), '') AS c8, IFNULL(cast(MIN(`k2`) AS VARCHAR), '') AS c9, " +
+                "cast(-1 AS BIGINT) FROM `baseall` [_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "UNION");
+        assertContains(plan, "MetaScan");
+
+        Config.enable_virtual_columns = true;
+        sql = "SELECT cast(9 AS INT) AS c1, cast(28714 AS BIGINT) AS c2, 'k2' AS c3, " +
+                "cast(COUNT(*) AS BIGINT) AS c4, cast(0 AS BIGINT) AS c5, '00' AS c6, cast(0 AS BIGINT) AS c7, " +
+                "IFNULL(cast(MAX(`k2`) AS VARCHAR), '') AS c8, IFNULL(cast(MIN(`k2`) AS VARCHAR), '') AS c9, " +
+                "cast(-1 AS BIGINT) FROM `baseall`";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "OlapScan");
+        Config.enable_virtual_columns = false;
     }
 }
