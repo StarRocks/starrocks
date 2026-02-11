@@ -50,7 +50,6 @@ import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
-import org.apache.spark.util.SizeEstimator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -70,8 +69,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
+<<<<<<< HEAD
     private static final int MEMORY_SNAPSHOT_SIZE = 1536; // approx memory size of one snapshot object without manifests
     private static final int MEMORY_MANIFEST_SIZE = 512; // approx memory size of one manifest object in snapshot
+=======
+>>>>>>> 953cf628dd ([BugFix] iceberg cache weigher refine (#69058))
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
@@ -105,17 +107,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec())
                 .executor(executorService)
                 .maximumWeight(tableCacheSize)
-                .weigher((Weigher<IcebergTableName, Table>) (IcebergTableName key, Table table) -> {
-                    long size = SizeEstimator.estimate(key);
-                    if (table != null) {
-                        size += 1L * countSnapshotsSafe(table) * MEMORY_SNAPSHOT_SIZE;
-                        if (((BaseTable) table).operations().current().currentSnapshot() != null) {
-                            size += 1L * (((BaseTable) table).operations().current().currentSnapshot()
-                                    .allManifests(((BaseTable) table).operations().io()).size() * MEMORY_MANIFEST_SIZE);
-                        }
-                    }
-                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
-                })
+                .weigher((Weigher<IcebergTableName, Table>) this::weighTableEntry)
                 .removalListener((IcebergTableName key, Table value, RemovalCause cause) -> {
                     if (key != null) {
                         LOG.debug("iceberg table cache removal: {}.{}, cause={}, evicted={}",
@@ -174,6 +166,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.dataFileCache = enableCache ? Caffeine.newBuilder()
                 .executor(executorService)
                 .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+<<<<<<< HEAD
                 .weigher((Weigher<String, Set<DataFile>>) (String key, Set<DataFile> files) -> {
                     long size = SizeEstimator.estimate(key);
                     if (!files.isEmpty()) {
@@ -181,6 +174,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     }
                     return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
                 })
+=======
+                .weigher((Weigher<String, Set<DataFile>>) this::weighContentFiles)
+>>>>>>> 953cf628dd ([BugFix] iceberg cache weigher refine (#69058))
                 .maximumWeight(dataFileCacheSize)
                 .removalListener((String key, Set<DataFile> value, RemovalCause cause) -> {
                     LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
@@ -192,6 +188,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.deleteFileCache = enableCache ? Caffeine.newBuilder()
                 .executor(executorService)
                 .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+<<<<<<< HEAD
                 .weigher((Weigher<String, Set<DeleteFile>>) (String key, Set<DeleteFile> files) -> {
                     long size = SizeEstimator.estimate(key);
                     if (!files.isEmpty()) {
@@ -199,6 +196,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     }
                     return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
                 })
+=======
+                .weigher((Weigher<String, Set<DeleteFile>>) this::weighContentFiles)
+>>>>>>> 953cf628dd ([BugFix] iceberg cache weigher refine (#69058))
                 .maximumWeight(deleteFileCacheSize)
                 .removalListener((String key, Set<DeleteFile> value, RemovalCause cause) -> {
                     LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
@@ -599,6 +599,47 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return ans;
     }
 
+<<<<<<< HEAD
+=======
+    private int weighContentFiles(String key, Set<? extends ContentFile<?>> files) {
+        long size = Estimator.estimate(key);
+        size += estimateContentFilesSize(files);
+        if (size > Integer.MAX_VALUE) {
+            LOG.warn("ContentFile cache entry size for key {} is too large: {} bytes", key, size);
+            return Integer.MAX_VALUE;
+        }
+        return (int) size;
+    }
+
+
+    private int weighTableEntry(IcebergTableName key, Table table) {
+        long size = Estimator.estimate(key);
+        if (table != null) {
+            size += Estimator.estimate(table);
+        }
+        if (size > Integer.MAX_VALUE) {
+            LOG.warn("Table cache entry size for key {} is too large: {} bytes", key, size);
+            return Integer.MAX_VALUE;
+        }
+        return (int) size;
+    }
+
+    private long estimateContentFilesSize(Set<? extends ContentFile<?>> files) {
+        if (files == null || files.isEmpty()) {
+            return 0L;
+        }
+        StructLike like = files.iterator().next().partition();
+        if (like instanceof PartitionData partitionData) {
+            org.apache.avro.Schema schema = partitionData.getSchema();
+            Set<Class<?>> ignoreClass = new HashSet<>();
+            ignoreClass.add(schema.getClass());
+            return Estimator.estimate(files, 3, ignoreClass) + Estimator.estimate(schema, 3);
+        } else {
+            return Estimator.estimate(files, 3);
+        }
+    }
+
+>>>>>>> 953cf628dd ([BugFix] iceberg cache weigher refine (#69058))
     public Map<String, Long> estimateCount() {
         Map<String, Long> counter = new HashMap<>();
         List<List<String>> partitionNames = getAllCachedPartitionNames();
@@ -635,66 +676,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         int cnt = dataFileCache.asMap().size();
         long size = Estimator.estimate(dataFileCache.asMap().keySet(), cnt);
         for (Set<DataFile> files : dataFileCache.asMap().values()) {
-            if (files.isEmpty()) {
-                continue;
-            }
-            StructLike like = files.iterator().next().partition();
-            if (like instanceof PartitionData partitionData) {
-                // all files using the same PartitionData schema, so ignore it in estimation
-                org.apache.avro.Schema schema = partitionData.getSchema();
-                Set<Class<?>> ignoreClass = new HashSet<>();
-                ignoreClass.add(schema.getClass());
-                size += Estimator.estimate(files, 10, ignoreClass);
-                size += Estimator.estimate(schema, 10);
-            } else {
-                size += Estimator.estimate(files, 10);
-            }
+            size += estimateContentFilesSize(files);
         }
         return size;
     }
 
     private long estimateDeleteFileCacheSize() {
         int cnt = deleteFileCache.asMap().size();
-        // Estimate size of keys
         long size = Estimator.estimate(deleteFileCache.asMap().keySet(), cnt);
-
-        // Count total delete files across all cache entries
-        long totalDeleteFiles = deleteFileCache.asMap().values().stream()
-                .mapToLong(Set::size)
-                .sum();
-
-        if (totalDeleteFiles == 0) {
-            return size;
-        }
-
-        // Sample up to 100 DeleteFiles evenly distributed
-        int sampleTarget = (int) Math.min(100, totalDeleteFiles);
-        long step = totalDeleteFiles / sampleTarget;
-        List<DeleteFile> samples = new ArrayList<>(sampleTarget);
-        long index = 0;
-        long nextSampleIndex = 0;
-
-        outer:
         for (Set<DeleteFile> files : deleteFileCache.asMap().values()) {
-            for (DeleteFile file : files) {
-                if (index == nextSampleIndex) {
-                    samples.add(file);
-                    nextSampleIndex += step;
-                    if (samples.size() >= sampleTarget) {
-                        break outer;
-                    }
-                }
-                index++;
-            }
+            size += estimateContentFilesSize(files);
         }
-
-        // Estimate all samples at once, then calculate average and extrapolate
-        if (!samples.isEmpty()) {
-            long sampleTotalSize = Estimator.estimate(samples, samples.size());
-            long avgSize = sampleTotalSize / samples.size();
-            size += avgSize * totalDeleteFiles;
-        }
-
         return size;
     }
 
