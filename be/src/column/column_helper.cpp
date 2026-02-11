@@ -17,18 +17,15 @@
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
-#include "column/chunk.h"
 #include "column/column_view/column_view_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "storage/chunk_helper.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/type_descriptor.h"
-#include "util/date_func.h"
 
 namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
@@ -506,41 +503,6 @@ size_t ColumnHelper::compute_bytes_size(ColumnsConstIterator const& begin, Colum
     return n;
 }
 
-ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& column) {
-    auto get_binary_column = [](const DoubleColumn* data_column, size_t size) -> MutableColumnPtr {
-        auto new_data_column = BinaryColumn::create();
-        new_data_column->reserve(size);
-
-        for (int row = 0; row < size; ++row) {
-            auto time = data_column->immutable_data()[row];
-            std::string time_str = time_str_from_double(time);
-            new_data_column->append(time_str);
-        }
-
-        return new_data_column;
-    };
-
-    ColumnPtr res;
-
-    if (column->only_null()) {
-        res = std::move(column);
-    } else if (column->is_nullable()) {
-        auto* nullable_column = down_cast<const NullableColumn*>(column.get());
-        auto* data_column = down_cast<const DoubleColumn*>(nullable_column->data_column().get());
-        res = NullableColumn::create(get_binary_column(data_column, column->size()),
-                                     std::move(nullable_column->null_column()));
-    } else if (column->is_constant()) {
-        auto* const_column = down_cast<const ConstColumn*>(column.get());
-        std::string time_str = time_str_from_double(const_column->get(0).get_double());
-        res = ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, column->size());
-    } else {
-        auto* data_column = down_cast<const DoubleColumn*>(column.get());
-        res = get_binary_column(data_column, column->size());
-    }
-
-    return res;
-}
-
 MutableColumns ColumnHelper::to_mutable_columns(const Columns& columns) {
     MutableColumns mutable_columns;
     mutable_columns.reserve(columns.size());
@@ -580,73 +542,4 @@ std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_arr
     auto offsets_column = array_column->offsets_column();
     return {offsets_column, elements_column, null_column};
 }
-
-template <class Ptr>
-bool ChunkSliceTemplate<Ptr>::empty() const {
-    return !chunk || offset == chunk->num_rows();
-}
-
-template <class Ptr>
-size_t ChunkSliceTemplate<Ptr>::rows() const {
-    return chunk->num_rows() - offset;
-}
-
-template <class Ptr>
-void ChunkSliceTemplate<Ptr>::reset(Ptr input) {
-    chunk = std::move(input);
-}
-
-template <class Ptr>
-size_t ChunkSliceTemplate<Ptr>::skip(size_t skip_rows) {
-    size_t real_skipped = std::min(rows(), skip_rows);
-    offset += real_skipped;
-    if (empty()) {
-        chunk.reset();
-        offset = 0;
-    }
-
-    return real_skipped;
-}
-
-// Cutoff required rows from this chunk
-template <class Ptr>
-ChunkUniquePtr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
-    DCHECK(!empty());
-    size_t cut_rows = std::min(rows(), required_rows);
-    auto res = chunk->clone_empty(cut_rows);
-    res->append(*chunk, offset, cut_rows);
-    offset += cut_rows;
-    if (empty()) {
-        chunk.reset();
-        offset = 0;
-    }
-    return res;
-}
-
-// Specialized for SegmentedChunkPtr
-template <>
-ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_rows) {
-    DCHECK(!empty());
-    // cutoff a chunk from current segment, if it doesn't meet the requirement just let it be
-    ChunkPtr segment = chunk->segments()[segment_id];
-    size_t segment_offset = offset % chunk->segment_size();
-    size_t cut_rows = std::min(segment->num_rows() - segment_offset, required_rows);
-
-    auto res = segment->clone_empty(cut_rows);
-    res->append(*segment, segment_offset, cut_rows);
-    offset += cut_rows;
-
-    // move to next segment
-    segment_id = offset / chunk->segment_size();
-
-    if (empty()) {
-        chunk->reset();
-        offset = 0;
-    }
-    return res;
-}
-
-template struct ChunkSliceTemplate<ChunkPtr>;
-template struct ChunkSliceTemplate<ChunkUniquePtr>;
-template struct ChunkSliceTemplate<SegmentedChunkPtr>;
 } // namespace starrocks

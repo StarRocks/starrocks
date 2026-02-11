@@ -21,7 +21,6 @@
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/function_helper.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -661,8 +660,15 @@ bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPt
     if (v1->size() != v2->size()) {
         return false;
     }
-    auto data_v1 = FunctionHelper::get_data_column_of_const(v1);
-    auto data_v2 = FunctionHelper::get_data_column_of_const(v2);
+    auto unpack_const_data_column = [](const ColumnPtr& column) -> ColumnPtr {
+        if (column->is_constant()) {
+            return down_cast<const ConstColumn*>(column.get())->data_column();
+        }
+        return column;
+    };
+
+    auto data_v1 = unpack_const_data_column(v1);
+    auto data_v2 = unpack_const_data_column(v2);
     auto* array_v1 = down_cast<const ArrayColumn*>(data_v1.get());
     auto* array_v2 = down_cast<const ArrayColumn*>(data_v2.get());
     const auto& offsets_v1 = array_v1->offsets();

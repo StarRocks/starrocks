@@ -14,7 +14,9 @@
 
 #include "column/map_column.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <numeric>
 #include <set>
 
 #include "column/column_helper.h"
@@ -22,7 +24,6 @@
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -253,20 +254,14 @@ uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) const {
     strings::memcpy_inlined(pos, &map_size, sizeof(map_size));
     size_t ser_size = sizeof(map_size);
 
-    // unstable sort keys, map keys must be unique
-    SmallPermutation perm(map_size);
-    {
-        for (uint32_t i = 0; i < map_size; i++) {
-            perm[i].index_in_chunk = offset + i;
-        }
-        Tie tie(map_size, 1);
-        std::pair<int, int> range{0, map_size};
-        auto st = sort_and_tie_column(false, _keys, SortDesc(true, true), perm, tie, range, false);
-        DCHECK(st.ok());
-    }
+    std::vector<uint32_t> perm(map_size);
+    std::iota(perm.begin(), perm.end(), 0);
+    std::stable_sort(perm.begin(), perm.end(), [this, offset](uint32_t lhs, uint32_t rhs) {
+        return _keys->compare_at(offset + lhs, offset + rhs, *_keys, -1) < 0;
+    });
 
     for (size_t i = 0; i < map_size; ++i) {
-        uint32_t index = perm[i].index_in_chunk;
+        uint32_t index = offset + perm[i];
         ser_size += _keys->serialize(index, pos + ser_size);
         ser_size += _values->serialize(index, pos + ser_size);
     }
