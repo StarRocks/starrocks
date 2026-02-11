@@ -21,7 +21,7 @@ namespace starrocks {
 
 VariantTuple build_variant_tuple_from_chunk_row(const Chunk& chunk, size_t row_idx,
                                                 const std::vector<uint32_t>& column_indexes) {
-    auto schema = chunk.schema();
+    const auto& schema = chunk.schema();
     DCHECK(schema != nullptr);
 
     VariantTuple tuple;
