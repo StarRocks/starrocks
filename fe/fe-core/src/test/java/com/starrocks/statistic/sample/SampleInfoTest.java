@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectRelation;
@@ -28,9 +29,12 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
@@ -40,6 +44,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class SampleInfoTest extends PlanTestBase {
@@ -62,12 +67,17 @@ public class SampleInfoTest extends PlanTestBase {
                 "c3 decimal(10, 2)," +
                 "c4 struct<a int, b array<struct<a int, b int>>>," +
                 "c5 struct<a int, b int>," +
-                "c6 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
+                "c6 struct<a int, b int, c struct<a int, b int>, d array<int>>," +
+                "carr array<int>, " +
+                "carr2 array<int>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
         tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), table);
+
+        StatisticsMetaManager m = new StatisticsMetaManager();
+        m.createStatisticsTablesForTest();
     }
 
     @Test
@@ -76,7 +86,7 @@ public class SampleInfoTest extends PlanTestBase {
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
-                sampleInfo);
+                sampleInfo, Map.of());
 
         String complexSql = sampleInfo.generateComplexTypeColumnTask(table.getId(), db.getId(), table.getName(),
                 db.getFullName(), columnSampleManager.getComplexTypeStats());
@@ -85,7 +95,7 @@ public class SampleInfoTest extends PlanTestBase {
         InsertStmt insertStmt = (InsertStmt) stmt.get(0);
         Assertions.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
         ValuesRelation valuesRelation = (ValuesRelation) insertStmt.getQueryStatement().getQueryRelation();
-        Assertions.assertTrue(valuesRelation.getRows().size() == 3);
+        Assertions.assertTrue(valuesRelation.getRows().size() == 5);
         Assertions.assertTrue(valuesRelation.getRows().get(0).size() == 12);
     }
 
@@ -95,7 +105,7 @@ public class SampleInfoTest extends PlanTestBase {
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
-                sampleInfo);
+                sampleInfo, Map.of());
         List<List<ColumnStats>> columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
         String primitiveSql = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(), db.getId(), table.getName(),
                 db.getFullName(), columnStatsBatch.get(0), tabletSampleManager);
@@ -117,7 +127,7 @@ public class SampleInfoTest extends PlanTestBase {
         List<Type> columnTypes = Lists.newArrayList(DateType.DATE,
                 new ArrayType(AnyStructType.ANY_STRUCT), IntegerType.INT);
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
-                sampleInfo);
+                sampleInfo, Map.of());
         List<List<ColumnStats>> columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
         String sql = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(), db.getId(), table.getName(),
                 db.getFullName(), columnStatsBatch.get(0), tabletSampleManager);
@@ -130,6 +140,84 @@ public class SampleInfoTest extends PlanTestBase {
         Assertions.assertTrue(unionRelation.getRelations().size() == 2);
     }
 
+    @Test
+    public void testVirtualUnnestStatistics() throws Exception {
+        // GIVEN
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
+        List<String> columnNames = Lists.newArrayList("carr");
+        List<Type> columnTypes = Lists.newArrayList(ArrayType.ARRAY_INT);
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
+                sampleInfo, Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true"));
+        List<List<ColumnStats>> columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
+
+        // WHEN
+        String sql = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(), db.getId(), table.getName(),
+                db.getFullName(), columnStatsBatch.get(0), tabletSampleManager);
+
+        // THEN
+        Assertions.assertTrue(sql.contains("unnest(`carr`)"));
+        Assertions.assertNotNull(getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testMultipleVirtualUnnestStatistics() throws Exception {
+        // GIVEN
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
+        List<String> columnNames = Lists.newArrayList("carr", "carr2", "c3");
+        List<Type> columnTypes = Lists.newArrayList(ArrayType.ARRAY_INT, ArrayType.ARRAY_INT, DecimalType.DECIMAL32);
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
+                sampleInfo, Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true"));
+
+        List<List<ColumnStats>> columnStatsBatch;
+        try {
+            ConnectContext.get().getSessionVariable().setStatisticCollectParallelism(12);
+            columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
+        } finally {
+            ConnectContext.get().getSessionVariable().setStatisticCollectParallelism(1);
+
+        }
+
+        // WHEN
+        String sql = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(), db.getId(), table.getName(),
+                db.getFullName(), columnStatsBatch.get(0), tabletSampleManager);
+
+        // THEN
+        // Unnest stats
+        Assertions.assertTrue(sql.contains("unnest(`carr`)"));
+        Assertions.assertTrue(sql.contains("unnest(`carr2`)"));
+        // Normal stats
+        Assertions.assertTrue(sql.contains("carr"));
+        Assertions.assertTrue(sql.contains("carr2"));
+        Assertions.assertTrue(sql.contains("c3"));
+
+        Assertions.assertNotNull(getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testVirtualUnnestStatisticsWithTabletHints() throws Exception {
+        // GIVEN
+        final var partition = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
+        final var tablet = partition.getLatestBaseIndex().getTablets().get(0);
+
+        // Add some more tablet stats to force tablet hints
+        final var dummyTabletStats = new TabletStats(tablet.getId(), partition.getId(), 100_000_000);
+        final var sampleInfo = new SampleInfo(
+                0.5, 50_000_000, 50_000_000,
+                List.of(dummyTabletStats), List.of(dummyTabletStats), List.of(dummyTabletStats), List.of(dummyTabletStats));
+        List<String> columnNames = Lists.newArrayList("carr");
+        List<Type> columnTypes = Lists.newArrayList(ArrayType.ARRAY_INT);
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
+                sampleInfo, Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true"));
+        List<List<ColumnStats>> columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
+
+        // WHEN
+        String sql = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(), db.getId(), table.getName(),
+                db.getFullName(), columnStatsBatch.get(0), tabletSampleManager);
+
+        // THEN
+        Assertions.assertTrue(sql.contains("unnest(`carr`)"));
+        Assertions.assertNotNull(getFragmentPlan(sql));
+    }
 
     @AfterAll
     public static void afterClass() {

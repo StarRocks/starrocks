@@ -134,6 +134,9 @@ public class StatsConstants {
             EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
     );
 
+    public static final String UNNEST_VIRTUAL_STATISTICS = "unnest_virtual_statistics";
+
+
     public enum AnalyzeType {
         SAMPLE,
         FULL,

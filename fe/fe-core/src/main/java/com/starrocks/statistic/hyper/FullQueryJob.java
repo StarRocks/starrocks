@@ -51,6 +51,7 @@ public class FullQueryJob extends HyperQueryJob {
                 context.put("maxFunction", columnStat.getMax());
                 context.put("minFunction", columnStat.getMin());
                 context.put("collectionSizeFunction", columnStat.getCollectionSize());
+                context.put("laterals", columnStat.getLateralJoin());
                 String sql = HyperStatisticSQLs.build(context, HyperStatisticSQLs.BATCH_FULL_STATISTIC_TEMPLATE);
                 metaSQL.add(sql);
             }

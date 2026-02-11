@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.statistic.virtual.VirtualStatistic;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.IntegerType;
@@ -87,7 +88,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
-            " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
+            " FROM ($fromClause) tt";
+    public static final String BATCH_FULL_STATISTIC_FROM_CLAUSE_TEMPLATE =
+            "select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`";
     private static final String OVERWRITE_PARTITION_TEMPLATE =
             "INSERT INTO " + TABLE_NAME + "(" + StatisticUtils.buildStatsColumnDef(TABLE_NAME).stream().map(ColumnDef::getName)
                     .collect(Collectors.joining(", ")) + ") " + "\n" +
@@ -318,8 +321,19 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                 continue;
             }
             for (int i = 0; i < columnNames.size(); i++) {
-                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnNames.get(i),
-                        columnTypes.get(i)));
+                final var columnName = columnNames.get(i);
+                final var columnType = columnTypes.get(i);
+
+                // Add regular column statistics
+                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnName, columnType));
+
+                // Add virtual statistics for applicable column types
+                for (final var virtualStatistic : VirtualStatistic.INSTANCES) {
+                    if (virtualStatistic.isEnabledInStatsJobProperties(properties) && virtualStatistic.appliesTo(columnType)) {
+                        totalQuerySQL.add(buildBatchCollectVirtualStatisticSQL(table, partition, columnName,
+                                columnType, virtualStatistic));
+                    }
+                }
             }
         }
 
@@ -328,11 +342,31 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     private String buildBatchCollectFullStatisticSQL(Table table, Partition partition, String columnName,
                                                      Type columnType) {
-        StringBuilder builder = new StringBuilder();
-        VelocityContext context = new VelocityContext();
-
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
         String quoteColumnName = StatisticUtils.quoting(table, columnName);
+        return buildBatchCollectStatisticSQL(table, partition, columnNameStr, quoteColumnName,
+                columnType, "");
+    }
+
+    private String buildBatchCollectVirtualStatisticSQL(Table table, Partition partition, String columnName,
+                                                        Type columnType, VirtualStatistic virtualStat) {
+        String columnNameStr = StringEscapeUtils.escapeSql(virtualStat.getVirtualColumnName(columnName));
+        String quoteColumnExpression = virtualStat.getVirtualExpression(columnName);
+        Type virtualType = virtualStat.getVirtualExpressionType(columnType);
+
+        var laterals = "";
+        if (virtualStat.requiresLateralJoin()) {
+            laterals = ", " + quoteColumnExpression + " $columnNameStr(`column_key`)";
+        }
+
+        return buildBatchCollectStatisticSQL(table, partition, columnNameStr, "column_key",
+                virtualType, laterals);
+    }
+
+    private String buildBatchCollectStatisticSQL(Table table, Partition partition, String columnNameStr,
+                                                 String quoteColumnName, Type columnType, String laterals) {
+        StringBuilder builder = new StringBuilder();
+        VelocityContext context = new VelocityContext();
         String quoteColumnKey = "`column_key`";
 
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION_V5);
@@ -343,6 +377,12 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("quoteColumnName", quoteColumnName);
+
+        final var fromClause = BATCH_FULL_STATISTIC_FROM_CLAUSE_TEMPLATE + laterals;
+        // Evaluate the FROM clause template
+        StringWriter fromClauseWriter = new StringWriter();
+        DEFAULT_VELOCITY_ENGINE.evaluate(context, fromClauseWriter, "", fromClause);
+        context.put("fromClause", fromClauseWriter.toString());
 
         if (!columnType.canStatistic()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");

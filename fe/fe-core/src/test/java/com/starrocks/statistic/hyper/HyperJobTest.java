@@ -61,7 +61,14 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class HyperJobTest extends DistributedEnvPlanTestBase {
 
@@ -99,14 +106,22 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
-    public void generateComplexTypeColumnTask() {
+    public void generateComplexTypeColumnTask() throws Exception {
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
 
-        List<HyperQueryJob> job =
-                HyperQueryJob.createFullQueryJobs(connectContext, db, table, columnNames, columnTypes, List.of(pid), 1, false);
-        Assertions.assertEquals(2, job.size());
-        Assertions.assertTrue(job.get(1) instanceof ConstQueryJob);
+        List<HyperQueryJob> jobs =
+                HyperQueryJob.createFullQueryJobs(connectContext, db, table, columnNames, columnTypes, List.of(pid), 1, false,
+                        Map.of());
+        Assertions.assertEquals(2, jobs.size());
+        assertInstanceOf(ConstQueryJob.class, jobs.get(1));
+        for (final var job : jobs) {
+            List<String> sqls = job.buildQuerySQL();
+            for (String sql : sqls) {
+                Assertions.assertNotNull(getFragmentPlan(sql)); // Make sure the query can be executed.
+            }
+        }
+
     }
 
     @Test
@@ -114,7 +129,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
 
-        ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table, false);
+        ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table, false, Map.of());
         ColumnStats columnStat = cc.getColumnStats().stream().filter(c -> c instanceof PrimitiveTypeColumnStats)
                 .findAny().orElse(null);
 
@@ -124,10 +139,15 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         context.put("hllFunction", columnStat.getNDV());
         context.put("maxFunction", columnStat.getMax());
         context.put("minFunction", columnStat.getMin());
+        context.put("fromTable", "`" + db.getOriginName() + "`.`" + table.getName() +
+                "` partition `" + table.getPartition(pid).getName() + "`");
+        context.put("laterals", columnStat.getLateralJoin());
+        context.put("collectionSizeFunction", columnStat.getCollectionSize());
         String sql = HyperStatisticSQLs.build(context, HyperStatisticSQLs.BATCH_FULL_STATISTIC_TEMPLATE);
         assertContains(sql, "hex(hll_serialize(IFNULL(hll_raw(`c0`)");
         List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
-        Assertions.assertTrue(stmt.get(0) instanceof QueryStatement);
+        assertInstanceOf(QueryStatement.class, stmt.get(0));
+        assertDoesNotThrow(() -> getFragmentPlan(sql));
     }
 
     @Test
@@ -136,14 +156,15 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<Type> columnTypes = Lists.newArrayList(DateType.DATE,
                 new ArrayType(AnyStructType.ANY_STRUCT), IntegerType.INT);
 
-        ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table, false);
+        ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table, false, Map.of());
         List<ColumnStats> columnStat = cc.getColumnStats().stream().filter(c -> c instanceof SubFieldColumnStats)
                 .collect(Collectors.toList());
         String sql = HyperStatisticSQLs.buildSampleSQL(db, table, table.getPartition(pid), columnStat, sampler,
                 HyperStatisticSQLs.BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE);
         Assertions.assertEquals(2, columnStat.size());
         List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
-        Assertions.assertTrue(stmt.get(0) instanceof QueryStatement);
+        assertInstanceOf(QueryStatement.class, stmt.get(0));
+        assertDoesNotThrow(() -> getFragmentPlan(sql));
     }
 
     public Pair<List<String>, List<Type>> initColumn(List<String> cols) {
@@ -185,45 +206,53 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
 
         List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, pair.first,
-                pair.second, List.of(pid), 1, false);
+                pair.second, List.of(pid), 1, false, Map.of());
 
         Assertions.assertEquals(1, jobs.size());
 
-        List<String> sql = jobs.get(0).buildQuerySQL();
-        Assertions.assertEquals(3, sql.size());
+        List<String> sqls = jobs.get(0).buildQuerySQL();
+        Assertions.assertEquals(3, sqls.size());
 
-        assertContains(sql.get(0), "hex(hll_serialize(IFNULL(hll_raw(`c1`),");
-        assertContains(sql.get(1), "FROM `test`.`t_struct` partition `t_struct`");
+        assertContains(sqls.get(0), "hex(hll_serialize(IFNULL(hll_raw(`c1`),");
+        assertContains(sqls.get(1), "FROM `test`.`t_struct` partition `t_struct`");
+
+        for (final var sql : sqls) {
+            assertDoesNotThrow(() -> getFragmentPlan(sql));
+        }
     }
 
     @Test
     public void testSampleJobs() {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
-
+        final var tabletId = getAnyTabletId(table);
         new MockUp<SampleInfo>() {
             @Mock
             public List<TabletStats> getMediumHighWeightTablets() {
-                return List.of(new TabletStats(1, pid, 5000000));
+                return List.of(new TabletStats(tabletId, pid, 5000000));
             }
         };
 
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
-                pair.second, List.of(pid), 1, sampler, false);
+                pair.second, List.of(pid), 1, sampler, false, Map.of());
 
         Assertions.assertEquals(2, jobs.size());
-        Assertions.assertTrue(jobs.get(0) instanceof MetaQueryJob);
-        Assertions.assertTrue(jobs.get(1) instanceof SampleQueryJob);
+        assertInstanceOf(MetaQueryJob.class, jobs.get(0));
+        assertInstanceOf(SampleQueryJob.class, jobs.get(1));
 
-        List<String> sql = jobs.get(1).buildQuerySQL();
-        Assertions.assertEquals(1, sql.size());
+        List<String> sqls = jobs.get(1).buildQuerySQL();
+        Assertions.assertEquals(1, sqls.size());
 
-        assertContains(sql.get(0), "with base_cte_table as ( SELECT * FROM (SELECT * FROM `test`.`t_struct` " +
-                "TABLET(1) SAMPLE('percent'='10')) t_medium_high)");
-        assertContains(sql.get(0), "cast(IFNULL(SUM(CHAR_LENGTH(`c2`)) * 0/ COUNT(*), 0) as BIGINT), " +
+        assertContains(sqls.get(0), "with base_cte_table as ( SELECT * FROM (SELECT * FROM `test`.`t_struct` " +
+                "TABLET(" + tabletId + ") SAMPLE('percent'='10')) t_medium_high)");
+        assertContains(sqls.get(0), "cast(IFNULL(SUM(CHAR_LENGTH(`c2`)) * 0/ COUNT(*), 0) as BIGINT), " +
                 "hex(hll_serialize(IFNULL(hll_raw(`c2`), hll_empty())))," +
                 " cast((COUNT(*) - COUNT(`c2`)) * 0 / COUNT(*) as BIGINT), " +
                 "IFNULL(MAX(LEFT(`c2`, 200)), ''), IFNULL(MIN(LEFT(`c2`, 200)), ''), cast(-1.0 as BIGINT) " +
-                "FROM base_cte_table ");
+                "FROM (SELECT * FROM base_cte_table ) from_cte ");
+
+        for (final var sql : sqls) {
+            assertDoesNotThrow(() -> getFragmentPlan(sql));
+        }
     }
 
     @Test
@@ -231,46 +260,56 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c7"));
 
         List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, pair.first,
-                pair.second, List.of(pid), 1, true);
+                pair.second, List.of(pid), 1, true, Map.of());
 
         Assertions.assertEquals(1, jobs.size());
 
-        List<String> sql = jobs.get(0).buildQuerySQL();
-        assertContains(sql.get(0), "'00'");
+        List<String> sqls = jobs.get(0).buildQuerySQL();
+        assertContains(sqls.get(0), "'00'");
         Config.enable_manual_collect_array_ndv = true;
-        sql = jobs.get(0).buildQuerySQL();
-        assertContains(sql.get(0), "hex(hll_serialize(IFNULL(hll_raw(crc32_hash(`c7`)), hll_empty())))");
+        sqls = jobs.get(0).buildQuerySQL();
+        assertContains(sqls.get(0), "hex(hll_serialize(IFNULL(hll_raw(crc32_hash(`c7`)), hll_empty())))");
         Config.enable_manual_collect_array_ndv = false;
+
+        for (final var sql : sqls) {
+            assertDoesNotThrow(() -> getFragmentPlan(sql));
+        }
     }
 
     @Test
     public void testSubfieldSampleJobs() {
         List<String> columnNames = Lists.newArrayList("c4.b", "c6.c.b");
         List<Type> columnTypes = Lists.newArrayList(new ArrayType(AnyStructType.ANY_STRUCT), IntegerType.INT);
+        final var tabletId = getAnyTabletId(table);
 
         new MockUp<SampleInfo>() {
             @Mock
             public List<TabletStats> getMediumHighWeightTablets() {
-                return List.of(new TabletStats(1, pid, 5000000));
+                return List.of(new TabletStats(tabletId, pid, 5000000));
             }
         };
 
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, columnNames,
-                columnTypes, List.of(pid), 1, sampler, false);
+                columnTypes, List.of(pid), 1, sampler, false, Map.of());
 
         Assertions.assertEquals(1, jobs.size());
-        Assertions.assertTrue(jobs.get(0) instanceof SampleQueryJob);
+        assertInstanceOf(SampleQueryJob.class, jobs.get(0));
 
-        List<String> sql = jobs.get(0).buildQuerySQL();
-        Assertions.assertEquals(2, sql.size());
+        List<String> sqls = jobs.get(0).buildQuerySQL();
+        Assertions.assertEquals(2, sqls.size());
 
-        assertContains(sql.get(1),
-                "with base_cte_table as ( SELECT * FROM (SELECT * FROM `test`.`t_struct` TABLET(1) SAMPLE" +
+        assertContains(sqls.get(1),
+                "with base_cte_table as ( SELECT * FROM (SELECT * FROM `test`.`t_struct` TABLET(" + tabletId + ") SAMPLE" +
                         "('percent'='10'))");
-        assertContains(sql.get(1), "'c6.c.b', cast(0 as BIGINT), cast(4 * 0 as BIGINT), ");
-        assertContains(sql.get(1), "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), ");
-        assertContains(sql.get(1), "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
-                "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), ''), cast(-1.0 as BIGINT) FROM base_cte_table");
+        assertContains(sqls.get(1), "'c6.c.b', cast(0 as BIGINT), cast(4 * 0 as BIGINT), ");
+        assertContains(sqls.get(1), "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), ");
+        assertContains(sqls.get(1), "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
+                "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), ''), cast(-1.0 as BIGINT) FROM " +
+                "(SELECT * FROM base_cte_table ) from_cte");
+
+        for (final var sql : sqls) {
+            assertDoesNotThrow(() -> getFragmentPlan(sql));
+        }
     }
 
     @Test
@@ -298,11 +337,131 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         };
 
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
-                pair.second, List.of(pid), 1, sampler, false);
+                pair.second, List.of(pid), 1, sampler, false, Map.of());
         long startTime = connectContext.getStartTime();
         for (HyperQueryJob job : jobs) {
             job.queryStatistics();
             Assertions.assertNotEquals(startTime, connectContext.getStartTime());
+        }
+    }
+
+    @Test
+    public void testVirtualStatisticWithFullStatistics() throws Exception {
+        // GIVEN
+        final var namesAndTypes = initColumn(List.of("c7")); // c7 is array<int>
+        Map<String, String> properties = Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true");
+
+        // WHEN
+        final var jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, namesAndTypes.first,
+                namesAndTypes.second, List.of(pid), 1, false, properties);
+
+        // THEN
+        assertFalse(jobs.isEmpty());
+
+        boolean containsArrayColumn = false;
+        boolean containsVirtualStat = false;
+
+        for (final var job : jobs) {
+            List<String> sqls = job.buildQuerySQL();
+            assertEquals(2, sqls.size());
+            for (String sql : sqls) {
+                Assertions.assertNotNull(getFragmentPlan(sql)); // Make sure the query can be executed.
+
+                List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
+
+                assertFalse(stmt.isEmpty());
+
+                // Check for regular array column
+                if (sql.contains("'c7'")) {
+                    containsArrayColumn = true;
+                }
+
+                // Check for virtual statistic with unnest
+                if (sql.contains("unnest(`c7`)") && sql.contains("VIRTUAL_STATISTIC_c7_UNNEST")) {
+                    containsVirtualStat = true;
+                }
+            }
+        }
+
+        assertTrue(containsArrayColumn);
+        assertTrue(containsVirtualStat);
+    }
+
+    private static long getAnyTabletId(Table table) {
+        final var partition = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
+        final var tablet = partition.getLatestBaseIndex().getTablets().get(0);
+        return tablet.getId();
+    }
+
+    @Test
+    public void testVirtualStatisticWithSampleStatistics() throws Exception {
+        // GIVEN
+        final var namesAndTypes = initColumn(List.of("c7")); // c7 is array<int>
+
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(getAnyTabletId(table), pid, 5000000));
+            }
+
+            @Mock
+            public int getMaxSampleTabletNum() {
+                return 1;
+            }
+        };
+
+        Map<String, String> properties = Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true");
+        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, namesAndTypes.first,
+                namesAndTypes.second, List.of(pid), 1, sampler, false, properties);
+
+        // Should have jobs for both regular and virtual columns
+        assertFalse(jobs.isEmpty());
+
+        boolean containsArrayColumn = false;
+        boolean containsVirtualStat = false;
+
+        for (HyperQueryJob job : jobs) {
+            List<String> sqls = job.buildQuerySQL();
+            for (String sql : sqls) {
+                System.out.println(sql);
+                Assertions.assertNotNull(getFragmentPlan(sql)); // Make sure the query can be executed.
+                List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
+                assertFalse(stmt.isEmpty());
+
+                // Check for regular array column (column name in the SQL as string literal or backticked)
+                if (sql.contains("'c7'") || sql.contains("`c7`")) {
+                    containsArrayColumn = true;
+                }
+
+                // Check for virtual statistic with unnest - in sample mode it uses subquery
+                if (sql.contains("unnest(`c7`)") && sql.contains("VIRTUAL_STATISTIC_c7_UNNEST")) {
+                    containsVirtualStat = true;
+                }
+            }
+        }
+
+        assertTrue(containsArrayColumn);
+        assertTrue(containsVirtualStat);
+    }
+
+    @Test
+    public void testVirtualStatisticNotAddedWhenDisabled() throws Exception {
+        // GIVEN
+        final var namesAndTypes = initColumn(List.of("c7")); // c7 is array<int>
+        Map<String, String> properties = Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "false");
+
+        // WHEN
+        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, namesAndTypes.first,
+                namesAndTypes.second, List.of(pid), 1, false, properties);
+
+        // THEN
+        for (HyperQueryJob job : jobs) {
+            List<String> sqls = job.buildQuerySQL();
+            for (String sql : sqls) {
+                Assertions.assertNotNull(getFragmentPlan(sql)); // Make sure the query can be executed.
+                assertFalse(sql.contains("VIRTUAL_STATISTIC"));
+                assertFalse(sql.contains("unnest"));
+            }
         }
     }
 

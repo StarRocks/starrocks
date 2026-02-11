@@ -18,7 +18,10 @@ import com.starrocks.common.Config;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.velocity.VelocityContext;
+import org.apache.velocity.app.VelocityEngine;
 
+import java.io.StringWriter;
 import java.util.List;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
@@ -27,6 +30,18 @@ import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAM
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class SampleInfo {
+
+    protected static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
+
+    static {
+        DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
+        // close velocity log
+        DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
+    }
+
+    private static final String CTE_TEMPLATE = "SELECT $columnNames FROM $fullyQualifiedName $tabletsHint " +
+            "$laterals $whereAndLimit";
+
     private final double tabletSampleRatio;
 
     private final long sampleRowCount;
@@ -169,22 +184,61 @@ public class SampleInfo {
         return builder.toString();
     }
 
+    private static String getSampleCte(String columnNames, String fullyQualifiedName, String tabletsHint, String laterals,
+                                       String whereAndLimit) {
+        final var velocityContext = new VelocityContext();
+        velocityContext.put("columnNames", columnNames);
+        velocityContext.put("fullyQualifiedName", fullyQualifiedName);
+        velocityContext.put("tabletsHint", tabletsHint);
+        velocityContext.put("laterals", laterals);
+        velocityContext.put("whereAndLimit", whereAndLimit);
+
+        final var cteWriter = new StringWriter();
+        DEFAULT_VELOCITY_ENGINE.evaluate(velocityContext, cteWriter, "", CTE_TEMPLATE);
+
+        return cteWriter.toString();
+    }
+
+    private String buildLaterals(List<ColumnStats> columnStats) {
+        final var laterals = columnStats.stream() //
+                .filter(stat -> stat instanceof VirtualPrimitiveTypeColumnStats
+                        && ((VirtualPrimitiveTypeColumnStats) stat).getVirtualStatistic().requiresLateralJoin()) //
+                .map(statThatNeedsLateralJoin -> { //
+                    final var virtualPrimitiveColumnStat = ((VirtualPrimitiveTypeColumnStats) statThatNeedsLateralJoin);
+                    final var columnName = statThatNeedsLateralJoin.columnName;
+                    final var virtualStat = virtualPrimitiveColumnStat.getVirtualStatistic();
+                    return String.format("%s %s(%s)",
+                            virtualStat.getVirtualExpression(virtualPrimitiveColumnStat.getBaseColumnName()), columnName,
+                            columnName);
+                }) //
+                .collect(Collectors.joining(", "));
+
+        if (laterals.isEmpty()) {
+            return "";
+        }
+
+        return ", " + laterals;
+    }
+
     private String generateQueryDataSql(String tableName, String dbName,
-                                       List<ColumnStats> primitiveTypeStats,
-                                       TabletSampleManager manager) {
+                                        List<ColumnStats> primitiveTypeStats,
+                                        TabletSampleManager manager) {
         StringBuilder sql = new StringBuilder();
         String fullQualifiedName = "`" + dbName + "`.`" + tableName + "`";
         StringJoiner joiner = new StringJoiner(", ");
+        String laterals = buildLaterals(primitiveTypeStats);
+
         for (int i = 0; i < primitiveTypeStats.size(); i++) {
             joiner.add(primitiveTypeStats.get(i).getQuotedColumnName() + " as col_" + (i + 1));
         }
         String columnNames = joiner.toString();
+
         if (!highWeightTablets.isEmpty()) {
-            sql.append("SELECT * FROM (")
-                    .append("SELECT ").append(columnNames).append(" FROM ")
-                    .append(fullQualifiedName)
-                    .append(generateTabletHint(highWeightTablets, manager.getHighWeight().getTabletReadRatio(),
-                            manager.getSampleRowsLimit()))
+            final var tabletsHint = generateTabletHint(highWeightTablets, manager.getHighWeight().getTabletReadRatio());
+            final var whereAndLimit = getWhereAndLimit(manager.getHighWeight().getTabletReadRatio(),
+                    manager.getSampleRowsLimit());
+            sql.append("SELECT * FROM (") //
+                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, laterals, whereAndLimit)) //
                     .append(") t_high");
         }
 
@@ -192,11 +246,13 @@ public class SampleInfo {
             if (sql.length() > 0) {
                 sql.append(" UNION ALL ");
             }
-            sql.append("SELECT * FROM (")
-                    .append("SELECT ").append(columnNames).append(" FROM ")
-                    .append(fullQualifiedName)
-                    .append(generateTabletHint(mediumHighWeightTablets, manager.getMediumHighWeight().getTabletReadRatio(),
-                            manager.getSampleRowsLimit()))
+
+            final var tabletsHint =
+                    generateTabletHint(mediumHighWeightTablets, manager.getMediumHighWeight().getTabletReadRatio());
+            final var whereAndLimit = getWhereAndLimit(manager.getMediumHighWeight().getTabletReadRatio(),
+                    manager.getSampleRowsLimit());
+            sql.append("SELECT * FROM (") //
+                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, laterals, whereAndLimit)) //
                     .append(") t_medium_high");
         }
 
@@ -204,11 +260,12 @@ public class SampleInfo {
             if (sql.length() > 0) {
                 sql.append(" UNION ALL ");
             }
-            sql.append("SELECT * FROM (")
-                    .append("SELECT ").append(columnNames).append(" FROM ")
-                    .append(fullQualifiedName)
-                    .append(generateTabletHint(mediumLowWeightTablets, manager.getMediumLowWeight().getTabletReadRatio(),
-                            manager.getSampleRowsLimit()))
+
+            final var tabletsHint = generateTabletHint(mediumLowWeightTablets, manager.getMediumLowWeight().getTabletReadRatio());
+            final var whereAndLimit = getWhereAndLimit(manager.getMediumLowWeight().getTabletReadRatio(),
+                    manager.getSampleRowsLimit());
+            sql.append("SELECT * FROM (") //
+                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, laterals, whereAndLimit)) //
                     .append(") t_medium_low");
         }
 
@@ -216,22 +273,24 @@ public class SampleInfo {
             if (sql.length() > 0) {
                 sql.append(" UNION ALL ");
             }
-            sql.append("SELECT * FROM (")
-                    .append("SELECT ").append(columnNames).append(" FROM ")
-                    .append(fullQualifiedName)
-                    .append(generateTabletHint(lowWeightTablets, manager.getLowWeight().getTabletReadRatio(),
-                            manager.getSampleRowsLimit()))
+            final var tabletsHint = generateTabletHint(lowWeightTablets, manager.getLowWeight().getTabletReadRatio());
+            final var whereAndLimit = getWhereAndLimit(manager.getLowWeight().getTabletReadRatio(),
+                    manager.getSampleRowsLimit());
+            sql.append("SELECT * FROM (") //
+                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, laterals, whereAndLimit)) //
                     .append(") t_low");
         }
 
-        if (sql.length() == 0) {
-            sql.append("SELECT").append(columnNames).append(" FROM ").append(fullQualifiedName).append(" LIMIT ").append(
-                    Config.statistic_sample_collect_rows);
+        if (sql.isEmpty()) {
+            sql.append("SELECT * FROM ( ") //
+                    .append(getSampleCte(columnNames, fullQualifiedName, "", laterals, "")) //
+                    .append(") t_no_hint LIMIT ") //
+                    .append(Config.statistic_sample_collect_rows);
         }
         return sql.toString();
     }
 
-    private String generateTabletHint(List<TabletStats> tabletStats, double readRatio, long sampleRowsLimit) {
+    private String generateTabletHint(List<TabletStats> tabletStats, double readRatio) {
         if (tabletStats.isEmpty()) {
             return "";
         }
@@ -243,12 +302,18 @@ public class SampleInfo {
 
         if (Config.enable_use_table_sample_collect_statistics) {
             int percent = Math.max(1, Math.min(100, (int) (readRatio * 100)));
-            hint.append(String.format(" SAMPLE('percent'='%d') LIMIT %d ", percent, sampleRowsLimit));
-        } else {
-            hint.append(" WHERE rand() <= ").append(readRatio);
-            hint.append(" LIMIT ").append(sampleRowsLimit);
+            hint.append(String.format(" SAMPLE('percent'='%d') ", percent));
         }
         return hint.toString();
+    }
+
+    private String getWhereAndLimit(double readRatio, long sampleRowsLimit) {
+        final var limit = " LIMIT " + sampleRowsLimit;
+        if (Config.enable_use_table_sample_collect_statistics) {
+            return limit; // Sampling is already covered when generating the tablet hint.
+        }
+
+        return " WHERE rand() <= " + readRatio + " LIMIT " + sampleRowsLimit;
     }
 
     private String generateQueryColumnSql(long tableId, long dbId, String tableName, String dbName,
