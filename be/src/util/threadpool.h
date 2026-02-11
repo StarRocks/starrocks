@@ -54,9 +54,9 @@
 // resolve `barrier` macro conflicts with boost/thread.hpp header file
 #undef barrier
 #include "base/container/priority_queue.h"
+#include "base/metrics.h"
 #include "base/time/monotime.h"
 #include "cpu_util.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 

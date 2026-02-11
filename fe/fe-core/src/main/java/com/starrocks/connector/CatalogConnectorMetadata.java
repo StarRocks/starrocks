@@ -390,4 +390,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     public Map<String, String> getCatalogProperties() {
         return normal.getCatalogProperties();
     }
+
+    @Override
+    public boolean canDeleteUsingMetadata(Table table, ScalarOperator predicate) {
+        return normal.canDeleteUsingMetadata(table, predicate);
+    }
+
+    @Override
+    public void executeMetadataDelete(Table table, ScalarOperator predicate, ConnectContext context) {
+        normal.executeMetadataDelete(table, predicate, context);
+    }
 }

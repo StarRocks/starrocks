@@ -48,7 +48,7 @@
 #include "gen_cpp/Descriptors_types.h"     // for TTupleId
 #include "gen_cpp/FrontendService_types.h" // for TTupleId
 #include "gen_cpp/Types_types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

@@ -41,6 +41,7 @@
 #include "base/container/raw_container.h"
 #include "base/crypto/sm3.h"
 #include "base/string/utf8.h"
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -60,7 +61,6 @@
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
-#include "types/large_int_value.h"
 #include "util/utf8_encoding.h"
 
 namespace starrocks {
@@ -520,7 +520,7 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
         if (src_nullable->has_null()) {
             auto* src_binary = down_cast<const BinaryColumn*>(src_nullable->data_column().get());
             ColumnPtr binary = func(columns, src_binary, std::forward<Args>(args)...);
-            NullColumn::MutablePtr src_null = NullColumn::create(*(src_nullable->null_column()));
+            NullColumn::MutablePtr src_null = NullColumn::static_pointer_cast(src_nullable->null_column()->clone());
 
             // - if binary is null ConstColumn, just return it.
             // - if binary is non-null ConstColumn, unfold it and wrap with src_null.

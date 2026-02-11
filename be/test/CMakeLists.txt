@@ -8,22 +8,18 @@ set(EXEC_FILES
         ./column/column_hash_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
-        ./column/german_string_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp
-        ./column/copied_datum_test.cpp
-        ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
-        ./column/fixed_length_column_test.cpp
+        ./column/fixed_length_column_extended_test.cpp
         ./column/json_column_test.cpp
-        ./column/variant_column_test.cpp
+        ./column/variant_column_extended_test.cpp
         ./column/map_column_test.cpp
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
-        ./column/timestamp_value_test.cpp
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
@@ -289,9 +285,6 @@ set(EXEC_FILES
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
-        ./runtime/datetime_value_test.cpp
-        ./runtime/decimalv2_value_test.cpp
-        ./runtime/decimalv3_test.cpp
         ./runtime/diagnose_daemon_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
@@ -300,7 +293,6 @@ set(EXEC_FILES
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/local_tablets_channel_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
-        ./runtime/large_int_value_test.cpp
         ./runtime/load_channel_test.cpp
         ./runtime/load_channel_mgr_test.cpp
         ./runtime/memory/mem_chunk_allocator_test.cpp
@@ -320,7 +312,6 @@ set(EXEC_FILES
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/time_bounded_stream_load_pipe_test.cpp
-        ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
         ./runtime/merge_cascade_test.cpp
@@ -333,10 +324,8 @@ set(EXEC_FILES
         ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
-        ./types/bitmap_value_test.cpp
         ./types/type_checker_test.cpp
         ./types/type_checker_xml_loader_test.cpp 
-        ./types/variant_value_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/aes_util_test.cpp
@@ -351,8 +340,6 @@ set(EXEC_FILES
         ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
-        ./util/core_local_test.cpp
-        ./util/core_local_counter_test.cpp
         ./util/cpu_info_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
@@ -363,20 +350,17 @@ set(EXEC_FILES
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
-        ./util/mysql_row_buffer_test.cpp
-        ./util/new_metrics_test.cpp
         ./util/parse_util_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp
         ./base/raw_container_test.cpp
         ./util/string_util_test.cpp
-        ./util/tdigest_test.cpp
         ./util/thread_test.cpp
         ./util/threadpool_test.cpp
         ./util/thrift_customize_test.cpp
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
-        ./util/int96_test.cpp
+        ./base/types/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
         ./util/gc_helper_test.cpp
@@ -391,7 +375,6 @@ set(EXEC_FILES
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
-        ./util/url_coding_test.cpp
         ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
@@ -411,7 +394,6 @@ set(EXEC_FILES
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
-        ./util/cow_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
@@ -424,6 +406,8 @@ endif ()
 
 add_subdirectory(base)
 add_subdirectory(common)
+add_subdirectory(column)
+add_subdirectory(types)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
@@ -455,7 +439,7 @@ SET(DW_TEST_FILES
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
     ./storage/datum_variant_test.cpp
-    ./storage/decimal12_test.cpp
+    ./base/types/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
     ./storage/delete_predicates_test.cpp
@@ -467,7 +451,6 @@ SET(DW_TEST_FILES
     ./storage/fast_schema_evolution_test.cpp
     ./storage/file_utils_test.cpp
     ./storage/get_use_pk_index_test.cpp
-    ./storage/hll_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp
@@ -543,8 +526,6 @@ SET(DW_TEST_FILES
     ./storage/publish_version_task_test.cpp
     ./storage/push_handler_test.cpp
     ./storage/range_test.cpp
-    ./storage/record_predicate/column_hash_is_congruent_test.cpp
-    ./storage/record_predicate/record_predicate_helper_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
     ./storage/roaring2range_test.cpp
@@ -594,10 +575,8 @@ SET(DW_TEST_FILES
     ./storage/short_key_index_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
-    ./storage/sstable/sstable_predicate_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_engine_test.cpp
-    ./storage/storage_types_test.cpp
     ./storage/table_reader_remote_test.cpp
     ./storage/table_reader_test.cpp
     ./storage/tablet_binlog_test.cpp

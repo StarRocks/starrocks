@@ -25,6 +25,7 @@ set(STARROCKS_LIBS
     Base
     Common
     Column
+    ColumnCore
     Connector
     Exec
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
@@ -36,6 +37,7 @@ set(STARROCKS_LIBS
     Storage
     Rowset
     Runtime
+    TypesCore
     Types
     Util
     Script

@@ -14,8 +14,9 @@
 
 #include "storage/lake/update_manager.h"
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
-#include "common/pretty_printer.h"
+#include "base/utility/pretty_printer.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
@@ -43,7 +44,6 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
-#include "util/failpoint/fail_point.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {

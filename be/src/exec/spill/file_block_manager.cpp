@@ -28,22 +28,26 @@ namespace starrocks::spill {
 class FileBlockContainer {
 public:
     FileBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
-                       int32_t plan_node_id, std::string plan_node_name, uint64_t id, size_t acquired_size)
+                       int32_t plan_node_id, std::string plan_node_name, uint64_t id, size_t acquired_size,
+                       bool skip_parent_path_deletion)
             : _dir(std::move(dir)),
               _query_id(query_id),
               _fragment_instance_id(fragment_instance_id),
               _plan_node_id(plan_node_id),
               _plan_node_name(std::move(plan_node_name)),
               _id(id),
-              _acquired_data_size(acquired_size) {}
+              _acquired_data_size(acquired_size),
+              _skip_parent_path_deletion(skip_parent_path_deletion) {}
 
     ~FileBlockContainer() {
         // @TODO we need add a gc thread to delete file
         TRACE_SPILL_LOG << "delete spill container file: " << path();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
         _dir->dec_size(_acquired_data_size);
-        // try to delete related dir, only the last one can success, we ignore the error
-        (void)(_dir->fs()->delete_dir(parent_path()));
+        if (!_skip_parent_path_deletion) {
+            // try to delete related dir, only the last one can success, we ignore the error
+            (void)(_dir->fs()->delete_dir(parent_path()));
+        }
     }
 
     Status open();
@@ -85,7 +89,8 @@ public:
 
     static StatusOr<FileBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id,
                                                   const TUniqueId& fragment_instance_id, int32_t plan_node_id,
-                                                  const std::string& plan_node_name, uint64_t id, size_t block_size);
+                                                  const std::string& plan_node_name, uint64_t id, size_t block_size,
+                                                  bool skip_parent_path_deletion);
 
 private:
     DirPtr _dir;
@@ -100,6 +105,9 @@ private:
     size_t _data_size = 0;
     // acquired data size from Dir
     size_t _acquired_data_size = 0;
+    // When true, skip deleting the parent directory in destructor.
+    // The caller (e.g. LoadSpillBlockManager) is responsible for cleaning up the parent path.
+    bool _skip_parent_path_deletion = false;
 };
 
 Status FileBlockContainer::open() {
@@ -141,9 +149,9 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> FileBlockContainer::get_readab
 StatusOr<FileBlockContainerPtr> FileBlockContainer::create(const DirPtr& dir, const TUniqueId& query_id,
                                                            const TUniqueId& fragment_instance_id, int32_t plan_node_id,
                                                            const std::string& plan_node_name, uint64_t id,
-                                                           size_t block_size) {
+                                                           size_t block_size, bool skip_parent_path_deletion) {
     auto container = std::make_shared<FileBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id,
-                                                          plan_node_name, id, block_size);
+                                                          plan_node_name, id, block_size, skip_parent_path_deletion);
     RETURN_IF_ERROR(container->open());
     return container;
 }
@@ -212,8 +220,9 @@ StatusOr<BlockPtr> FileBlockManager::acquire_block(const AcquireBlockOptions& op
     AcquireDirOptions acquire_dir_opts;
     acquire_dir_opts.data_size = opts.block_size;
     ASSIGN_OR_RETURN(auto dir, _dir_mgr->acquire_writable_dir(acquire_dir_opts));
-    ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id,
-                                                                   opts.name, opts.block_size));
+    ASSIGN_OR_RETURN(auto block_container,
+                     get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id, opts.name,
+                                             opts.block_size, opts.skip_parent_path_deletion));
     auto res = std::make_shared<FileBlock>(block_container);
     res->set_is_remote(dir->is_remote());
     return res;
@@ -227,21 +236,21 @@ Status FileBlockManager::release_block(BlockPtr block) {
     return Status::OK();
 }
 
-StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(const DirPtr& dir,
-                                                                          const TUniqueId& fragment_instance_id,
-                                                                          int32_t plan_node_id,
-                                                                          const std::string& plan_node_name,
-                                                                          size_t block_size) {
+StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(
+        const DirPtr& dir, const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+        const std::string& plan_node_name, size_t block_size, bool skip_parent_path_deletion) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "
-                    << plan_node_name;
+                    << plan_node_name << ", block size: " << block_size << " bytes"
+                    << ", skip parent path deletion: " << skip_parent_path_deletion;
     uint64_t id = _next_container_id++;
     std::string container_dir = dir->dir() + "/" + print_id(_query_id);
     if (_last_created_container_dir != container_dir) {
         RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
         _last_created_container_dir = container_dir;
     }
-    ASSIGN_OR_RETURN(auto block_container, FileBlockContainer::create(dir, _query_id, fragment_instance_id,
-                                                                      plan_node_id, plan_node_name, id, block_size));
+    ASSIGN_OR_RETURN(auto block_container,
+                     FileBlockContainer::create(dir, _query_id, fragment_instance_id, plan_node_id, plan_node_name, id,
+                                                block_size, skip_parent_path_deletion));
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }

@@ -208,9 +208,6 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-
-    RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
-    RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;
 };
 
 // ================================

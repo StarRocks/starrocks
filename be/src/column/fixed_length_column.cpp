@@ -14,7 +14,7 @@
 
 #include "column/fixed_length_column.h"
 
-#include "base/int256.h"
+#include "base/types/int256.h"
 
 namespace starrocks {
 template class FixedLengthColumn<uint8_t>;

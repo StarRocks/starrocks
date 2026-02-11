@@ -17,6 +17,7 @@
 #include <atomic>
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "common/statusor.h"
@@ -33,7 +34,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 

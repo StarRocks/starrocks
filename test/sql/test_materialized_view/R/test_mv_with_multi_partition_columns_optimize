@@ -1,4 +1,4 @@
--- name: test_mv_with_multi_partition_columns_optimize 
+-- name: test_mv_with_multi_partition_columns_optimize @slow
 CREATE TABLE t1 (
     k1 int,
     k2 date,
@@ -17,7 +17,10 @@ REFRESH MANUAL
 AS select sum(k1), k2, k3 from t1 group by k2, k3;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW mv1 with sync mode;
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+-- result:
+019c2dca-3fb1-70cd-a05b-f8572b5f576b
+-- !result
 function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
 -- result:
 True
@@ -31,9 +34,13 @@ select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;
 alter table t1 partition by date_trunc("month", k2);
 -- result:
 -- !result
-function: wait_alter_table_finish()
+function: wait_optimize_table_finish()
 -- result:
-
+None
+-- !result
+select sleep(3);
+-- result:
+1
 -- !result
 function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
 -- result:
@@ -45,10 +52,13 @@ select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;
 2020-06-02	SZ	3
 2020-07-02	SH	2
 -- !result
-INSERT INTO t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2,'2020-07-02','SH');
+INSERT INTO t1 VALUES (1,'2020-06-02','BJ'),(2,'2020-07-02','SH');
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+-- result:
+E: (1064, 'execute task mv-15083 failed: Materialized view: mv1/15083 is not active due to base-table optimized:t1.')
+-- !result
 function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;", "mv1")
 -- result:
 False

@@ -43,9 +43,9 @@
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/strip.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
 #include "util/compression/block_compression.h"
-#include "util/json.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {

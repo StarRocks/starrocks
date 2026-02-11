@@ -19,7 +19,6 @@
 #include <utility>
 
 #include "base/testutil/assert.h"
-#include "column/datum.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -31,6 +30,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "types/datum.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -241,7 +241,7 @@ TEST_F(PersistentIndexLoadExecutorTest, test_submit_task_many_times) {
 
 TEST_F(PersistentIndexLoadExecutorTest, test_non_pk_tablet) {
     // non pk tablet
-    auto tablet = std::make_shared<Tablet>();
+    auto tablet = std::make_shared<Tablet>(DUP_KEYS);
     auto tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->set_tablet_id(10000);
     tablet->set_tablet_meta(tablet_meta);

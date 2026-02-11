@@ -36,12 +36,12 @@
 #include "base/utility/pred_guard.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
-#include "util/value_generator.h"
+#include "types/type_descriptor.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 

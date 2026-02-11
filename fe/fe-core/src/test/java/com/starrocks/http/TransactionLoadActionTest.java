@@ -18,11 +18,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.http.rest.ActionStatus;
-import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionLoadCoordinatorMgr;
 import com.starrocks.http.rest.TransactionResult;
@@ -49,6 +49,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.Utils;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -574,9 +575,9 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            new MockUp<RestBaseAction>() {
+            new MockUp<Utils>() {
                 @Mock
-                public Optional<String> getUserDefaultWarehouse(BaseRequest request) {
+                public Optional<String> getUserDefaultWarehouse(UserIdentity userIdentity) {
                     return Optional.of("user_wh");
                 }
             };

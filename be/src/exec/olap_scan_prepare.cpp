@@ -17,6 +17,7 @@
 #include <boost/variant/static_visitor.hpp>
 #include <variant>
 
+#include "base/orlp/pdqsort.h"
 #include "column/type_traits.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
@@ -35,10 +36,9 @@
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/runtime_range_pruner.hpp"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 

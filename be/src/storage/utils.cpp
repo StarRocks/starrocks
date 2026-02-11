@@ -53,6 +53,7 @@
 #include "base/system/errno.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"

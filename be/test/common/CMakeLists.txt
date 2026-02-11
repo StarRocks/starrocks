@@ -15,6 +15,7 @@
 set(COMMON_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     config_test.cpp
+    cow_test.cpp
     process_exit_test.cpp
     tracer_test.cpp
 )

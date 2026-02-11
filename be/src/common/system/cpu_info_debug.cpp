@@ -14,7 +14,7 @@
 
 #include <sstream>
 
-#include "common/pretty_printer.h"
+#include "base/utility/pretty_printer.h"
 #include "common/system/cpu_info.h"
 #include "gutil/strings/substitute.h"
 

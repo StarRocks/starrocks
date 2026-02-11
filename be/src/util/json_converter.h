@@ -12,29 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include <velocypack/Slice.h>
 
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
+#include "types/json_value.h"
+#include "types/json_value_converter.h"
 #include "types/timestamp_value.h"
-#ifdef __APPLE__
-#include "simdjson.h"
-#else
-#include "simdjson/ondemand.h"
-#endif
-#include "util/json.h"
 
 namespace starrocks {
-
-using SimdJsonValue = simdjson::ondemand::value;
-using SimdJsonObject = simdjson::ondemand::object;
-
-// Convert SIMD-JSON object/value to a JsonValue
-StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value);
-StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value);
 
 // like getNumber, but don't check
 template <LogicalType ResultType>

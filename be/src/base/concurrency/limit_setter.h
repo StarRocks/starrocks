@@ -63,6 +63,6 @@ public:
     }
 
 private:
-    std::atomic<int64_t> _value;
+    std::atomic<int64_t> _value{0};
 };
 } // namespace starrocks

@@ -65,12 +65,12 @@
 #include "fs/fs_util.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "service/backend_options.h"
 #include "service/mem_hook.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "types/time_types.h"
 #include "util/debug_util.h"
 #include "util/logging.h"
 #include "util/memory_lock.h"
@@ -325,6 +325,7 @@ std::string dump_memory_tracker() {
 }
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
+    StarRocksMetrics::instance()->metrics()->set_collect_hook_enabled(!config::enable_metric_calculator);
     bool init_system_metrics = config::enable_system_metrics;
     bool init_jvm_metrics = config::enable_jvm_metrics;
     std::set<std::string> disk_devices;

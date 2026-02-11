@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "base/container/raw_container.h"
-#include "runtime/memory/column_allocator.h"
+#include "common/memory/column_allocator.h"
 
 namespace starrocks {
 

@@ -41,7 +41,7 @@
 #include <string>
 
 #include "base/utility/defer_op.h"
-#include "common/pretty_printer.h"
+#include "base/utility/pretty_printer.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/spark_load.h"
 #include "storage/lake/tablet_manager.h"

@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.estimate.ShallowMemory;
 import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -47,6 +48,7 @@ import java.util.Comparator;
 /**
  * This class represents the olap replica related metadata.
  */
+@ShallowMemory
 public class Replica implements Writable {
     private static final Logger LOG = LogManager.getLogger(Replica.class);
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();

@@ -155,6 +155,15 @@ public:
 
     Status flush();
 
+    // Wait for flush token with memory pressure awareness.
+    // When memory limit is exceeded, this method will keep waiting until either:
+    // 1. All flush tasks are completed, or
+    // 2. Memory usage drops below 70% of the limit
+    // This prevents memory overflow during high-throughput loading scenarios.
+    // @param tracker: The memory tracker to check for memory pressure. This should be
+    //                 the tracker that triggered the flush (either _mem_tracker or its parent).
+    Status wait_for_flush_token(MemTracker* tracker);
+
     Status flush_async();
 
     int64_t queueing_memtable_num() const;
@@ -444,9 +453,17 @@ inline Status DeltaWriterImpl::flush_async() {
             _last_write_ts = 0;
         });
 
-        RETURN_IF_ERROR(_mem_table->finalize());
-        if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
-            RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
+        // When parallel memtable finalize is enabled, the finalize operation is deferred to
+        // the flush thread (see FlushToken::_flush_memtable). This allows the write thread to
+        // continue inserting data into a new memtable in parallel.
+        // However, if auto-increment columns need to be filled, we must finalize here in the
+        // write thread because auto-increment ID assignment requires the finalized result chunk
+        // and must be completed before the memtable is submitted for async flush.
+        if (_miss_auto_increment_column || !config::enable_parallel_memtable_finalize) {
+            RETURN_IF_ERROR(_mem_table->finalize());
+            if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
+                RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
+            }
         }
         st = _flush_token->submit(
                 std::move(_mem_table), _eos, [this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
@@ -508,6 +525,28 @@ inline Status DeltaWriterImpl::flush() {
     return _flush_token->wait();
 }
 
+// Wait for flush tasks with memory pressure awareness.
+// This method implements a smart waiting strategy:
+// - Polls every 1000ms to check flush completion and memory status
+// - Continues waiting while memory usage exceeds 70% of the limit AND flush is not complete
+// - Returns immediately if all flush tasks are done OR memory pressure is relieved
+// This approach balances between:
+// 1. Allowing the write thread to continue early when memory is available
+// 2. Preventing OOM by waiting when memory pressure is high
+// @param tracker: The memory tracker to check for memory pressure. This should be
+//                 the tracker that triggered the flush (either _mem_tracker or its parent).
+Status DeltaWriterImpl::wait_for_flush_token(MemTracker* tracker) {
+    if (_flush_token == nullptr) {
+        // This will happen when flush is invoked before any write.
+        return Status::OK();
+    }
+    bool wait_finish = false;
+    do {
+        ASSIGN_OR_RETURN(wait_finish, _flush_token->wait_for(1000 /* ms */));
+    } while (tracker != nullptr && tracker->limit_exceeded_by_ratio(70) && !wait_finish);
+    return Status::OK();
+}
+
 // To developers: Do NOT perform any I/O in this method, because this method may be invoked
 // in a bthread.
 Status DeltaWriterImpl::open() {
@@ -566,25 +605,33 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     auto start_time = MonotonicNanos();
     DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.write_time_ns, MonotonicNanos() - start_time); });
     _last_write_ts = butil::gettimeofday_s();
-    Status st;
     auto res = _mem_table->insert(chunk, indexes, 0, indexes_size);
     if (!res.ok()) {
         return res.status();
     }
     auto full = res.value();
+    // Memory pressure handling with parallel finalize optimization:
+    // - When memory limit is exceeded, trigger async flush and wait with memory awareness
+    // - The wait_for_flush_token() will block until memory drops below 70% threshold
+    // - When memtable is full but no memory pressure, only trigger async flush without waiting,
+    //   allowing the write thread to continue inserting into a new memtable immediately
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
-        st = flush();
+        RETURN_IF_ERROR(flush_async());
+        RETURN_IF_ERROR(wait_for_flush_token(_mem_tracker));
         ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
-        st = flush();
+        RETURN_IF_ERROR(flush_async());
+        RETURN_IF_ERROR(wait_for_flush_token(_mem_tracker->parent()));
         ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
     } else if (full) {
-        st = flush_async();
+        // Memtable is full but memory is sufficient - just submit for async flush
+        // without waiting, enabling parallel processing
+        RETURN_IF_ERROR(flush_async());
         ADD_COUNTER_RELAXED(_stats.memtable_full_count, 1);
     }
-    return st;
+    return Status::OK();
 }
 
 Status DeltaWriterImpl::init_write_schema() {

@@ -232,7 +232,6 @@ Status PersistentIndexMemtable::flush() {
     sstable_pb.set_max_rss_rowid(max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     sstable_pb.mutable_range()->CopyFrom(range_pb);
-    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _sstable = std::move(sstable);

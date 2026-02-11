@@ -35,7 +35,6 @@
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
-#include "storage/sstable/sstable_predicate.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
 
@@ -511,12 +510,9 @@ Status LakePersistentIndex::prepare_merging_iterator(
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
-        if (sstable_pb.has_predicate()) {
-            ASSIGN_OR_RETURN(read_options.predicate,
-                             sstable::SstablePredicate::create(metadata->schema(), sstable_pb.predicate()));
-        }
         read_options.shared_rssid = sstable_pb.shared_rssid();
         read_options.shared_version = sstable_pb.shared_version();
+        read_options.rssid_offset = sstable_pb.rssid_offset();
         read_options.delvec = merging_sstable->delvec();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
@@ -585,9 +581,10 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
     ASSIGN_OR_RETURN(auto result,
                      LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta));
     // 3. Do parallel compaction for each candidate set.
+    bool is_merge_base_level = fileset_start_idx == 0 ? result.merge_base_level : false;
     ASSIGN_OR_RETURN(auto cb,
                      compact_mgr->async_compact(
-                             result.candidate_filesets, metadata, fileset_start_idx == 0 /* merge_base_level */,
+                             result.candidate_filesets, metadata, is_merge_base_level,
                              [&, result](const std::vector<PersistentIndexSstablePB>& sstables) {
                                  // 4. Merge output sstables into current index.
                                  //    reuse `apply_opcompaction` to do this.

@@ -15,7 +15,7 @@
 #include "base/simd/expand.h"
 #include "base/testutil/parallel_test.h"
 #include "gtest/gtest.h"
-#include "util/value_generator.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 

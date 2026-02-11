@@ -80,6 +80,7 @@ statement
 
     // Task Statement
     | submitTaskStatement
+    | alterTaskStatement
     | dropTaskStatement
 
     // Materialized View Statement
@@ -377,6 +378,12 @@ statement
     | unsupportedStatement
     ;
 
+
+// show-predicate-clauses
+showPredicateClauses
+    : (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 
 useDatabaseStatement
@@ -392,8 +399,8 @@ setCatalogStatement
     ;
 
 showDatabasesStatement
-    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
-    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
+    | SHOW SCHEMAS (LIKE pattern=string)? showPredicateClauses
     ;
 
 alterDbQuotaStatement
@@ -426,12 +433,12 @@ recoverDbStmt
     ;
 
 showDataStmt
-    : SHOW DATA
-    | SHOW DATA FROM qualifiedName
+    : SHOW DATA showPredicateClauses
+    | SHOW DATA FROM qualifiedName showPredicateClauses
     ;
 
 showDataDistributionStmt
-    : SHOW DATA DISTRIBUTION FROM qualifiedName partitionNames?
+    : SHOW DATA DISTRIBUTION FROM qualifiedName partitionNames? showPredicateClauses
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -586,11 +593,11 @@ indexType
     ;
 
 showTableStatement
-    : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
     ;
 
 showTemporaryTablesStatement
-    : SHOW TEMPORARY TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW TEMPORARY TABLES ((FROM | IN) db=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
     ;
 
 showCreateTableStatement
@@ -599,11 +606,11 @@ showCreateTableStatement
 
 showColumnStatement
     : SHOW FULL? (COLUMNS | FIELDS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
-        ((LIKE pattern=string) | (WHERE expression))?
+        (LIKE pattern=string)? showPredicateClauses
     ;
 
 showTableStatusStatement
-    : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
     ;
 
 refreshTableStatement
@@ -611,10 +618,8 @@ refreshTableStatement
     ;
 
 showAlterStatement
-    : SHOW ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE) ((FROM | IN) db=qualifiedName)?
-        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
-    | SHOW ALTER MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
-              (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    : SHOW ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE) ((FROM | IN) db=qualifiedName)? showPredicateClauses
+    | SHOW ALTER MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? showPredicateClauses
     ;
 
 descTableStatement
@@ -630,7 +635,7 @@ createTableLikeStatement
     ;
 
 showIndexStatement
-    : SHOW (INDEX | INDEXES | KEY | KEYS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
+    : SHOW (INDEX | INDEXES | KEY | KEYS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)? showPredicateClauses
     ;
 
 recoverTableStatement
@@ -647,9 +652,7 @@ cancelAlterTableStatement
     ;
 
 showPartitionsStatement
-    : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
-    (WHERE expression)?
-    (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName showPredicateClauses
     ;
 
 recoverPartitionStatement
@@ -690,6 +693,10 @@ submitTaskStatement
         AS (createTableAsSelectStatement | insertStatement | dataCacheSelectStatement)
     ;
 
+alterTaskStatement
+    : ALTER TASK (IF EXISTS)? qualifiedName (RESUME | SUSPEND | SET propertyList)
+    ;
+
 taskClause
     : properties
     | taskScheduleDesc
@@ -727,7 +734,7 @@ materializedViewDesc
     ;
 
 showMaterializedViewsStatement
-    : SHOW MATERIALIZED VIEWS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW MATERIALIZED VIEWS ((FROM | IN) db=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
     ;
 
 dropMaterializedViewStatement
@@ -760,7 +767,7 @@ adminSetReplicaStatusStatement
     : ADMIN SET REPLICA STATUS properties
     ;
 adminShowConfigStatement
-    : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)? showPredicateClauses
     ;
 
 adminShowAutomatedSnapshotStatement
@@ -768,11 +775,11 @@ adminShowAutomatedSnapshotStatement
     ;
 
 adminShowReplicaDistributionStatement
-    : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
+    : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames? showPredicateClauses
     ;
 
 adminShowReplicaStatusStatement
-    : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? (WHERE where=expression)?
+    : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? showPredicateClauses
     ;
 
 adminRepairTableStatement
@@ -822,7 +829,7 @@ cancelAlterSystemStatement
     ;
 
 showComputeNodesStatement
-    : SHOW COMPUTE NODES
+    : SHOW COMPUTE NODES showPredicateClauses
     ;
 
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
@@ -840,7 +847,7 @@ dropExternalCatalogStatement
     ;
 
 showCatalogsStatement
-    : SHOW CATALOGS (LIKE pattern=string)?
+    : SHOW CATALOGS (LIKE pattern=string)? showPredicateClauses
     ;
 
 alterCatalogStatement
@@ -863,7 +870,7 @@ locationsDesc
     ;
 
 showStorageVolumesStatement
-    : SHOW STORAGE VOLUMES (LIKE pattern=string)?
+    : SHOW STORAGE VOLUMES (LIKE pattern=string)? showPredicateClauses
     ;
 
 dropStorageVolumeStatement
@@ -904,7 +911,7 @@ updateFailPointStatusStatement
     ;
 
 showFailPointStatement
-    : SHOW FAILPOINTS ((LIKE pattern=string))? (ON BACKEND string)?
+    : SHOW FAILPOINTS (LIKE pattern=string)? (ON BACKEND string)? showPredicateClauses
     ;
 
 // ------------------------------------------- Dictionary Statement -----------------------------------------------------
@@ -924,7 +931,7 @@ refreshDictionaryStatement
     ;
 
 showDictionaryStatement
-    : SHOW DICTIONARY qualifiedName?
+    : SHOW DICTIONARY qualifiedName? showPredicateClauses
     ;
 
 cancelRefreshDictionaryStatement
@@ -1391,24 +1398,21 @@ pauseRoutineLoadStatement
 
 showRoutineLoadStatement
     : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
-        (FROM db=qualifiedName)?
-        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+        (FROM db=qualifiedName)? showPredicateClauses
     ;
 
 showRoutineLoadTaskStatement
     : SHOW ROUTINE LOAD TASK
-        (FROM db=qualifiedName)?
-        WHERE expression
+        (FROM db=qualifiedName)? showPredicateClauses
     ;
 
 showCreateRoutineLoadStatement
-    : SHOW CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier
+    : SHOW CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier showPredicateClauses
     ;
 
 showStreamLoadStatement
     : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
-        (FROM db=qualifiedName)?
-        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+        (FROM db=qualifiedName)? showPredicateClauses
     ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
@@ -1458,15 +1462,15 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    : SHOW ANALYZE (JOB | STATUS)? showPredicateClauses
     ;
 
 showStatsMetaStatement
-    : SHOW (MULTIPLE COLUMNS)? STATS META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    : SHOW (MULTIPLE COLUMNS)? STATS META showPredicateClauses
     ;
 
 showHistogramMetaStatement
-    : SHOW HISTOGRAM META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    : SHOW HISTOGRAM META showPredicateClauses
     ;
 
 killAnalyzeStatement
@@ -1494,7 +1498,7 @@ dropBaselinePlanStatement
     ;
 
 showBaselinePlanStatement
-    : SHOW BASELINE (WHERE expression)?
+    : SHOW BASELINE showPredicateClauses
     | SHOW BASELINE ON queryRelation
     ;
 
@@ -1525,13 +1529,13 @@ alterResourceGroupStatement
     ;
 
 showResourceGroupStatement
-    : SHOW VERBOSE? RESOURCE GROUP identifier
-    | SHOW VERBOSE? RESOURCE GROUPS ALL?
+    : SHOW VERBOSE? RESOURCE GROUP identifier showPredicateClauses
+    | SHOW VERBOSE? RESOURCE GROUPS ALL? showPredicateClauses
     ;
 
 showResourceGroupUsageStatement
-    : SHOW USAGE RESOURCE GROUP identifier
-    | SHOW USAGE RESOURCE GROUPS
+    : SHOW USAGE RESOURCE GROUP identifier showPredicateClauses
+    | SHOW USAGE RESOURCE GROUPS showPredicateClauses
     ;
 
 createResourceStatement
@@ -1547,7 +1551,7 @@ dropResourceStatement
     ;
 
 showResourceStatement
-    : SHOW RESOURCES
+    : SHOW RESOURCES showPredicateClauses
     ;
 
 classifier
@@ -1557,7 +1561,7 @@ classifier
 // ------------------------------------------- UDF Statement ----------------------------------------------------
 
 showFunctionsStatement
-    : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
     ;
 
 dropFunctionStatement
@@ -1642,12 +1646,12 @@ resourceDesc
     ;
 
 showLoadStatement
-    : SHOW LOAD (ALL)? (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    : SHOW LOAD (ALL)? (FROM identifier)? showPredicateClauses
     ;
 
 showLoadWarningsStatement
-    : SHOW LOAD WARNINGS (FROM identifier)? (WHERE expression)? limitElement?
-    | SHOW LOAD WARNINGS ON string
+    : SHOW LOAD WARNINGS (FROM identifier)? showPredicateClauses
+    | SHOW LOAD WARNINGS ON string showPredicateClauses
     ;
 
 cancelLoadStatement
@@ -1668,62 +1672,62 @@ cancelCompactionStatement
 // ------------------------------------------- Show Statement ----------------------------------------------------------
 
 showAuthorStatement
-    : SHOW AUTHORS
+    : SHOW AUTHORS showPredicateClauses
     ;
 
 showBackendsStatement
-    : SHOW BACKENDS
+    : SHOW BACKENDS showPredicateClauses
     ;
 
 showBrokerStatement
-    : SHOW BROKER
+    : SHOW BROKER showPredicateClauses
     ;
 
 showCharsetStatement
-    : SHOW (CHAR SET | CHARSET | CHARACTER SET) ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW (CHAR SET | CHARSET | CHARACTER SET) (LIKE pattern=string)? showPredicateClauses
     ;
 
 showCollationStatement
-    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW COLLATION (LIKE pattern=string)? showPredicateClauses
     ;
 
 showDeleteStatement
-    : SHOW DELETE ((FROM | IN) db=qualifiedName)?
+    : SHOW DELETE ((FROM | IN) db=qualifiedName)? showPredicateClauses
     ;
 
 showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)? showPredicateClauses
     ;
 
 showEventsStatement
-    : SHOW EVENTS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW EVENTS ((FROM | IN) catalog=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
     ;
 
 showEnginesStatement
-    : SHOW ENGINES
+    : SHOW ENGINES showPredicateClauses
     ;
 
 showFrontendsStatement
-    : SHOW FRONTENDS
+    : SHOW FRONTENDS showPredicateClauses
     ;
 
 showPluginsStatement
-    : SHOW PLUGINS
+    : SHOW PLUGINS showPredicateClauses
     ;
 
 showRepositoriesStatement
-    : SHOW REPOSITORIES
+    : SHOW REPOSITORIES showPredicateClauses
     ;
 
 showOpenTableStatement
-    : SHOW OPEN TABLES
+    : SHOW OPEN TABLES showPredicateClauses
     ;
 showPrivilegesStatement
-    : SHOW PRIVILEGES
+    : SHOW PRIVILEGES showPredicateClauses
     ;
 
 showProcedureStatement
-    : SHOW (PROCEDURE | FUNCTION) STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    : SHOW (PROCEDURE | FUNCTION) STATUS (LIKE pattern=string)? showPredicateClauses
     ;
 
 showProcStatement
@@ -1731,45 +1735,45 @@ showProcStatement
     ;
 
 showProcesslistStatement
-    : SHOW FULL? PROCESSLIST (FOR string)?
+    : SHOW FULL? PROCESSLIST (FOR string)? showPredicateClauses
     ;
 
 showProfilelistStatement
-    : SHOW PROFILELIST (LIMIT limit =INTEGER_VALUE)?
+    : SHOW PROFILELIST showPredicateClauses
     ;
 
 showRunningQueriesStatement
-    : SHOW RUNNING QUERIES (LIMIT limit =INTEGER_VALUE)?
+    : SHOW RUNNING QUERIES showPredicateClauses
     ;
 
 showStatusStatement
-    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW varType? STATUS (LIKE pattern=string)? showPredicateClauses
     ;
 
 showTabletStatement
     : SHOW TABLET INTEGER_VALUE
-    | SHOW (TABLET | TABLETS) FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW (TABLET | TABLETS) FROM qualifiedName partitionNames? showPredicateClauses
     ;
 
 showTransactionStatement
-    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? (WHERE expression)?
+    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? showPredicateClauses
     ;
 
 showTriggersStatement
-    : SHOW FULL? TRIGGERS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW FULL? TRIGGERS ((FROM | IN) catalog=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
     ;
 
 showUserPropertyStatement
-    : SHOW PROPERTY (FOR string)? (LIKE string)?
-    | SHOW PROPERTIES (FOR string)? (LIKE string)?
+    : SHOW PROPERTY (FOR string)? (LIKE string)? showPredicateClauses
+    | SHOW PROPERTIES (FOR string)? (LIKE string)? showPredicateClauses
     ;
 
 showVariablesStatement
-    : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW varType? VARIABLES (LIKE pattern=string)? showPredicateClauses
     ;
 
 showWarningStatement
-    : SHOW (WARNINGS | ERRORS) (limitElement)?
+    : SHOW (WARNINGS | ERRORS) showPredicateClauses
     ;
 
 helpStatement
@@ -1793,7 +1797,7 @@ alterUserStatement
     ;
 
 showUserStatement
-    : SHOW (USER | USERS)
+    : SHOW (USER | USERS) showPredicateClauses
     ;
 
 showAuthenticationStatement
@@ -1818,7 +1822,7 @@ dropRoleStatement
     ;
 
 showRolesStatement
-    : SHOW ROLES
+    : SHOW ROLES showPredicateClauses
     ;
 
 grantRoleStatement
@@ -1874,10 +1878,10 @@ revokePrivilegeStatement
     ;
 
 showGrantsStatement
-    : SHOW GRANTS
-    | SHOW GRANTS FOR USER? user
-    | SHOW GRANTS FOR EXTERNAL GROUP identifierOrString
-    | SHOW GRANTS FOR ROLE identifierOrString
+    : SHOW GRANTS showPredicateClauses
+    | SHOW GRANTS FOR USER? user showPredicateClauses
+    | SHOW GRANTS FOR EXTERNAL GROUP identifierOrString showPredicateClauses
+    | SHOW GRANTS FOR ROLE identifierOrString showPredicateClauses
     ;
 
 authOption
@@ -1936,11 +1940,11 @@ dropSecurityIntegrationStatement
     ;
 
 showSecurityIntegrationStatement
-    : SHOW SECURITY INTEGRATIONS
+    : SHOW SECURITY INTEGRATIONS showPredicateClauses
     ;
 
 showCreateSecurityIntegrationStatement
-    : SHOW CREATE SECURITY INTEGRATION identifier
+    : SHOW CREATE SECURITY INTEGRATION identifier showPredicateClauses
     ;
 
 // ------------------------------------------- Group Provider Statement ------------------------------------------
@@ -1954,11 +1958,11 @@ dropGroupProviderStatement
     ;
 
 showGroupProvidersStatement
-    : SHOW GROUP PROVIDERS
+    : SHOW GROUP PROVIDERS showPredicateClauses
     ;
 
 showCreateGroupProviderStatement
-    : SHOW CREATE GROUP PROVIDER identifier
+    : SHOW CREATE GROUP PROVIDER identifier showPredicateClauses
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
@@ -1975,7 +1979,7 @@ cancelBackupStatement
     ;
 
 showBackupStatement
-    : SHOW BACKUP ((FROM | IN) identifier)?
+    : SHOW BACKUP ((FROM | IN) identifier)? showPredicateClauses
     ;
 
 restoreStatement
@@ -1992,12 +1996,11 @@ cancelRestoreStatement
     ;
 
 showRestoreStatement
-    : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
+    : SHOW RESTORE ((FROM | IN) identifier)? showPredicateClauses
     ;
 
 showSnapshotStatement
-    : SHOW SNAPSHOT ON identifier
-    (WHERE expression)?
+    : SHOW SNAPSHOT ON identifier showPredicateClauses
     ;
 
 createRepositoryStatement
@@ -2022,11 +2025,11 @@ delSqlBlackListStatement
     ;
 
 showSqlBlackListStatement
-    : SHOW SQLBLACKLIST
+    : SHOW SQLBLACKLIST showPredicateClauses
     ;
 
 showWhiteListStatement
-    : SHOW WHITELIST
+    : SHOW WHITELIST showPredicateClauses
     ;
 
 // ------------------------------------------- Sql Digest BlackList Statement ------------------------------------------
@@ -2040,7 +2043,7 @@ delSqlDigestBlackListStatement
     ;
 
 showSqlDigestBlackListStatement
-    : SHOW SQL DIGEST BLACKLIST
+    : SHOW SQL DIGEST BLACKLIST showPredicateClauses
     ;
 
 
@@ -2055,7 +2058,7 @@ delBackendBlackListStatement
     ;
 
 showBackendBlackListStatement
-    : SHOW BACKEND BLACKLIST
+    : SHOW BACKEND BLACKLIST showPredicateClauses
     ;
 
 // ------------------------------------ Compute Node BlackList Statement ---------------------------------------------------
@@ -2069,7 +2072,7 @@ delComputeNodeBlackListStatement
     ;
 
 showComputeNodeBlackListStatement
-    : SHOW COMPUTE NODE BLACKLIST
+    : SHOW COMPUTE NODE BLACKLIST showPredicateClauses
     ;
 
 // -------------------------------------- DataCache Management Statement --------------------------------------------
@@ -2083,7 +2086,7 @@ createDataCacheRuleStatement
     ;
 
 showDataCacheRulesStatement
-    : SHOW DATACACHE RULES
+    : SHOW DATACACHE RULES showPredicateClauses
     ;
 
 dropDataCacheRuleStatement
@@ -2109,9 +2112,7 @@ cancelExportStatement
     ;
 
 showExportStatement
-    : SHOW EXPORT ((FROM | IN) catalog=qualifiedName)?
-        ((LIKE pattern=string) | (WHERE expression))?
-        (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    : SHOW EXPORT ((FROM | IN) catalog=qualifiedName)? (LIKE pattern=string)? showPredicateClauses
     ;
 
 // ------------------------------------------- Plugin Statement --------------------------------------------------------
@@ -2135,7 +2136,7 @@ dropFileStatement
     ;
 
 showSmallFilesStatement
-    : SHOW FILE ((FROM | IN) catalog=qualifiedName)?
+    : SHOW FILE ((FROM | IN) catalog=qualifiedName)? showPredicateClauses
     ;
 
 // -------------------------------------------- Pipe Statement ---------------------------------------------------------
@@ -2167,8 +2168,7 @@ descPipeStatement
     ;
 
 showPipeStatement
-    : SHOW PIPES ((LIKE pattern=string) | (WHERE expression) | (FROM qualifiedName))?
-        (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    : SHOW PIPES ((LIKE pattern=string) | (FROM qualifiedName))? showPredicateClauses
     ;
 
 
@@ -2287,16 +2287,16 @@ setWarehouseStatement
     ;
 
 showWarehousesStatement
-    : SHOW WAREHOUSES (LIKE pattern=string)?
+    : SHOW WAREHOUSES (LIKE pattern=string)? showPredicateClauses
     ;
 
 showClustersStatement
-    : SHOW (CLUSTERS | CNGROUPS) FROM WAREHOUSE identifier
+    : SHOW (CLUSTERS | CNGROUPS) FROM WAREHOUSE identifier showPredicateClauses
     ;
 
 showNodesStatement
-    : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
-    | SHOW NODES FROM WAREHOUSE identifier (CNGROUP cngroupName=identifierOrString)?
+    : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)? showPredicateClauses
+    | SHOW NODES FROM WAREHOUSE identifier (CNGROUP cngroupName=identifierOrString)? showPredicateClauses
     ;
 
 alterWarehouseStatement
@@ -2917,6 +2917,7 @@ partitionDesc
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
     | PARTITION BY partitionExpr (',' partitionExpr)*
+    | PARTITION BY '(' partitionExpr (',' partitionExpr)* ')'
     ;
 
 listPartitionDesc

@@ -259,8 +259,8 @@ public:
 
         DCHECK(data1->is_array());
         DCHECK(data2->is_array());
-        auto lhs_arr = down_cast<const ArrayColumn&>(*data1);
-        auto rhs_arr = down_cast<const ArrayColumn&>(*data2);
+        const auto& lhs_arr = down_cast<const ArrayColumn&>(*data1);
+        const auto& rhs_arr = down_cast<const ArrayColumn&>(*data2);
 
         ColumnBuilder<TYPE_BOOLEAN> builder(l->size());
         std::vector<int8_t> cmp_result;

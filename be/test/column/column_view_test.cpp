@@ -21,8 +21,8 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 static ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t>>& values, bool is_nullable) {
@@ -77,7 +77,7 @@ static void test_array_column_view_helper(bool nullable, bool append_default, lo
     DCHECK_EQ(array_column_view->size(), num_rows);
 
     const auto final_array_column = array_column_view->clone_empty();
-    array_column_view->append_to(*final_array_column, selection.data(), 0, selection.size());
+    array_column_view->append_selective_to(*final_array_column, selection.data(), 0, selection.size());
     ASSERT_EQ(final_array_column->debug_string(), expect_result);
 }
 

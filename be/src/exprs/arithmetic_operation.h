@@ -18,7 +18,7 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 #include "types/logical_type.h"
 
 #ifdef STARROCKS_JIT_ENABLE

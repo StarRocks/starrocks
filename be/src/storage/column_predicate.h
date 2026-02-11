@@ -20,21 +20,21 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/decimalv3.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/index/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "types/datum.h"
+#include "types/decimalv3.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
+#include "types/type_traits.h"
 
 class Roaring;
 

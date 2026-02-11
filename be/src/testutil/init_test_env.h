@@ -31,13 +31,13 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
+#include "types/time_types.h"
 #include "util/logging.h"
 
 namespace starrocks {

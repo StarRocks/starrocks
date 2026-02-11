@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <runtime/types.h>
-
 #include <string_view>
 
 #include "base/phmap/phmap.h"
@@ -26,6 +24,7 @@
 #include "common/global_types.h"
 #include "exec/query_cache/owner_info.h"
 #include "storage/variant_tuple.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 class ChunkPB;

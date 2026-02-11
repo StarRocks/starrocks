@@ -40,6 +40,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/failpoint/fail_point.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -77,7 +78,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/failpoint/fail_point.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include <llvm/IR/Value.h>

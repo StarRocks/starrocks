@@ -14,22 +14,20 @@
 
 #include "column/binary_column.h"
 
-#include "column/column_view/column_view.h"
-
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
 
 #include "base/container/raw_container.h"
+#include "base/hash/hash_util.hpp"
 #include "column/bytes.h"
+#include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "util/hash_util.hpp"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 template <typename T>
@@ -89,7 +87,7 @@ template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from,
                                            const uint32_t size) {
     if (src.is_binary_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
 

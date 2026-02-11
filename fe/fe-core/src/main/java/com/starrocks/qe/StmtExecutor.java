@@ -49,6 +49,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
@@ -86,6 +87,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
@@ -113,6 +116,7 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergDeleteSink;
+import com.starrocks.planner.IcebergMetadataDeleteNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
@@ -1093,11 +1097,26 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof TranslateStmt) {
                 handleTranslateStmt();
             } else if (parsedStmt instanceof BeginStmt) {
-                TransactionStmtExecutor.beginStmt(context, (BeginStmt) parsedStmt);
+                if (context.getSessionVariable().isEnableSqlTransaction()) {
+                    TransactionStmtExecutor.beginStmt(context, (BeginStmt) parsedStmt);
+                } else {
+                    // transaction disabled: keep syntax only, do nothing and return OK
+                    context.getState().setOk(0, 0, "");
+                }
             } else if (parsedStmt instanceof CommitStmt) {
-                TransactionStmtExecutor.commitStmt(context, (CommitStmt) parsedStmt);
+                if (context.getSessionVariable().isEnableSqlTransaction() || context.getTxnId() != 0) {
+                    TransactionStmtExecutor.commitStmt(context, (CommitStmt) parsedStmt);
+                } else {
+                    // transaction disabled: keep syntax only, do nothing and return OK
+                    context.getState().setOk(0, 0, "");
+                }
             } else if (parsedStmt instanceof RollbackStmt) {
-                TransactionStmtExecutor.rollbackStmt(context, (RollbackStmt) parsedStmt);
+                if (context.getSessionVariable().isEnableSqlTransaction() || context.getTxnId() != 0) {
+                    TransactionStmtExecutor.rollbackStmt(context, (RollbackStmt) parsedStmt);
+                } else {
+                    // transaction disabled: keep syntax only, do nothing and return OK
+                    context.getState().setOk(0, 0, "");
+                }
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -2885,6 +2904,26 @@ public class StmtExecutor {
                 }
                 context.setState(e.getQueryState());
             }
+            return;
+        }
+
+        // Handle metadata-level delete for Iceberg
+        // execute the delete operation here
+        if (stmt instanceof DeleteStmt && execPlan != null && execPlan.isIcebergMetadataDelete()) {
+            // Execute metadata-level delete
+            IcebergMetadataDeleteNode node = (IcebergMetadataDeleteNode) execPlan.getTopFragment().getPlanRoot();
+            IcebergTable table = node.getTable();
+            ScalarOperator predicate = node.getPredicate();
+
+            Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
+            if (connectorMetadata.isPresent()) {
+                connectorMetadata.get().executeMetadataDelete(table, predicate, context);
+            } else {
+                throw new StarRocksConnectorException("Can not find {} connector metadata for table: {}",
+                        table.getCatalogName(), table.getName());
+            }
+            context.getState().setOk();
             return;
         }
 

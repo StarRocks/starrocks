@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "column/column_viewer.h"
@@ -34,7 +35,6 @@
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
-#include "util/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_util.h"
 

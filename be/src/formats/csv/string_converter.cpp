@@ -18,7 +18,7 @@
 #include "column/binary_column.h"
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 

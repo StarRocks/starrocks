@@ -81,6 +81,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
@@ -125,6 +126,7 @@ import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TPersistentIndexType;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -206,6 +208,7 @@ public class OlapTable extends Table {
     @SerializedName(value = "indexIdToMeta")
     protected Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newHashMap();
     // index name -> index meta id, not change the SerializedName for compatibility
+    @IgnoreMemoryTrack
     @SerializedName(value = "indexNameToId")
     protected Map<String, Long> indexNameToMetaId = Maps.newHashMap();
 
@@ -217,6 +220,7 @@ public class OlapTable extends Table {
 
     @SerializedName(value = "idToPartition")
     protected Map<Long, Partition> idToPartition = new HashMap<>();
+    @IgnoreMemoryTrack
     protected Map<String, Partition> nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     protected Map<Long, Long> physicalPartitionIdToPartitionId = new HashMap<>();
@@ -408,7 +412,7 @@ public class OlapTable extends Table {
             olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
         }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
-        Map<String, Partition> nameToPartitions = Maps.newLinkedHashMap();
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
@@ -3366,5 +3370,17 @@ public class OlapTable extends Table {
 
     public boolean isRangeDistribution() {
         return defaultDistributionInfo instanceof RangeDistributionInfo;
+    }
+
+    public TPrimaryKeyEncodingType getPrimaryKeyEncodingType() {
+        if (getKeysType() != KeysType.PRIMARY_KEYS) {
+            return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE;
+        }
+
+        if (!isCloudNativeTableOrMaterializedView()) {
+            return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
+        }
+
+        return isRangeDistribution() ? TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2 : TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
     }
 }

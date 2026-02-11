@@ -30,8 +30,8 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {

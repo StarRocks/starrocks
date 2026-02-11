@@ -17,9 +17,9 @@
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
+#include "base/url_coding.h"
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
-#include "util/url_coding.h"
 
 namespace starrocks::pipeline {
 

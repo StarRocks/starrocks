@@ -18,10 +18,10 @@
 #include <memory>
 
 #include "base/concurrency/bthread_shared_mutex.h"
+#include "base/metrics.h"
 #include "base/phmap/phmap.h"
 #include "base/phmap/phmap_base.h"
 #include "base/time/time.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 

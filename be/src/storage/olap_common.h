@@ -50,8 +50,8 @@
 #include <unordered_set>
 
 #include "base/utility/guard.h"
+#include "common/delete_condition.h"
 #include "gen_cpp/Types_types.h"
-#include "storage/delete_condition.h"
 #include "storage/olap_define.h"
 #include "util/hash_util.hpp"
 #include "util/uid_util.h"
@@ -243,8 +243,6 @@ struct OlapReaderStatistics {
     int64_t vec_cond_chunk_copy_ns = 0;
     int64_t branchless_cond_evaluate_ns = 0;
     int64_t expr_cond_evaluate_ns = 0;
-    int64_t record_predicate_evaluate_ns = 0;
-    int64_t rows_record_predicate_filtered = 0;
 
     int64_t get_rowsets_ns = 0;
     int64_t get_delvec_ns = 0;

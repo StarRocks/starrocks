@@ -17,6 +17,7 @@
 #include <any>
 
 #include "base/container/fixed_hash_map.h"
+#include "base/failpoint/fail_point.h"
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
 #include "column/column_hash.h"
@@ -26,7 +27,6 @@
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 DECLARE_FAIL_POINT(agg_hash_set_bad_alloc);

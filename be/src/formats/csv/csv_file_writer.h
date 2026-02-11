@@ -16,6 +16,7 @@
 
 #include "formats/csv/converter.h"
 #include "formats/file_writer.h"
+#include "gen_cpp/Types_types.h"
 #include "io/formatted_output_stream.h"
 
 namespace starrocks {

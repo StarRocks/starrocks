@@ -46,6 +46,7 @@
 #include "agent/task_worker_pool.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "runtime/heartbeat_flags.h"
 #include "service/backend_options.h"

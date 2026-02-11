@@ -1275,6 +1275,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
         Map<String, ScalarOperator> leftExprMap = new HashMap<>();
         Map<String, ScalarOperator> rightExprMap = new HashMap<>();
+        List<Pair<ScalarOperator, ScalarOperator>> predicatePairs = new ArrayList<>();
 
         for (ScalarOperator conjunct : conjuncts) {
             Preconditions.checkState(conjunct instanceof BinaryPredicateOperator,
@@ -1286,6 +1287,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
             ScalarOperator leftExpr = binaryPred.getChild(0);
             ScalarOperator rightExpr = binaryPred.getChild(1);
+            predicatePairs.add(new Pair<>(leftExpr, rightExpr));
 
             String leftColName = extractBaseColumnName(leftExpr);
             String rightColName = extractBaseColumnName(rightExpr);
@@ -1298,10 +1300,19 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             }
         }
 
+        int fallbackIdx = 0;
         for (String colName : usingColumns) {
             String lowerColName = colName.toLowerCase();
             ScalarOperator leftExpr = leftExprMap.get(lowerColName);
             ScalarOperator rightExpr = rightExprMap.get(lowerColName);
+
+            if (leftExpr == null || rightExpr == null) {
+                if (fallbackIdx < predicatePairs.size()) {
+                    Pair<ScalarOperator, ScalarOperator> fallback = predicatePairs.get(fallbackIdx++);
+                    leftExpr = leftExpr == null ? fallback.first : leftExpr;
+                    rightExpr = rightExpr == null ? fallback.second : rightExpr;
+                }
+            }
 
             if (leftExpr != null && rightExpr != null) {
                 Type commonType = TypeManager.getCommonType(leftExpr.getType(), rightExpr.getType());

@@ -43,7 +43,7 @@
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
-#include "util/metrics.h"
+#include "base/metrics.h"
 #include "util/metrics/file_scan_metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"

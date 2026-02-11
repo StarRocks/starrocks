@@ -16,13 +16,13 @@
 
 #include <future>
 
+#include "base/url_coding.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-#include "util/url_coding.h"
 #include "utils.h"
 
 namespace starrocks::connector {

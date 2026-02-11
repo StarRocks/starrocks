@@ -32,7 +32,7 @@ TEST(FileUtilTest, test_read_whole_content) {
     ASSERT_TRUE(ofs.good());
     ofs.close();
 
-    ASSERT_TRUE(FileUtil::read_contents(name, content));
+    ASSERT_TRUE(FileUtil::read_whole_content(name, content));
 
     std::filesystem::remove(name);
 }
@@ -68,6 +68,16 @@ TEST(FileUtilTest, test_read_contents) {
     ASSERT_EQ(1, first);
     ASSERT_EQ(2.5, second);
     ASSERT_EQ(-1, third);
+
+    ofs.open(name);
+    ASSERT_TRUE(ofs.good());
+    ofs << "1 2.5 foo";
+    ofs.close();
+    first = second = third = -1;
+    ASSERT_FALSE(FileUtil::read_contents(name, first, second, third));
+    ASSERT_EQ(1, first);
+    ASSERT_EQ(2.5, second);
+    // Do not assert third after a parse failure; it may be unchanged or zeroed by stream extraction.
 
     std::filesystem::remove(name);
 }

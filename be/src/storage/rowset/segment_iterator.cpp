@@ -48,7 +48,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
-#include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/roaring2range.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -67,9 +66,8 @@
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "storage/virtual_column_utils.h"
-#include "types/array_type_info.h"
 #include "types/logical_type.h"
-#include "base/utility/scoped_cleanup.h"
+#include "types/type_info.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -341,7 +339,6 @@ private:
 
     StatusOr<uint16_t> _filter_by_non_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
     StatusOr<uint16_t> _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
-    StatusOr<uint16_t> _filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid);
 
     StatusOr<uint16_t> _filter_by_compound_and_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from,
                                                           uint16_t to, ColumnId column_id,
@@ -2148,8 +2145,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
     }
 
-    ASSIGN_OR_RETURN(chunk_size, _filter_by_record_predicate(chunk, rowid));
-
     if (_context->_has_force_dict_encode) {
         RETURN_IF_ERROR(_encode_to_global_id(_context));
         chunk = _context->_adapt_global_dict_chunk.get();
@@ -2548,19 +2543,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
     return chunk_size;
 }
 
-StatusOr<uint16_t> SegmentIterator::_filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid) {
-    size_t chunk_size = chunk->num_rows();
-    if (chunk_size > 0 && _opts.record_predicate != nullptr) {
-        SCOPED_RAW_TIMER(&_opts.stats->record_predicate_evaluate_ns);
-        RETURN_IF_ERROR(_opts.record_predicate->evaluate(chunk, _selection.data()));
-
-        size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
-        _opts.stats->rows_record_predicate_filtered += (chunk_size - new_size);
-        chunk_size = new_size;
-    }
-    return chunk_size;
-}
-
 uint16_t SegmentIterator::_filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to) {
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
     uint16_t chunk_size = to;
@@ -2649,11 +2631,6 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     for (const auto& field : output_schema().fields()) {
         output_columns.insert(field->id());
     }
-    std::set<ColumnId> record_predicate_cols;
-    if (_opts.record_predicate != nullptr) {
-        RETURN_IF_ERROR(
-                RecordPredicateHelper::get_column_ids(*_opts.record_predicate, _schema, &record_predicate_cols));
-    }
 
     for (size_t i = 0; i < early_materialize_fields; i++) {
         const FieldPtr& f = _schema.field(i);
@@ -2661,8 +2638,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         bool use_global_dict_code = _can_using_global_dict(f);
         bool use_dict_code = _can_using_dict_code(f);
 
-        if (delete_pred_columns.count(f->id()) || output_columns.count(f->id()) ||
-            record_predicate_cols.count(f->id()) /* need decode to compute the record predicate */) {
+        if (delete_pred_columns.count(f->id()) || output_columns.count(f->id())) {
             ctx->_skip_dict_decode_indexes.push_back(false);
         } else {
             ctx->_skip_dict_decode_indexes.push_back(true);
@@ -2672,7 +2648,6 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
                 // 2. column not in output schema
                 // 3. column is not one of the delete predicate columns
                 // 4. column must not be dict decoded when the read is finished
-                // 5. column not in record predicate
                 ctx->_prune_cols.insert(cid);
             }
         }

@@ -43,6 +43,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/tracer.h"
@@ -65,7 +66,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
-#include "util/failpoint/fail_point.h"
 #include "util/ratelimit.h"
 #include "util/starrocks_metrics.h"
 
@@ -76,22 +76,19 @@ TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& table
 }
 
 Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
-        : BaseTablet(tablet_meta, data_dir),
-          _last_cumu_compaction_failure_millis(0),
-          _last_base_compaction_failure_millis(0),
-          _last_cumu_compaction_success_millis(0),
-          _last_base_compaction_success_millis(0),
-          _cumulative_point(kInvalidCumulativePoint) {
+        : BaseTablet(tablet_meta, data_dir), _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
+    _keys_type = _max_version_schema->keys_type();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 #ifndef BE_TEST
     StarRocksMetrics::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
 #endif
 }
 
-Tablet::Tablet() {
+Tablet::Tablet(KeysType keys_type) {
+    _keys_type = keys_type;
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 

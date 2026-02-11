@@ -26,7 +26,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/lake/metacache.h"
@@ -39,6 +38,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 
@@ -294,35 +294,6 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         EXPECT_TRUE(files_to_delete[0].find(writer->segments()[0].path) != std::string::npos);
         EXPECT_TRUE(files_to_delete[1].find(writer->segments()[1].path) != std::string::npos);
     }
-}
-
-TEST_F(LakeRowsetTest, test_read_by_column_hash_is_congruent) {
-    create_rowsets_for_testing();
-
-    auto rowset =
-            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
-    RowsetReadOptions rs_opts;
-    OlapReaderStatistics stats;
-    rs_opts.stats = &stats;
-    TabletSchemaCSPtr opt_tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
-    rs_opts.tablet_schema = opt_tablet_schema;
-
-    std::string col_name(_tablet_schema->column(0).name());
-    std::vector<ColumnId> input_schema_cids;
-    input_schema_cids.push_back(1);
-    auto mutable_rowset_meta_ptr = const_cast<RowsetMetadataPB*>(&rowset->metadata());
-
-    auto record_predicate_pb = mutable_rowset_meta_ptr->mutable_record_predicate();
-    record_predicate_pb->set_type(RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT);
-    auto column_hash_is_congruent_pb = record_predicate_pb->mutable_column_hash_is_congruent();
-    column_hash_is_congruent_pb->set_modulus(2);
-    column_hash_is_congruent_pb->set_remainder(0);
-    column_hash_is_congruent_pb->add_column_names(col_name);
-
-    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, input_schema_cids);
-    ASSERT_OK(rowset->read(input_schema, rs_opts));
-    ASSERT_ERROR(rowset->get_each_segment_iterator(input_schema, false, &stats));
-    ASSERT_ERROR(rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
 }
 
 namespace {

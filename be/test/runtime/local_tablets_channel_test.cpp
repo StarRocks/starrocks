@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "column/chunk.h"
@@ -32,7 +33,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "util/failpoint/fail_point.h"
 #include "util/reusable_closure.h"
 #include "util/runtime_profile.h"
 

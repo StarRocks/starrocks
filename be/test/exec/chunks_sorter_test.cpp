@@ -23,7 +23,6 @@
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -37,9 +36,10 @@
 #include "exprs/column_ref.h"
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "testutil/column_test_helper.h"
-#include "util/json.h"
+#include "types/datum.h"
+#include "types/json_value.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

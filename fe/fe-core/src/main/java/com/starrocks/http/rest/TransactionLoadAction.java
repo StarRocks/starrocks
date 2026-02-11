@@ -62,12 +62,14 @@ import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.warehouse.Utils;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
@@ -334,10 +336,13 @@ public class TransactionLoadAction extends RestBaseAction {
         if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
         } else {
-            Optional<String> userWarehouseName = getUserDefaultWarehouse(request);
-            if (userWarehouseName.isPresent() &&
-                    GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(userWarehouseName.get())) {
-                warehouseName = userWarehouseName.get();
+            ConnectContext ctx = request.getConnectContext();
+            if (ctx != null) {
+                Optional<String> userWarehouseName = Utils.getUserDefaultWarehouse(ctx.getCurrentUserIdentity());
+                if (userWarehouseName.isPresent() &&
+                        GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(userWarehouseName.get())) {
+                    warehouseName = userWarehouseName.get();
+                }
             }
         }
 

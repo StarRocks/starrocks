@@ -12,24 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "types/map_type_info.h"
-
-#include "base/utility/mem_util.hpp"
 #include "common/logging.h"
 #include "gutil/casts.h"
-#include "runtime/mem_pool.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
 class MapTypeInfo final : public TypeInfo {
 public:
-    virtual ~MapTypeInfo() = default;
     explicit MapTypeInfo(TypeInfoPtr key_type, TypeInfoPtr value_type)
             : _key_type(std::move(key_type)), _value_type(std::move(value_type)) {}
 
+    ~MapTypeInfo() override = default;
+
     void shallow_copy(void* dest, const void* src) const override { CHECK(false); }
 
-    void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { CHECK(false); }
+    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override { CHECK(false); }
 
     void direct_copy(void* dest, const void* src) const override { CHECK(false); }
 

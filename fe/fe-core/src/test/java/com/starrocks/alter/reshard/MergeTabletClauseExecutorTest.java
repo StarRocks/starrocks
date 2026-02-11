@@ -80,6 +80,7 @@ public class MergeTabletClauseExecutorTest {
     @Test
     public void testMergeTabletJobMgrStub() throws Exception {
         TabletReshardJobMgr jobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        jobMgr.createTabletReshardJob(db, table, new MergeTabletClause());
+        Assertions.assertThrows(StarRocksException.class,
+                () -> jobMgr.createTabletReshardJob(db, table, new MergeTabletClause()));
     }
 }

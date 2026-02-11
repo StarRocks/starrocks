@@ -24,11 +24,12 @@
 #include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/cow.h"
+#include "common/delete_condition.h" // for DelCondSatisfied
+#include "common/memory/column_allocator.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
-#include "runtime/memory/column_allocator.h"
-#include "storage/delete_condition.h" // for DelCondSatisfied
-#include "util/cow.h"
+#include "gutil/macros.h"
 
 namespace starrocks {
 
@@ -218,6 +219,10 @@ public:
         static_assert(std::is_same<T, uint32_t>::value, "The type of indexes must be uint32_t");
         return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
+
+    // Append rows from this source column to destination column by selection.
+    // This is specialized for view-like source columns. Non-view columns should not override this.
+    virtual void append_selective_to(Column& dest, const uint32_t* indexes, uint32_t from, uint32_t size) const;
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
     // Currently only `ObjectColumn<BitmapValue>` support shallow copy
