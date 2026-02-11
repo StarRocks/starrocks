@@ -356,6 +356,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
 - `excluded_refresh_tables`：The base tables listed in this property will not trigger data refresh to the materialized view when their data changes. This property is usually used together with the `excluded_trigger_tables` property. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any data change in all base tables will trigger the corresponding materialized view refresh.
+- `task_priority`：The priority of refresh task. This property is usually used together with the `refresh_scheme` `ASYNC`. The default value is null, the value should be 0~100.
 
 
   > **CAUTION**

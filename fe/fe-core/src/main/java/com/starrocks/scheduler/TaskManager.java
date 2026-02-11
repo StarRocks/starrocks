@@ -317,6 +317,10 @@ public class TaskManager implements MemoryTrackable {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
         ExecuteOption option = new ExecuteOption(task);
+        if (task.getProperties().get(TaskRun.TASK_PRIORITY) != null) {
+            int taskPriority = Integer.parseInt(task.getProperties().get(TaskRun.TASK_PRIORITY));
+            option.setPriority(taskPriority);
+        }
         option.setManual(true);
         return executeTask(taskName, option);
     }
@@ -692,10 +696,12 @@ public class TaskManager implements MemoryTrackable {
 
         if (hasChanged) {
             GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
-                    new AlterTaskInfo(currentTask.getName(), changedType, changedTask.getSchedule()),
+                    new AlterTaskInfo(currentTask.getName(), changedType, changedTask.getSchedule(),
+                            changedTask.getProperties()),
                     wal -> {
                         AlterTaskInfo alterTaskInfo = (AlterTaskInfo) wal;
                         changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+                        changeTaskProperties(currentTask, alterTaskInfo.getProperties());
                     }
             );
             if (changedType == Constants.TaskType.PERIODICAL) {
@@ -717,6 +723,18 @@ public class TaskManager implements MemoryTrackable {
         currentTask.setType(changedType);
     }
 
+    private void changeTaskProperties(Task currentTask, Map<String, String> changedProperties) {
+        // Handle properties update
+        if (changedProperties != null) {
+            Map<String, String> current = currentTask.getProperties();
+            if (current == null) {
+                current = Maps.newHashMap();
+                currentTask.setProperties(current);
+            }
+            current.putAll(changedProperties);
+        }
+    }
+
     public void replayAlterTask(AlterTaskInfo alterTaskInfo) {
         Task currentTask = getTask(alterTaskInfo.getName());
         // Handle task type change (existing logic)
@@ -727,15 +745,7 @@ public class TaskManager implements MemoryTrackable {
         if (alterTaskInfo.getState() != null) {
             currentTask.setState(alterTaskInfo.getState());
         }
-        // Handle properties update
-        if (alterTaskInfo.getProperties() != null) {
-            Map<String, String> current = currentTask.getProperties();
-            if (current == null) {
-                current = Maps.newHashMap();
-                currentTask.setProperties(current);
-            }
-            current.putAll(alterTaskInfo.getProperties());
-        }
+        changeTaskProperties(currentTask, alterTaskInfo.getProperties());
     }
 
     @VisibleForTesting
@@ -802,8 +812,12 @@ public class TaskManager implements MemoryTrackable {
         }
 
         long initialDelay = getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
-        LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, scheduleTime:{}",
-                task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime);
+        int taskPriority = Constants.TaskRunPriority.LOWEST.value();
+        if (task.getProperties().get(TaskRun.TASK_PRIORITY) != null) {
+            taskPriority = Integer.parseInt(task.getProperties().get(TaskRun.TASK_PRIORITY));
+        }
+        LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, scheduleTime:{}, priority:{}",
+                task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime, taskPriority);
         // set task's next schedule time
         task.setNextScheduleTime(currentDateTime.plusSeconds(initialDelay).toEpochSecond(ZoneOffset.UTC));
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> {
@@ -811,8 +825,9 @@ public class TaskManager implements MemoryTrackable {
             try {
                 task.setLastScheduleTime(TimeUtils.getEpochSeconds());
                 task.setNextScheduleTime(TimeUtils.getEpochSeconds() + periodSeconds);
-                ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true,
-                        task.getProperties());
+                // get priority everytime, so that new priority can be applied when task priority is changed
+                int priority = Integer.parseInt(task.getProperties().get(TaskRun.TASK_PRIORITY));
+                ExecuteOption option = new ExecuteOption(priority, true, task.getProperties());
                 executeTask(task.getName(), option);
             } catch (Throwable e) {
                 LOG.warn("failed to execute periodical task: {}", task, e);

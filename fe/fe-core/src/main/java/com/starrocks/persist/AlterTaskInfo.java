@@ -40,10 +40,11 @@ public class AlterTaskInfo implements Writable {
         // for persist
     }
 
-    public AlterTaskInfo(String name, Constants.TaskType type, TaskSchedule schedule) {
+    public AlterTaskInfo(String name, Constants.TaskType type, TaskSchedule schedule, Map<String, String> properties) {
         this.name = name;
         this.type = type;
         this.schedule = schedule;
+        this.properties = properties;
     }
 
     public AlterTaskInfo(String name, Constants.TaskState state) {

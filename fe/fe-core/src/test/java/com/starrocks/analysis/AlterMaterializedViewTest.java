@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.AlterJobException;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
@@ -31,7 +32,9 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -459,6 +462,48 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                 "product_id", "",
                 "express_id", "",
                 "region_id", ""), columnMap);
+    }
+
+    @Test
+    public void testAlterMVTaskPriority() throws Exception {
+        {
+            MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+            Assertions.assertNull(mv.getTableProperty().getProperties().get(TaskRun.TASK_PRIORITY));
+            Task task = currentState.getTaskManager().getTask(TaskBuilder.getMvTaskName(mv.getId()));
+            Assertions.assertNull(task.getProperties().get(TaskRun.TASK_PRIORITY));
+            String alterMvSql = "alter materialized view mv1 set (\"task_priority\" = \"71\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+            Assertions.assertEquals("71", mv.getTableProperty().getProperties().get(TaskRun.TASK_PRIORITY));
+            Assertions.assertEquals("71", task.getProperties().get(TaskRun.TASK_PRIORITY));
+        }
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"task_priority\" = \"171\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Exception e = Assertions.assertThrows(AlterJobException.class,
+                    () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assertions.assertEquals("Task priority should between 0 and 100.", e.getMessage());
+        }
+
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"task_priority\" = \"-71\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Exception e = Assertions.assertThrows(AlterJobException.class,
+                    () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assertions.assertEquals("Task priority should between 0 and 100.", e.getMessage());
+        }
+
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"task_priority\" = \"abc\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Exception e = Assertions.assertThrows(AlterJobException.class,
+                    () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assertions.assertEquals("Task priority should between 0 and 100: For input string: \"abc\"", e.getMessage());
+        }
     }
 
     @Test

@@ -46,6 +46,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.scheduler.TaskRun.MV_ID;
+import static com.starrocks.scheduler.TaskRun.TASK_PRIORITY;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
@@ -145,6 +146,10 @@ public class TaskBuilder {
 
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(MV_ID, String.valueOf(materializedView.getId()));
+        if (materializedView.getTableProperty().getProperties().containsKey(TASK_PRIORITY)) {
+            taskProperties.put(TASK_PRIORITY,
+                    materializedView.getTableProperty().getProperties().get(TASK_PRIORITY));
+        }
         // Don't put mv table properties into task properties since mv refresh doesn't need them, and the properties
         // will cause task run's meta-data too large.
         // In PropertyAnalyzer.analyzeMVProperties, it removed the warehouse property, because
@@ -172,6 +177,10 @@ public class TaskBuilder {
         String mvId = String.valueOf(materializedView.getId());
         previousTaskProperties.put(MV_ID, mvId);
         task.setProperties(previousTaskProperties);
+        if (materializedView.getTableProperty().getProperties().containsKey(TASK_PRIORITY)) {
+            task.getProperties().put(TASK_PRIORITY,
+                    materializedView.getTableProperty().getProperties().get(TASK_PRIORITY));
+        }
         task.setDefinition(materializedView.getTaskDefinition());
         task.setExpireTime(0L);
         if (previousTask != null) {

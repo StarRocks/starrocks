@@ -68,6 +68,7 @@ public class TaskRun implements Comparable<TaskRun> {
     // NOTE: ALL task run properties should be defined here, and the associated properties configuration below should be
     // added carefully.
     public static final String MV_ID = "mvId";
+    public static final String TASK_PRIORITY = "task_priority";
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     // list partition values to be refreshed
@@ -90,13 +91,14 @@ public class TaskRun implements Comparable<TaskRun> {
     // - `PROPERTIES_WAREHOUSE`/`START_TASK_RUN_ID` is no need to check equality of task runs because they will not affect
     //  the task run's result.
     public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+            MV_ID, TASK_PRIORITY, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
     // Properties that can be set in TaskRun which are used to distinguish other noisy properties from users' defined properties.
     // and will ignore other properties in the task run history.
     // This should be only used in the task run history table and should not used for checking task run's real properties
     // because this is not a complete list of task run properties.
     public static final Set<String> RESERVED_HISTORY_TASK_RUN_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE, IS_TEST);
+            MV_ID, TASK_PRIORITY, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES,
+            PROPERTIES_WAREHOUSE, IS_TEST);
 
     public static final int INVALID_TASK_PROGRESS = -1;
 
