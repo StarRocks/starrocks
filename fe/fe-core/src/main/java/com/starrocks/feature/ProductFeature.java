@@ -81,6 +81,11 @@ public class ProductFeature {
                 "high-performance columnar data transfer using Apache Arrow.",
                 "https://docs.starrocks.io/docs/unloading/arrow_flight/"
         ));
+        features.add(new ProductFeature(
+                "automated-cluster-snapshot",
+                "Automatically creates consistent cluster snapshots at configured intervals for recovery and cloning.",
+                "https://docs.starrocks.io/docs/administration/cluster_snapshot/"
+        ));
         FEATURES = ImmutableList.copyOf(features);
     }
 
