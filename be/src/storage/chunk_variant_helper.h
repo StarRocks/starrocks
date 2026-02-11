@@ -14,4 +14,16 @@
 
 #pragma once
 
-#include "common/query_cache_owner_info.h"
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+#include "column/chunk.h"
+#include "storage/variant_tuple.h"
+
+namespace starrocks {
+
+VariantTuple build_variant_tuple_from_chunk_row(const Chunk& chunk, size_t row_idx,
+                                                const std::vector<uint32_t>& column_indexes);
+
+} // namespace starrocks

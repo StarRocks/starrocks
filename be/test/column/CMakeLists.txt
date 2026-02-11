@@ -60,7 +60,9 @@ target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS} gtest_main)
 
 set(CHUNK_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    chunk_core_test.cpp
     field_test.cpp
+    schema_test.cpp
 )
 
 set(CHUNK_TEST_LINK_LIBS

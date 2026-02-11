@@ -19,7 +19,6 @@ set(EXEC_FILES
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
-        ./column/schema_test.cpp
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
         ./connector/benchmark_connector_test.cpp
