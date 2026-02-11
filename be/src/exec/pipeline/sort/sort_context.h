@@ -20,7 +20,7 @@
 #include <mutex>
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
+#include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/context_with_dependency.h"

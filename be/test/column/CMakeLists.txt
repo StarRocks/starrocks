@@ -22,7 +22,11 @@ set(COLUMN_TEST_FILES
     column_visitor_test.cpp
     column_filter_range_test.cpp
     fixed_length_column_core_test.cpp
-    column_hash_stub.cpp
+    column_hash_core_test.cpp
+    array_column_core_test.cpp
+    array_view_column_core_test.cpp
+    map_column_core_test.cpp
+    struct_column_core_test.cpp
     binary_column_core_test.cpp
     const_nullable_core_test.cpp
     nullable_column_core_test.cpp

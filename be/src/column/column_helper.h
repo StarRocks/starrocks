@@ -669,20 +669,6 @@ public:
     static Columns to_columns(MutableColumns&& columns);
 };
 
-// Hold a slice of chunk
-template <class Ptr = ChunkUniquePtr>
-struct ChunkSliceTemplate {
-    Ptr chunk;
-    size_t segment_id = 0;
-    size_t offset = 0;
-
-    bool empty() const;
-    size_t rows() const;
-    size_t skip(size_t skip_rows);
-    ChunkUniquePtr cutoff(size_t required_rows);
-    void reset(Ptr input);
-};
-
 template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
@@ -729,9 +715,5 @@ APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
     };
 // GET_CONTAINER(TYPE_JSON)
 #undef GET_CONTAINER
-
-using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
-using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
-using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks
