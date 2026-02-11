@@ -446,6 +446,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setSortKeyIndexes(originIndexMetaId == baseIndexMetaId ? sortKeyIdxes : null)
                             .setSortKeyUniqueIds(originIndexMetaId == baseIndexMetaId ? sortKeyUniqueIds : null)
                             .addColumns(shadowSchema)
+                            .setPrimaryKeyEncodingType(tbl.getPrimaryKeyEncodingType())
                             .build().toTabletSchema();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();

@@ -170,4 +170,46 @@ TEST(TabletSchemaTest, test_is_support_checksum) {
     ASSERT_FALSE(map_column2.is_support_checksum());
 }
 
+TEST(TabletSchemaTest, test_primary_key_encoding_type_fallback) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_schema_version(1);
+
+    auto c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("k1");
+    c1->set_type("BIGINT");
+    c1->set_is_key(true);
+
+    TabletSchema tablet_schema(schema_pb);
+    ASSERT_TRUE(tablet_schema.has_primary_key_encoding_type());
+    ASSERT_EQ(tablet_schema.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1);
+}
+
+TEST(TabletSchemaTest, test_primary_key_encoding_type_round_trip) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_schema_version(1);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+
+    auto c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("k1");
+    c1->set_type("BIGINT");
+    c1->set_is_key(true);
+
+    TabletSchema tablet_schema(schema_pb);
+    ASSERT_EQ(tablet_schema.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+
+    TabletSchemaPB persisted_schema_pb;
+    tablet_schema.to_schema_pb(&persisted_schema_pb);
+    ASSERT_TRUE(persisted_schema_pb.has_primary_key_encoding_type());
+    ASSERT_EQ(persisted_schema_pb.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+
+    TabletSchema reloaded_schema(persisted_schema_pb);
+    ASSERT_EQ(reloaded_schema.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+}
+
 } // namespace starrocks

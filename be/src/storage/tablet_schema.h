@@ -328,6 +328,11 @@ public:
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
     int compression_level() const { return _compression_level; }
+
+    bool has_primary_key_encoding_type() const {
+        return _primary_key_encoding_type != PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE;
+    }
+    PrimaryKeyEncodingTypePB primary_key_encoding_type() const { return _primary_key_encoding_type; }
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
@@ -419,6 +424,8 @@ private:
     mutable std::unique_ptr<starrocks::Schema> _schema;
     mutable std::once_flag _init_schema_once_flag;
     int32_t _schema_version = -1;
+
+    PrimaryKeyEncodingTypePB _primary_key_encoding_type = PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

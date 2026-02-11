@@ -974,6 +974,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setIndexes(olapTable.getCopiedIndexes())
                     .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                     .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                    .setPrimaryKeyEncodingType(olapTable.getPrimaryKeyEncodingType())
                     .build().toTabletSchema();
 
             CreateReplicaTask task = CreateReplicaTask.newBuilder()
