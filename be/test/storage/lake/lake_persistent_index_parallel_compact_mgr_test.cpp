@@ -997,16 +997,19 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_large_ss
     std::vector<std::string> sample_keys;
     ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
 
-    // For large sstables, should return multiple sample keys based on the sampling interval
+    // For large sstables, should return multiple sample keys based on the sampling interval.
+    // The first key is always the start_key, followed by sampled keys from the index block.
     ASSERT_GT(sample_keys.size(), 1);
+
+    // The first sample key must be the start_key (this is the core of the bug fix)
+    ASSERT_EQ(sample_keys[0], sst1.range().start_key());
 
     // Verify sample keys are sorted
     for (size_t i = 1; i < sample_keys.size(); i++) {
         ASSERT_TRUE(comparator->Compare(sample_keys[i - 1], sample_keys[i]) < 0);
     }
 
-    // Verify sample keys are within the sstable range
-    ASSERT_TRUE(comparator->Compare(sample_keys[0], sst1.range().start_key()) > 0);
+    // Verify the remaining sample keys are within the sstable range
     ASSERT_TRUE(comparator->Compare(sample_keys[sample_keys.size() - 1], sst1.range().end_key()) < 0);
 
     // Restore original config
@@ -1115,6 +1118,168 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_with_differen
 
     // Restore original config
     config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+// Verify that for large SSTs, the start_key is always included as the first
+// sample key, and no duplicate is introduced by Table::sample_keys (which now
+// starts iteration from index 1).
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_large_sstable_start_key_always_first) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 10; // Very small to ensure many samples
+
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_start_key_first.sst", 0, 2000, &sst1));
+    ASSERT_GT(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // Must have at least start_key + some sampled keys
+    ASSERT_GT(sample_keys.size(), 1);
+
+    // The first key must be exactly the start_key
+    ASSERT_EQ(sample_keys[0], sst1.range().start_key());
+
+    // No duplicate: the second key must be strictly greater than start_key
+    const sstable::Comparator* cmp = sstable::BytewiseComparator();
+    ASSERT_TRUE(cmp->Compare(sample_keys[1], sst1.range().start_key()) > 0);
+
+    // All keys must be unique (no duplicates from start_key + index block sampling)
+    for (size_t i = 1; i < sample_keys.size(); i++) {
+        ASSERT_TRUE(cmp->Compare(sample_keys[i - 1], sample_keys[i]) < 0) << "Duplicate or out-of-order at index " << i;
+    }
+
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+// Verify that when parallel compaction tasks are generated from large SSTs,
+// the first task's seek_key equals the SST's start_key (not a later sampled key).
+// This was the original bug: missing start_key caused the first task to skip
+// keys at the beginning of the SST.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_generate_tasks_large_sstable_seek_range_covers_start_key) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    auto old_threshold = config::pk_index_parallel_compaction_task_split_threshold_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 10;
+    config::pk_index_parallel_compaction_task_split_threshold_bytes = 1; // Force many tasks
+
+    // Create a large sstable
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_seek_range_cover.sst", 0, 2000, &sst1));
+    ASSERT_GT(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+
+    std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>> tasks;
+    mgr->TEST_generate_compaction_tasks(candidates, _tablet_metadata, false, &tasks);
+
+    ASSERT_GE(tasks.size(), 2); // Should have multiple tasks due to small threshold
+
+    // The first task's output must cover the start_key of the SST.
+    // Run the first task and check the output range.
+    std::vector<PersistentIndexSstablePB> first_output;
+    auto cb = std::make_unique<AsyncCompactCB>(mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                   first_output = sstables;
+                                                   return Status::OK();
+                                               });
+    tasks[0]->set_cb(cb.get());
+    ASSERT_OK(cb->thread_pool_token()->submit(tasks[0]));
+    ASSERT_OK(cb->wait_for());
+
+    // The first task's output must include keys starting from the SST's start_key.
+    ASSERT_FALSE(first_output.empty());
+    ASSERT_EQ(first_output[0].range().start_key(), sst1.range().start_key());
+
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+    config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
+}
+
+// Verify that compaction of a large SST split into parallel tasks produces output
+// that covers the full key range without any gaps at the beginning.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_large_sstable_no_missing_keys_at_start) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    auto old_threshold = config::pk_index_parallel_compaction_task_split_threshold_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 10;
+    config::pk_index_parallel_compaction_task_split_threshold_bytes = 1;
+
+    // Create two large overlapping sstables to trigger actual merge
+    PersistentIndexSstablePB sst1, sst2;
+    ASSERT_OK(create_test_sstable("test_no_gap_1.sst", 0, 1000, &sst1));
+    ASSERT_OK(create_test_sstable("test_no_gap_2.sst", 0, 1000, &sst2));
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+    candidates.push_back({sst2});
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
+
+    ASSERT_FALSE(output_sstables.empty());
+
+    // The first output SST must start from the original start_key (no gap at the beginning)
+    ASSERT_EQ(output_sstables[0].range().start_key(), sst1.range().start_key());
+
+    // The last output SST must end at the original end_key
+    ASSERT_EQ(output_sstables.back().range().end_key(), sst1.range().end_key());
+
+    // Verify output sstables are sorted and non-overlapping:
+    // start_key[i] > end_key[i-1] since each task handles a non-overlapping seek range
+    const sstable::Comparator* cmp = sstable::BytewiseComparator();
+    for (size_t i = 1; i < output_sstables.size(); i++) {
+        ASSERT_TRUE(cmp->Compare(output_sstables[i].range().start_key(), output_sstables[i - 1].range().end_key()) > 0)
+                << "Output sstables overlap at index " << i;
+    }
+
+    // Verify all original keys can be found in the output (no keys lost due to missing start_key)
+    for (int k = 0; k < 1000; k++) {
+        std::string key = fmt::format("key_{:016X}", k);
+        bool found = false;
+        for (const auto& out_sst_pb : output_sstables) {
+            ASSIGN_OR_ABORT(auto sst, open_sstable(out_sst_pb));
+            Slice key_slice(key);
+            KeyIndexSet key_indexes;
+            key_indexes.insert(0);
+            std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+            KeyIndexSet found_key_indexes;
+            auto st = sst->multi_get(&key_slice, key_indexes, -1, values.data(), &found_key_indexes);
+            if (st.ok() && !found_key_indexes.empty()) {
+                found = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found) << "Key " << key << " not found in any output sstable";
+    }
+
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+    config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
+}
+
+// Verify that sample_keys from a small sstable still returns the start_key
+// (behavior preserved after the fix).
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_small_sstable_returns_start_key) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_small_start_key.sst", 100, 50, &sst1));
+    ASSERT_LE(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // For small sstables, should return exactly one key: the start_key
+    ASSERT_EQ(sample_keys.size(), 1);
+    ASSERT_EQ(sample_keys[0], sst1.range().start_key());
 }
 
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range_filtering) {
