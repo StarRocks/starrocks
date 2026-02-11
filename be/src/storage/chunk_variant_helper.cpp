@@ -15,6 +15,7 @@
 #include "storage/chunk_variant_helper.h"
 
 #include "column/chunk.h"
+#include "column/schema.h"
 
 namespace starrocks {
 
