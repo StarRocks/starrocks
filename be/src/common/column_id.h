@@ -14,18 +14,11 @@
 
 #pragma once
 
-#include <ostream>
-#include <string>
-
-#include "common/storage_aggregate_type.h"
+#include <cstdint>
 
 namespace starrocks {
 
-StorageAggregateType get_aggregation_type_by_string(const std::string& str);
-std::string get_string_by_aggregation_type(StorageAggregateType type);
+using ColumnId = uint32_t;
+using ColumnUID = int32_t;
 
 } // namespace starrocks
-
-namespace std {
-ostream& operator<<(ostream& os, starrocks::StorageAggregateType method);
-}

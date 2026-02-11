@@ -42,6 +42,10 @@ ADD_BE_LIB(ColumnCore
         column_hash/column_hash.cpp
 )
 
+ADD_BE_LIB(ChunkCore
+        field.cpp
+)
+
 ADD_BE_LIB(Column
         chunk.cpp
         chunk_extra_data.cpp
@@ -52,9 +56,6 @@ ADD_BE_LIB(Column
         column_viewer.cpp
         datum_convert.cpp
         datum_tuple.cpp
-        field.cpp
         schema.cpp
         stream_chunk.cpp
 )
-
-target_link_libraries(Column PUBLIC ColumnCore)
