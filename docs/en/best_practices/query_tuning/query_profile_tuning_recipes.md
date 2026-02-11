@@ -173,7 +173,7 @@ For ease of understanding various metrics, Merge can be represented as the follo
 
 **Sort spilling** – When `MaxBufferedBytes` rises above roughly 2 GB or `SpillBytes` is non‑zero, the sort phase is spilling to disk. Add a `LIMIT`, pre‑aggregate upstream, or raise `sort_spill_threshold` if the machine has enough memory.
 
-**Merge starvation** – A high `PendingStageTime` tells you the merge is waiting for upstream chunks. optimize the producer operator first or enlarge pipeline buffers.
+**Merge starvation** – A high `PendingStageTime` tells you the merge is waiting for upstream chunks. Optimize the producer operator first or enlarge pipeline buffers.
 
 **Wide window partitions** – Huge `PeakBufferedRows` inside a window operator point to very broad partitions or an ORDER BY lacking frame limits. Partition more granularly, add `RANGE BETWEEN` bounds, or materialize intermediate aggregates.
 
