@@ -9265,7 +9265,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             ScalarType type = ScalarType.createCharType(length);
             return type;
         } else if (context.SIGNED() != null) {
-            return Type.INT;
+            return Type.BIGINT;
         } else if (context.HLL() != null) {
             ScalarType type = ScalarType.createHllType();
             return type;
