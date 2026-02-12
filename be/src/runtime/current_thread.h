@@ -247,6 +247,9 @@ private:
     }
 
 public:
+    using IsEnvInitializedFn = bool (*)();
+    using ProcessMemTrackerFn = starrocks::MemTracker* (*)();
+
     CurrentThread() : _lwp_id(get_thread_id()) { tls_is_thread_status_init = true; }
     ~CurrentThread();
 
@@ -287,6 +290,7 @@ public:
 
     bool check_mem_limit() { return _check; }
 
+    static void set_mem_tracker_source(IsEnvInitializedFn is_env_initialized, ProcessMemTrackerFn process_mem_tracker);
     static starrocks::MemTracker* mem_tracker();
     static starrocks::MemTracker* singleton_check_mem_tracker();
 
