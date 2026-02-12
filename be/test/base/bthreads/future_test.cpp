@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/bthreads/future.h"
+#include "base/bthreads/future.h"
 
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>

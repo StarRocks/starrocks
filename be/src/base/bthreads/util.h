@@ -20,7 +20,7 @@
 
 #include <functional>
 
-#include "common/statusor.h"
+#include "base/statusor.h"
 
 namespace starrocks::bthreads {
 

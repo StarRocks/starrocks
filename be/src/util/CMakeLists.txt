@@ -70,8 +70,6 @@ set(UTIL_FILES
   lru_cache.cpp
   debug/query_trace_impl.cpp
   stack_trace_mutex.cpp
-  bthreads/future.h
-  bthreads/future_impl.cpp
   debug_action.cpp
   memory_lock.cpp
   internal_service_recoverable_stub.cpp

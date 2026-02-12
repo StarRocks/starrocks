@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
 ADD_BE_LIB(Base
+  bthreads/future_impl.cpp
   concurrency/await.cpp
   concurrency/core_local.cpp
   concurrency/spinlock.cpp

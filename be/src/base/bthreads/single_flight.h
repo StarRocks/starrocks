@@ -19,8 +19,8 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "base/bthreads/future.h"
 #include "base/testutil/sync_point.h"
-#include "util/bthreads/future.h"
 
 namespace starrocks::bthreads::singleflight {
 

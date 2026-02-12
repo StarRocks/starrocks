@@ -331,11 +331,6 @@ set(EXEC_FILES
         ./util/bitmap_test.cpp
         ./util/block_compression_test.cpp
         ./util/brpc_stub_cache_test.cpp
-        ./util/bthreads/future_test.cpp
-        ./util/bthreads/promise_test.cpp
-        ./util/bthreads/semaphore_test.cpp
-        ./util/bthreads/shared_future_test.cpp
-        ./util/bthreads/single_flight_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
