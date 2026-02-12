@@ -26,11 +26,7 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
->>>>>>> 32b0d79f8e ([UT] Fix StmtExecutorTest unstable UT (#69221))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
