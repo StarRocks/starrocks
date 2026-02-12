@@ -140,7 +140,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Strings
 - Unit: -
 - Is mutable: No
-- Description: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`.
+- Description: Specifies the file names (without extensions) or file name wildcards for which VLOG logs should be printed. Multiple file names can be separated by commas. For example, if you set this configuration item to `storage_engine,tablet_manager`, StarRocks prints VLOG logs from the storage_engine.cpp and tablet_manager.cpp files. You can also use wildcards, e.g., set to `*` to print VLOG logs from all files. The VLOG log printing level is controlled by the `sys_log_verbose_level` parameter.
 - Introduced in: -
 
 ### Server
