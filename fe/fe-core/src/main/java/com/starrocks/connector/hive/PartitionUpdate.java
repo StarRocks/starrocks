@@ -97,17 +97,20 @@ public class PartitionUpdate {
         OVERWRITE,
     }
 
-    public static PartitionUpdate get(THiveFileInfo fileInfo, String stagingDir, String tableLocation) {
+    public static PartitionUpdate get(THiveFileInfo fileInfo, String stagingDir,
+                                      String tableLocation, List<String> partitionColNames) {
         Preconditions.checkState(fileInfo.isSetPartition_path() && !Strings.isNullOrEmpty(fileInfo.getPartition_path()),
                 "Missing partition path");
 
-        String partitionName = PartitionUtil.getPartitionName(stagingDir, fileInfo.getPartition_path());
+        String partitionNameFromPath = PartitionUtil.getPartitionName(stagingDir, fileInfo.getPartition_path());
+        List<String> partitionValues = PartitionUtil.toPartitionValues(partitionNameFromPath);
+        String partitionName = PartitionUtil.toHivePartitionName(partitionColNames, partitionValues);
 
         String tableLocationWithSlash = getPathWithSlash(tableLocation);
         String stagingDirWithSlash = getPathWithSlash(stagingDir);
 
-        String writePath = stagingDirWithSlash + partitionName + "/";
-        String targetPath = tableLocationWithSlash + partitionName + "/";
+        String writePath = stagingDirWithSlash + partitionNameFromPath + "/";
+        String targetPath = tableLocationWithSlash + partitionNameFromPath + "/";
 
         return new PartitionUpdate(partitionName, new Path(writePath), new Path(targetPath),
                 Lists.newArrayList(fileInfo.getFile_name()), fileInfo.getRecord_count(), fileInfo.getFile_size_in_bytes());
