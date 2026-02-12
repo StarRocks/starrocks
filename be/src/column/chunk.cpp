@@ -21,9 +21,6 @@
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
-#include "gen_cpp/data.pb.h"
-#include "gutil/strings/substitute.h"
-#include "runtime/descriptors.h"
 
 namespace starrocks {
 
@@ -386,17 +383,6 @@ DatumTuple Chunk::get(size_t n) const {
         res.append(column->get(n));
     }
     return res;
-}
-
-VariantTuple Chunk::get(size_t n, const std::vector<uint32_t>& column_indexes) const {
-    DCHECK(_schema != nullptr);
-    VariantTuple tuple;
-    tuple.reserve(column_indexes.size());
-    for (uint32_t i : column_indexes) {
-        DCHECK_LT(i, _columns.size());
-        tuple.emplace(_schema->field(i)->type(), _columns[i]->get(n));
-    }
-    return tuple;
 }
 
 size_t Chunk::memory_usage() const {

@@ -14,4 +14,22 @@
 
 #pragma once
 
-#include "common/query_cache_owner_info.h"
+namespace starrocks {
+
+enum StorageAggregateType {
+    STORAGE_AGGREGATE_NONE = 0,
+    STORAGE_AGGREGATE_SUM = 1,
+    STORAGE_AGGREGATE_MIN = 2,
+    STORAGE_AGGREGATE_MAX = 3,
+    STORAGE_AGGREGATE_REPLACE = 4,
+    STORAGE_AGGREGATE_HLL_UNION = 5,
+    STORAGE_AGGREGATE_UNKNOWN = 6,
+    STORAGE_AGGREGATE_BITMAP_UNION = 7,
+    // Replace if and only if added value is not null
+    STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL = 8,
+    STORAGE_AGGREGATE_PERCENTILE_UNION = 9,
+    // Generic aggregate function's state union
+    STORAGE_AGGREGATE_AGG_STATE_UNION = 10
+};
+
+} // namespace starrocks

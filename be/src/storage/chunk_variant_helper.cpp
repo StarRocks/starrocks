@@ -12,20 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "storage/chunk_variant_helper.h"
 
-#include <ostream>
-#include <string>
-
-#include "common/storage_aggregate_type.h"
+#include "column/chunk.h"
+#include "column/schema.h"
 
 namespace starrocks {
 
-StorageAggregateType get_aggregation_type_by_string(const std::string& str);
-std::string get_string_by_aggregation_type(StorageAggregateType type);
+VariantTuple build_variant_tuple_from_chunk_row(const Chunk& chunk, size_t row_idx,
+                                                const std::vector<uint32_t>& column_indexes) {
+    const auto& schema = chunk.schema();
+    DCHECK(schema != nullptr);
+
+    VariantTuple tuple;
+    tuple.reserve(column_indexes.size());
+    for (uint32_t column_index : column_indexes) {
+        DCHECK_LT(column_index, chunk.num_columns());
+        tuple.emplace(schema->field(column_index)->type(), chunk.get_column_by_index(column_index)->get(row_idx));
+    }
+    return tuple;
+}
 
 } // namespace starrocks
-
-namespace std {
-ostream& operator<<(ostream& os, starrocks::StorageAggregateType method);
-}
