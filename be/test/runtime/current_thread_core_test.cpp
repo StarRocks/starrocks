@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/current_thread.h"
-
 #include <gtest/gtest.h>
+
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
