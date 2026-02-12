@@ -18,6 +18,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_CORE_FILES
+    current_thread.cpp
     mem_tracker.cpp
 )
 
@@ -105,7 +106,6 @@ set(RUNTIME_FILES
     global_dict/parser.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp
-    current_thread.cpp
     runtime_filter_cache.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp

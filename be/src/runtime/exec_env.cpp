@@ -69,6 +69,7 @@
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/dummy_load_path_mgr.h"
@@ -178,6 +179,10 @@ void register_hll_registers_allocator() {
     CHECK(st.ok()) << "failed to register hll registers allocator: " << st.to_string();
 }
 
+MemTracker* process_mem_tracker_provider() {
+    return GlobalEnv::GetInstance()->process_mem_tracker();
+}
+
 } // namespace
 
 bool GlobalEnv::_is_init = false;
@@ -188,6 +193,7 @@ bool GlobalEnv::is_init() {
 
 Status GlobalEnv::init() {
     RETURN_IF_ERROR(_init_mem_tracker());
+    CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
     _is_init = true;
     return Status::OK();
 }

@@ -14,6 +14,7 @@
 
 set(RUNTIME_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    current_thread_core_test.cpp
     mem_tracker_test.cpp
 )
 
