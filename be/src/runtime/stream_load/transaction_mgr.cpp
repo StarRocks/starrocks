@@ -29,6 +29,7 @@
 #include "base/metrics.h"
 #include "base/string/string_parser.hpp"
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/utils.h"
@@ -58,7 +59,6 @@
 #include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

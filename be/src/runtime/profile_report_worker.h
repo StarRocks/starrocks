@@ -15,6 +15,7 @@
 #pragma once
 #include <thread>
 
+#include "base/uid_util.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"

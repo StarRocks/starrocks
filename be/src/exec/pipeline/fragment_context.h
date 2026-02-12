@@ -17,6 +17,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/uid_util.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/driver_limiter.h"

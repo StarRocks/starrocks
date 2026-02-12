@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "connector/connector_sink_profile.h"
@@ -24,7 +25,6 @@
 #include "runtime/exec_env.h"
 #include "storage/load_chunk_spiller.h"
 #include "util/threadpool.h"
-#include "util/uid_util.h"
 
 namespace starrocks::connector {
 

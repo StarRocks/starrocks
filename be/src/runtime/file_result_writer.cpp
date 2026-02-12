@@ -36,6 +36,7 @@
 
 #include <memory>
 
+#include "base/uid_util.h"
 #include "column/chunk.h"
 #include "exec/local_file_writer.h"
 #include "exec/parquet_builder.h"
@@ -46,7 +47,6 @@
 #include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

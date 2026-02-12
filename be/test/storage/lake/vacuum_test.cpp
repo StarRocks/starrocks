@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "base/uid_util.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "json2pb/json_to_pb.h"
@@ -32,7 +33,6 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/vacuum_full.h"
 #include "test_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks::lake {
 

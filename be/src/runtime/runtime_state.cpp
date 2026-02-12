@@ -51,6 +51,7 @@
 #include "fslib/star_cache_handler.h"
 #endif
 #include "base/time/timezone_utils.h"
+#include "base/uid_util.h"
 #include "base/utility/pretty_printer.h"
 #include "cache/datacache.h"
 #include "runtime/descriptors.h"
@@ -60,7 +61,6 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_worker.h"
 #include "types/datetime_value.h"
-#include "util/uid_util.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"

@@ -20,11 +20,11 @@
 #include <exec/pipeline/query_context.h>
 #include <util/arrow/utils.h>
 
+#include "base/uid_util.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "exec/arrow_flight_batch_reader.h"
 #include "exprs/base64.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

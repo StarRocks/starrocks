@@ -19,13 +19,13 @@
 #include <mutex>
 #include <vector>
 
+#include "base/uid_util.h"
 #include "common/status.h"
 #include "gutil/ref_counted.h"
 #include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
 #include "util/threadpool.h"
 #include "util/trace.h"
-#include "util/uid_util.h"
 
 namespace starrocks::lake {
 

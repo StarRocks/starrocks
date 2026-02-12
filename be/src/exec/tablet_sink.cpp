@@ -42,6 +42,7 @@
 #include "agent/master_info.h"
 #include "agent/utils.h"
 #include "base/simd/simd.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -69,7 +70,6 @@
 #include "util/stack_util.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/uid_util.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
 static const uint8_t VALID_SEL_OK = 0x1;

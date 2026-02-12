@@ -39,13 +39,13 @@
 #include <vector>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "fmt/format.h"
 #include "gutil/strings/split.h"
 #include "runtime/small_file_mgr.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

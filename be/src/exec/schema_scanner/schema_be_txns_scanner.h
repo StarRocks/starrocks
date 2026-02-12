@@ -16,9 +16,9 @@
 
 #include <cstdint>
 
+#include "base/uid_util.h"
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

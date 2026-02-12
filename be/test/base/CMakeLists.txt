@@ -69,6 +69,7 @@ set(BASE_TEST_FILES
     utility/pretty_printer_test.cpp
     utility/scoped_cleanup_test.cpp
     utility/template_util_test.cpp
+    uid_util_test.cpp
     url_coding_test.cpp
     uuid/uuid_generator_test.cpp
     status_test.cpp

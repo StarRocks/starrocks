@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sink/export_sink_operator.h"
 
+#include "base/uid_util.h"
 #include "exec/data_sink.h"
 #include "exec/file_builder.h"
 #include "exec/pipeline/fragment_context.h"
@@ -24,7 +25,6 @@
 #include "fs/fs_broker.h"
 #include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 

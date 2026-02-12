@@ -56,7 +56,6 @@ set(UTIL_FILES
   url_parser.cpp
   filesystem_util.cc
 # coding_util.cpp
-  uid_util.cpp
   aes_util.cpp
   string_util.cpp
   thrift_rpc_helper.cpp

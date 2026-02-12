@@ -18,6 +18,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/uid_util.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -41,7 +42,6 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "util/thrift_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

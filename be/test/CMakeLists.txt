@@ -351,7 +351,6 @@ set(EXEC_FILES
         ./util/threadpool_test.cpp
         ./util/thrift_customize_test.cpp
         ./util/trace_test.cpp
-        ./util/uid_util_test.cpp
         ./base/types/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp

@@ -38,9 +38,9 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "base/uid_util.h"                        // for std::hash for UniqueId
 #include "runtime/stream_load/stream_load_pipe.h" // for StreamLoadPipe
 #include "util/starrocks_metrics.h"
-#include "util/uid_util.h" // for std::hash for UniqueId
 
 namespace starrocks {
 

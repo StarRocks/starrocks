@@ -40,11 +40,11 @@
 #include <mutex>
 #include <string_view>
 
+#include "base/uid_util.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/routine_load/data_consumer_pool.h"
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

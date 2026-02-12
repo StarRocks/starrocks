@@ -21,6 +21,7 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/failpoint/fail_point.h"
+#include "base/uid_util.h"
 #include "column/column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"

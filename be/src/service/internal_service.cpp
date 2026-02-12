@@ -49,6 +49,7 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
 #include "column/stream_chunk.h"
@@ -91,7 +92,6 @@
 #include "util/hash_util.hpp"
 #include "util/thrift_util.h"
 #include "util/time_guard.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
