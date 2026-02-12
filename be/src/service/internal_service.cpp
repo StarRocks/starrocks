@@ -91,7 +91,7 @@
 #include "util/hash_util.hpp"
 #include "util/thrift_util.h"
 #include "util/time_guard.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

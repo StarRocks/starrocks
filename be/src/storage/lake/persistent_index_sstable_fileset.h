@@ -24,7 +24,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/sstable/comparator.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

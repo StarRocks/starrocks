@@ -74,7 +74,7 @@
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero

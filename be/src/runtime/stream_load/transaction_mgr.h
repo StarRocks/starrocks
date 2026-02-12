@@ -22,7 +22,7 @@
 #include "stream_load_context.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
-#include "util/uid_util.h" // for std::hash for UniqueId
+#include "base/uid_util.h" // for std::hash for UniqueId
 
 namespace starrocks {
 

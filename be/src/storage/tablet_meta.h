@@ -51,7 +51,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet_schema.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

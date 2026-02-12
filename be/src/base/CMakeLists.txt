@@ -54,6 +54,7 @@ ADD_BE_LIB(Base
   testutil/assert.cpp
   testutil/sync_point.cc
   testutil/sync_point_impl.cc
+  uid_util.cpp
   url_coding.cpp
   uuid/uuid_generator.cpp
   status.cpp

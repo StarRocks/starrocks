@@ -31,7 +31,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/ref_count_closure.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 namespace starrocks {
 struct TypeDescriptor;
 

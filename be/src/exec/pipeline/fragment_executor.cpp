@@ -50,7 +50,7 @@
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::pipeline {
 

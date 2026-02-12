@@ -58,7 +58,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
 #include "types/logical_type.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::vectorized {
 class TExprBuilder {

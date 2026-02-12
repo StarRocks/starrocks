@@ -61,7 +61,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::vectorized {
 

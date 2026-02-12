@@ -46,7 +46,7 @@
 #include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

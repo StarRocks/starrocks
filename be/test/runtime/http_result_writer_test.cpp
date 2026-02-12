@@ -23,7 +23,7 @@
 #include "exprs/column_ref.h"
 #include "runtime/buffer_control_block.h"
 #include "storage/chunk_helper.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

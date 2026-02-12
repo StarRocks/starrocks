@@ -25,7 +25,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "util/threadpool.h"
 #include "util/trace.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::lake {
 

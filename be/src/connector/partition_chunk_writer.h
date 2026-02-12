@@ -24,7 +24,7 @@
 #include "runtime/exec_env.h"
 #include "storage/load_chunk_spiller.h"
 #include "util/threadpool.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::connector {
 

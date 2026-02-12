@@ -43,26 +43,6 @@ struct hash<starrocks::decimal12_t> {
     }
 };
 
-template <>
-struct hash<starrocks::TUniqueId> {
-    std::size_t operator()(const starrocks::TUniqueId& id) const {
-        std::size_t seed = 0;
-        seed = starrocks::HashUtil::hash(&id.lo, sizeof(id.lo), seed);
-        seed = starrocks::HashUtil::hash(&id.hi, sizeof(id.hi), seed);
-        return seed;
-    }
-};
-
-template <>
-struct hash<starrocks::TNetworkAddress> {
-    size_t operator()(const starrocks::TNetworkAddress& address) const {
-        std::size_t seed = 0;
-        seed = starrocks::HashUtil::hash(address.hostname.data(), address.hostname.size(), seed);
-        seed = starrocks::HashUtil::hash(&address.port, 4, seed);
-        return seed;
-    }
-};
-
 #if !__clang__ && __GNUC__ < 6
 // Cause this is builtin function
 template <>

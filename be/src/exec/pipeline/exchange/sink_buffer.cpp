@@ -26,7 +26,7 @@
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::pipeline {
 

@@ -27,7 +27,7 @@
 #include "runtime/exec_env.h"
 #include "util/compression/block_compression.h"
 #include "util/logging.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

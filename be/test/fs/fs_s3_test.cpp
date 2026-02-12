@@ -27,7 +27,7 @@
 #include "common/s3_uri.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

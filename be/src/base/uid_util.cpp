@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 #include "base/uuid/uuid_generator.h"
 #include "gutil/endian.h"

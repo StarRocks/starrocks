@@ -18,7 +18,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "util/thread.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

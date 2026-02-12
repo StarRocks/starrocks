@@ -38,9 +38,9 @@
 #include <string>
 #include <string_view>
 
+#include "base/hash/hash_util.hpp"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/types.pb.h"    // for PUniqueId
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
@@ -153,6 +153,26 @@ std::string print_id(const PUniqueId& id);
 } // namespace starrocks
 
 namespace std {
+
+template <>
+struct hash<starrocks::TUniqueId> {
+    std::size_t operator()(const starrocks::TUniqueId& id) const {
+        std::size_t seed = 0;
+        seed = starrocks::HashUtil::hash(&id.lo, sizeof(id.lo), seed);
+        seed = starrocks::HashUtil::hash(&id.hi, sizeof(id.hi), seed);
+        return seed;
+    }
+};
+
+template <>
+struct hash<starrocks::TNetworkAddress> {
+    size_t operator()(const starrocks::TNetworkAddress& address) const {
+        std::size_t seed = 0;
+        seed = starrocks::HashUtil::hash(address.hostname.data(), address.hostname.size(), seed);
+        seed = starrocks::HashUtil::hash(&address.port, 4, seed);
+        return seed;
+    }
+};
 
 template <>
 struct hash<starrocks::UniqueId> {

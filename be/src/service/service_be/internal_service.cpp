@@ -51,7 +51,7 @@
 #include "storage/dictionary_cache_manager.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

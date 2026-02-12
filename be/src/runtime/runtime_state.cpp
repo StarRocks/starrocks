@@ -60,7 +60,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_worker.h"
 #include "types/datetime_value.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"

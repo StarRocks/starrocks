@@ -45,7 +45,7 @@
 #include "fmt/format.h"
 #include "gutil/strings/split.h"
 #include "runtime/small_file_mgr.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

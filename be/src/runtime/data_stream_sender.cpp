@@ -62,7 +62,7 @@
 #include "util/internal_service_recoverable_stub.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

@@ -41,7 +41,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "util/thrift_util.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

@@ -41,7 +41,7 @@
 #include "fs/fs.h"
 #include "storage/lake/location_provider.h"
 #include "storage/olap_define.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

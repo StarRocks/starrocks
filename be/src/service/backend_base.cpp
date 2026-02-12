@@ -58,7 +58,7 @@
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
 #include "util/thrift_server.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

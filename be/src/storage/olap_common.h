@@ -55,7 +55,7 @@
 #include "gen_cpp/Types_types.h"
 #include "storage/olap_define.h"
 #include "util/hash_util.hpp"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 #define LOW_56_BITS 0x00ffffffffffffff
 

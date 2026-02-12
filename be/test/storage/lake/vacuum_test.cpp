@@ -32,7 +32,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/vacuum_full.h"
 #include "test_util.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::lake {
 

@@ -40,7 +40,7 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::pipeline {
 

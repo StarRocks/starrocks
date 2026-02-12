@@ -34,7 +34,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "util/starrocks_metrics.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::lake {
 

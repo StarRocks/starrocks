@@ -20,7 +20,7 @@
 #include "base/testutil/assert.h"
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

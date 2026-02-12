@@ -50,7 +50,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/statistic_result_writer.h"
 #include "runtime/variable_result_writer.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks {
 

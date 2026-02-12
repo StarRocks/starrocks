@@ -52,7 +52,7 @@
 #include "runtime/load_channel.h"
 #include "runtime/tablets_channel.h"
 #include "util/threadpool.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace brpc {
 class Controller;

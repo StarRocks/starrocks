@@ -38,7 +38,7 @@
 #include "runtime/exec_env.h"
 #include "storage/options.h"
 #include "util/stack_util.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 
 namespace starrocks::spill {
 class LogBlockContainer {

@@ -17,7 +17,7 @@
 #ifdef FIU_ENABLE
 #include "common/system/backend_options.h"
 #include "gutil/strings/join.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
 #endif
 
 namespace starrocks::load::failpoint {

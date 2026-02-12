@@ -20,6 +20,7 @@
 
 #include <string>
 
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
