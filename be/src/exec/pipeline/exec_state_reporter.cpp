@@ -21,9 +21,9 @@
 
 #include "agent/master_info.h"
 #include "base/network/network_util.h"
+#include "common/system/backend_options.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 

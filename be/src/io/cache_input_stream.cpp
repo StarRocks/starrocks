@@ -20,9 +20,9 @@
 
 #include "common/config.h"
 #include "common/runtime_profile.h"
+#include "common/system/backend_options.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
-#include "service/backend_options.h"
 #include "util/hash_util.hpp"
 #include "util/stack_util.h"
 
