@@ -34,7 +34,9 @@ public class PartitionUpdateTest {
         fileInfo.setPartition_path("hdfs://hadoop01:9000/tmp/starrocks/queryid/k2=2");
         fileInfo.setRecord_count(10);
         fileInfo.setFile_size_in_bytes(100);
-        PartitionUpdate pu = PartitionUpdate.get(fileInfo, stagingDir, tableLocation);
+        List<String> partitionColNames = Lists.newArrayList();
+        partitionColNames.add("k2");
+        PartitionUpdate pu = PartitionUpdate.get(fileInfo, stagingDir, tableLocation, partitionColNames);
         pu.setUpdateMode(PartitionUpdate.UpdateMode.NEW);
         Assertions.assertEquals("k2=2", pu.getName());
         Assertions.assertEquals(Lists.newArrayList("myfile.parquet"), pu.getFileNames());
@@ -49,7 +51,7 @@ public class PartitionUpdateTest {
         ExceptionChecker.expectThrowsWithMsg(
                 IllegalStateException.class,
                 "Missing partition path",
-                () -> PartitionUpdate.get(fileInfo1, stagingDir, tableLocation));
+                () -> PartitionUpdate.get(fileInfo1, stagingDir, tableLocation, partitionColNames));
     }
 
     @Test
