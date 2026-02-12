@@ -44,6 +44,7 @@
 #include "agent/finish_task.h"
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
+#include "base/network/network_util.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
@@ -63,7 +64,6 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
 
 using std::set;

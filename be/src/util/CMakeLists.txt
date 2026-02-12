@@ -43,7 +43,6 @@ set(UTIL_FILES
   starrocks_metrics.cpp
   metrics/file_scan_metrics.cpp
   misc.cpp
-  network_util.cpp
   parse_util.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
@@ -57,7 +56,6 @@ set(UTIL_FILES
   url_parser.cpp
   filesystem_util.cc
 # coding_util.cpp
-  cidr.cpp
   uid_util.cpp
   aes_util.cpp
   string_util.cpp

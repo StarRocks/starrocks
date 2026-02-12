@@ -30,6 +30,8 @@
 #include <limits>
 #include <random>
 
+#include "base/network/cidr.h"
+#include "base/network/network_util.h"
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/uuid/uuid_generator.h"
@@ -48,8 +50,6 @@
 #include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
-#include "util/cidr.h"
-#include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

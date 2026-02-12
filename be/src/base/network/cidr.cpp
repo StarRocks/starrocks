@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/cidr.h"
+#include "base/network/cidr.h"
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -43,7 +43,7 @@
 #include <iterator>
 #include <ostream>
 
-#include "common/logging.h"
+#include "base/logging.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
 

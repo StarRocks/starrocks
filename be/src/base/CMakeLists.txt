@@ -22,6 +22,8 @@ ADD_BE_LIB(Base
   crypto/sha.cpp
   crypto/sm3.cpp
   coding.cpp
+  network/network_util.cpp
+  network/cidr.cpp
   gc/gc_helper_smoothstep.cpp
   hash/crc32c_sse_simd.cpp
   hash/hash_util.cpp

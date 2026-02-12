@@ -25,10 +25,10 @@
 
 #include <memory>
 
+#include "base/network/network_util.h"
 #include "base/testutil/assert.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
-#include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

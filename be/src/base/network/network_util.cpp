@@ -32,10 +32,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/network_util.h"
+#include "base/network/network_util.h"
 
 #include <arpa/inet.h>
-#include <common/logging.h>
 #include <ifaddrs.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -50,6 +49,7 @@
 #include <sstream>
 #include <utility>
 
+#include "base/logging.h"
 #include "gutil/strings/substitute.h"
 
 #ifdef __APPLE__
