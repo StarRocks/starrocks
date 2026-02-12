@@ -77,7 +77,7 @@ public class ClusterSummaryActionV2 extends RestBaseAction {
         long totalCapacity = getTotalCapacity(backendMap);
 
         ClusterSummaryRestResult clusterSummaryRestResult = new ClusterSummaryRestResult.Builder()
-                .dbCount((long) infoService.getAllDbs().size())
+                .dbCount((long) infoService.getDbIds().size())
                 .tableCount(tableCount)
                 .diskUsedCapacity(dataUsedCapacity)
                 .diskAvailableCapacity(availableCapacity)
@@ -94,9 +94,9 @@ public class ClusterSummaryActionV2 extends RestBaseAction {
     }
 
     private long getTblCount(LocalMetastore infoService) {
-        return infoService.getAllDbs()
+        return infoService.getDbIds()
                 .stream()
-                .mapToLong(db -> (long) db.getTables().size())
+                .mapToLong(db -> (long) infoService.getTables(db).size())
                 .sum();
     }
 
