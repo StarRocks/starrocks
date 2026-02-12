@@ -45,6 +45,7 @@
 #include <vector>
 
 #include "base/phmap/phmap.h"
+#include "base/uid_util.h"
 #include "cache/datacache_utils.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cctz/time_zone.h"
@@ -734,12 +735,12 @@ private:
     bool _fragment_prepared = false;
 };
 
-#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
-    do {                                                                                    \
-        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
-        if (tracker != nullptr) {                                                           \
-            return Status::MemoryLimitExceeded(tracker->err_msg(msg, state));               \
-        }                                                                                   \
+#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                                    \
+    do {                                                                                                        \
+        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker();                     \
+        if (tracker != nullptr) {                                                                               \
+            return Status::MemoryLimitExceeded(tracker->err_msg(msg, print_id(state->fragment_instance_id()))); \
+        }                                                                                                       \
     } while (false)
 
 #define RETURN_IF_CANCELLED(state)                                                       \
