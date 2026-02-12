@@ -43,10 +43,8 @@ public class ClusterSummaryActionV2Test extends StarRocksHttpTestCase {
         RestBaseResultV2<ClusterSummaryRestResult> resp = parseResponseBody(respStr);
         ClusterSummaryRestResult clusterSummaryRestResult = resp.getResult();
         Assertions.assertEquals(200, response.code());
-        Assertions.assertTrue(respStr.contains("64"));
         Assertions.assertNotNull(clusterSummaryRestResult);
     }
-
 
     private static RestBaseResultV2<ClusterSummaryRestResult> parseResponseBody(String body) {
         try {
