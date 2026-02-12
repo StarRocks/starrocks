@@ -26,6 +26,11 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.ShowFrontendsStmt;
+>>>>>>> 32b0d79f8e ([UT] Fix StmtExecutorTest unstable UT (#69221))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -57,9 +62,6 @@ public class StmtExecutorTest {
                 times = 1;
                 result = true;
 
-                state.getSqlParser();
-                result = new SqlParser(AstBuilder.getInstance());
-
                 state.isLeader();
                 times = 2;
                 result = false;
@@ -68,7 +70,7 @@ public class StmtExecutorTest {
         };
 
         Assertions.assertFalse(new StmtExecutor(new ConnectContext(),
-                SqlParser.parseSingleStatement("show frontends", SqlModeHelper.MODE_DEFAULT)).isForwardToLeader());
+                new ShowFrontendsStmt()).isForwardToLeader());
     }
 
     @Test
