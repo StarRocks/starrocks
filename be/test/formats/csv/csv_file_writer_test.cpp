@@ -569,6 +569,74 @@ TEST_F(CSVFileWriterTest, TestWriteArrayWithNull) {
     ASSERT_EQ(content, expect);
 }
 
+TEST_F(CSVFileWriterTest, TestWriteHiveArray) {
+    // type_descs: ARRAY<INT>
+    std::vector<TypeDescriptor> type_descs;
+    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    type_int_array.children.push_back(type_int);
+    type_descs.push_back(type_int_array);
+
+    auto column_names = _make_type_names(type_descs);
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    writer_options->is_hive = true;
+    writer_options->collection_delim = '\002';
+    auto writer =
+            std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names, type_descs,
+                                                     std::move(column_evaluators), writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // Create ARRAY<INT> column with data: [1,2,3], [4,5], [], [6]
+        auto elements_data = Int32Column::create();
+        auto offsets = UInt32Column::create();
+        auto null_column = UInt8Column::create();
+
+        // row 0: [1,2,3]
+        elements_data->append(1);
+        elements_data->append(2);
+        elements_data->append(3);
+        offsets->append(0);
+
+        // row 1: [4,5]
+        elements_data->append(4);
+        elements_data->append(5);
+        offsets->append(3);
+
+        // row 2: [] (empty array)
+        offsets->append(5);
+
+        // row 3: [6]
+        elements_data->append(6);
+        offsets->append(5);
+        offsets->append(6);
+
+        auto array_column =
+                ArrayColumn::create(NullableColumn::create(elements_data, UInt8Column::create(6, 0)), offsets);
+        null_column->append_numbers(std::vector<uint8_t>{0, 0, 0, 0}.data(), 4);
+        auto nullable_column = NullableColumn::create(std::move(array_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
+
+    // verify correctness
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    std::string expect = "1\0022\0023\n4\0025\n\n6\n";
+    ASSERT_EQ(content, expect);
+}
+
 TEST_F(CSVFileWriterTest, TestWriteMap) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
