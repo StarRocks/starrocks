@@ -20,18 +20,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
 #include <atomic>
 
-#include "base/bthreads/util.h"
-#include "base/concurrency/await.h"
-#include "base/concurrency/countdown_latch.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
->>>>>>> 60aca0629f ([BugFix] Fix ineffective retries in cross publish for tablet merging (#69186))
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "fs/fs_util.h"
