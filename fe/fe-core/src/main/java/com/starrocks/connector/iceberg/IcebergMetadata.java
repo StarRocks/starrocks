@@ -451,11 +451,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    private void updateCommitInfo(SnapshotUpdate update, ConnectContext context) {
-        update.set(ENGINE_NAME, "StarRocks");
-        update.set(ENGINE_VERSION, GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
-        update.set(STARROCKS_USER, context.getCurrentUserIdentity() != null ?
-                context.getCurrentUserIdentity().getUser() : "None");
+    public static void updateCommitInfo(SnapshotUpdate update, ConnectContext context) {
+        updateCommitInfo(update, "StarRocks",
+                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion(),
+                context.getCurrentUserIdentity() != null ?
+                        context.getCurrentUserIdentity().getUser() : "None");
+    }
+
+    public static void updateCommitInfo(SnapshotUpdate update, String engineName, String engineVersion, String user) {
+        update.set(ENGINE_NAME, engineName);
+        update.set(ENGINE_VERSION, engineVersion);
+        update.set(STARROCKS_USER, user);
     }
 
     /**
@@ -1160,10 +1166,10 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
-                                                             Expression icebergPredicate,
-                                                             TvrVersionRange tvrVersionRange,
-                                                             ConnectContext connectContext,
-                                                             boolean enableCollectColumnStats) {
+                                                                      Expression icebergPredicate,
+                                                                      TvrVersionRange tvrVersionRange,
+                                                                      ConnectContext connectContext,
+                                                                      boolean enableCollectColumnStats) {
         if (tvrVersionRange.isEmpty()) {
             return new CloseableIterator<>() {
                 @Override
@@ -1595,7 +1601,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 // Commit state is unknown - the commit may have succeeded, failed, or still be in progress
                 // Do NOT delete the data files as they may have been committed
                 LOG.warn("Commit state unknown for {}.{}.{}, data files may have been committed. " +
-                        "Do NOT retry without verification to avoid duplicate data ingestion.",
+                                "Do NOT retry without verification to avoid duplicate data ingestion.",
                         catalogName, dbName, tableName);
             }
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
@@ -1835,9 +1841,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         default void setAuditInfo(String engineName, String engineVersion, String user) {
             SnapshotUpdate<?> update = getSnapshotUpdate();
             if (update != null) {
-                update.set(ENGINE_NAME, engineName);
-                update.set(ENGINE_VERSION, engineVersion);
-                update.set(STARROCKS_USER, user);
+                IcebergMetadata.updateCommitInfo(update, engineName, engineVersion, user);
             }
         }
     }
