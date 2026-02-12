@@ -45,6 +45,7 @@
 #include <vector>
 
 #include "base/phmap/phmap.h"
+#include "base/uid_util.h"
 #include "cache/datacache_utils.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cctz/time_zone.h"
@@ -61,7 +62,6 @@
 #include "runtime/mem_tracker.h"
 #include "util/debug_action.h"
 #include "util/logging.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
