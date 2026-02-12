@@ -37,8 +37,8 @@
 #include <atomic>
 
 #include "base/concurrency/spinlock.h"
-#include "storage/rowset/rowset_id_generator.h"
 #include "base/uid_util.h"
+#include "storage/rowset/rowset_id_generator.h"
 
 namespace starrocks {
 

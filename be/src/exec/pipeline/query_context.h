@@ -22,8 +22,8 @@
 
 #include "base/concurrency/spinlock.h"
 #include "base/hash/hash.h"
-#include "base/uid_util.h"
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
