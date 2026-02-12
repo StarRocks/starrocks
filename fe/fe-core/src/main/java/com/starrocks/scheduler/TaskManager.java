@@ -816,12 +816,8 @@ public class TaskManager implements MemoryTrackable {
         }
 
         long initialDelay = getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
-        int taskPriority = Constants.TaskRunPriority.LOWEST.value();
-        if (task.getProperties().get(TaskRun.TASK_PRIORITY) != null) {
-            taskPriority = Integer.parseInt(task.getProperties().get(TaskRun.TASK_PRIORITY));
-        }
         LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, scheduleTime:{}, priority:{}",
-                task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime, taskPriority);
+                task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime, getTaskPriority(task));
         // set task's next schedule time
         task.setNextScheduleTime(currentDateTime.plusSeconds(initialDelay).toEpochSecond(ZoneOffset.UTC));
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> {
@@ -830,14 +826,21 @@ public class TaskManager implements MemoryTrackable {
                 task.setLastScheduleTime(TimeUtils.getEpochSeconds());
                 task.setNextScheduleTime(TimeUtils.getEpochSeconds() + periodSeconds);
                 // get priority everytime, so that new priority can be applied when task priority is changed
-                int priority = Integer.parseInt(task.getProperties().get(TaskRun.TASK_PRIORITY));
-                ExecuteOption option = new ExecuteOption(priority, true, task.getProperties());
+                ExecuteOption option = new ExecuteOption(getTaskPriority(task), true, task.getProperties());
                 executeTask(task.getName(), option);
             } catch (Throwable e) {
                 LOG.warn("failed to execute periodical task: {}", task, e);
             }
         }, initialDelay, periodSeconds, TimeUnit.SECONDS);
         periodFutureMap.put(task.getId(), future);
+    }
+
+    private int getTaskPriority(Task task) {
+        int priority = Constants.TaskRunPriority.LOWEST.value();
+        if (task.getProperties() != null && task.getProperties().get(TaskRun.TASK_PRIORITY) != null) {
+            priority = Integer.parseInt(task.getProperties().get(TaskRun.TASK_PRIORITY));
+        }
+        return priority;
     }
 
     private boolean tryTaskLock() {
