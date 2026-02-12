@@ -15,6 +15,7 @@ package com.starrocks.catalog.system.information;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
@@ -33,7 +34,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -44,12 +44,14 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TUserRoles;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -138,7 +140,12 @@ public class TaskRunsSystemTable extends SystemTable {
         }
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
+        if (context.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
+            userIdentity.setCurrent_role_ids(userRoles);
+        }
         params.setCurrent_user_ident(userIdentity);
         // Evaluate result
         TGetTaskRunInfoResult info = query(params);
@@ -165,9 +172,9 @@ public class TaskRunsSystemTable extends SystemTable {
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 
-        UserIdentity currentUser = null;
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
@@ -180,9 +187,6 @@ public class TaskRunsSystemTable extends SystemTable {
             }
 
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         status.getDbName());
             } catch (AccessDeniedException e) {
