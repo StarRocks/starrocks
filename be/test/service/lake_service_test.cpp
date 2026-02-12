@@ -20,6 +20,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "base/bthreads/util.h"
 #include "base/concurrency/await.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
@@ -45,7 +46,6 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/txn_log.h"
 #include "storage/variant_tuple.h"
-#include "util/bthreads/util.h"
 
 namespace starrocks {
 

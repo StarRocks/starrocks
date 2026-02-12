@@ -15,7 +15,7 @@
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
-#include "util/bthreads/future.h"
+#include "base/bthreads/future.h"
 
 namespace starrocks::bthreads {
 

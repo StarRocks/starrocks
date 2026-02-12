@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/bthreads/semaphore.h"
+#include "base/bthreads/semaphore.h"
 
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
 #include <thread>
 
+#include "base/bthreads/util.h"
 #include "base/testutil/assert.h"
-#include "util/bthreads/util.h"
 
 namespace starrocks::bthreads {
 

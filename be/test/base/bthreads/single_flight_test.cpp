@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/bthreads/single_flight.h"
+#include "base/bthreads/single_flight.h"
 
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
+#include "base/bthreads/util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "base/utility/defer_op.h"
-#include "util/bthreads/util.h"
 
 namespace starrocks::bthreads {
 
