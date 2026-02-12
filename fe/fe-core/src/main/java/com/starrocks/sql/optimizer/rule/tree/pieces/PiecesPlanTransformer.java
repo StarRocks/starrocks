@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 class PiecesPlanTransformer {
     private final ColumnRefFactory factory;
@@ -198,14 +199,13 @@ class PiecesPlanTransformer {
             LogicalScanOperator scan = optExpression.getOp().cast();
 
             Map<Column, Integer> columnMetaToIdMap = Maps.newHashMap();
-            scan.getTable().getColumns().stream().sorted(Comparator.comparing(Column::getName)).forEach(c ->
-                    columnMetaToIdMap.put(c, context.columnRefConverter.getNextID())
-            );
+            Stream.concat(scan.getTable().getColumns().stream(), scan.getTable().getVirtualColumns().stream())
+                    .distinct()
+                    .sorted(Comparator.comparing(Column::getName))
+                    .forEach(c -> columnMetaToIdMap.put(c, context.columnRefConverter.getNextID()));
 
             scan.getColumnMetaToColRefMap().forEach((c, ref) -> {
-                if (columnMetaToIdMap.get(c) != null) {
-                    context.columnRefConverter.convertRef(ref, columnMetaToIdMap.get(c));
-                }
+                context.columnRefConverter.convertRef(ref, columnMetaToIdMap.get(c));
             });
 
             pieces.algebra = scan.getTable().getUUID() + ":" + scan.getTable().getName() +
