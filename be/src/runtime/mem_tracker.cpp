@@ -37,7 +37,6 @@
 #include <utility>
 
 #include "common/system/backend_options.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -246,12 +245,12 @@ MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, Sim
     return item;
 }
 
-std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) const {
+std::string MemTracker::err_msg(const std::string& msg, std::string_view fragment_instance_id) const {
     std::stringstream str;
     str << "Memory of " << label() << " exceed limit. " << msg << " ";
     str << "Backend: " << BackendOptions::get_localhost() << ", ";
-    if (state != nullptr) {
-        str << "fragment: " << print_id(state->fragment_instance_id()) << " ";
+    if (!fragment_instance_id.empty()) {
+        str << "fragment: " << fragment_instance_id << " ";
     }
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
     switch (type()) {

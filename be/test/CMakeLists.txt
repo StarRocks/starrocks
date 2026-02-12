@@ -298,7 +298,6 @@ set(EXEC_FILES
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/memory/counting_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
-        ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
@@ -399,6 +398,7 @@ add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
+add_subdirectory(runtime)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)

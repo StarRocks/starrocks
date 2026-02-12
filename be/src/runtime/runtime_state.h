@@ -61,6 +61,7 @@
 #include "runtime/mem_tracker.h"
 #include "util/debug_action.h"
 #include "util/logging.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -734,12 +735,12 @@ private:
     bool _fragment_prepared = false;
 };
 
-#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
-    do {                                                                                    \
-        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
-        if (tracker != nullptr) {                                                           \
-            return Status::MemoryLimitExceeded(tracker->err_msg(msg, state));               \
-        }                                                                                   \
+#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                                    \
+    do {                                                                                                        \
+        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker();                     \
+        if (tracker != nullptr) {                                                                               \
+            return Status::MemoryLimitExceeded(tracker->err_msg(msg, print_id(state->fragment_instance_id()))); \
+        }                                                                                                       \
     } while (false)
 
 #define RETURN_IF_CANCELLED(state)                                                       \
