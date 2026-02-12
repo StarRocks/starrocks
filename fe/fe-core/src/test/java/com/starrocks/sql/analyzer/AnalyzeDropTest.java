@@ -51,6 +51,26 @@ public class AnalyzeDropTest {
     }
 
     @Test
+    public void testDropFunctionIfExists() {
+        // DROP FUNCTION IF EXISTS should not throw when function does not exist
+        analyzeSuccess("drop function if exists non_existent_func(int)");
+        analyzeSuccess("drop function if exists test.non_existent_func(int)");
+
+        // DROP FUNCTION without IF EXISTS should fail when function does not exist
+        analyzeFail("drop function non_existent_func(int)");
+        analyzeFail("drop function test.non_existent_func(int)");
+    }
+
+    @Test
+    public void testDropGlobalFunctionIfExists() {
+        // DROP GLOBAL FUNCTION IF EXISTS should not throw when function does not exist
+        analyzeSuccess("drop global function if exists non_existent_global_func(int)");
+
+        // DROP GLOBAL FUNCTION without IF EXISTS should fail when function does not exist
+        analyzeFail("drop global function non_existent_global_func(int)");
+    }
+
+    @Test
     public void testDropView() {
         analyzeSuccess("drop view if exists view_to_drop");
         analyzeSuccess("drop view view_to_drop");

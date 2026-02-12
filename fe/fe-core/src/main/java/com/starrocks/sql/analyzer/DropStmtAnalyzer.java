@@ -226,14 +226,20 @@ public class DropStmtAnalyzer {
             if (functionName.isGlobalFunction()) {
                 func = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(funcDesc);
                 if (func == null) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
+                    if (!statement.dropIfExists()) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
+                    }
+                    return null;
                 }
             } else {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
                 if (db != null) {
                     func = db.getFunction(funcDesc);
                     if (func == null) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
+                        if (!statement.dropIfExists()) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
+                        }
+                        return null;
                     }
                 }
             }
