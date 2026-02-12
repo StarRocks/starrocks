@@ -55,6 +55,7 @@
 #include <cstring>
 #include <filesystem>
 
+#include "base/network/network_util.h"
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
@@ -75,7 +76,6 @@
 #include "util/logging.h"
 #include "util/memory_lock.h"
 #include "util/misc.h"
-#include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_util.h"

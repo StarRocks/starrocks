@@ -39,7 +39,7 @@
 #include <string>
 #include <vector>
 
-#include "common/status.h"
+#include "base/status.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {

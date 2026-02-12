@@ -43,6 +43,7 @@
 
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/network/network_util.h"
 #include "base/url_coding.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/fragment_executor.h"
@@ -62,7 +63,6 @@
 #include "service/backend_options.h"
 #include "types/datetime_value.h"
 #include "util/misc.h"
-#include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/threadpool.h"
