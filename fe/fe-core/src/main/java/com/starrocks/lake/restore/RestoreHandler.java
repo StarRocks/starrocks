@@ -311,9 +311,9 @@ public class RestoreHandler {
                                                 LakeTable tableForRestore)
             throws StarRocksException {
         // Copy an origin index id to name map
-        Map<Long, String> origIdxIdToName = Maps.newHashMap();
+        Map<Long, String> origIdxMetaIdToName = Maps.newHashMap();
         for (Map.Entry<String, Long> entry : tableForRestore.getIndexNameToMetaId().entrySet()) {
-            origIdxIdToName.put(entry.getValue(), entry.getKey());
+            origIdxMetaIdToName.put(entry.getValue(), entry.getKey());
         }
 
         RestoreIdMappings mappings = new RestoreIdMappings();
@@ -330,19 +330,19 @@ public class RestoreHandler {
         }
 
         // Reset all 'indexIdToXXX' map
-        Map<Long, MaterializedIndexMeta> origIndexIdToMeta = Maps.newHashMap(tableForRestore.getIndexMetaIdToMeta());
+        Map<Long, MaterializedIndexMeta> origIndexMetaIdToMeta = Maps.newHashMap(tableForRestore.getIndexMetaIdToMeta());
         tableForRestore.getIndexMetaIdToMeta().clear();
-        for (Map.Entry<Long, String> entry : origIdxIdToName.entrySet()) {
-            long newIdxId = GlobalStateMgr.getCurrentState().getNextId();
+        for (Map.Entry<Long, String> entry : origIdxMetaIdToName.entrySet()) {
+            long newIdxMetaId = GlobalStateMgr.getCurrentState().getNextId();
             if (entry.getValue().equals(tableForRestore.getName())) {
                 // Base index
-                tableForRestore.setBaseIndexMetaId(newIdxId);
+                tableForRestore.setBaseIndexMetaId(newIdxMetaId);
             }
-            MaterializedIndexMeta indexMeta = origIndexIdToMeta.get(entry.getKey());
-            indexMeta.setIndexMetaIdForRestore(newIdxId);
-            indexMeta.setSchemaId(newIdxId);
-            tableForRestore.getIndexMetaIdToMeta().put(newIdxId, indexMeta);
-            tableForRestore.getIndexNameToMetaId().put(entry.getValue(), newIdxId);
+            MaterializedIndexMeta indexMeta = origIndexMetaIdToMeta.get(entry.getKey());
+            indexMeta.setIndexMetaIdForRestore(newIdxMetaId);
+            indexMeta.setSchemaId(newIdxMetaId);
+            tableForRestore.getIndexMetaIdToMeta().put(newIdxMetaId, indexMeta);
+            tableForRestore.getIndexNameToMetaId().put(entry.getValue(), newIdxMetaId);
         }
 
         // Generate a partition old id to new id map
@@ -386,30 +386,30 @@ public class RestoreHandler {
         for (Map.Entry<Long, Partition> entry : tableForRestore.getIdToPartition().entrySet()) {
             Partition partition = entry.getValue();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                Map<Long, MaterializedIndex> origIdToIndex = Maps.newHashMapWithExpectedSize(origIdxIdToName.size());
-                for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
-                    MaterializedIndex idx = physicalPartition.getIndex(entry2.getKey());
-                    origIdToIndex.put(entry2.getKey(), idx);
+                Map<Long, MaterializedIndex> origMetaIdToIndex = Maps.newHashMapWithExpectedSize(origIdxMetaIdToName.size());
+                for (Map.Entry<Long, String> entry2 : origIdxMetaIdToName.entrySet()) {
+                    long origMetaId = entry2.getKey();
+                    MaterializedIndex idx = physicalPartition.getLatestIndex(origMetaId);
+                    origMetaIdToIndex.put(origMetaId, idx);
                     // Delete old indexes
-                    physicalPartition.deleteMaterializedIndexByMetaId(entry2.getKey());
+                    physicalPartition.deleteMaterializedIndexByMetaId(origMetaId);
                 }
-                for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
-                    MaterializedIndex idx = origIdToIndex.get(entry2.getKey());
-                    long newIdxId = tableForRestore.getIndexNameToMetaId().get(entry2.getValue());
-                    idx.setIdForRestore(newIdxId);
+                for (Map.Entry<Long, String> entry2 : origIdxMetaIdToName.entrySet()) {
+                    MaterializedIndex idx = origMetaIdToIndex.get(entry2.getKey());
+                    // Use index meta id as index id
+                    long newIdxMetaId = tableForRestore.getIndexMetaIdByName(entry2.getValue());
+                    idx.setIdForRestore(newIdxMetaId);
                     long newShardGroupId;
                     try {
                         newShardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent()
                                 .createShardGroup(targetDatabase.getId(), tableForRestore.getId(), physicalPartition.getId(),
-                                        newIdxId);
+                                        newIdxMetaId);
                     } catch (DdlException e) {
                         throw new StarRocksException("Failed to create shard group: " + e.getMessage(), e);
                     }
                     idx.setShardGroupId(newShardGroupId);
-                    if (newIdxId == tableForRestore.getBaseIndexMetaId()) {
+                    if (newIdxMetaId == tableForRestore.getBaseIndexMetaId()) {
                         physicalPartition.setShardGroupId(newShardGroupId);
-                    }
-                    if (newIdxId == tableForRestore.getBaseIndexMetaId()) {
                         // Set base index
                         physicalPartition.setBaseIndex(idx);
                     } else {
