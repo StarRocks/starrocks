@@ -45,14 +45,12 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_CONNECTION_POOL_SIZE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TIMEOUT;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
-import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
@@ -316,10 +314,8 @@ public class HiveMetaClient {
             RecyclableClient client = null;
             StarRocksConnectorException connectionException = null;
             try {
-                List<String> decodedPartitionNames = partitionNames.stream().
-                        map(name -> unescapePathName(name)).collect(Collectors.toList());
                 client = getClient();
-                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, decodedPartitionNames);
+                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
                 if (partitions.size() != partitionNames.size()) {
                     LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
                             partitionNames.size(), dbName, tblName, partitions.size());
