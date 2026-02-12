@@ -15,6 +15,7 @@
 #pragma once
 
 #include <span>
+#include <vector>
 
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
@@ -36,24 +37,33 @@ public:
 public:
     // For publish normal transaction
     PublishTabletInfo(int64_t tablet_id)
-            : publish_tablet_type(PUBLISH_NORMAL), tablet_id_in_txn_log(tablet_id), tablet_id_in_metadata(tablet_id) {}
+            : publish_tablet_type(PUBLISH_NORMAL),
+              tablet_ids_in_txn_logs({tablet_id}),
+              tablet_id_in_metadata(tablet_id) {}
 
-    // For cross publish
+    // For publish cross transaction with only one txn log, including splitting tablet and identical tablet
     PublishTabletInfo(PublishTabletType publish_tablet_type, int64_t tablet_id_in_txn_log,
                       int64_t tablet_id_in_metadata)
             : publish_tablet_type(publish_tablet_type),
-              tablet_id_in_txn_log(tablet_id_in_txn_log),
+              tablet_ids_in_txn_logs(1, tablet_id_in_txn_log),
+              tablet_id_in_metadata(tablet_id_in_metadata) {}
+
+    // For cross publish merging tablet with multiple txn logs
+    PublishTabletInfo(PublishTabletType publish_tablet_type, const std::span<const int64_t>& tablet_ids_in_txn_logs,
+                      int64_t tablet_id_in_metadata)
+            : publish_tablet_type(publish_tablet_type),
+              tablet_ids_in_txn_logs(tablet_ids_in_txn_logs.begin(), tablet_ids_in_txn_logs.end()),
               tablet_id_in_metadata(tablet_id_in_metadata) {}
 
     PublishTabletType get_publish_tablet_type() const { return publish_tablet_type; }
-    int64_t get_tablet_id_in_txn_log() const { return tablet_id_in_txn_log; }
+    const std::vector<int64_t>& get_tablet_ids_in_txn_logs() const { return tablet_ids_in_txn_logs; }
     int64_t get_tablet_id_in_metadata() const { return tablet_id_in_metadata; }
     // A txn log will be applied to multiple tablets in splitting tablet, so it cannot be deleted after applied.
     bool can_delete_txn_log() const { return publish_tablet_type != SPLITTING_TABLET; }
 
 private:
     PublishTabletType publish_tablet_type;
-    int64_t tablet_id_in_txn_log;
+    std::vector<int64_t> tablet_ids_in_txn_logs;
     int64_t tablet_id_in_metadata;
 };
 
