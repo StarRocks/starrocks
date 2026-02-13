@@ -20,13 +20,6 @@
 #include <ctime>
 #include <set>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
->>>>>>> a4b2aec119 ([Enhancement] Support shared file cleanup for range distribution vacuum and tablet deletion (#68222))
 #include "common/config.h"
 #include "fs/fs.h"
 #include "json2pb/json_to_pb.h"
@@ -40,6 +33,7 @@
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
