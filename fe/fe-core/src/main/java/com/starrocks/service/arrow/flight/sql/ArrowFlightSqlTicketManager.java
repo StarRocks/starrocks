@@ -43,8 +43,9 @@ import java.net.URI;
  */
 public class ArrowFlightSqlTicketManager {
 
-    private static final String TICKET_DELIMITER = "\\|";
+    private static final String TICKET_DELIMITER = "\\|"; // regexp
     private static final String BE_TICKET_DELIMITER = ":";
+    private static final String FE_TICKET_DELIMITER = "|";
     private static final String GRPCS_SCHEME = "grpcs://";
     private static final String GRPC_SCHEME = "grpc://";
 
@@ -224,7 +225,7 @@ public class ArrowFlightSqlTicketManager {
     public ByteString buildFELocalTicket(String token, TUniqueId queryId) {
         // Extract UUID from token (token may be "host|uuid" or just "uuid")
         String uuid = extractUuidFromToken(token);
-        return ByteString.copyFromUtf8(uuid + "|" + DebugUtil.printId(queryId));
+        return ByteString.copyFromUtf8(uuid + FE_TICKET_DELIMITER + DebugUtil.printId(queryId));
     }
 
     public ByteString buildFEProxyTicket(String token, TUniqueId queryId) {
@@ -233,7 +234,7 @@ public class ArrowFlightSqlTicketManager {
         String feHost = feEndpoint.getUri().getHost();
         int fePort = feEndpoint.getUri().getPort();
         String hostPort = NetUtils.getHostPortInAccessibleFormat(feHost, fePort);
-        return ByteString.copyFromUtf8(uuid + "|" + DebugUtil.printId(queryId) + "|" + hostPort);
+        return ByteString.copyFromUtf8(uuid + FE_TICKET_DELIMITER + DebugUtil.printId(queryId) + FE_TICKET_DELIMITER + hostPort);
     }
 
     /**
