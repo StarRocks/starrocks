@@ -28,7 +28,8 @@ Status PrimaryKeyRecover::recover() {
     // 2. generate primary key schema
     MutableColumnPtr pk_column;
     auto pkey_schema = generate_pkey_schema();
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    ASSIGN_OR_RETURN(auto encoding_type, primary_key_encoding_type());
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
@@ -88,7 +89,8 @@ Status PrimaryKeyRecover::recover() {
                                 return st;
                             } else {
                                 pk_column->reset_column();
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                          encoding_type);
                                 // upsert and generate new deletes
                                 RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
                                 row_id_start += pk_column->size();
