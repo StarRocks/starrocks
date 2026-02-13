@@ -15,14 +15,14 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
