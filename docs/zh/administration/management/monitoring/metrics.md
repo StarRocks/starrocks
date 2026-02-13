@@ -583,7 +583,7 @@ displayed_sidebar: docs
 
 - 单位：Byte
 - 类型：瞬时值
-- 描述：该内存池内存配额的瞬时值 1
+- 描述：该内存池内存配额的瞬时值
 
 ### starrocks_be_mem_pool_mem_usage_bytes
 
