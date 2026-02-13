@@ -211,20 +211,25 @@ public class DropStmtAnalyzer {
             statement.setFunctionSearchDesc(funcDesc);
 
             // check function existence
-            Function func;
+            Function func = null;
             if (functionName.isGlobalFunction()) {
                 func = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(funcDesc);
-                if (func == null) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
-                }
             } else {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
                 if (db != null) {
+<<<<<<< HEAD
                     func = db.getFunction(statement.getFunctionSearchDesc());
                     if (func == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
                     }
+=======
+                    func = db.getFunction(funcDesc);
+>>>>>>> 7bbd1272ba ([BugFix] Fix DROP FUNCTION IF EXISTS ignoring ifExists flag (#69216))
                 }
+            }
+
+            if (func == null && !statement.dropIfExists()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
             }
 
             return null;
