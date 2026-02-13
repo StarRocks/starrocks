@@ -369,7 +369,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForBoolean) {
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForTinyint) {
     auto sc = create_key_schema({TYPE_TINYINT});
     std::vector<int8_t> sorted_values = {std::numeric_limits<int8_t>::min(), -1, 0, 1,
-                                          std::numeric_limits<int8_t>::max()};
+                                         std::numeric_limits<int8_t>::max()};
     auto pchunk = ChunkHelper::new_chunk(*sc, sorted_values.size());
     for (int8_t v : sorted_values) {
         Datum d;
@@ -383,7 +383,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForTinyint) {
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForSmallint) {
     auto sc = create_key_schema({TYPE_SMALLINT});
     std::vector<int16_t> sorted_values = {std::numeric_limits<int16_t>::min(), -1, 0, 1,
-                                           std::numeric_limits<int16_t>::max()};
+                                          std::numeric_limits<int16_t>::max()};
     auto pchunk = ChunkHelper::new_chunk(*sc, sorted_values.size());
     for (int16_t v : sorted_values) {
         Datum d;
@@ -396,11 +396,9 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForSmallint) {
 
 TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForLargeint) {
     auto sc = create_key_schema({TYPE_LARGEINT});
-    std::vector<int128_t> sorted_values = {std::numeric_limits<int128_t>::min(),
-                                            static_cast<int128_t>(-1),
-                                            static_cast<int128_t>(0),
-                                            static_cast<int128_t>(1),
-                                            std::numeric_limits<int128_t>::max()};
+    std::vector<int128_t> sorted_values = {std::numeric_limits<int128_t>::min(), static_cast<int128_t>(-1),
+                                           static_cast<int128_t>(0), static_cast<int128_t>(1),
+                                           std::numeric_limits<int128_t>::max()};
     auto pchunk = ChunkHelper::new_chunk(*sc, sorted_values.size());
     for (int128_t v : sorted_values) {
         Datum d;
@@ -494,8 +492,7 @@ TEST(PrimaryKeyEncoderTest, testV2EncodingPreservesSortOrderForCompositeIntInt) 
     auto sc = create_key_schema({TYPE_INT, TYPE_BIGINT});
     // Pairs in ascending order: (int, bigint)
     auto pchunk = ChunkHelper::new_chunk(*sc, 5);
-    std::vector<std::pair<int32_t, int64_t>> sorted_pairs = {
-            {-100, -1000}, {-100, 0}, {0, -1}, {0, 0}, {100, 999}};
+    std::vector<std::pair<int32_t, int64_t>> sorted_pairs = {{-100, -1000}, {-100, 0}, {0, -1}, {0, 0}, {100, 999}};
     for (const auto& [v1, v2] : sorted_pairs) {
         Datum d1, d2;
         d1.set_int32(v1);
@@ -602,9 +599,9 @@ TEST(PrimaryKeyEncoderTest, testV2EncodeExceedLimitForComposite) {
 
     // 4 (int) + 100 (varchar) + 1 (escape for \0) + 2 (separator) + 2 (smallint) = 109
     EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
-                                                         PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
-    EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 10,
                                                         PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+    EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 10,
+                                                       PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
 }
 
 } // namespace starrocks

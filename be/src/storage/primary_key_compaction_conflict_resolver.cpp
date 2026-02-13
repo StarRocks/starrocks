@@ -99,9 +99,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                                 }
                                 // 6. replace pk index
                                 TRACE_COUNTER_SCOPE_LATENCY_US("compaction_replace_index_latency_us");
-                                TRY_CATCH_BAD_ALLOC(
-                                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
-                                                                  encoding_type));
+                                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                                              col.get(), encoding_type));
                                 RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id, current_rowid,
                                                                       replace_indexes, *col));
                                 current_rowid += chunk->num_rows();
