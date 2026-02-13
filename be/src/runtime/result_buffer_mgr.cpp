@@ -39,6 +39,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/misc.h"
 #include "util/thread.h"
 

@@ -50,6 +50,7 @@
 #include "http/http_client.h"
 #include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

@@ -34,6 +34,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

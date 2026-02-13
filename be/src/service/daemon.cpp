@@ -181,7 +181,7 @@ void calculate_metrics(void* arg_this) {
 
     auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
-        StarRocksMetrics::instance()->metrics()->trigger_hook();
+        GlobalMetricsRegistry::instance()->metrics()->trigger_hook();
 
         if (last_ts == -1L) {
             last_ts = MonotonicSeconds();
@@ -326,7 +326,7 @@ std::string dump_memory_tracker() {
 }
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
-    StarRocksMetrics::instance()->metrics()->set_collect_hook_enabled(!config::enable_metric_calculator);
+    GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(!config::enable_metric_calculator);
     bool init_system_metrics = config::enable_system_metrics;
     bool init_jvm_metrics = config::enable_jvm_metrics;
     std::set<std::string> disk_devices;

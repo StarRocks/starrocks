@@ -303,10 +303,6 @@ void GlobalMetricsRegistry::initialize(const std::vector<std::string>& paths, bo
 #endif
 }
 
-MetricRegistry* StarRocksMetrics::metrics() {
-    return GlobalMetricsRegistry::instance()->metrics();
-}
-
 void GlobalMetricsRegistry::_update() {
     _update_process_thread_num();
     _update_process_fd_num();

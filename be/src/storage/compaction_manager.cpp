@@ -20,6 +20,7 @@
 #include "compaction_manager.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
+#include "util/global_metrics_registry.h"
 #include "util/thread.h"
 
 using namespace std::chrono_literals;

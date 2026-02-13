@@ -22,6 +22,7 @@
 #include "base/failpoint/fail_point.h"
 #include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

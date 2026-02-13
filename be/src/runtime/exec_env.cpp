@@ -350,7 +350,7 @@ ExecEnv::~ExecEnv() = default;
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
-    _metrics = StarRocksMetrics::instance()->metrics();
+    _metrics = GlobalMetricsRegistry::instance()->metrics();
     _stream_mgr = new DataStreamMgr();
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     _result_mgr = new ResultBufferMgr();
@@ -567,9 +567,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     };
     REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
 
-    _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
-    _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
-    _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
+    _backend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "backend");
+    _frontend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "frontend");
+    _broker_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "broker");
     RETURN_IF_ERROR(_result_mgr->init());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.

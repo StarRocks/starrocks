@@ -17,6 +17,7 @@
 #include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

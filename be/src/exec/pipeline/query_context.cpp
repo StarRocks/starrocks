@@ -32,6 +32,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "util/global_metrics_registry.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -336,7 +337,7 @@ QueryContextManager::QueryContextManager(size_t log2_num_slots)
 
 Status QueryContextManager::init() {
     // regist query context metrics
-    auto metrics = StarRocksMetrics::instance()->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
     _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
     metrics->register_metric(_metric_name, _query_ctx_cnt.get());
     metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
@@ -383,7 +384,7 @@ size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
 
 QueryContextManager::~QueryContextManager() {
     // unregist metrics
-    auto metrics = StarRocksMetrics::instance()->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->deregister_hook(_metric_name);
     _query_ctx_cnt.reset();
 

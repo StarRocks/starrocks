@@ -40,9 +40,9 @@ private:
     std::unordered_map<std::string, std::unique_ptr<IntGauge>> metrics;
 };
 
-#define REGISTER_GAUGE_STARROCKS_METRIC(name, func)                                                       \
-    StarRocksMetrics::instance()->metrics()->register_metric(#name, &StarRocksMetrics::instance()->name); \
-    StarRocksMetrics::instance()->metrics()->register_hook(                                               \
+#define REGISTER_GAUGE_STARROCKS_METRIC(name, func)                                                            \
+    GlobalMetricsRegistry::instance()->metrics()->register_metric(#name, &StarRocksMetrics::instance()->name); \
+    GlobalMetricsRegistry::instance()->metrics()->register_hook(                                               \
             #name, [&]() { StarRocksMetrics::instance()->name.set_value(func()); });
 
 #define REGISTER_THREAD_POOL_METRICS(name, threadpool)                                                            \
@@ -392,8 +392,6 @@ public:
         static StarRocksMetrics instance;
         return &instance;
     }
-
-    MetricRegistry* metrics();
 
 private:
     StarRocksMetrics();

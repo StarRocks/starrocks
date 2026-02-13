@@ -64,6 +64,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/starrocks_metrics.h"
 #include "types/datetime_value.h"
+#include "util/global_metrics_registry.h"
 #include "util/misc.h"
 #include "util/thread.h"
 #include "util/threadpool.h"

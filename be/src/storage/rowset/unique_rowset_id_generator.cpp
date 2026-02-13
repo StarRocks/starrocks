@@ -37,6 +37,7 @@
 #include "base/concurrency/spinlock.h"
 #include "base/uid_util.h"
 #include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

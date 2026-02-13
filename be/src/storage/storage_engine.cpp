@@ -80,6 +80,7 @@
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
 #include "util/bthreads/executor.h"
+#include "util/global_metrics_registry.h"
 #include "util/lru_cache.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"

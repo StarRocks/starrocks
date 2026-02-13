@@ -38,6 +38,7 @@
 #include "common/status.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

@@ -44,6 +44,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/thread.h"
 
 namespace starrocks {
