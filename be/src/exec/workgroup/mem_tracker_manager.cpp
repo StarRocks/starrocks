@@ -142,11 +142,11 @@ void MemTrackerManager::_add_metrics_unlocked(const std::string& mem_pool, Uniqu
 }
 
 void MemTrackerManager::_update_metrics() {
-    std::unique_lock write_lock(_mutex);
-    _update_metrics_unlocked(write_lock);
+    std::shared_lock read_lock(_mutex);
+    _update_metrics_unlocked(read_lock);
 }
 
-void MemTrackerManager::_update_metrics_unlocked(UniqueLockType&) {
+void MemTrackerManager::_update_metrics_unlocked(SharedLockType&) {
     const auto divide = [](const int64_t a, const int64_t b) { return b <= 0 ? 0.0 : static_cast<double>(a) / b; };
 
     for (auto& [mem_pool, metrics] : _shared_mem_trackers_metrics) {

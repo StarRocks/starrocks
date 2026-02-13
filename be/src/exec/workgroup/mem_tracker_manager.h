@@ -61,6 +61,7 @@ public:
 private:
     using MutexType = std::shared_mutex;
     using UniqueLockType = std::unique_lock<MutexType>;
+    using SharedLockType = std::shared_lock<MutexType>;
 
     void _add_metrics_unlocked(const std::string& mem_pool, UniqueLockType& lock);
     void _update_metrics();
