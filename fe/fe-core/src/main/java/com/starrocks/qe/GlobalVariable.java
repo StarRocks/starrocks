@@ -96,6 +96,8 @@ public final class GlobalVariable {
 
     public static final String ENABLE_TABLE_NAME_CASE_INSENSITIVE = "enable_table_name_case_insensitive";
 
+    public static final String RUN_MODE = "run_mode";
+
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
@@ -160,6 +162,9 @@ public final class GlobalVariable {
      */
     @VariableMgr.VarAttr(name = ENABLE_TABLE_NAME_CASE_INSENSITIVE, flag = VariableMgr.READ_ONLY)
     public static boolean enableTableNameCaseInsensitive = false;
+
+    @VariableMgr.VarAttr(name = RUN_MODE, flag = VariableMgr.READ_ONLY)
+    public static String runMode = Config.run_mode;
 
     /**
      * Query will be pending when BE is overloaded, if `enableQueryQueueXxx` is true.
