@@ -177,11 +177,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
         long preExtraFileSize = 0;
-        // if enable file bundling, there will be only one node (Aggregator).
+        // If shared file cleanup is enabled, vacuum runs on a single aggregator node.
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         boolean fileBundling = table.isFileBundling();
+        boolean rangeDistribution = table.isRangeDistribution();
         try {
             for (MaterializedIndex index : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
@@ -205,14 +206,15 @@ public class AutovacuumDaemon extends FrontendDaemon {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
+        boolean enableSharedFileCleanup = fileBundling || rangeDistribution;
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
         ComputeNode pickNode = null;
         for (Tablet tablet : tablets) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
 
-            if (fileBundling) {
-                // if enable file bundling, there will be only one node.
+            if (enableSharedFileCleanup) {
+                // shared cleanup runs on a single node.
                 if (pickNode == null) {
                     pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
                 }
@@ -258,6 +260,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             vacuumRequest.enableFileBundling = fileBundling;
+            vacuumRequest.enableSharedFileCleanup = enableSharedFileCleanup;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
