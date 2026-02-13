@@ -102,9 +102,31 @@ Rowset::~Rowset() {
     }
 }
 
+StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
+    const TabletRangePB* range_pb = nullptr;
+    if (_metadata->has_range()) {
+        range_pb = &_metadata->range();
+    } else if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
+        range_pb = &_tablet_metadata->range();
+    }
+
+    if (range_pb == nullptr) {
+        return std::optional<SeekRange>{};
+    }
+
+    // Do not use mem_pool here. SeekRange will reference the data owned by protobuf metadata,
+    // and metadata lifetime is guaranteed to outlive rowset iterators.
+    ASSIGN_OR_RETURN(auto range, TabletRangeHelper::create_seek_range_from(*range_pb, _tablet_schema, nullptr));
+    return std::optional<SeekRange>(std::move(range));
+}
+
 Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer,
                                                     uint64_t& uncompacted_num_rows, uint64_t& uncompacted_data_size) {
     DCHECK(partial_segments_compaction());
+
+    if (metadata().has_range()) {
+        op_compaction->mutable_output_rowset()->mutable_range()->CopyFrom(metadata().range());
+    }
 
     std::vector<SegmentPtr> segments;
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
@@ -282,13 +304,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 
     std::vector<ChunkIteratorPtr> segment_iterators;
 
-    SeekRange tablet_range;
-    if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
-        // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
-        // and the data in tablet_metadata->range() has the same lifetime as the rowset
-        ASSIGN_OR_RETURN(tablet_range,
-                         TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
-    }
+    ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
     // Check if segment metadata filter can be used.
     // Apply metadata filter BEFORE loading segments to avoid loading unnecessary segment footers.
@@ -333,8 +349,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         }
 
         seg_options.tablet_range = std::nullopt;
-        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
-            seg_options.tablet_range = tablet_range;
+        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
+            shared_segment_range.has_value()) {
+            seg_options.tablet_range = *shared_segment_range;
         }
 
         if (options.rowid_range_option != nullptr) { // physical split.
@@ -404,19 +421,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
 
-    SeekRange tablet_range;
-    if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
-        // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
-        // and the data in tablet_metadata->range() has the same lifetime as the rowset
-        ASSIGN_OR_RETURN(tablet_range,
-                         TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
-    }
+    ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];
         seg_options.tablet_range = std::nullopt;
-        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
-            seg_options.tablet_range = tablet_range;
+        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
+            shared_segment_range.has_value()) {
+            seg_options.tablet_range = *shared_segment_range;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
@@ -452,19 +464,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
 
-    SeekRange tablet_range;
-    if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
-        // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
-        // and the data in tablet_metadata->range() has the same lifetime as the rowset
-        ASSIGN_OR_RETURN(tablet_range,
-                         TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
-    }
+    ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];
         seg_options.tablet_range = std::nullopt;
-        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
-            seg_options.tablet_range = tablet_range;
+        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
+            shared_segment_range.has_value()) {
+            seg_options.tablet_range = *shared_segment_range;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {

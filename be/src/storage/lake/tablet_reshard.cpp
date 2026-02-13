@@ -81,6 +81,9 @@ static void set_all_data_files_shared(TxnLogPB* txn_log) {
             auto* sstable = op_compaction->mutable_output_sstable();
             sstable->set_shared(true);
         }
+        for (auto& sstable : *op_compaction->mutable_output_sstables()) {
+            sstable.set_shared(true);
+        }
     }
 
     if (txn_log->has_op_schema_change()) {
@@ -100,6 +103,21 @@ static void set_all_data_files_shared(TxnLogPB* txn_log) {
             if (op_write.has_rowset()) {
                 set_all_data_files_shared(op_write.mutable_rowset());
             }
+        }
+    }
+
+    if (txn_log->has_op_parallel_compaction()) {
+        auto* op_parallel_compaction = txn_log->mutable_op_parallel_compaction();
+        for (auto& subtask_op : *op_parallel_compaction->mutable_subtask_compactions()) {
+            if (subtask_op.has_output_rowset()) {
+                set_all_data_files_shared(subtask_op.mutable_output_rowset());
+            }
+        }
+        if (op_parallel_compaction->has_output_sstable()) {
+            op_parallel_compaction->mutable_output_sstable()->set_shared(true);
+        }
+        for (auto& sstable : *op_parallel_compaction->mutable_output_sstables()) {
+            sstable.set_shared(true);
         }
     }
 }
@@ -145,11 +163,64 @@ static int64_t compute_rssid_offset(const TabletMetadataPB& base_metadata, const
     return static_cast<int64_t>(base_metadata.next_rowset_id()) - min_id;
 }
 
+static StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
+    TabletRange lhs;
+    RETURN_IF_ERROR(lhs.from_proto(lhs_pb));
+    TabletRange rhs;
+    RETURN_IF_ERROR(rhs.from_proto(rhs_pb));
+    ASSIGN_OR_RETURN(auto intersected, lhs.intersect(rhs));
+    TabletRangePB result;
+    intersected.to_proto(&result);
+    return result;
+}
+
+static Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range) {
+    DCHECK(rowset != nullptr);
+    if (!rowset->has_range()) {
+        rowset->mutable_range()->CopyFrom(range);
+        return Status::OK();
+    }
+
+    ASSIGN_OR_RETURN(auto intersected, intersect_range(rowset->range(), range));
+    rowset->mutable_range()->CopyFrom(intersected);
+    return Status::OK();
+}
+
+static Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range) {
+    if (txn_log->has_op_write() && txn_log->mutable_op_write()->has_rowset()) {
+        RETURN_IF_ERROR(update_rowset_range(txn_log->mutable_op_write()->mutable_rowset(), range));
+    }
+    if (txn_log->has_op_compaction() && txn_log->mutable_op_compaction()->has_output_rowset()) {
+        RETURN_IF_ERROR(update_rowset_range(txn_log->mutable_op_compaction()->mutable_output_rowset(), range));
+    }
+    if (txn_log->has_op_schema_change()) {
+        for (auto& rowset : *txn_log->mutable_op_schema_change()->mutable_rowsets()) {
+            RETURN_IF_ERROR(update_rowset_range(&rowset, range));
+        }
+    }
+    if (txn_log->has_op_replication()) {
+        for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
+            if (op_write.has_rowset()) {
+                RETURN_IF_ERROR(update_rowset_range(op_write.mutable_rowset(), range));
+            }
+        }
+    }
+    if (txn_log->has_op_parallel_compaction()) {
+        for (auto& subtask : *txn_log->mutable_op_parallel_compaction()->mutable_subtask_compactions()) {
+            if (subtask.has_output_rowset()) {
+                RETURN_IF_ERROR(update_rowset_range(subtask.mutable_output_rowset(), range));
+            }
+        }
+    }
+    return Status::OK();
+}
+
 static Status merge_rowsets(const TabletMetadataPB& old_metadata, int64_t rssid_offset,
                             TabletMetadataPB* new_metadata) {
     for (const auto& rowset : old_metadata.rowsets()) {
         auto* new_rowset = new_metadata->add_rowsets();
         new_rowset->CopyFrom(rowset);
+        RETURN_IF_ERROR(update_rowset_range(new_rowset, old_metadata.range()));
         new_rowset->set_id(static_cast<uint32_t>(static_cast<int64_t>(rowset.id()) + rssid_offset));
         if (rowset.has_max_compact_input_rowset_id()) {
             new_rowset->set_max_compact_input_rowset_id(
@@ -605,6 +676,7 @@ CONTINUE_HANDLE_SPLITTING_TABLET:
     }
 
     const auto& old_tablet_old_metadata = old_tablet_old_metadata_or.value();
+    const auto& old_tablet_range = old_tablet_old_metadata->range();
 
     // Old tablet
     {
@@ -654,8 +726,11 @@ CONTINUE_HANDLE_SPLITTING_TABLET:
         new_tablet_new_metadata->mutable_range()->CopyFrom(new_tablet_range.range);
         set_all_data_files_shared(new_tablet_new_metadata.get());
 
+        ASSIGN_OR_RETURN(auto effective_range, intersect_range(old_tablet_range, new_tablet_range.range));
+
         // Update num rows and data size for rowsets
         for (auto& rowset_metadata : *new_tablet_new_metadata->mutable_rowsets()) {
+            RETURN_IF_ERROR(update_rowset_range(&rowset_metadata, effective_range));
             const auto it = new_tablet_range.rowset_stats.find(rowset_metadata.id());
             if (it != new_tablet_range.rowset_stats.end()) {
                 rowset_metadata.set_num_rows(it->second.num_rows);
@@ -934,8 +1009,8 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     return Status::OK();
 }
 
-TxnLogPtr convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
-                          const PublishTabletInfo& publish_tablet_info) {
+StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
+                                    const PublishTabletInfo& publish_tablet_info) {
     if (publish_tablet_info.get_publish_tablet_type() == PublishTabletInfo::PUBLISH_NORMAL) {
         return txn_log;
     }
@@ -947,6 +1022,7 @@ TxnLogPtr convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& bas
     // For tablet splitting, set all data files shared in new txn log
     if (publish_tablet_info.get_publish_tablet_type() == PublishTabletInfo::SPLITTING_TABLET) {
         set_all_data_files_shared(new_txn_log.get());
+        RETURN_IF_ERROR(update_rowset_ranges(new_txn_log.get(), base_tablet_metadata->range()));
     }
 
     return new_txn_log;

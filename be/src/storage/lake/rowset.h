@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <unordered_set>
 
 #include "common/statusor.h"
@@ -23,6 +24,7 @@
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/seek_range.h"
 
 namespace starrocks::lake {
 
@@ -136,6 +138,8 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
+    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
     const RowsetMetadataPB* _metadata;
