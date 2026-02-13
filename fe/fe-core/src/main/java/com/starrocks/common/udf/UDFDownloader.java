@@ -42,7 +42,7 @@ public class UDFDownloader {
         synchronized (getLockForPath(localPath)) {
             setUpLocalPath(localPath);
             Status status = doDownload(sv, remotePath, localPath);
-            if (status != Status.OK) {
+            if (status.ok()) {
                 LOG.error(status.getErrorMsg());
                 throw new RuntimeException(status.getErrorMsg());
             }
@@ -55,8 +55,8 @@ public class UDFDownloader {
             Files.createDirectories(parentDir);
         }
         File localFile = new File(localPath);
-        if (localFile.exists()) {
-            String errMsg = String.format("the %s already exists", localFile);
+        if (localFile.exists() && !localFile.delete()) {
+            String errMsg = String.format("Failed to delete existing file %s", localFile);
             throw new RuntimeException(errMsg);
         }
     }

@@ -14,16 +14,18 @@
 
 package com.starrocks.common.udf;
 
-import com.starrocks.common.DdlException;
 import com.starrocks.storagevolume.StorageVolume;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.starrocks.common.Config.STARROCKS_HOME_DIR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
@@ -32,7 +34,7 @@ public class UDFDownloaderTest {
 
 
     @Test
-    void testDownload2Local() throws DdlException {
+    void testDownload2Local(@TempDir Path tempDir) throws Exception {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -41,9 +43,16 @@ public class UDFDownloaderTest {
         StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                 storageParams, true, "");
 
-        String localPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", "test.jar");
+        String remotePath = "s3://test-bucket/starrocks/udf/test.jar";
+        String localPath = tempDir.resolve("test.jar").toString();
+        StorageHandler storageHandler = Mockito.mock(StorageHandler.class);
 
-        Assertions.assertThrows(RuntimeException.class, () ->
-                UDFDownloader.download2Local(sv, "s3://test-bucket/starrocks/udf/test.jar", localPath));
+        try (MockedStatic<StorageHandlerFactory> storageHandlerFactoryMockedStatic =
+                     Mockito.mockStatic(StorageHandlerFactory.class)) {
+            storageHandlerFactoryMockedStatic.when(() -> StorageHandlerFactory.create(sv)).thenReturn(storageHandler);
+            Assertions.assertThrows(RuntimeException.class, () ->
+                    UDFDownloader.download2Local(sv, remotePath, localPath));
+            Mockito.verify(storageHandler).getObject(remotePath, localPath);
+        }
     }
 }
