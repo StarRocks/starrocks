@@ -451,7 +451,7 @@ static inline StatusOr<JITCallablePtr> optimize_and_finalize_module(const std::s
                                        " error: " + llvm::toString(sym.takeError()));
     }
     JITScalarFunction fn_ptr = sym->toPtr<JITScalarFunction>();
-    return std::make_shared<JITCallable>(std::move(mem_mgr), std::move(fn_ptr));
+    return std::make_shared<JITCallable>(MemMgrPtr(std::move(mem_mgr)), std::move(fn_ptr));
 }
 
 #ifndef BE_TEST

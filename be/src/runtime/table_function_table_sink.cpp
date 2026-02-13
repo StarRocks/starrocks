@@ -59,7 +59,7 @@ Status TableFunctionTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status TableFunctionTableSink::close(RuntimeState* state, Status exec_status) {
+Status TableFunctionTableSink::close(RuntimeState* state, const Status& exec_status) {
     ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
@@ -81,6 +81,7 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     DCHECK(target_table.columns.size() == output_exprs.size());
 
     std::vector<std::string> column_names;
+    column_names.reserve(target_table.columns.size());
     for (const auto& column : target_table.columns) {
         column_names.push_back(column.column_name);
     }
@@ -132,10 +133,11 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
                 pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
 
     } else {
         std::vector<TExpr> partition_exprs;
+        partition_exprs.reserve(target_table.partition_column_ids.size());
         for (auto id : target_table.partition_column_ids) {
             partition_exprs.push_back(output_exprs[id]);
         }
@@ -146,7 +148,7 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     }
 
     return Status::OK();

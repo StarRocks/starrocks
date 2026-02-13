@@ -76,6 +76,7 @@ Status AggGroupState::_prepare_mem_state_tables(RuntimeState* state,
     // intermediate agg_state is created when intermediate/detail agg states are not empty.
     if (!intermediate_agg_states.empty()) {
         std::vector<SlotDescriptor*> intermediate_slots;
+        intermediate_slots.reserve(key_size + intermediate_agg_states.size());
         for (int32_t i = 0; i < key_size; i++) {
             intermediate_slots.push_back(_intermediate_tuple_desc->slots()[i]);
         }
@@ -95,6 +96,7 @@ Status AggGroupState::_prepare_mem_state_tables(RuntimeState* state,
             // detail state table schema:
             // group_by_keys + agg_key -> count
             std::vector<SlotDescriptor*> detail_table_slots;
+            detail_table_slots.reserve(key_size + 2);
             for (auto i = 0; i < key_size; i++) {
                 detail_table_slots.push_back(input_slots[i]);
             }

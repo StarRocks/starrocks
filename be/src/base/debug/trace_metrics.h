@@ -57,6 +57,9 @@ public:
     TraceMetrics() = default;
     ~TraceMetrics() = default;
 
+    TraceMetrics(const TraceMetrics&) = delete;
+    const TraceMetrics& operator=(const TraceMetrics&) = delete;
+
     // Internalize the given string by duplicating it into a process-wide
     // pool. If this string has already been interned, returns a pointer
     // to a previous instance. Otherwise, copies it into the pool.
@@ -84,9 +87,6 @@ public:
 private:
     mutable SpinLock lock_;
     std::map<const char*, int64_t> counters_;
-
-    TraceMetrics(const TraceMetrics&) = delete;
-    const TraceMetrics& operator=(const TraceMetrics&) = delete;
 };
 
 inline void TraceMetrics::Increment(const char* name, int64_t amount) {

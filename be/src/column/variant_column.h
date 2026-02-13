@@ -50,7 +50,7 @@ public:
     void append(const Column& src, size_t offset, size_t count) override;
 
     // Add a forwarding function to expose the base class append function
-    void append(const Column& src) { append(src, 0, src.size()); }
+    void append(const Column& src) override { append(src, 0, src.size()); }
     void append(const VariantRowValue* object);
     void append(VariantRowValue&& object);
     void append(const VariantRowValue& object);

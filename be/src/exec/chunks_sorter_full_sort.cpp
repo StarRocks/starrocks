@@ -61,7 +61,7 @@ Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) 
 // Accumulate unsorted input chunks into a larger chunk
 Status ChunksSorterFullSort::_merge_unsorted(RuntimeState* state, const ChunkPtr& chunk) {
     SCOPED_TIMER(_build_timer);
-    _staging_unsorted_chunks.push_back(std::move(chunk));
+    _staging_unsorted_chunks.push_back(chunk);
     _staging_unsorted_rows += chunk->num_rows();
     _staging_unsorted_bytes += chunk->bytes_usage();
     return Status::OK();

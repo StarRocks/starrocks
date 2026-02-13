@@ -334,7 +334,7 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         msg << "create BufferOutputStream failure, reason: " << sink_res.status().ToString();
         return Status::InternalError(msg.str());
     }
-    std::shared_ptr<arrow::io::BufferOutputStream> sink = sink_res.ValueOrDie();
+    const auto& sink = sink_res.ValueOrDie();
     // create RecordBatch Writer
     auto writer_res = arrow::ipc::MakeStreamWriter(sink.get(), record_batch.schema());
     if (!writer_res.ok()) {
@@ -342,7 +342,7 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         msg << "open RecordBatchStreamWriter failure, reason: " << writer_res.status().ToString();
         return Status::InternalError(msg.str());
     }
-    std::shared_ptr<arrow::ipc::RecordBatchWriter> record_batch_writer = writer_res.ValueOrDie();
+    const auto& record_batch_writer = writer_res.ValueOrDie();
     // write RecordBatch to memory buffer outputstream
     a_st = record_batch_writer->WriteRecordBatch(record_batch);
     if (!a_st.ok()) {
@@ -357,7 +357,7 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         msg << "allocate result buffer failure, reason: " << finish_res.status().ToString();
         return Status::InternalError(msg.str());
     }
-    std::shared_ptr<arrow::Buffer> buffer = finish_res.ValueOrDie();
+    const auto& buffer = finish_res.ValueOrDie();
     *result = buffer->ToString();
     // close the sink
     [[maybe_unused]] auto sk_close_st = sink->Close();
@@ -370,7 +370,7 @@ Status serialize_arrow_schema(std::shared_ptr<arrow::Schema>* schema, std::strin
         return Status::InternalError("serialize_arrow_schema failed");
     }
 
-    const auto record_batch = empty_arrow_record_batch.ValueOrDie();
+    const auto& record_batch = empty_arrow_record_batch.ValueOrDie();
     return serialize_record_batch(*record_batch, result);
 }
 } // namespace starrocks

@@ -101,7 +101,7 @@ Status ExportSink::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExportSink::close(RuntimeState* state, Status exec_status) {
+Status ExportSink::close(RuntimeState* state, const Status& exec_status) {
     if (_closed) {
         return Status::OK();
     }

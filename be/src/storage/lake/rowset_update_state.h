@@ -54,12 +54,12 @@ struct AutoIncrementPartialUpdateState {
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id = 0;
+    uint32_t segment_id = 0;
     std::vector<uint32_t> rowids;
-    bool skip_rewrite;
+    bool skip_rewrite = false;
 
-    AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    AutoIncrementPartialUpdateState() : schema(nullptr) {}
 
     void init(std::shared_ptr<TabletSchema> modified_schema, uint32_t id, uint32_t segment_id) {
         this->schema = std::move(modified_schema);

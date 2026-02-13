@@ -230,7 +230,7 @@ ColumnPtr FunctionHelper::merge_column_and_null_column(ColumnPtr&& column, NullC
         auto new_null_column = union_null_column(nullable_column->null_column(), null_column);
         return NullableColumn::create(nullable_column->data_column()->clone(), std::move(new_null_column));
     } else {
-        return NullableColumn::create(std::move(column), std::move(null_column));
+        return NullableColumn::create(column, null_column);
     }
 }
 

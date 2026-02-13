@@ -42,6 +42,9 @@ public:
     static bool is_bind_ipv6();
     static bool is_cn();
 
+    BackendOptions(const BackendOptions&) = delete;
+    BackendOptions& operator=(const BackendOptions&) = delete;
+
 private:
     static bool analyze_priority_cidrs();
     static bool is_in_prior_network(const std::string& ip);
@@ -53,9 +56,6 @@ private:
     static TBackend _backend;
     static bool _bind_ipv6;
     static bool _is_cn;
-
-    BackendOptions(const BackendOptions&) = delete;
-    const BackendOptions& operator=(const BackendOptions&) = delete;
 };
 
 } // namespace starrocks

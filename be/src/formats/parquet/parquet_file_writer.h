@@ -29,10 +29,10 @@
 #include <parquet/platform.h>
 #include <parquet/schema.h>
 #include <parquet/types.h>
-#include <stddef.h>
-#include <stdint.h>
 
 #include <condition_variable>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <future>
 #include <map>

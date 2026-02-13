@@ -364,8 +364,7 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
         std::shared_ptr<TabletIndex> index_meta;
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
         if (index_meta.get() != nullptr) {
-            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, std::move(opts),
-                                                                           index_opt);
+            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, opts, index_opt);
         }
     }
     return Status::OK();

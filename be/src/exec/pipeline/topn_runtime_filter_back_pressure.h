@@ -29,7 +29,11 @@ class TopnRfBackPressure {
     class ScaleGenerator {
     public:
         ScaleGenerator(T initial_value, T delta, double factor, std::function<bool(T)> next_cb)
-                : initial_value(initial_value), delta(delta), factor(factor), next_cb(next_cb), value(initial_value) {}
+                : initial_value(initial_value),
+                  delta(delta),
+                  factor(factor),
+                  next_cb(std::move(next_cb)),
+                  value(initial_value) {}
 
         T limit() { return value; }
         void next() {

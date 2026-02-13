@@ -54,6 +54,9 @@ public:
     Status get_connection(const std::string& namenode, std::shared_ptr<HdfsFsClient>& hdfs_client,
                           const FSOptions& options);
 
+    HdfsFsCache(const HdfsFsCache&) = delete;
+    const HdfsFsCache& operator=(const HdfsFsCache&) = delete;
+
 private:
     std::mutex _lock;
     std::unordered_map<std::string, std::shared_ptr<HdfsFsClient>> _cache_clients;
@@ -61,8 +64,6 @@ private:
     Random _rand{(uint32_t)time(nullptr)};
 
     HdfsFsCache() = default;
-    HdfsFsCache(const HdfsFsCache&) = delete;
-    const HdfsFsCache& operator=(const HdfsFsCache&) = delete;
 };
 
 } // namespace starrocks

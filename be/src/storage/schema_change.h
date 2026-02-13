@@ -72,7 +72,7 @@ public:
     virtual Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                            TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
                            TabletSchemaCSPtr base_tablet_schema = nullptr) = 0;
-    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+    void set_alter_msg_header(const std::string& msg) { _alter_msg_header = msg; }
     std::string alter_msg_header() { return _alter_msg_header; }
 
     std::string _alter_msg_header;
@@ -139,7 +139,7 @@ public:
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
 
-    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+    void set_alter_msg_header(const std::string& msg) { _alter_msg_header = msg; }
 
     const std::string& get_task_detail_msg() { return _task_detail_msg; }
 

@@ -104,8 +104,8 @@ struct CastFn {
     template <bool AllowThrowException>                                                                                \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                           \
         static ColumnPtr cast_fn(ColumnPtr&& column) {                                                                  \
-            if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                        \
-                          std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                     \
+            if constexpr (static_cast<long double>(std::numeric_limits<RunTimeCppType<TO_TYPE>>::max()) <              \
+                          static_cast<long double>(std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max())) {           \
                 if constexpr (!AllowThrowException) {                                                                  \
                     return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE,    \
                                                                                                          TO_TYPE>(     \
@@ -1269,11 +1269,8 @@ public:
                                                                                lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
-                if constexpr ((std::is_floating_point_v<ToCppType> || std::is_floating_point_v<FromCppType>)
-                                      ? (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
-                                         static_cast<long double>(std::numeric_limits<FromCppType>::max()))
-                                      : (std::numeric_limits<ToCppType>::max() <
-                                         std::numeric_limits<FromCppType>::max())) {
+                if constexpr (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
+                              static_cast<long double>(std::numeric_limits<FromCppType>::max())) {
                     // Check overflow.
 
                     llvm::Value* max_overflow = nullptr;

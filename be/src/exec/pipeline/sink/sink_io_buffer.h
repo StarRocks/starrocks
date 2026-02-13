@@ -39,10 +39,10 @@ public:
         return ret ? 0 : -1;
     }
 
+    ~SinkIOExecutor() override = default;
+
 private:
     SinkIOExecutor() = default;
-
-    ~SinkIOExecutor() override = default;
 };
 
 // SinkIOBuffer accepts input from all sink operators, it uses an execution queue to asynchronously process chunks one by one.
@@ -106,7 +106,7 @@ private:
     // That is, calling append_chunk() with a nullptr, won't accidentially stop the entire queue.
     struct QueueItem {
         ChunkPtr chunk_ptr;
-        QueueItem(const ChunkPtr& chunkPtr) : chunk_ptr(chunkPtr) {}
+        explicit QueueItem(ChunkPtr chunk) : chunk_ptr(std::move(chunk)) {}
     };
     typedef std::shared_ptr<QueueItem> QueueItemPtr;
 

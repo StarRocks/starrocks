@@ -135,7 +135,7 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
         std::shared_ptr<TabletsChannel> channel;
         std::lock_guard l(_lock);
         if (_schema == nullptr) {
-            _schema.reset(new OlapTableSchemaParam());
+            _schema = std::make_shared<OlapTableSchemaParam>();
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
         if (_row_desc == nullptr) {

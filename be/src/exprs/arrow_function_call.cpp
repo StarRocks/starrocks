@@ -48,7 +48,7 @@ StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context
     size_t num_rows = chunk != nullptr ? chunk->num_rows() : 1;
     for (int i = 0; i < _children.size(); ++i) {
         ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, chunk));
-        columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, std::move(columns[i]));
+        columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, columns[i]);
     }
 
     // get call stub
@@ -74,7 +74,7 @@ Status ArrowFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context)
 
     FunctionContext::TypeDesc return_type = _type;
     std::vector<FunctionContext::TypeDesc> args_types;
-
+    args_types.reserve(_children.size());
     for (Expr* child : _children) {
         args_types.push_back(child->type());
     }

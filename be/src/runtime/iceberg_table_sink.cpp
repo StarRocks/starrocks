@@ -53,7 +53,7 @@ Status IcebergTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status IcebergTableSink::close(RuntimeState* state, Status exec_status) {
+Status IcebergTableSink::close(RuntimeState* state, const Status& exec_status) {
     ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
@@ -92,7 +92,7 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
                 pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     } else {
         std::vector<ExprContext*> partition_expr_ctxs;
 
@@ -113,7 +113,7 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop, transform_exprs);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     }
 
     return Status::OK();

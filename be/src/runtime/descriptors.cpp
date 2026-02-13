@@ -327,10 +327,12 @@ RowPositionDescriptor* RowPositionDescriptor::from_thrift(const TRowPositionDesc
     switch (t_desc.row_position_type) {
     case TRowPositionType::ICEBERG_V3_ROW_POSITION: {
         std::vector<SlotId> fetch_ref_slot_ids;
+        fetch_ref_slot_ids.reserve(t_desc.fetch_ref_slots.size());
         for (const auto& slot_id : t_desc.fetch_ref_slots) {
             fetch_ref_slot_ids.emplace_back(slot_id);
         }
         std::vector<SlotId> lookup_ref_slot_ids;
+        lookup_ref_slot_ids.reserve(t_desc.lookup_ref_slots.size());
         for (const auto& slot_id : t_desc.lookup_ref_slots) {
             lookup_ref_slot_ids.emplace_back(slot_id);
         }

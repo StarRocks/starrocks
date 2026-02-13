@@ -301,7 +301,7 @@ struct BitmapIndexSeeker {
         auto& col_ctx = parent_node_ctx.col_contexts.find(cid)->second;
 
         SparseRange<> r;
-        const Status st = col_pred->seek_bitmap_dictionary(bitmap_iter, &r);
+        Status st = col_pred->seek_bitmap_dictionary(bitmap_iter, &r);
         if (st.ok()) {
             if constexpr (Type == CompoundNodeType::AND) {
                 col_ctx.bitmap_ranges &= r;

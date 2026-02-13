@@ -20,8 +20,7 @@
 #include "exec/pipeline/operator.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class AggregateStreamingSinkOperatorFactory;
 class AggregateStreamingSinkOperator : public Operator {
@@ -117,5 +116,4 @@ private:
     std::once_flag _set_collector_flag;
     const std::vector<RuntimeFilterBuildDescriptor*>& _build_runtime_filters;
 };
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

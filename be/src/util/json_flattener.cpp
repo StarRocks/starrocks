@@ -373,7 +373,7 @@ StatusOr<size_t> JsonPathDeriver::check_null_factor(const std::vector<const Colu
 
 JsonPathDeriver::JsonPathDeriver(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                  bool has_remain)
-        : _has_remain(has_remain), _paths(std::move(paths)), _types(types) {
+        : _has_remain(has_remain), _paths(paths), _types(types) {
     for (size_t i = 0; i < _paths.size(); i++) {
         auto* leaf = JsonFlatPath::normalize_from_path(_paths[i], _path_root.get());
         leaf->type = types[i];
@@ -787,7 +787,7 @@ JsonFlattener::JsonFlattener(JsonPathDeriver& deriver) {
 
 JsonFlattener::JsonFlattener(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                              bool has_remain)
-        : _has_remain(has_remain), _dst_paths(std::move(paths)) {
+        : _has_remain(has_remain), _dst_paths(paths) {
     _dst_root = std::make_shared<JsonFlatPath>();
 
     for (size_t i = 0; i < _dst_paths.size(); i++) {
@@ -972,7 +972,7 @@ MutableColumns JsonFlattener::mutable_result() {
 }
 
 JsonMerger::JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain)
-        : _src_paths(std::move(paths)), _has_remain(has_remain) {
+        : _src_paths(paths), _has_remain(has_remain) {
     _src_root = std::make_shared<JsonFlatPath>();
 
     for (size_t i = 0; i < _src_paths.size(); i++) {
@@ -1260,7 +1260,7 @@ void JsonMerger::_check_has_non_null_values(const JsonFlatPath* root, size_t ind
 
 HyperJsonTransformer::HyperJsonTransformer(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                            bool has_remain)
-        : _dst_remain(has_remain), _dst_paths(std::move(paths)), _dst_types(types) {
+        : _dst_remain(has_remain), _dst_paths(paths), _dst_types(types) {
     for (size_t i = 0; i < _dst_paths.size(); i++) {
         _dst_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(types[i]), true));
     }

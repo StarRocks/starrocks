@@ -357,7 +357,7 @@ public:
             if constexpr (lt_is_decimal<ResultType>) {
                 return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
             } else {
-                return NullableColumn::create(std::move(data_result), std::move(null_result));
+                return NullableColumn::create(data_result, null_result);
             }
         }
 
@@ -376,7 +376,7 @@ public:
         if constexpr (lt_is_decimal<ResultType>) {
             return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
         } else {
-            return NullableColumn::create(std::move(data_result), std::move(null_result));
+            return NullableColumn::create(data_result, null_result);
         }
     }
 

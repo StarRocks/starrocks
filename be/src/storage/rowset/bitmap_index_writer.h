@@ -70,12 +70,11 @@ public:
 
     void set_dictionary_compression(CompressionTypePB compression) { _dictionary_compression = compression; }
 
+    BitmapIndexWriter(const BitmapIndexWriter&) = delete;
+    BitmapIndexWriter& operator=(const BitmapIndexWriter&) = delete;
+
 protected:
     CompressionTypePB _dictionary_compression = LZ4;
-
-private:
-    BitmapIndexWriter(const BitmapIndexWriter&) = delete;
-    const BitmapIndexWriter& operator=(const BitmapIndexWriter&) = delete;
 };
 
 } // namespace starrocks

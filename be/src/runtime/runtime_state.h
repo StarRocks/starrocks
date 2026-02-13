@@ -105,6 +105,9 @@ public:
 
     explicit RuntimeState(ExecEnv* exec_env);
 
+    RuntimeState(const RuntimeState&) = delete;
+    RuntimeState& operator=(const RuntimeState&) = delete;
+
     // Empty d'tor to avoid issues with std::unique_ptr.
     ~RuntimeState();
 
@@ -445,7 +448,7 @@ public:
 
     void append_tablet_fail_infos(const TTabletFailInfo& fail_info) {
         std::lock_guard<std::mutex> l(_tablet_infos_lock);
-        _tablet_fail_infos.emplace_back(std::move(fail_info));
+        _tablet_fail_infos.emplace_back(fail_info);
     }
 
     std::vector<TSinkCommitInfo>& sink_commit_infos() {
@@ -455,7 +458,7 @@ public:
 
     void add_sink_commit_info(const TSinkCommitInfo& sink_commit_info) {
         std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
-        _sink_commit_infos.emplace_back(std::move(sink_commit_info));
+        _sink_commit_infos.emplace_back(sink_commit_info);
     }
 
     // get mem limit for load channel
@@ -664,9 +667,6 @@ private:
 
     std::mutex _sink_commit_infos_lock;
     std::vector<TSinkCommitInfo> _sink_commit_infos;
-
-    // prohibit copies
-    RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
 

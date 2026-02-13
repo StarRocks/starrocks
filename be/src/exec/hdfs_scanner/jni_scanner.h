@@ -111,9 +111,11 @@ private:
     int _chunk_meta_index;
 
     void reset_chunk_meta(long chunk_meta) {
+        // NOLINTNEXTLINE(performance-no-int-to-ptr) - JNI: long holds native pointer from Java
         _chunk_meta_ptr = static_cast<long*>(reinterpret_cast<void*>(chunk_meta));
         _chunk_meta_index = 0;
     }
+    // NOLINTNEXTLINE(performance-no-int-to-ptr) - JNI: long holds native pointer from Java
     void* next_chunk_meta_as_ptr() { return reinterpret_cast<void*>(_chunk_meta_ptr[_chunk_meta_index++]); }
     long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };

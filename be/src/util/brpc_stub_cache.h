@@ -100,10 +100,11 @@ public:
     void cleanup_expired(const butil::EndPoint& endpoint);
     void shutdown();
 
-private:
-    HttpBrpcStubCache();
     HttpBrpcStubCache(const HttpBrpcStubCache&) = delete;
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache&) = delete;
+
+private:
+    HttpBrpcStubCache();
     ~HttpBrpcStubCache();
 
     SpinLock _lock;
@@ -121,10 +122,11 @@ public:
     void cleanup_expired(const butil::EndPoint& endpoint);
     void shutdown();
 
-private:
-    LakeServiceBrpcStubCache();
     LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache&) = delete;
     LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
+
+private:
+    LakeServiceBrpcStubCache();
     ~LakeServiceBrpcStubCache();
 
     SpinLock _lock;

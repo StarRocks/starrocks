@@ -174,7 +174,7 @@ Status TransactionMgr::list_transactions(const HttpRequest* req, std::string* re
 }
 
 Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* resp) {
-    auto label = req->header(HTTP_LABEL_KEY);
+    const auto& label = req->header(HTTP_LABEL_KEY);
     Status st;
     auto ctx = _exec_env->stream_context_mgr()->get(label);
     if (ctx == nullptr) {

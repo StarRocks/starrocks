@@ -926,6 +926,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_write_schema->num_key_columns());
     for (size_t i = 0; i < _write_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

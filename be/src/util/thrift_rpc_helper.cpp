@@ -92,8 +92,8 @@ Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<T>&)>
 }
 
 template <typename T>
-Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
-                            std::function<void(ClientConnection<T>&)> callback, int timeout_ms, int retry_times) {
+Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port, ConnectionCallBack<T> callback, int timeout_ms,
+                            int retry_times) {
     if (UNLIKELY(_s_exec_env == nullptr)) {
         return Status::ThriftRpcError(
                 "Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please retry "

@@ -128,7 +128,7 @@ class CompactionScheduler {
     public:
         constexpr const static int16_t kConcurrencyRestoreTimes = 2;
 
-        explicit Limiter(int16_t total) : _total(total), _free(total), _reserved(0), _success(0) {}
+        explicit Limiter(int16_t total) : _total(total), _free(total) {}
 
         // Acquire a token for doing compaction task. returns true on success and false otherwise.
         // No new compaction task should be scheduled to run if the method returned false.
@@ -150,9 +150,9 @@ class CompactionScheduler {
         // The number of tokens can be assigned to compaction tasks.
         int64_t _free;
         // The number of reserved tokens. reserved tokens cannot be assigned to compaction task.
-        int16_t _reserved;
+        int16_t _reserved{};
         // The number of tasks that didn't encounter the Status::MemoryLimitExceeded error.
-        int64_t _success;
+        int64_t _success{};
     };
 
     using CompactionContextPtr = std::unique_ptr<CompactionTaskContext>;

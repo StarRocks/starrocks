@@ -162,6 +162,9 @@ public:
 
     void get_txn_infos(int64_t txn_id, int64_t tablet_id, std::vector<TxnInfo>& txn_infos);
 
+    TxnManager(const TxnManager&) = delete;
+    const TxnManager& operator=(const TxnManager&) = delete;
+
 private:
     using TxnKey = std::pair<int64_t, int64_t>; // partition_id, transaction_id;
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -213,9 +216,6 @@ private:
 
     // Dynamic thread pool used to concurrently flush WAL to disk
     std::unique_ptr<ThreadPool> _flush_thread_pool;
-
-    TxnManager(const TxnManager&) = delete;
-    const TxnManager& operator=(const TxnManager&) = delete;
 }; // TxnManager
 
 inline std::shared_mutex& TxnManager::_get_txn_map_lock(TTransactionId transactionId) {

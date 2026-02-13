@@ -192,14 +192,14 @@ StatusOr<VariantPathExtraction> VariantPathParser::parse_segment(ParserState& st
         // Try parsing as array index first
         auto arraySegment = parse_array_index(state);
         if (arraySegment.ok()) {
-            return VariantPathExtraction(std::move(arraySegment.value()));
+            return VariantPathExtraction(arraySegment.value());
         }
 
         // Reset and try parsing as quoted key
         state.pos = saved_pos;
         auto objectSegment = parse_quoted_key(state);
         if (objectSegment.ok()) {
-            return VariantPathExtraction(std::move(objectSegment.value()));
+            return VariantPathExtraction(objectSegment.value());
         }
 
         // Reset position if both failed

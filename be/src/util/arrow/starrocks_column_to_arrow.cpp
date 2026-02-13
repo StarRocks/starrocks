@@ -776,8 +776,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& out
         const Expr* expr = output_expr_ctxs[i]->root();
         if (column->is_constant()) {
             // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
-            column = ColumnHelper::copy_and_unfold_const_column(expr->type(), column->is_nullable(), std::move(column),
-                                                                num_rows);
+            column = ColumnHelper::copy_and_unfold_const_column(expr->type(), column->is_nullable(), column, num_rows);
         }
 
         ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), result_columns[i]);
@@ -786,7 +785,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& out
         }
     }
 
-    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(result_columns));
+    *result = arrow::RecordBatch::Make(schema, num_rows, result_columns);
 
     return Status::OK();
 }
@@ -805,7 +804,7 @@ Status convert_columns_to_arrow_batch(size_t num_rows, const Columns& columns, a
             return Status::InvalidArgument(arrow_st.ToString());
         }
     }
-    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
+    *result = arrow::RecordBatch::Make(schema, num_rows, arrays);
     return Status::OK();
 }
 
@@ -824,8 +823,8 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
         auto column = chunk->get_column_by_slot_id(slot_ids[i]);
         if (column->is_constant()) {
             // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
-            column = ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(),
-                                                                std::move(column), num_rows);
+            column =
+                    ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(), column, num_rows);
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, *slot_types[i], schema->field(i)->type(), array);
@@ -834,7 +833,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
             return Status::InvalidArgument(arrow_st.ToString());
         }
     }
-    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
+    *result = arrow::RecordBatch::Make(schema, num_rows, arrays);
     return Status::OK();
 }
 } // namespace starrocks

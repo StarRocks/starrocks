@@ -117,7 +117,7 @@ StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(b
     if (shared) {
         return SpillInputStream::as_stream(_chunks, _spiller);
     } else {
-        return SpillInputStream::as_stream(std::move(_chunks), _spiller);
+        return SpillInputStream::as_stream(_chunks, _spiller);
     }
 }
 

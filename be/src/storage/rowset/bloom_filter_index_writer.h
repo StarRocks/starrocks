@@ -67,9 +67,10 @@ public:
 
     virtual uint64_t size() = 0;
 
-private:
     BloomFilterIndexWriter(const BloomFilterIndexWriter&) = delete;
     const BloomFilterIndexWriter& operator=(const BloomFilterIndexWriter&) = delete;
+
+private:
 };
 
 } // namespace starrocks

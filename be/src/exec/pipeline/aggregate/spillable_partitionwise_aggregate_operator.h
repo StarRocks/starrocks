@@ -49,7 +49,7 @@ class SpillablePartitionWiseAggregateSourceOperator final : public SourceOperato
 public:
     SpillablePartitionWiseAggregateSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                   int32_t driver_sequence,
-                                                  const AggregateBlockingSourceOperatorPtr non_pw_agg,
+                                                  AggregateBlockingSourceOperatorPtr non_pw_agg,
                                                   ConjugateOperatorPtr pw_agg)
             : SourceOperator(factory, id, "spillable_partitionwise_agg_source", plan_node_id, false, driver_sequence),
               _non_pw_agg(std::move(non_pw_agg)),
@@ -190,12 +190,12 @@ private:
 class SpillablePartitionWiseAggregateSinkOperatorFactory : public OperatorFactory {
 public:
     SpillablePartitionWiseAggregateSinkOperatorFactory(
-            int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory,
+            int32_t id, int32_t plan_node_id, const AggregatorFactoryPtr& aggregator_factory,
             const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters,
             SpillProcessChannelFactoryPtr spill_channel_factory)
             : OperatorFactory(id, "spillable_partitionwise_agg_sink", plan_node_id),
               _agg_op_factory(std::make_shared<AggregateBlockingSinkOperatorFactory>(
-                      id, plan_node_id, std::move(aggregator_factory), build_runtime_filters, spill_channel_factory)),
+                      id, plan_node_id, aggregator_factory, build_runtime_filters, spill_channel_factory)),
               _spill_channel_factory(std::move(spill_channel_factory)) {}
 
     ~SpillablePartitionWiseAggregateSinkOperatorFactory() override = default;

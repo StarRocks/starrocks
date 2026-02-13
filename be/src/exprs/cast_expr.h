@@ -162,7 +162,7 @@ private:
 class CastJsonToMap final : public Expr {
 public:
     CastJsonToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
-            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+            : Expr(node), _key_cast_expr(key_cast_expr), _value_cast_expr(value_cast_expr) {}
 
     CastJsonToMap(const CastJsonToMap& rhs) : Expr(rhs) {}
 
@@ -234,7 +234,7 @@ private:
 class CastVariantToMap final : public Expr {
 public:
     CastVariantToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
-            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+            : Expr(node), _key_cast_expr(key_cast_expr), _value_cast_expr(value_cast_expr) {}
 
     CastVariantToMap(const CastVariantToMap& rhs) : Expr(rhs) {}
 
@@ -307,8 +307,7 @@ public:
 
 private:
     // Invoked only by clone.
-    CastToVariantExpr(const CastToVariantExpr& rhs)
-            : Expr(rhs), _from_type(rhs._from_type), _allow_throw_exception(rhs._allow_throw_exception) {}
+    CastToVariantExpr(const CastToVariantExpr& rhs) = default;
 
     TypeDescriptor _from_type;
     bool _allow_throw_exception;
@@ -341,7 +340,7 @@ public:
 
 private:
     // Invoked only by clone.
-    CastMapExpr(const CastMapExpr& rhs) : Expr(rhs) {}
+    CastMapExpr(const CastMapExpr& rhs) = default;
 
     Expr* _key_cast = nullptr;
     Expr* _value_cast = nullptr;
@@ -384,7 +383,7 @@ class MustNullExpr final : public Expr {
 public:
     MustNullExpr(const TExprNode& node) : Expr(node) {}
 
-    MustNullExpr(const MustNullExpr& rhs) : Expr(rhs) {}
+    MustNullExpr(const MustNullExpr& rhs) = default;
 
     ~MustNullExpr() override = default;
 

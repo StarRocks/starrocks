@@ -326,11 +326,11 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         return res.status();
     }
 
-    auto seg_iterators = res.value();
+    const auto& seg_iterators = res.value();
 
     // Fetch the new columns value into the new_chunk
     for (int idx = 0; idx < seg_iterators.size(); ++idx) {
-        auto seg_iterator = seg_iterators[idx];
+        const auto& seg_iterator = seg_iterators[idx];
         if (seg_iterator.get() == nullptr) {
             std::stringstream ss;
             ss << "Failed to get segment iterator, segment id: " << idx;
@@ -1129,6 +1129,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             // new added dcgs info for every segment in rowset.
             DeltaColumnGroupList dcgs;
             std::vector<int> last_dcg_counts;
+            last_dcg_counts.reserve(sc_params.rowsets_to_change[i]->num_segments());
             for (uint32_t j = 0; j < sc_params.rowsets_to_change[i]->num_segments(); j++) {
                 // check the lastest historical_dcgs version if it is equal to schema change version
                 // of the rowset. If it is, we should merge the dcg info.

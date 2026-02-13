@@ -85,11 +85,11 @@ class CancellableRunnable : public Runnable {
 public:
     CancellableRunnable(std::function<void()> runner, std::function<void()> canceller)
             : _runnable(std::move(runner)), _canceller(std::move(canceller)) {}
-    virtual ~CancellableRunnable() = default;
+    ~CancellableRunnable() override = default;
 
-    virtual void run() override { _runnable(); }
+    void run() override { _runnable(); }
 
-    virtual void cancel() override { _canceller(); }
+    void cancel() override { _canceller(); }
 
 protected:
     std::function<void()> _runnable;
@@ -167,6 +167,7 @@ private:
     CpuUtil::CpuIds _cpuids;
     std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
 
+public:
     ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
     const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
 };
@@ -436,6 +437,7 @@ private:
     // Total time in nanoseconds to execute tasks.
     CoreLocalCounter<int64_t> _total_execute_time_ns{MetricUnit::NOUNIT};
 
+public:
     ThreadPool(const ThreadPool&) = delete;
     const ThreadPool& operator=(const ThreadPool&) = delete;
 };
@@ -447,6 +449,9 @@ private:
 // ThreadPool's lock.
 class ThreadPoolToken {
 public:
+    ThreadPoolToken(const ThreadPoolToken&) = delete;
+    ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
+
     // Destroys the token.
     //
     // May be called on a token with outstanding tasks, as Shutdown() will be
@@ -545,9 +550,6 @@ private:
     // Number of worker threads currently executing tasks belonging to this
     // token.
     int _active_threads;
-
-    ThreadPoolToken(const ThreadPoolToken&) = delete;
-    const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
 };
 
 // A class use to limit the number of tasks submitted to the thread pool.

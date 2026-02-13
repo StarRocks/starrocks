@@ -141,8 +141,8 @@ private:
 
 class IOFailureGuard {
 public:
-    IOFailureGuard() { SyncPoint::GetInstance()->EnableProcessing(); }
-    ~IOFailureGuard() { SyncPoint::GetInstance()->DisableProcessing(); }
+    IOFailureGuard() { SyncPoint::GetInstance()->EnableProcessing(); }   // NOLINT(modernize-use-equals-default)
+    ~IOFailureGuard() { SyncPoint::GetInstance()->DisableProcessing(); } // NOLINT(modernize-use-equals-default)
 };
 
 template <typename T, typename PICT_OP>

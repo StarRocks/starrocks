@@ -58,7 +58,7 @@ public:
             : _is(std::move(is)),
               _buffer(buffer),
               _buffer_size(buffer_size),
-              _buffer_last(0),
+              _buffer_last(nullptr),
               _current(_buffer),
               _read_count(0),
               _count(0),
@@ -83,7 +83,7 @@ public:
     void Flush() { DCHECK(false); }
     Ch* PutBegin() {
         DCHECK(false);
-        return 0;
+        return nullptr;
     }
     size_t PutEnd(Ch*) {
         DCHECK(false);
@@ -91,7 +91,7 @@ public:
     }
 
     // For encoding detection only.
-    const Ch* Peek4() const { return (_current + 4 - !_eof <= _buffer_last) ? _current : 0; }
+    const Ch* Peek4() const { return (_current + 4 - !_eof <= _buffer_last) ? _current : nullptr; }
 
     Status status() const { return _status; }
 
@@ -172,7 +172,7 @@ public:
     }
     char Take() {
         DCHECK(false);
-        return 0;
+        return '\0';
     }
     size_t Tell() const {
         DCHECK(false);
@@ -180,7 +180,7 @@ public:
     }
     char* PutBegin() {
         DCHECK(false);
-        return 0;
+        return nullptr;
     }
     size_t PutEnd(char*) {
         DCHECK(false);

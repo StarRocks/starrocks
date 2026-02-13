@@ -53,7 +53,7 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
 
 // Callback for handling commit results
 void IcebergDeleteSink::callback_on_commit(const CommitResult& result) {
-    push_rollback_action(std::move(result.rollback_action));
+    push_rollback_action(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
 

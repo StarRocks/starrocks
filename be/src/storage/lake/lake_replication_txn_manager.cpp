@@ -85,7 +85,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     if (!shared_src_fs_st_or.ok()) {
         return Status::Corruption("Failed to create virtual starlet filesystem");
     }
-    auto shared_src_fs = shared_src_fs_st_or.value();
+    const std::shared_ptr<FileSystem>& shared_src_fs = shared_src_fs_st_or.value();
     ASSIGN_OR_RETURN(auto src_tablet_meta,
                      _tablet_manager->get_tablet_metadata(src_tablet_id, src_visible_version, false, 0, nullptr));
 #endif

@@ -26,9 +26,9 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
-#include <stddef.h>
-#include <stdint.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <utility>

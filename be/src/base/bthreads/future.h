@@ -233,9 +233,9 @@ public:
         return this->_state->value();
     }
 
-    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+    bool operator==(const SharedFuture& rhs) const { return this->_state == rhs._state; }
 
-    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+    bool operator<(const SharedFuture& rhs) const { return this->_state < rhs._state; }
 
 private:
     friend class Promise<R>;
@@ -283,9 +283,9 @@ public:
         return this->_state->value();
     }
 
-    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+    bool operator==(const SharedFuture& rhs) const { return this->_state == rhs._state; }
 
-    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+    bool operator<(const SharedFuture& rhs) const { return this->_state < rhs._state; }
 
 private:
     friend class Promise<R&>;
@@ -329,9 +329,9 @@ public:
         this->wait_and_check_exception();
     }
 
-    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+    bool operator==(const SharedFuture& rhs) const { return this->_state == rhs._state; }
 
-    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+    bool operator<(const SharedFuture& rhs) const { return this->_state < rhs._state; }
 
 private:
     friend class Promise<void>;
@@ -387,9 +387,9 @@ public:
         this->_state->set_value(std::move(value));
     }
 
-    void set_exception(std::exception_ptr ex) {
+    void set_exception(std::exception_ptr&& ex) {
         SharedStateBase::check_state(this->_state);
-        this->_state->set_exception(ex);
+        this->_state->set_exception(std::move(ex));
     }
 
 private:
@@ -429,9 +429,9 @@ public:
         _state->set_value(value);
     }
 
-    void set_exception(std::exception_ptr e) {
+    void set_exception(std::exception_ptr&& e) {
         SharedStateBase::check_state(this->_state);
-        _state->set_exception(e);
+        _state->set_exception(std::move(e));
     }
 
 private:
@@ -473,9 +473,9 @@ public:
         _state->set_value();
     }
 
-    void set_exception(std::exception_ptr e) {
+    void set_exception(std::exception_ptr&& e) {
         SharedStateBase::check_state(this->_state);
-        _state->set_exception(e);
+        _state->set_exception(std::move(e));
     }
 };
 

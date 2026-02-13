@@ -57,6 +57,7 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
 
 Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }

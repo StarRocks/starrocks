@@ -14,9 +14,8 @@
 
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -46,7 +45,7 @@ public:
         _inner_reader->set_page_change_on_record_boundry();
     }
 
-    ~StoredColumnReaderWithIndex() = default;
+    ~StoredColumnReaderWithIndex() override = default;
 
     void set_need_parse_levels(bool need_parse_levels) override {
         _inner_reader->set_need_parse_levels(need_parse_levels);

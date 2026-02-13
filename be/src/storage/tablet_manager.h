@@ -141,6 +141,9 @@ public:
 
     static bool get_rowset_id_from_path(const std::string& path, RowsetId* rowset_id);
 
+    TabletManager(const TabletManager&) = delete;
+    TabletManager& operator=(const TabletManager&) = delete;
+
     void get_tablet_stat(TTabletStatResult* result);
 
     // parse tablet header msg to generate tablet object
@@ -234,9 +237,6 @@ private:
         SpinLock _latches[kNumShard];
         std::unordered_set<int64_t> _locks[kNumShard];
     };
-
-    TabletManager(const TabletManager&) = delete;
-    const TabletManager& operator=(const TabletManager&) = delete;
 
     // Add a tablet pointer to StorageEngine
     // If force, drop the existing tablet add this new one

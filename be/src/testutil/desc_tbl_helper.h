@@ -69,9 +69,9 @@ public:
     static std::vector<SlotTypeDescInfoArray> create_slot_type_desc_info_arrays(
             const std::vector<SlotTypeInfoArray>& slot_info_arrays) {
         std::vector<SlotTypeDescInfoArray> slot_type_desc_info_arrays;
-        for (auto slot_info_array : slot_info_arrays) {
+        for (const auto& slot_info_array : slot_info_arrays) {
             SlotTypeDescInfoArray slot_type_desc_infos;
-            for (auto slot_info : slot_info_array) {
+            for (const auto& slot_info : slot_info_array) {
                 slot_type_desc_infos.emplace_back(std::get<0>(slot_info),
                                                   TypeDescriptor::from_logical_type(std::get<1>(slot_info)),
                                                   std::get<2>(slot_info));

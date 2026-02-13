@@ -549,7 +549,7 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
                     return NullableColumn::create(binary_nullable->data_column(), std::move(src_null));
                 }
             } else {
-                return NullableColumn::create(std::move(binary), std::move(src_null));
+                return NullableColumn::create(binary, src_null);
             }
         } else {
             auto* src = down_cast<const BinaryColumn*>(src_nullable->data_column().get());
@@ -3983,9 +3983,8 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan_vec(StringFunc
     ASSIGN_OR_RETURN(auto res, hyperscan_vec_evaluate(binary, state, rpl_value));
     if (columns[0]->is_nullable()) {
         return NullableColumn::create(
-                std::move(res),
-                NullColumn::static_pointer_cast(
-                        std::move(*down_cast<const NullableColumn*>(columns[0].get())->null_column()).mutate()));
+                res, NullColumn::static_pointer_cast(
+                             std::move(*down_cast<const NullableColumn*>(columns[0].get())->null_column()).mutate()));
     } else if (columns[0]->is_constant()) {
         return ConstColumn::create(std::move(res), columns[0]->size());
     }

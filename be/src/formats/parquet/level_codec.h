@@ -15,10 +15,10 @@
 #pragma once
 
 #include <glog/logging.h>
-#include <string.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #include "base/bit/bit_stream_utils.h"

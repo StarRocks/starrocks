@@ -80,9 +80,9 @@ static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInf
             for (const auto& elem : array) {
                 Datum child_datum = elem;
                 _project_default_datum_by_path_if_needed(&child_datum, element_type_info.get(), value_path);
-                projected.emplace_back(std::move(child_datum));
+                projected.emplace_back(child_datum);
             }
-            datum->set_array(std::move(projected));
+            datum->set_array(projected);
             return;
         }
 
@@ -144,7 +144,7 @@ static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInf
                 _project_default_datum_by_path_if_needed(&child_datum, field_types[i].get(), selected[i]);
             }
 
-            projected.emplace_back(std::move(child_datum));
+            projected.emplace_back(child_datum);
         }
 
         datum->set(projected);

@@ -43,7 +43,7 @@ public:
         VLOG_ROW << "StateCombinator constructor:" << _agg_state_desc.debug_string();
     }
 
-    ~StateCombinator() = default;
+    virtual ~StateCombinator() = default;
 
     // prepare the state combinator
     virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) { return Status::OK(); }
@@ -61,7 +61,7 @@ protected:
     // It is used to allocate memory for aggregate state.
     class AlignedMemoryGuard {
     public:
-        AlignedMemoryGuard(size_t alignment, size_t size) : _ptr(nullptr), _alignment(alignment), _size(size) {}
+        AlignedMemoryGuard(size_t alignment, size_t size) : _alignment(alignment), _size(size) {}
 
         ~AlignedMemoryGuard() noexcept {
             if (_ptr) {
@@ -85,7 +85,7 @@ protected:
         AlignedMemoryGuard& operator=(AlignedMemoryGuard&&) = default;
 
     private:
-        AggDataPtr _ptr;
+        AggDataPtr _ptr = nullptr;
         size_t _alignment;
         size_t _size;
     };

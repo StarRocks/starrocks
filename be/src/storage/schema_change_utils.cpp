@@ -33,7 +33,7 @@ ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& new_schema) {
     _schema_mapping.resize(new_schema->num_columns());
 }
 
-ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+ChunkChanger::ChunkChanger(TabletSchemaCSPtr base_schema, const TabletSchemaCSPtr& new_schema,
                            std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type)
         : _base_schema(std::move(base_schema)),
           _base_table_column_names(base_table_column_names),
@@ -759,10 +759,12 @@ Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& ba
     const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
     const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
     std::vector<int32_t> base_sort_key_unique_ids;
-    std::vector<int32_t> new_sort_key_unique_ids;
+    base_sort_key_unique_ids.reserve(base_sort_key_idxes.size());
     for (auto idx : base_sort_key_idxes) {
         base_sort_key_unique_ids.emplace_back(base_schema->column(idx).unique_id());
     }
+    std::vector<int32_t> new_sort_key_unique_ids;
+    new_sort_key_unique_ids.reserve(new_sort_key_idxes.size());
     for (auto idx : new_sort_key_idxes) {
         new_sort_key_unique_ids.emplace_back(new_schema->column(idx).unique_id());
     }

@@ -66,7 +66,7 @@ private:
 // No actual authentication.
 class NoOpBearerAuthServerMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory {
 public:
-    NoOpBearerAuthServerMiddlewareFactory() : _is_valid(false) {}
+    NoOpBearerAuthServerMiddlewareFactory() = default;
 
     arrow::Status StartCall(const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
                             std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) override;
@@ -74,7 +74,7 @@ public:
     [[nodiscard]] bool GetIsValid() const { return _is_valid; }
 
 private:
-    bool _is_valid;
+    bool _is_valid = false;
 };
 
 } // namespace starrocks

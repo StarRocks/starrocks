@@ -135,7 +135,7 @@ Status HdfsScanner::_build_scanner_context() {
             column.decode_needed =
                     slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
                                                         _scanner_params.slots_of_multi_field_conjunct.end();
-            ctx.materialized_columns.emplace_back(std::move(column));
+            ctx.materialized_columns.emplace_back(column);
         }
     }
 
@@ -144,7 +144,7 @@ Status HdfsScanner::_build_scanner_context() {
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = _scanner_params.partition_index_in_chunk[i];
-        ctx.partition_columns.emplace_back(std::move(column));
+        ctx.partition_columns.emplace_back(column);
     }
 
     for (size_t i = 0; i < _scanner_params.extended_col_slots.size(); i++) {
@@ -152,7 +152,7 @@ Status HdfsScanner::_build_scanner_context() {
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = _scanner_params.extended_col_index_in_chunk[i];
-        ctx.extended_columns.emplace_back(std::move(column));
+        ctx.extended_columns.emplace_back(column);
     }
 
     ctx.slot_descs = _scanner_params.tuple_desc->slots();
@@ -188,7 +188,7 @@ Status HdfsScanner::_build_scanner_context() {
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
     opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
-    ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
     auto* predicate_parser =
             opts.obj_pool->add(new ConnectorPredicateParser(&_scanner_params.tuple_desc->decoded_slots()));

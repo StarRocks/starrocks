@@ -105,11 +105,11 @@ Status BenchmarkScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
     for (size_t i = 0; i < _slot_descs.size(); ++i) {
         SlotDescriptor* slot_desc = _slot_descs[i];
         ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, raw_chunk.get()));
-        column = ColumnHelper::unfold_const_column(slot_desc->type(), raw_chunk->num_rows(), std::move(column));
+        column = ColumnHelper::unfold_const_column(slot_desc->type(), raw_chunk->num_rows(), column);
         cast_chunk->append_column(column, slot_desc->id());
     }
 
-    *chunk = std::move(cast_chunk);
+    *chunk = cast_chunk;
     _batch_start_idx += num_elements;
     return Status::OK();
 }

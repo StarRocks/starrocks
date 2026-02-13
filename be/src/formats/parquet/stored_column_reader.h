@@ -89,7 +89,7 @@ class StoredColumnReaderImpl : public StoredColumnReader {
 public:
     StoredColumnReaderImpl(const ColumnReaderOptions& opts) : _opts(opts) {}
 
-    virtual ~StoredColumnReaderImpl() = default;
+    ~StoredColumnReaderImpl() override = default;
 
     // Reset internal state and ready for next read_values
     virtual void reset_levels() = 0;

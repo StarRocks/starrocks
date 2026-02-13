@@ -85,6 +85,9 @@ class IndexedColumnWriter {
 public:
     explicit IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo, WritableFile* wfile);
 
+    IndexedColumnWriter(const IndexedColumnWriter&) = delete;
+    const IndexedColumnWriter& operator=(const IndexedColumnWriter&) = delete;
+
     ~IndexedColumnWriter();
 
     Status init();
@@ -122,9 +125,6 @@ private:
     // encoder for value index's key
     const KeyCoder* _validx_key_coder;
     const BlockCompressionCodec* _compress_codec;
-
-    IndexedColumnWriter(const IndexedColumnWriter&) = delete;
-    const IndexedColumnWriter& operator=(const IndexedColumnWriter&) = delete;
 };
 
 } // namespace starrocks
