@@ -35,8 +35,8 @@ Status udf_downloder::download_remote_file_2_local(const std::string& remotePath
 Status udf_downloder::setup_local_file_path(const std::string& local_path) {
     auto status = FileSystem::Default() -> path_exists(local_path);
     if (status.ok()) {
-        LOG(INFO) << fmt::format("the {} file already exists", local_path);
-        return Status::AlreadyExist(fmt::format("the {} file already exists", local_path));
+        RETURN_IF_ERROR(FileSystem::Default() -> delete_file(local_path));
+        LOG(INFO) << fmt::format("Removed the {} existing file", local_path);
     }
     std::string dir_path = local_path.substr(0, local_path.find_last_of('/'));
     RETURN_IF_ERROR(FileSystem::Default()->create_dir_recursive(dir_path));
