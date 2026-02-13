@@ -384,6 +384,22 @@ static void set_rowset_shared_segments(RowsetMetadataPB* rowset_meta, bool share
     }
 }
 
+static void set_rowset_range_int(RowsetMetadataPB* rowset_meta, std::optional<int32_t> lower, bool lower_included,
+                                 std::optional<int32_t> upper, bool upper_included) {
+    auto* range = rowset_meta->mutable_range();
+    range->Clear();
+    if (lower.has_value()) {
+        auto* tuple = range->mutable_lower_bound();
+        *tuple->add_values() = make_int_variant_pb(lower.value());
+        range->set_lower_bound_included(lower_included);
+    }
+    if (upper.has_value()) {
+        auto* tuple = range->mutable_upper_bound();
+        *tuple->add_values() = make_int_variant_pb(upper.value());
+        range->set_upper_bound_included(upper_included);
+    }
+}
+
 static size_t count_rows_from_iters(const std::vector<ChunkIteratorPtr>& iters, int chunk_size = 1024) {
     size_t rows = 0;
     for (const auto& it : iters) {
@@ -455,6 +471,28 @@ TEST_F(LakeRowsetTest, test_tablet_range_pruning_inclusive_exclusive) {
     // Per segment keys include 10,11,12. Total segments = 3.
     // With tablet range [10, 12) (closed-open), each segment contributes keys {10, 11}.
     ASSERT_EQ(make_rowset_and_count(10, true, 12, false), 3 * 2);
+}
+
+TEST_F(LakeRowsetTest, test_rowset_range_overrides_tablet_range) {
+    create_rowsets_for_testing();
+
+    // tablet range [10, 12), rowset range [11, 13)
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, true);
+    set_rowset_range_int(rs_meta, 11, true, 13, false);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+
+    // If rowset range takes precedence, keep keys [11,13) => each segment contributes 11,12
+    ASSERT_EQ(count_rows_from_iters(iters), 3 * 2);
 }
 
 TEST_F(LakeRowsetTest, test_tablet_range_pb_invalid_bounds) {

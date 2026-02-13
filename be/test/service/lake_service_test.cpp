@@ -1354,12 +1354,10 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
             ASSERT_EQ(3, old_metadata_1->version());
             ASSERT_EQ(old_metadata_1->rowsets(0).segments_size(), old_metadata_1->rowsets(0).shared_segments_size());
             EXPECT_TRUE(old_metadata_1->rowsets(0).shared_segments(0));
-
             ASSIGN_OR_ABORT(auto old_metadata_2, _tablet_mgr->get_tablet_metadata(old_tablet_id_2, 3));
             ASSERT_EQ(3, old_metadata_2->version());
             ASSERT_EQ(old_metadata_2->rowsets(0).segments_size(), old_metadata_2->rowsets(0).shared_segments_size());
             EXPECT_TRUE(old_metadata_2->rowsets(0).shared_segments(0));
-
             ASSIGN_OR_ABORT(auto new_metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
             ASSERT_EQ(new_tablet_id, new_metadata->id());
             ASSERT_EQ(2, new_metadata->rowsets_size());
@@ -1371,6 +1369,12 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
                       generate_sort_key(0).SerializeAsString());
             EXPECT_EQ(new_metadata->range().upper_bound().SerializeAsString(),
                       generate_sort_key(100).SerializeAsString());
+            ASSERT_TRUE(new_metadata->rowsets(0).has_range());
+            ASSERT_TRUE(new_metadata->rowsets(1).has_range());
+            EXPECT_EQ(new_metadata->rowsets(0).range().SerializeAsString(),
+                      old_metadata_1->range().SerializeAsString());
+            EXPECT_EQ(new_metadata->rowsets(1).range().SerializeAsString(),
+                      old_metadata_2->range().SerializeAsString());
         }
 
         {
