@@ -22,6 +22,7 @@
 #include "agent/master_info.h"
 #include "base/network/network_util.h"
 #include "common/system/backend_options.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"

@@ -14,6 +14,7 @@
 
 #include "storage/base_compaction.h"
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
