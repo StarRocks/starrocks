@@ -46,12 +46,12 @@
 #include "common/runtime_profile.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
-#include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 
 namespace starrocks {

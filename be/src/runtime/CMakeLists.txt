@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(RUNTIME_CORE_FILES
     current_thread.cpp
     mem_tracker.cpp
+    starrocks_metrics.cpp
 )
 
 ADD_BE_LIB(RuntimeCore

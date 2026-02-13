@@ -60,6 +60,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
@@ -71,7 +72,6 @@
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/misc.h"
-#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
 namespace starrocks {

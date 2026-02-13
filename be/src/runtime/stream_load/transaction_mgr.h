@@ -20,8 +20,8 @@
 
 #include "base/uid_util.h" // for std::hash for UniqueId
 #include "fmt/format.h"
+#include "runtime/starrocks_metrics.h"
 #include "stream_load_context.h"
-#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
 namespace starrocks {

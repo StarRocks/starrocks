@@ -21,6 +21,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -33,7 +34,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

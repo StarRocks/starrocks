@@ -19,7 +19,7 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 #ifdef WITH_STARCACHE
 #include "base/testutil/assert.h"

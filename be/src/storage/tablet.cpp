@@ -50,6 +50,7 @@
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/binlog_builder.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"
@@ -66,8 +67,8 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "util/global_metrics_registry.h"
 #include "util/ratelimit.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -83,7 +84,7 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
     _keys_type = _max_version_schema->keys_type();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 #ifndef BE_TEST
-    StarRocksMetrics::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
+    GlobalMetricsRegistry::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
 #endif
 }
 
@@ -95,7 +96,7 @@ Tablet::Tablet(KeysType keys_type) {
 Tablet::~Tablet() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 #ifndef BE_TEST
-    StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(_tablet_meta->table_id());
+    GlobalMetricsRegistry::instance()->table_metrics_mgr()->unregister_table(_tablet_meta->table_id());
 #endif
 }
 

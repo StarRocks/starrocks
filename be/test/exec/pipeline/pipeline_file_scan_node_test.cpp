@@ -44,8 +44,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_util.h"
 
 // TODO: test multi thread

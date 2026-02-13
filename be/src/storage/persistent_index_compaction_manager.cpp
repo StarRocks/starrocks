@@ -14,10 +14,10 @@
 
 #include "storage/persistent_index_compaction_manager.h"
 
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 
 namespace starrocks {

@@ -39,7 +39,7 @@
 #include "common/runtime_profile.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/system_allocator.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 namespace starrocks {
 

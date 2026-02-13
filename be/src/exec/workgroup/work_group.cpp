@@ -28,7 +28,8 @@
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::workgroup {
 
@@ -204,7 +205,7 @@ void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker) {
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
 
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>(
-            StarRocksMetrics::instance()->get_pipeline_executor_metrics()->get_driver_queue_metrics()));
+            GlobalMetricsRegistry::instance()->pipeline_executor_metrics()->get_driver_queue_metrics()));
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
 

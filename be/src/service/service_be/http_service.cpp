@@ -69,7 +69,7 @@
 #include "http/http_method.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 namespace starrocks {
 

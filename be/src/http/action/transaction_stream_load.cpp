@@ -50,6 +50,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -58,7 +59,6 @@
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
 #include "util/json_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

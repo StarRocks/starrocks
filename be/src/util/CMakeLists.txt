@@ -40,7 +40,7 @@ set(UTIL_FILES
   hash_util.hpp
   json_util.cpp
   json_flattener.cpp
-  starrocks_metrics.cpp
+  global_metrics_registry.cpp
   metrics/file_scan_metrics.cpp
   misc.cpp
   parse_util.cpp

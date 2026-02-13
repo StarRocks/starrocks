@@ -23,7 +23,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

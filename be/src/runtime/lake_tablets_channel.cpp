@@ -36,6 +36,7 @@
 #include "runtime/load_channel.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/lake/async_delta_writer.h"
@@ -45,8 +46,8 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/compression/block_compression.h"
+#include "util/global_metrics_registry.h"
 #include "util/stack_trace_mutex.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -348,7 +349,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _index_id = params.index_id();
     _schema = schema;
 #ifndef BE_TEST
-    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
 #endif
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {

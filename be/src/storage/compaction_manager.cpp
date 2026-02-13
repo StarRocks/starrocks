@@ -18,8 +18,8 @@
 #include <thread>
 
 #include "compaction_manager.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
-#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
 using namespace std::chrono_literals;

@@ -24,6 +24,7 @@
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "service/brpc_service_test_util.h"
 #include "storage/async_delta_writer.h"
 #include "storage/chunk_helper.h"
@@ -36,7 +37,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

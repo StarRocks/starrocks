@@ -19,7 +19,7 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 namespace starrocks {
 

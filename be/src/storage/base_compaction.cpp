@@ -17,7 +17,7 @@
 #include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 #include "util/trace.h"
 
 namespace starrocks {

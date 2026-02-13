@@ -49,7 +49,7 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 namespace starrocks {
 

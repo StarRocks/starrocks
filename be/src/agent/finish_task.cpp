@@ -19,7 +19,7 @@
 #include "base/testutil/sync_point.h"
 #include "common/logging.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 namespace starrocks {
 

@@ -41,6 +41,7 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/delta_writer.h"
@@ -53,7 +54,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/disposable_closure.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -152,7 +153,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 #ifndef BE_TEST
-    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
 #endif
 
     _senders = std::vector<Sender>(params.num_senders());

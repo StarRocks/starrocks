@@ -88,6 +88,7 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/small_file_mgr.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
@@ -104,9 +105,9 @@
 #include "types/hll.h"
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
+#include "util/global_metrics_registry.h"
 #include "util/parse_util.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/starrocks_metrics.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -487,7 +488,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
-            StarRocksMetrics::instance()->get_pipeline_executor_metrics());
+            GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;

@@ -24,6 +24,7 @@
 #include "exprs/jsonpath.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/parser.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/table_schema_service.h"
@@ -34,7 +35,6 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
 

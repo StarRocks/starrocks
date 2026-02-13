@@ -24,8 +24,8 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
-#include "util/starrocks_metrics.h"
 
 //TODO: test multi thread
 //TODO: test runtime filter

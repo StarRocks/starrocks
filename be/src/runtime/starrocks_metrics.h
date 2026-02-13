@@ -12,41 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/util/doris_metrics.h
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 #pragma once
 
-#include <set>
+#include <memory>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
-#include "exec/pipeline/pipeline_metrics.h"
-#ifndef __APPLE__
-#include "util/jvm_metrics.h"
-#endif
 #include "base/metrics.h"
-#include "util/metrics/file_scan_metrics.h"
-#include "util/system_metrics.h"
-#include "util/table_metrics.h"
 
 namespace starrocks {
 
@@ -89,8 +61,6 @@ private:
 
 class StarRocksMetrics {
 public:
-    // query execution
-    pipeline::PipelineExecutorMetrics pipeline_executor_metrics;
     METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_driver_overloaded, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
@@ -423,39 +393,10 @@ public:
         return &instance;
     }
 
-    // not thread-safe, call before calling metrics
-    void initialize(const std::vector<std::string>& paths = std::vector<std::string>(),
-                    bool init_system_metrics = false, bool init_jvm_metrics = false,
-                    const std::set<std::string>& disk_devices = std::set<std::string>(),
-                    const std::vector<std::string>& network_interfaces = std::vector<std::string>());
-
-    MetricRegistry* metrics() { return &_metrics; }
-    SystemMetrics* system_metrics() { return &_system_metrics; }
-    TableMetricsManager* table_metrics_mgr() { return &_table_metrics_mgr; }
-    TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
-    pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
-    FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
+    MetricRegistry* metrics();
 
 private:
-    // Don't allow constructor
     StarRocksMetrics();
-
-    void _update();
-    void _update_process_thread_num();
-    void _update_process_fd_num();
-
-private:
-    static const std::string _s_registry_name;
-    static const std::string _s_hook_name;
-
-    MetricRegistry _metrics;
-    SystemMetrics _system_metrics;
-#ifndef __APPLE__
-    JVMMetrics _jvm_metrics;
-#endif
-    TableMetricsManager _table_metrics_mgr;
-
-    std::unique_ptr<FileScanMetrics> _file_scan_metrics;
 };
 
 }; // namespace starrocks

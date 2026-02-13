@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 #include <gtest/gtest.h>
 

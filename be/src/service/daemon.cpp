@@ -67,16 +67,17 @@
 #include "fs/fs_util.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/user_function_cache.h"
 #include "service/mem_hook.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "types/time_types.h"
 #include "util/debug_util.h"
+#include "util/global_metrics_registry.h"
 #include "util/logging.h"
 #include "util/memory_lock.h"
 #include "util/misc.h"
-#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_util.h"
 
@@ -186,9 +187,9 @@ void calculate_metrics(void* arg_this) {
             last_ts = MonotonicSeconds();
             lst_push_bytes = StarRocksMetrics::instance()->push_request_write_bytes.value();
             lst_query_bytes = StarRocksMetrics::instance()->query_scan_bytes.value();
-            StarRocksMetrics::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
-            StarRocksMetrics::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
-                                                                                &lst_net_receive_bytes);
+            GlobalMetricsRegistry::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
+            GlobalMetricsRegistry::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
+                                                                                     &lst_net_receive_bytes);
         } else {
             int64_t current_ts = MonotonicSeconds();
             long interval = (current_ts - last_ts);
@@ -208,25 +209,25 @@ void calculate_metrics(void* arg_this) {
 
             // 3. max disk io util.
             StarRocksMetrics::instance()->max_disk_io_util_percent.set_value(
-                    StarRocksMetrics::instance()->system_metrics()->get_max_io_util(lst_disks_io_time, 15));
+                    GlobalMetricsRegistry::instance()->system_metrics()->get_max_io_util(lst_disks_io_time, 15));
             // Update lst map.
-            StarRocksMetrics::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
+            GlobalMetricsRegistry::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
 
             // 4. max network traffic.
             int64_t max_send = 0;
             int64_t max_receive = 0;
-            StarRocksMetrics::instance()->system_metrics()->get_max_net_traffic(
+            GlobalMetricsRegistry::instance()->system_metrics()->get_max_net_traffic(
                     lst_net_send_bytes, lst_net_receive_bytes, 15, &max_send, &max_receive);
             StarRocksMetrics::instance()->max_network_send_bytes_rate.set_value(max_send);
             StarRocksMetrics::instance()->max_network_receive_bytes_rate.set_value(max_receive);
             // update lst map
-            StarRocksMetrics::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
-                                                                                &lst_net_receive_bytes);
+            GlobalMetricsRegistry::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
+                                                                                     &lst_net_receive_bytes);
         }
 
         LOG(INFO) << dump_memory_tracker();
 
-        StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
+        GlobalMetricsRegistry::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
 }
@@ -295,7 +296,7 @@ void jemalloc_tracker_daemon(void* arg_this) {
 
 #define DUMP_METRIC(name, value_expr) fmt::format_to(std::back_inserter(buffer), " " #name "({})", value_expr);
 std::string dump_memory_tracker() {
-    auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
+    auto* mem_metrics = GlobalMetricsRegistry::instance()->system_metrics()->memory_metrics();
 
     fmt::memory_buffer buffer;
     fmt::format_to(std::back_inserter(buffer), "Current memory statistics:");
@@ -347,8 +348,8 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             return;
         }
     }
-    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices,
-                                             network_interfaces);
+    GlobalMetricsRegistry::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices,
+                                                  network_interfaces);
 }
 
 Slice get_process_comm(pid_t pid, char* buffer, int max_size) {
@@ -390,7 +391,7 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << "(" << process_comm << ")"
                    << ", is going to exit";
 
-        StarRocksMetrics::instance()->system_metrics()->update_memory_metrics();
+        GlobalMetricsRegistry::instance()->system_metrics()->update_memory_metrics();
         LOG(ERROR) << dump_memory_tracker();
     }
 #ifdef USE_STAROS

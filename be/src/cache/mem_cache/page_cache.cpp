@@ -39,8 +39,8 @@
 #include "base/metrics.h"
 #include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "util/lru_cache.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
