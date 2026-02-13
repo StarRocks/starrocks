@@ -18,11 +18,8 @@
 #include <gtest/gtest.h>
 
 #include "gen_cpp/AgentService_types.h"
-<<<<<<< HEAD
 #include "runtime/types.h"
-=======
 #include "storage/tablet_range.h"
->>>>>>> a3b6aa8dfd ([Enhancement] Introduce rowset range in tablet splitting and merging for range-distribution table (#69155))
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 
