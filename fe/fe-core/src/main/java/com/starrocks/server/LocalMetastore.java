@@ -1610,17 +1610,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public void addSubPartitions(Database db, OlapTable table, Partition partition,
-<<<<<<< HEAD
                                  int numSubPartition, long warehouseId) throws DdlException {
-=======
-                                 int numSubPartition, ComputeResource computeResource) throws DdlException {
-        addSubPartitions(db, table, partition, numSubPartition, 0, computeResource);
+        addSubPartitions(db, table, partition, numSubPartition, 0, warehouseId);
     }
 
     public void addSubPartitions(Database db, OlapTable table, Partition partition,
                                  int numSubPartition, int bucketNum,
-                                 ComputeResource computeResource) throws DdlException {
->>>>>>> 75ccf7b1e8 ([Enhancement] Add interface to add physical partition for random distribution table (#68503))
+                                 long warehouseId) throws DdlException {
         try {
             table.setAutomaticBucketing(true);
 
@@ -1759,14 +1755,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long warehouseId = ConnectContext.get() != null
                 ? ConnectContext.get().getCurrentWarehouseId()
                 : WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
         // Add one physical partition with the specified bucket number.
         // The bucketNum is set on the shadow-copied table inside addSubPartitions,
         // so there is no concurrent safety issue with the original table object.
-        addSubPartitions(db, olapTable, partition, 1, bucketNum, computeResource);
+        addSubPartitions(db, olapTable, partition, 1, bucketNum, warehouseId);
 
         LOG.info("Successfully added physical partition to partition '{}' in table '{}'",
                 partition.getName(), olapTable.getName());

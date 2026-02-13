@@ -1374,7 +1374,7 @@ public class AlterTest {
         Set<Long> existingIds = partition.get().getSubPartitions().stream()
                 .map(PhysicalPartition::getId).collect(java.util.stream.Collectors.toSet());
         GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 1,
-                    5, WarehouseManager.DEFAULT_RESOURCE);
+                    5, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assertions.assertEquals(partition.get().getSubPartitions().size(), 5);
         Assertions.assertEquals(table.getPhysicalPartitions().size(), 5);
 
