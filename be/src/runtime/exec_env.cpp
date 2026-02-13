@@ -277,7 +277,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
     register_hll_registers_allocator();
-    MemChunkAllocator::init_metrics();
+    register_mem_chunk_allocator_metrics(GlobalMetricsRegistry::instance()->metrics());
 
     return Status::OK();
 }
