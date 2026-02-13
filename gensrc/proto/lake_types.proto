@@ -112,7 +112,7 @@ message DelfileWithRowsetId {
     // origin rowset that generate this del file.
     optional uint32 origin_rowset_id = 2;
     // Because of historical reason, DELETE don't have its own segment id, we only use
-    // `rowset_id + segment_id` for UPSERT.
+    // `rowset_id + segment_idx` for UPSERT.
     // So if there is a UPSERT and DELETE mix transaction, we use
     // `op_offset` to identify the order of deletes, and rssid of DELETE will be
     // just same as previous UPSERT. And if the Rowset don't have UPSERT, DELETE's rssid
@@ -134,6 +134,11 @@ message SegmentMetadataPB {
     optional TuplePB sort_key_min = 1;
     optional TuplePB sort_key_max = 2;
     optional int64 num_rows = 3;
+    // Segment index inside the rowset. The global rssid is `rowset_id + segment_idx`.
+    // Initially assigned as a contiguous positional index at write time, but may become
+    // non-contiguous after operations such as partial compaction or batch merge.
+    // Backward compatibility: if absent, consumers should fallback to positional index.
+    optional uint32 segment_idx = 4;
 }
 
 message RowsetMetadataPB {

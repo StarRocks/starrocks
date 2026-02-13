@@ -841,7 +841,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
         // so we use max segment id as `op_offset`.
         // TODO : support real order of mix upsert and delete in one transaction.
-        const uint32_t del_rebuild_rssid = rowset->id() + std::max(rowset->num_segments(), (int64_t)1) - 1;
+        const uint32_t del_rebuild_rssid = rowset->id() + get_max_segment_idx(rowset->metadata());
         if (pkc->is_binary()) {
             // When PK table have multi pk columns or one pk column with varchar type,
             // we treat it as binary column.
@@ -870,15 +870,25 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     return Status::OK();
 }
 
+static size_t rebuild_segment_cnt(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
+    size_t cnt = 0;
+    for (int i = 0; i < rowset.segments_size(); ++i) {
+        if (get_rssid(rowset, i) >= rebuild_rss_id) {
+            ++cnt;
+        }
+    }
+    return cnt;
+}
+
 // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
 bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
-    if (rowset.segments_size() > 0 && (rowset.id() + rowset.segments_size() <= rebuild_rss_id)) {
+    if (rowset.segments_size() > 0 && rowset.id() + get_max_segment_idx(rowset) < rebuild_rss_id) {
         // All segments and del files under this rowset are not need to rebuild.
         // E.g.
         // If `rebuild_rss_id` is 12, and
-        // 1. `id` = 10, `segments_size` = 2, we can skip this rowset, because two segment's id is
+        // 1. `id` = 10, segment ids are [0, 1], we can skip this rowset, because two segment's rssid is
         //     10 and 11, both smaller than 12.
-        // 2. `id` = 10, `segments_size` = 3, we can't skip this rowset, because last segment's id
+        // 2. `id` = 10, segment ids are [0, 2], we can't skip this rowset, because last segment's rssid
         //     is 12 which is equal to 12, it may not dump to sst yet.
         return false;
     }
@@ -904,9 +914,7 @@ size_t LakePersistentIndex::need_rebuild_file_cnt(const TabletMetadataPB& metada
             continue; // skip rowset
         }
         cnt += rowset.del_files_size();
-        // rowset id + segment id < rebuild_rss_id can be skip.
-        // so only some segments in this rowset need to rebuild
-        cnt += std::min(rowset.id() + rowset.segments_size() - rebuild_rss_id, (uint32_t)rowset.segments_size());
+        cnt += rebuild_segment_cnt(rowset, rebuild_rss_id);
     }
     return cnt;
 }
@@ -964,7 +972,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 continue;
             }
             DeferOp close_iter([&] { itr->close(); });
-            if (rowset->id() + i < rebuild_rss_id) {
+            uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+            if (rssid < rebuild_rss_id) {
                 // lower than rebuild point, skip
                 // Notice: segment id that equal `rebuild_rss_id` can't be skip because
                 // there are maybe some rows need to rebuild.
@@ -988,7 +997,6 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     } else {
                         pkc = const_cast<Column*>(chunk->columns()[0].get());
                     }
-                    uint32_t rssid = rowset->id() + i;
                     uint64_t base = ((uint64_t)rssid) << 32;
                     std::vector<IndexValue> values;
                     values.reserve(pkc->size());

@@ -740,6 +740,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     table_schema_key->set_schema_id(_tablet_schema->id());
 
     for (const auto& f : _tablet_writer->segments()) {
+        uint32_t segment_idx = op_write->mutable_rowset()->segments_size();
         op_write->mutable_rowset()->add_segments(f.path);
         op_write->mutable_rowset()->add_segment_size(f.size.value());
         op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
@@ -750,6 +751,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
         f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
         segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
     for (const auto& f : _tablet_writer->dels()) {
         op_write->add_dels(f.path);

@@ -596,6 +596,34 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
     }
 }
 
+TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
+    const int64_t tablet_id = 32001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(200);
+
+    auto* input_rowset = metadata->add_rowsets();
+    input_rowset->set_id(110);
+    input_rowset->add_segments("a.dat");
+    input_rowset->add_segments("b.dat");
+    input_rowset->add_segment_metas()->set_segment_idx(0);
+    input_rowset->add_segment_metas()->set_segment_idx(5);
+
+    DeltaColumnGroupVerPB dcg;
+    dcg.add_versions(13);
+    (*metadata->mutable_dcg_meta()->mutable_dcgs())[115] = dcg;
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(110);
+    op_compaction.set_compact_version(12);
+    op_compaction.mutable_output_rowset()->add_segments("out.dat");
+
+    EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
+}
+
 TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(9);
@@ -662,6 +690,141 @@ TEST_F(MetaFileTest, test_error_state) {
     Status st = builder.update_num_del_stat(segment_id_to_add_dels);
     EXPECT_FALSE(st.ok());
     EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
+}
+
+TEST_F(MetaFileTest, test_segment_id_helper_fallback_and_override) {
+    RowsetMetadataPB rowset;
+    rowset.set_id(1000);
+    rowset.add_segments("a.dat");
+    rowset.add_segments("b.dat");
+    rowset.add_segment_metas()->set_num_rows(10);
+    rowset.add_segment_metas()->set_num_rows(20);
+
+    // Backward compatibility: fallback to segment index when segment_id is absent.
+    EXPECT_EQ(0, get_segment_idx(rowset, 0));
+    EXPECT_EQ(1, get_segment_idx(rowset, 1));
+    EXPECT_EQ(1000, get_rssid(rowset, 0));
+    EXPECT_EQ(1001, get_rssid(rowset, 1));
+
+    rowset.mutable_segment_metas(0)->set_segment_idx(3);
+    rowset.mutable_segment_metas(1)->set_segment_idx(8);
+
+    EXPECT_EQ(3, get_segment_idx(rowset, 0));
+    EXPECT_EQ(8, get_segment_idx(rowset, 1));
+    EXPECT_EQ(1003, get_rssid(rowset, 0));
+    EXPECT_EQ(1008, get_rssid(rowset, 1));
+}
+
+TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
+    const int64_t tablet_id = 31001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    auto* rowset = op_write.mutable_rowset();
+    rowset->add_segments("a.dat");
+    rowset->add_segments("b.dat");
+    rowset->add_segment_metas()->set_segment_idx(2);
+    rowset->add_segment_metas()->set_segment_idx(7);
+    op_write.add_dels("d1.del");
+    op_write.add_dels("d2.del");
+
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& written = metadata->rowsets(0);
+    ASSERT_EQ(2, written.del_files_size());
+    EXPECT_EQ(7, written.del_files(0).op_offset());
+    EXPECT_EQ(7, written.del_files(1).op_offset());
+    EXPECT_EQ(118, metadata->next_rowset_id());
+}
+
+TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
+    const int64_t tablet_id = 31002;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(102);
+
+    // input rowset with sparse segment ids: rssids are 100 and 105.
+    auto* input_rowset = metadata->add_rowsets();
+    input_rowset->set_id(100);
+    input_rowset->add_segments("a.dat");
+    input_rowset->add_segments("b.dat");
+    input_rowset->add_segment_metas()->set_segment_idx(0);
+    input_rowset->add_segment_metas()->set_segment_idx(5);
+
+    // neighbor rowset with rssid 101 should not be deleted.
+    auto* neighbor_rowset = metadata->add_rowsets();
+    neighbor_rowset->set_id(101);
+    neighbor_rowset->add_segments("c.dat");
+    neighbor_rowset->add_segment_metas()->set_segment_idx(0);
+
+    DelvecPagePB delvec_page;
+    delvec_page.set_version(10);
+    delvec_page.set_offset(0);
+    delvec_page.set_size(1);
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[100] = delvec_page;
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[101] = delvec_page;
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[105] = delvec_page;
+
+    DeltaColumnGroupVerPB dcg;
+    dcg.add_column_files("a.cols");
+    (*metadata->mutable_dcg_meta()->mutable_dcgs())[100] = dcg;
+    (*metadata->mutable_dcg_meta()->mutable_dcgs())[101] = dcg;
+    (*metadata->mutable_dcg_meta()->mutable_dcgs())[105] = dcg;
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(100);
+    op_compaction.mutable_output_rowset()->add_segments("out.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
+
+    ASSERT_OK(builder.apply_opcompaction(op_compaction, 101, 0));
+
+    const auto& delvecs = metadata->delvec_meta().delvecs();
+    EXPECT_TRUE(delvecs.find(100) == delvecs.end());
+    EXPECT_TRUE(delvecs.find(105) == delvecs.end());
+    EXPECT_TRUE(delvecs.find(101) != delvecs.end());
+
+    const auto& dcgs = metadata->dcg_meta().dcgs();
+    EXPECT_TRUE(dcgs.find(100) == dcgs.end());
+    EXPECT_TRUE(dcgs.find(105) == dcgs.end());
+    EXPECT_TRUE(dcgs.find(101) != dcgs.end());
+}
+
+TEST_F(MetaFileTest, test_apply_opcompaction_next_rowset_id_uses_max_segment_id) {
+    const int64_t tablet_id = 31003;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(200);
+
+    auto* input_rowset = metadata->add_rowsets();
+    input_rowset->set_id(100);
+    input_rowset->add_segments("in.dat");
+    input_rowset->add_segment_metas()->set_segment_idx(0);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(100);
+    auto* output_rowset = op_compaction.mutable_output_rowset();
+    output_rowset->add_segments("out1.dat");
+    output_rowset->add_segments("out2.dat");
+    output_rowset->add_segment_metas()->set_segment_idx(1);
+    output_rowset->add_segment_metas()->set_segment_idx(5);
+
+    ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    EXPECT_EQ(200, metadata->rowsets(0).id());
+    EXPECT_EQ(206, metadata->next_rowset_id());
 }
 
 TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
@@ -732,6 +895,8 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     RowsetMetadataPB rowset_meta1;
     rowset_meta1.add_segments("s1.dat");
     rowset_meta1.add_segments("s2.dat");
+    rowset_meta1.add_segment_metas()->set_segment_idx(3);
+    rowset_meta1.add_segment_metas()->set_segment_idx(9);
     op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
     op_write1.add_dels("d1.del");
     op_write1.add_dels("d2.del");
@@ -741,6 +906,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     TxnLogPB_OpWrite op_write2;
     RowsetMetadataPB rowset_meta2;
     rowset_meta2.add_segments("s3.dat");
+    rowset_meta2.add_segment_metas()->set_segment_idx(4);
     op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
     op_write2.add_dels("d3.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
@@ -753,21 +919,65 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     EXPECT_EQ("s1.dat", final_rowset.segments(0));
     EXPECT_EQ("s2.dat", final_rowset.segments(1));
     EXPECT_EQ("s3.dat", final_rowset.segments(2));
+    ASSERT_EQ(3, final_rowset.segment_metas_size());
+    EXPECT_EQ(3, final_rowset.segment_metas(0).segment_idx());
+    EXPECT_EQ(9, final_rowset.segment_metas(1).segment_idx());
+    EXPECT_EQ(14, final_rowset.segment_metas(2).segment_idx());
     ASSERT_EQ(3, final_rowset.del_files_size());
     std::set<std::string> del_names;
     for (int i = 0; i < final_rowset.del_files_size(); ++i) {
         del_names.insert(final_rowset.del_files(i).name());
         EXPECT_EQ(final_rowset.id(), final_rowset.del_files(i).origin_rowset_id());
+        EXPECT_EQ(14, final_rowset.del_files(i).op_offset());
     }
     EXPECT_TRUE(del_names.count("d1.del") > 0);
     EXPECT_TRUE(del_names.count("d2.del") > 0);
     EXPECT_TRUE(del_names.count("d3.del") > 0);
+    EXPECT_EQ(515, metadata->next_rowset_id());
 
     metadata->set_version(21);
     ASSERT_TRUE(builder.finalize(next_id()).ok());
     ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 21));
     ASSERT_EQ(1, persisted->rowsets_size());
     ASSERT_EQ(3, persisted->rowsets(0).del_files_size());
+}
+
+TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
+    const int64_t tablet_id = 30003;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(30);
+    metadata->set_next_rowset_id(600);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // First rowset does not contain segment_metas (backward compatible input).
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset()->add_segments("m1.dat");
+    op_write1.mutable_rowset()->add_segments("m2.dat");
+    op_write1.add_dels("d1.del");
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    // Second rowset contains segment_metas.
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->add_segments("m3.dat");
+    op_write2.mutable_rowset()->add_segment_metas()->set_segment_idx(0);
+    op_write2.add_dels("d2.del");
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    builder.set_final_rowset();
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& final_rowset = metadata->rowsets(0);
+    ASSERT_EQ(3, final_rowset.segments_size());
+    ASSERT_EQ(3, final_rowset.segment_metas_size());
+    EXPECT_EQ(0, final_rowset.segment_metas(0).segment_idx());
+    EXPECT_EQ(1, final_rowset.segment_metas(1).segment_idx());
+    EXPECT_EQ(2, final_rowset.segment_metas(2).segment_idx());
+    ASSERT_EQ(2, final_rowset.del_files_size());
+    EXPECT_EQ(2, final_rowset.del_files(0).op_offset());
+    EXPECT_EQ(2, final_rowset.del_files(1).op_offset());
+    EXPECT_EQ(603, metadata->next_rowset_id());
 }
 
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {

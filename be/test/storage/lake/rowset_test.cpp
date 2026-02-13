@@ -296,6 +296,61 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
     }
 }
 
+TEST_F(LakeRowsetTest, test_partial_compaction_sparse_segment_id_no_collision) {
+    create_rowsets_for_testing();
+    auto* rowset_meta = _tablet_metadata->mutable_rowsets(0);
+    rowset_meta->set_next_compaction_offset(2);
+    rowset_meta->clear_segment_metas();
+    rowset_meta->add_segment_metas()->set_segment_idx(0);
+    rowset_meta->add_segment_metas()->set_segment_idx(2);
+    rowset_meta->add_segment_metas()->set_segment_idx(4);
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    {
+        std::vector<int> k1{40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51};
+        std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(k1.data(), k1.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+        ASSERT_EQ(2, writer->segments().size());
+    }
+
+    TxnLogPB txn_log;
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
+    ASSERT_TRUE(rs->partial_segments_compaction());
+    CompactionTaskContext context(txn_id, _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+    ASSERT_OK(task.fill_compaction_segment_info(op_compaction, writer.get()));
+
+    const auto& output_rowset = op_compaction->output_rowset();
+    ASSERT_EQ(4, output_rowset.segments_size());
+    ASSERT_EQ(4, output_rowset.segment_metas_size());
+    EXPECT_EQ(2, op_compaction->new_segment_offset());
+    EXPECT_EQ(2, op_compaction->new_segment_count());
+
+    std::unordered_set<uint32_t> segment_ids;
+    for (int i = 0; i < output_rowset.segment_metas_size(); ++i) {
+        segment_ids.insert(output_rowset.segment_metas(i).segment_idx());
+    }
+    EXPECT_EQ(static_cast<size_t>(output_rowset.segment_metas_size()), segment_ids.size());
+    EXPECT_TRUE(segment_ids.contains(0));
+    EXPECT_TRUE(segment_ids.contains(2));
+    EXPECT_TRUE(segment_ids.contains(5));
+    EXPECT_TRUE(segment_ids.contains(6));
+}
 namespace {
 
 static VariantPB make_int_variant_pb(int32_t v) {
