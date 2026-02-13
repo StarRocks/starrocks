@@ -470,6 +470,7 @@ if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.12.0" ]; then
     # c patches
     cd $TP_SOURCE_DIR/$AVRO_SOURCE
     patch -p1 < $TP_PATCH_DIR/avro-1.12.0.c.patch
+    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.c.namespace.patch
     cp $TP_PATCH_DIR/avro-1.12.0.c.findjansson.patch ./lang/c/Findjansson.cmake
 
     # c++ patches

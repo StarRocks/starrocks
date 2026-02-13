@@ -1,0 +1,19 @@
+diff --git a/lang/c/src/schema.c b/lang/c/src/schema.c
+index a4d8e9f89..d3577efc0 100644
+--- a/lang/c/src/schema.c
++++ b/lang/c/src/schema.c
+@@ -806,6 +806,14 @@ find_named_schemas(const char *name, const char *namespace, st_table *st)
+ 	if (rval) {
+ 		return val.schema;
+ 	}
++
++	/*
++	 * If the name cannot be resolved in the current namespace, it is resolved against the null namespace.
++	 */
++	if (st_lookup(st, (st_data_t) name, &(val.data))) {
++		return val.schema;
++	}
++
+ 	avro_set_error("No schema type named %s", name);
+ 	return NULL;
+ };
