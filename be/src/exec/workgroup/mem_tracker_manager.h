@@ -65,7 +65,7 @@ private:
 
     void _add_metrics_unlocked(const std::string& mem_pool, UniqueLockType& lock);
     void _update_metrics();
-    void _update_metrics_unlocked(UniqueLockType&);
+    void _update_metrics_unlocked(SharedLockType&);
 
     mutable std::shared_mutex _mutex;
     std::once_flag _register_metrics_hook_once_flag;
