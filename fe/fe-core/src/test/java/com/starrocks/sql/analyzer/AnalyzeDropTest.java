@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -48,6 +49,37 @@ public class AnalyzeDropTest {
         Assertions.assertEquals("t0", stmt.getTableName());
         Assertions.assertFalse(stmt.isSetIfExists());
         Assertions.assertFalse(stmt.isForceDrop());
+    }
+
+    @Test
+    public void testDropFunctionIfExists() {
+        // DROP FUNCTION IF EXISTS should not throw when function does not exist
+        analyzeSuccess("drop function if exists non_existent_func(int)");
+        analyzeSuccess("drop function if exists test.non_existent_func(int)");
+
+        // DROP FUNCTION without IF EXISTS should fail when function does not exist
+        analyzeFail("drop function non_existent_func(int)");
+        analyzeFail("drop function test.non_existent_func(int)");
+
+        StatementBase dbStmt = AnalyzeTestUtil.parseSql("drop function non_existent_func(int)");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            Analyzer.analyze(dbStmt, AnalyzeTestUtil.getConnectContext());
+        });
+    }
+
+    @Test
+    public void testDropGlobalFunctionIfExists() {
+        // DROP GLOBAL FUNCTION IF EXISTS should not throw when function does not exist
+        analyzeSuccess("drop global function if exists non_existent_global_func(int)");
+
+        // DROP GLOBAL FUNCTION without IF EXISTS should fail when function does not exist
+        analyzeFail("drop global function non_existent_global_func(int)");
+
+        // Direct analyzer call to guarantee coverage of reportSemanticException line
+        StatementBase globalStmt = AnalyzeTestUtil.parseSql("drop global function non_existent_global_func(int)");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            Analyzer.analyze(globalStmt, AnalyzeTestUtil.getConnectContext());
+        });
     }
 
     @Test
