@@ -100,6 +100,21 @@ column_names: id,name
  update_time: 2025-04-11 15:09:50
 ```
 
+### Virtual column statistics
+Since StarRocks 4.0, virtual column statistics are supported. Virtual statistics are statistics that can be calculated over an expression and not only over a physical column. 
+
+At the moment, the only kind of virtual statistic that is implemented is `unnest` (of arrays). Calculation of virtual statistics is disabled by default as using them depends on query patterns.
+When analyzing a table, you can pass a property to enable the calculation of `unnest` virtual statistics by using:
+```sql
+ANALYZE FULL TABLE `TABLE1` PROPERTIES("unnest_virtual_statistics" = "true");
+```
+
+Note that sample as well as full statistics are supported.
+
+For example, statistics for an array column `col1` using the following expression `unnest(col1)` will be calculated when enabled. 
+When the session variable `enable_unnest_virtual_statistics` is enabled, the optimizer will then use and propagate the calculated virtual statistics when it encounters an `unnest(col1)` expression in a query. 
+This can help if you are regularly unnesting array columns and issue queries on them, for example joins. The optimizer can then use the statistics to e.g. account for a skewed join.
+
 ## Collection types and methods
 
 Data size and data distribution constantly change in a table. Statistics must be updated regularly to represent that data change. Before creating a statistics collection task, you must choose a collection type and method that best suit your business requirements.
