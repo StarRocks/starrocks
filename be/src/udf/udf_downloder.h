@@ -34,10 +34,6 @@ namespace starrocks
 
         Status do_download(const std::string& remotePath, std::string& localPath, const FSOptions& options);
 
-        static std::unordered_map<std::string, std::shared_ptr<std::mutex>> _path_mutexes;
-
         static std::mutex _download_mutex;
-
-        static std::shared_ptr<std::mutex> get_mutex_for_path(const std::string& localPath);
     };
 }

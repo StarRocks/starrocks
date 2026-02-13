@@ -36,7 +36,7 @@ public:
 
 TEST_F(UDFDownloaderTest, TestDownloadFromCloudRegularStorageEngine) {
 
-    std::string localPath = "/local/starrocks/plugins/java_udf/test.jar";
+    std::string localPath = "/tmp/test.jar";
 
     Status status = downloader->download_remote_file_2_local("s3://test-bucket/starrocks/udf/test.jar",
             localPath, FSOptions{});
