@@ -1537,7 +1537,7 @@ void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_b
         return;
     }
     auto request_ctx = std::make_shared<pipeline::RemoteLookUpRequestContext>(cntl, req, response, done);
-    st = _exec_env->lookup_dispatcher_mgr()->lookup(std::move(request_ctx));
+    st = _exec_env->lookup_dispatcher_mgr()->lookup(request_ctx);
 }
 
 template class PInternalServiceImplBase<PInternalService>;

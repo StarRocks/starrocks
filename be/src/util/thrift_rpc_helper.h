@@ -48,7 +48,7 @@ public:
     }
 
     template <typename T>
-    static Status rpc(const std::string& ip, const int32_t port, ConnectionCallBack<T> callback, int timeout_ms,
+    static Status rpc(const std::string& ip, const int32_t port, const ConnectionCallBack<T>& callback, int timeout_ms,
                       int retry_times = 2);
 
     template <typename T>

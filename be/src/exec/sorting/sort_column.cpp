@@ -465,7 +465,7 @@ private:
     }
 
     template <class T>
-    void _restore_inlined_permutation(const CompactChunkPermutation<T> inlined) {
+    void _restore_inlined_permutation(const CompactChunkPermutation<T>& inlined) {
         size_t n = std::min(inlined.size(), _pruned_limit);
         for (size_t i = 0; i < n; i++) {
             _permutation[i].chunk_index = inlined[i].chunk_index;
@@ -521,11 +521,8 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
 static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
                                   SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie,
                                   const SortDescs* sort_descs) {
-    // Nullable column need set all the null rows to default values,
-    // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
-    if (column->is_nullable() && !column->is_constant()) {
-        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
-    }
+    // When called from sort_and_tie_helper_nullable we receive the data column (non-nullable);
+    // nulls are already handled by partition_null_and_nonnull_helper, so no fill_null here.
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
     if (sort_descs != nullptr) {
         column_sorter.use_german_string(sort_descs->is_use_german_string());

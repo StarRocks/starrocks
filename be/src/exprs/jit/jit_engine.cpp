@@ -289,17 +289,17 @@ static inline void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis 
                 llvm::SLPVectorizerPass slp_vectorize_pass;
 
                 function_pm.addPass(std::move(inst_combine_pass));
-                function_pm.addPass(std::move(promote_pass));
+                function_pm.addPass(std::move(promote_pass)); // NOLINT(performance-move-const-arg)
                 function_pm.addPass(std::move(gvn_pass));
-                function_pm.addPass(std::move(new_gvn_pass));
-                function_pm.addPass(std::move(simplify_cfg_pass));
-                function_pm.addPass(std::move(loop_vectorize_pass));
+                function_pm.addPass(std::move(new_gvn_pass));        // NOLINT(performance-move-const-arg)
+                function_pm.addPass(std::move(simplify_cfg_pass));   // NOLINT(performance-move-const-arg)
+                function_pm.addPass(std::move(loop_vectorize_pass)); // NOLINT(performance-move-const-arg)
                 function_pm.addPass(std::move(slp_vectorize_pass));
 
                 module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
 
                 llvm::GlobalOptPass global_opt;
-                module_pm.addPass(std::move(global_opt));
+                module_pm.addPass(std::move(global_opt)); // NOLINT(performance-move-const-arg)
             });
 
     auto module_pm = pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
@@ -451,7 +451,8 @@ static inline StatusOr<JITCallablePtr> optimize_and_finalize_module(const std::s
                                        " error: " + llvm::toString(sym.takeError()));
     }
     JITScalarFunction fn_ptr = sym->toPtr<JITScalarFunction>();
-    return std::make_shared<JITCallable>(MemMgrPtr(std::move(mem_mgr)), std::move(fn_ptr));
+    return std::make_shared<JITCallable>(MemMgrPtr(std::move(mem_mgr)),
+                                         std::move(fn_ptr)); // NOLINT(performance-move-const-arg)
 }
 
 #ifndef BE_TEST
