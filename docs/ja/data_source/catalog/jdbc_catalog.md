@@ -57,6 +57,7 @@ JDBC catalog のプロパティ。`PROPERTIES` には以下のパラメーター
 | jdbc_uri          | JDBC ドライバーがターゲットデータベースに接続するために使用する URI。MySQL の場合、URI は `"jdbc:mysql://ip:port"` 形式です。PostgreSQL の場合、URI は `"jdbc:postgresql://ip:port/db_name"` 形式です。詳細は [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html) を参照してください。 |
 | driver_url        | JDBC ドライバー JAR パッケージのダウンロード URL。HTTP URL またはファイル URL がサポートされます。例えば、`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` や `file:///home/disk1/postgresql-42.3.3.jar` です。<br />**注意**<br />JDBC ドライバーを FE と BE または CN ノードの同じパスに配置し、`driver_url` をそのパスに設定することもできます。この場合、`file:///<path>/to/the/driver` 形式でなければなりません。 |
 | driver_class      | JDBC ドライバーのクラス名。一般的なデータベースエンジンの JDBC ドライバークラス名は以下の通りです：<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x およびそれ以前) および `com.mysql.cj.jdbc.Driver` (MySQL v6.x およびそれ以降)</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
+| schema_resolver   | (オプション) 使用するスキーマリゾルバーを明示的に指定します。有効な値：`postgresql`、`mysql`、`oracle`、`sqlserver`、`clickhouse`。ドライバークラス名から自動検出できない非標準の JDBC ドライバーを使用する場合にこのパラメーターを使用します。指定しない場合、StarRocks は `driver_class` パラメーターに基づいて適切なリゾルバーを自動検出します。 |
 
 > **注意**
 >
@@ -120,7 +121,19 @@ PROPERTIES
     "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
     "driver_url"="https://repo1.maven.org/maven2/com/clickhouse/clickhouse-jdbc/0.4.6/clickhouse-jdbc-0.4.6.jar",
     "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
-);    
+);
+-- 非標準ドライバーに schema_resolver を使用
+CREATE EXTERNAL CATALOG jdbc5
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="postgres",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/mydb",
+    "driver_url"="file:///path/to/custom-postgresql-driver.jar",
+    "driver_class"="com.custom.PostgresDriver",
+    "schema_resolver"="postgresql"
+);
 ```
 
 ## JDBC catalog の表示
