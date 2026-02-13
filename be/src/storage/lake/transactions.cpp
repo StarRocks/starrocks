@@ -397,7 +397,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             auto tablet_id_in_txn_log = tablet_ids_in_txn_logs[j];
             auto& txn_logs = txn_logs_vector[j];
             for (auto& txn_log : txn_logs) {
-                txn_log = convert_txn_log(txn_log, base_metadata, tablet_info);
+                ASSIGN_OR_RETURN(auto converted_txn_log, convert_txn_log(txn_log, base_metadata, tablet_info));
+                txn_log = std::move(converted_txn_log);
             }
             // multi statement transaction
             if (txns[i].load_ids_size() > 0) {
@@ -472,7 +473,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                     return txn_vlog_or.status();
                 }
 
-                auto txn_vlog = convert_txn_log(txn_vlog_or.value(), base_metadata, tablet_info);
+                ASSIGN_OR_RETURN(auto txn_vlog, convert_txn_log(txn_vlog_or.value(), base_metadata, tablet_info));
                 auto st = log_applier->apply(*txn_vlog);
                 if (!st.ok()) {
                     LOG(WARNING) << "Fail to apply " << vlog_path << ": " << st;
