@@ -87,6 +87,12 @@ shell: if [ -s be_pprof_file.txt ] && [ "$(cat be_pprof_file.txt)" != "" ]; then
 -- Should handle error from BE (covers ProcProfileFileAction.java:165-166)
 shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=nonexistent_file.tar.gz"
 
+-- Test 21: Test /proc_profile/file with non-existent BE node
+-- Should return appropriate error HTTP status for non-existent BE node
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:1.2.3.4:$(cat be_http_port.txt)&filename=nonexistent_file.tar.gz"
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):9999&filename=nonexistent_file.tar.gz"
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:1.2.3.4:9999&filename=nonexistent_file.tar.gz"
+
 -- Cleanup
 shell: rm -f fe_profile_file.txt be_profile_file.txt be_ip.txt be_http_port.txt be_tar_file.txt be_pprof_file.txt
 

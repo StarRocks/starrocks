@@ -149,6 +149,21 @@ shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file
 0
 500
 -- !result
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:1.2.3.4:$(cat be_http_port.txt)&filename=nonexistent_file.tar.gz"
+-- result:
+0
+400
+-- !result
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):9999&filename=nonexistent_file.tar.gz"
+-- result:
+0
+400
+-- !result
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:1.2.3.4:9999&filename=nonexistent_file.tar.gz"
+-- result:
+0
+400
+-- !result
 shell: rm -f fe_profile_file.txt be_profile_file.txt be_ip.txt be_http_port.txt be_tar_file.txt be_pprof_file.txt
 -- result:
 0

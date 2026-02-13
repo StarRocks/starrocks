@@ -21,6 +21,9 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -45,6 +48,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 
 public class ProcProfileFileAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(ProcProfileFileAction.class);
@@ -116,6 +120,13 @@ public class ProcProfileFileAction extends WebBaseAction {
             port = Integer.parseInt(parts[1]);
         } catch (NumberFormatException e) {
             LOG.warn("Invalid BE port: {}", parts[1]);
+            writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+            return;
+        }
+
+        // Validate BE node exists before proxying the request to mitigate SSRF risk.
+        if (!validateNodeExists(host, port)) {
+            LOG.warn("BE node does not exist: {}:{}", host, port);
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
         }
@@ -205,5 +216,24 @@ public class ProcProfileFileAction extends WebBaseAction {
         }
 
         return null;
+    }
+
+    private boolean validateNodeExists(String host, int httpPort) {
+        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
+        for (Backend backend : backends) {
+            if (backend.getHost().equals(host) && backend.getHttpPort() == httpPort) {
+                return true;
+            }
+        }
+
+        List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .getComputeNodes();
+        for (ComputeNode computeNode : computeNodes) {
+            if (computeNode.getHost().equals(host) && computeNode.getHttpPort() == httpPort) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
