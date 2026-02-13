@@ -26,6 +26,41 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.13
+
+发布日期：2026 年 2 月 13 日
+
+### 功能优化
+
+- 新增 FE 配置项 `enable_table_metrics_collect`，用于控制是否收集表级别指标。[#68691](https://github.com/StarRocks/starrocks/pull/68691)
+- 支持在用户级别为 Merge Commit 设置默认 Warehouse。[#68616](https://github.com/StarRocks/starrocks/pull/68616)
+
+### 问题修复
+
+修复了以下问题：
+
+- 复制事务中的源分区检查问题。[#68883](https://github.com/StarRocks/starrocks/pull/68883)
+- 在 `BEGIN TRANSACTION` 中指定 Label 时，未正确识别已使用的 Label。[#68660](https://github.com/StarRocks/starrocks/pull/68660)
+- 带有 CTE 作用域的 `JOIN ON` 子句相关的错误。[#68809](https://github.com/StarRocks/starrocks/pull/68809)
+- 在显式指定下界时，可能创建重叠的范围分区。[#68255](https://github.com/StarRocks/starrocks/pull/68255)
+- SQL 方言从 Trino 降级为 StarRocks 时解析器逻辑错误。[#68725](https://github.com/StarRocks/starrocks/pull/68725)
+- Projection Column 裁剪问题。[#68242](https://github.com/StarRocks/starrocks/pull/68242)
+- 子查询作用域检查问题。[#68415](https://github.com/StarRocks/starrocks/pull/68415)
+- 函数分析器中的类型转换不匹配问题。[#66749](https://github.com/StarRocks/starrocks/pull/66749)
+- 候选物化视图选择逻辑错误。[#68571](https://github.com/StarRocks/starrocks/pull/68571)
+- Thrift `accept` 线程在发生异常时退出。[#68644](https://github.com/StarRocks/starrocks/pull/68644)
+- Iceberg 数据文件大小估算不准确。[#68787](https://github.com/StarRocks/starrocks/pull/68787)
+- 数据湖表内存泄漏问题。[#68678](https://github.com/StarRocks/starrocks/pull/68678)
+- HMS 连接池满时发生死锁。[#68033](https://github.com/StarRocks/starrocks/pull/68033)
+- Iceberg Delete 列的 Nullability 问题。[#68649](https://github.com/StarRocks/starrocks/pull/68649)
+- 物化视图持有大型外部表问题。[#68171](https://github.com/StarRocks/starrocks/pull/68171)
+- Iceberg 表缓存内存限制问题。[#67769](https://github.com/StarRocks/starrocks/pull/67769)
+- PocoHttpClient 使用了错误的超时参数。[#68765](https://github.com/StarRocks/starrocks/pull/68765)
+- 使用 Clang 编译 BE 失败问题。[#68805](https://github.com/StarRocks/starrocks/pull/68805)
+- 启动期间物化视图被重复加载多次。[#62351](https://github.com/StarRocks/starrocks/pull/62351)
+- CVE-2025-27821。[#68529](https://github.com/StarRocks/starrocks/pull/68529)
+- 在某些场景下，可变参数函数返回错误的日期值。[#67947](https://github.com/StarRocks/starrocks/pull/67947)
+
 ## 3.5.12
 
 发布日期：2026 年 1 月 22 日
