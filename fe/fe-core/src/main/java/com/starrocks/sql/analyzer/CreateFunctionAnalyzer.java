@@ -204,7 +204,7 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "StorageVolumeMgr is not initialized");
         }
-        StorageVolume  sv = storageVolumeMgr.getStorageVolumeByName(this.storageVolumeName);
+        StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(this.storageVolumeName);
         if (sv == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     String.format("Storage volume '%s' not found. Please create it first.", this.storageVolumeName));
