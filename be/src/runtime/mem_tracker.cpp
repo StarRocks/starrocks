@@ -36,8 +36,8 @@
 
 #include <utility>
 
+#include "common/system/backend_options.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
 
 namespace starrocks {
 

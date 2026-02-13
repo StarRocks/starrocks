@@ -44,6 +44,7 @@
 
 #include "column/chunk.h"
 #include "common/logging.h"
+#include "common/system/backend_options.h"
 #include "exprs/expr.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
@@ -54,7 +55,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"

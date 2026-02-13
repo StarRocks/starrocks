@@ -20,6 +20,7 @@ ADD_BE_LIB(Common
   memory/column_allocator.cpp
   runtime_profile.cpp
   stack_util.cpp
+  system/backend_options.cpp
   system/disk_info.cpp
   system/cpu_info.cpp
   system/cpu_info_debug.cpp

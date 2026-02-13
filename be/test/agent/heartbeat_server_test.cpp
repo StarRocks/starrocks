@@ -15,9 +15,9 @@
 #include "agent/heartbeat_server.h"
 
 #include "common/process_exit.h"
+#include "common/system/backend_options.h"
 #include "gen_cpp/Types_types.h"
 #include "gtest/gtest.h"
-#include "service/backend_options.h"
 
 namespace starrocks {
 

@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "common/system/backend_options.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService.h"
@@ -23,7 +24,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {

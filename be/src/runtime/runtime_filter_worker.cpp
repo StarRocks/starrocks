@@ -22,6 +22,7 @@
 
 #include "base/time/time.h"
 #include "common/config.h"
+#include "common/system/backend_options.h"
 #include "exec/hash_join_node.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -32,7 +33,6 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
 #include "util/brpc_stub_cache.h"
 #include "util/internal_service_recoverable_stub.h"
 #include "util/thread.h"

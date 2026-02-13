@@ -21,9 +21,9 @@
 #include <util/arrow/utils.h>
 
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "exec/arrow_flight_batch_reader.h"
 #include "exprs/base64.h"
-#include "service/backend_options.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

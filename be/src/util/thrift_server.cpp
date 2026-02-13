@@ -51,7 +51,7 @@
 #include <utility>
 
 #include "common/config.h"
-#include "service/backend_options.h"
+#include "common/system/backend_options.h"
 #include "util/thread.h"
 
 namespace starrocks {
