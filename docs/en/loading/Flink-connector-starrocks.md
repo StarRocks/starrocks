@@ -20,9 +20,6 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
@@ -862,6 +859,119 @@ takes effect only when the new value for `score` is has a greater or equal to th
     ```
 
    You can see that only the values of the second data row change, and the values of the first data row do not change.
+
+### Load data with Merge Commit
+
+This section shows how to use Merge Commit to improve loading throughput when you have multiple Flink sink subtasks writing to the same StarRocks table. These examples use Flink SQL and StarRocks v3.4.0 or later.
+
+#### Preparations
+
+Create a database `test` and create a Primary Key table `score_board` in StarRocks.
+
+```SQL
+CREATE DATABASE `test`;
+
+CREATE TABLE `test`.`score_board`
+(
+    `id` int(11) NOT NULL COMMENT "",
+    `name` varchar(65533) NULL DEFAULT "" COMMENT "",
+    `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`);
+```
+
+#### Basic configuration
+
+This Flink SQL enables merge commit with a 10-second merge window. Data from all sink subtasks is merged into a single transaction within each window.
+
+```SQL
+CREATE TABLE `score_board` (
+    `id` INT,
+    `name` STRING,
+    `score` INT,
+    PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+    'connector' = 'starrocks',
+    'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+    'load-url' = '127.0.0.1:8030',
+    'database-name' = 'test',
+    'table-name' = 'score_board',
+    'username' = 'root',
+    'password' = '',
+    'sink.properties.enable_merge_commit' = 'true',
+    'sink.properties.merge_commit_interval_ms' = '10000',
+    'sink.buffer-flush.interval-ms' = '5000'
+);
+```
+
+Insert data into the Flink table. The data will be loaded into StarRocks via merge commit.
+
+```SQL
+INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 95), (3, 'spark', 90);
+```
+
+#### In-order loading for Primary Key tables
+
+By default, a single sink subtask may send multiple Stream Load requests concurrently, which can cause out-of-order loading. For Primary Key tables where data ordering matters, there are two approaches to handle this issue.
+
+**Method 1: Use `sink.merge-commit.max-concurrent-requests`**
+
+Set `sink.merge-commit.max-concurrent-requests` to `0` to ensure each subtask sends requests one at a time. This guarantees in-order loading but may reduce throughput.
+
+```SQL
+CREATE TABLE `score_board` (
+    `id` INT,
+    `name` STRING,
+    `score` INT,
+    PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+    'connector' = 'starrocks',
+    'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+    'load-url' = '127.0.0.1:8030',
+    'database-name' = 'test',
+    'table-name' = 'score_board',
+    'username' = 'root',
+    'password' = '',
+    'sink.properties.enable_merge_commit' = 'true',
+    'sink.properties.merge_commit_interval_ms' = '10000',
+    'sink.buffer-flush.interval-ms' = '5000',
+    'sink.merge-commit.max-concurrent-requests' = '0'
+);
+
+INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 95), (3, 'spark', 90);
+```
+
+**Method 2: Use Conditional Update**
+
+If you want to keep concurrent requests for higher throughput but still prevent older data from overwriting newer data, you can use [Conditional Update](#conditional-update). Set `sink.properties.merge_condition` to a column (for example, a version or timestamp column) so that an update only takes effect when the incoming value is greater than or equal to the existing value.
+
+```SQL
+CREATE TABLE `score_board` (
+    `id` INT,
+    `name` STRING,
+    `score` INT,
+    PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+    'connector' = 'starrocks',
+    'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+    'load-url' = '127.0.0.1:8030',
+    'database-name' = 'test',
+    'table-name' = 'score_board',
+    'username' = 'root',
+    'password' = '',
+    'sink.properties.enable_merge_commit' = 'true',
+    'sink.properties.merge_commit_interval_ms' = '10000',
+    'sink.buffer-flush.interval-ms' = '5000',
+    'sink.properties.merge_condition' = 'score'
+);
+
+INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 95), (3, 'spark', 90);
+```
+
+With this configuration, concurrent requests are allowed (default `sink.merge-commit.max-concurrent-requests` is `Integer.MAX_VALUE`), but an update to a row only takes effect when the new `score` is greater than or equal to the existing `score`. This prevents newer data from being overwritten by older data even under out-of-order loading.
 
 ### Load data into columns of BITMAP type
 
