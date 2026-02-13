@@ -338,99 +338,6 @@ public class LocalMetaStoreTest {
                 "Tablets should not be changed when truncate fails");
         Assertions.assertTrue(writeLockAcquired.get(), "Write lock should be acquired during truncate");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testTruncateTableEditLog() throws Exception {
-        String catalogName = connectContext.getCurrentCatalog();
-        String dbFullName = "test";
-        String tableName = "edit_log_t1";
-        starRocksAssert.useDatabase("test").withTable(
-                        "CREATE TABLE test.edit_log_t1(k1 int, k2 int, k3 int)" +
-                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
-        // Include catalog name in QualifiedName, use dbFullName for database name
-        QualifiedName qualifiedName = QualifiedName.of(List.of(catalogName, dbFullName, tableName));
-        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
-        TruncateTableStmt stmt = new TruncateTableStmt(tableRef, NodePosition.ZERO);
-        // Analyze the statement (normally done before execution)
-        TruncateTableAnalyzer.analyze(stmt, connectContext);
-
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
-        OlapTable table = (OlapTable) database.getTable(tableName);
-        OlapTable followerTable  = AnalyzerUtils.getShadowCopyTable(table);
-        long oldPartitionId = table.getPartition(tableName).getId();
-
-        // 3. Execute truncateTable
-        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        metastore.truncateTable(stmt, connectContext);
-
-        // 4. Verify master state - partition is replaced with new one
-        // For unpartitioned table, partition name should be the same as table name
-        Partition newPartition = table.getPartition(tableName);
-        Assertions.assertNotNull(newPartition);
-        Assertions.assertNotEquals(oldPartitionId, newPartition.getId());
-
-        // 5. Test follower replay
-        TruncateTableInfo replayInfo = (TruncateTableInfo) UtFrameUtils.PseudoJournalReplayer
-                .replayNextJournal(OperationType.OP_TRUNCATE_TABLE);
-
-        Assertions.assertNotNull(replayInfo);
-        Assertions.assertEquals(database.getId(), replayInfo.getDbId());
-        Assertions.assertEquals(table.getId(), replayInfo.getTblId());
-        Assertions.assertNotNull(replayInfo.getPartitions());
-        Assertions.assertFalse(replayInfo.getPartitions().isEmpty());
-
-        LocalMetastore followerLocalMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
-                GlobalStateMgr.getCurrentState().getRecycleBin(),
-                GlobalStateMgr.getCurrentState().getColocateTableIndex());
-        Database followerDatabase = new Database(database.getId(), database.getFullName());
-        followerLocalMetastore.replayCreateDb(followerDatabase);
-        followerDatabase.registerTableUnlocked(followerTable);
-        followerLocalMetastore.replayTruncateTable(replayInfo);
-        Partition followerPartition = followerTable.getPartition(tableName);
-        Assertions.assertNotNull(followerPartition);
-        Assertions.assertNotEquals(oldPartitionId, followerPartition.getId());
-
-        UtFrameUtils.tearDownForPersisTest();
-    }
-
-    @Test
-    public void testTruncateTableEditLogException() throws Exception {
-        String catalogName = connectContext.getCurrentCatalog();
-        String dbFullName = "test";
-        String tableName = "edit_log_t2";
-        starRocksAssert.useDatabase(dbFullName).withTable(
-                        "CREATE TABLE " + tableName + "(k1 int, k2 int, k3 int)" +
-                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
-        // Include catalog name in QualifiedName, use dbFullName for database name
-        QualifiedName qualifiedName = QualifiedName.of(List.of(catalogName, dbFullName, tableName));
-        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
-        TruncateTableStmt stmt = new TruncateTableStmt(tableRef, NodePosition.ZERO);
-        // Analyze the statement (normally done before execution)
-        TruncateTableAnalyzer.analyze(stmt, connectContext);
-
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
-        OlapTable table = (OlapTable) database.getTable(tableName);
-        long oldPartitionId = table.getPartition(tableName).getId();
-
-        // 3. Mock EditLog.logTruncateTable to throw exception
-        EditLog spyEditLog = spy(new EditLog(null));
-        doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logTruncateTable(any(TruncateTableInfo.class), any());
-        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
-
-        // 4. Execute truncateTable and expect exception
-        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            metastore.truncateTable(stmt, connectContext);
-        });
-        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
-
-        // 5. Verify partition ID remains unchanged after exception
-        // For unpartitioned table, partition name should be the same as table name
-        Assertions.assertEquals(oldPartitionId, table.getPartition(tableName).getId());
-    }
 
     @Test
     public void testAddPhysicalPartitionForNonPartitionedTable() throws Exception {
@@ -548,5 +455,4 @@ public class LocalMetaStoreTest {
 
         starRocksAssert.dropTable("test.add_pp_err");
     }
->>>>>>> 75ccf7b1e8 ([Enhancement] Add interface to add physical partition for random distribution table (#68503))
 }
