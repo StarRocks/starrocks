@@ -15,6 +15,8 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Range;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -36,6 +38,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
@@ -48,6 +51,8 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -1744,6 +1749,107 @@ public class LocalMetastoreTablePropertyEditLogTest {
         Assertions.assertEquals(120, olapTable.getTableQueryTimeout());
         Map<String, String> exported = olapTable.getProperties();
         Assertions.assertEquals("120", exported.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+    }
+
+    @Test
+    public void testAlterDataCacheEnableHelper() throws Exception {
+        // Tests the alterDataCacheEnable helper method via reflection (same pattern as above)
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 9300, DB_NAME + "_datacache_helper");
+        metastore.unprotectCreateDb(db);
+
+        LakeTable lakeTable = createRangePartitionedLakeTable(TABLE_ID + 9300, TABLE_NAME + "_datacache_helper", 3);
+        lakeTable.getTableProperty().setStorageInfo(
+                new StorageInfo(FilePathInfo.newBuilder().build(), FileCacheInfo.newBuilder().build()));
+        db.registerTableUnlocked(lakeTable);
+
+        // Mock StarOSAgent to no-op
+        new MockUp<com.starrocks.lake.StarOSAgent>() {
+            @Mock
+            public void updateShardGroup(List<Partition> partitionsList, boolean enableCache) {
+                // no-op
+            }
+        };
+
+        List<Runnable> appliers = new ArrayList<>();
+        Map<String, String> props = new HashMap<>();
+        props.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+
+        java.lang.reflect.Method alterDataCacheEnable = LocalMetastore.class.getDeclaredMethod(
+                "alterDataCacheEnable", Database.class, OlapTable.class, Map.class, List.class);
+        alterDataCacheEnable.setAccessible(true);
+        alterDataCacheEnable.invoke(metastore, db, lakeTable, props, appliers);
+        Assertions.assertEquals(1, appliers.size());
+        appliers.get(0).run();
+
+        // Verify the property has been set on the table
+        Assertions.assertTrue(lakeTable.getTableProperty().getStorageInfo().isEnableDataCache());
+    }
+
+    @Test
+    public void testAlterDataCacheEnableOnNonCloudNativeTableFails() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 9400, DB_NAME + "_datacache_non_cloud");
+        metastore.unprotectCreateDb(db);
+
+        OlapTable olapTable = createHashOlapTable(TABLE_ID + 9400, TABLE_NAME + "_datacache_non_cloud", 3);
+        db.registerTableUnlocked(olapTable);
+
+        List<Runnable> appliers = new ArrayList<>();
+        Map<String, String> props = new HashMap<>();
+        props.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+
+        java.lang.reflect.Method alterDataCacheEnable = LocalMetastore.class.getDeclaredMethod(
+                "alterDataCacheEnable", Database.class, OlapTable.class, Map.class, List.class);
+        alterDataCacheEnable.setAccessible(true);
+
+        try {
+            alterDataCacheEnable.invoke(metastore, db, olapTable, props, appliers);
+            Assertions.fail("Should throw exception for non-cloud-native table");
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Assertions.assertTrue(e.getCause() instanceof com.starrocks.common.DdlException);
+            Assertions.assertTrue(e.getCause().getMessage().contains("datacache.enable"));
+        }
+    }
+
+    @Test
+    public void testOlapTableSetDataCacheEnable() {
+        // OlapTable.setDataCacheEnable with null tableProperty
+        OlapTable table = createHashOlapTable(TABLE_ID + 9500, TABLE_NAME + "_datacache_set", 3);
+        table.setTableProperty(null);
+        table.setDataCacheEnable(true);
+        Assertions.assertNotNull(table.getTableProperty());
+    }
+
+    @Test
+    public void testTablePropertyBuildDataCacheEnable() {
+        // Test buildDataCacheEnable when storageInfo is null (should log warning but not throw)
+        Map<String, String> propMap = new HashMap<>();
+        propMap.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+        TableProperty tp = new TableProperty(propMap);
+        // storageInfo is null by default
+        tp.buildDataCacheEnable(); // should not throw, just log warning
+
+        // Test buildDataCacheEnable when storageInfo is present
+        LakeTable lakeTable = createRangePartitionedLakeTable(TABLE_ID + 9600, TABLE_NAME + "_build_cache", 3);
+        TableProperty lakeProperty = lakeTable.getTableProperty();
+        lakeProperty.setStorageInfo(
+                new StorageInfo(FilePathInfo.newBuilder().build(), FileCacheInfo.newBuilder().build()));
+        lakeProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+        lakeProperty.buildDataCacheEnable();
+        Assertions.assertTrue(lakeProperty.getStorageInfo().isEnableDataCache());
+
+        lakeProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "false");
+        lakeProperty.buildDataCacheEnable();
+        Assertions.assertFalse(lakeProperty.getStorageInfo().isEnableDataCache());
+    }
+
+    @Test
+    public void testTablePropertyBuildDataCacheEnableNotSet() {
+        // Test buildDataCacheEnable when property is not set
+        Map<String, String> propMap = new HashMap<>();
+        TableProperty tp = new TableProperty(propMap);
+        tp.buildDataCacheEnable(); // should be a no-op, no exception
     }
 
 }

@@ -931,6 +931,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                         ((RecyclePartitionInfoV2) partitionInfo).getDataCacheInfo());
             }
 
+            // Corner case: The user may have dropped the partition (non-force), then changed
+            // the table's datacache.enable property while the partition was in the recycle bin.
+            // When the partition is recovered (including replay), its DataCacheInfo should be
+            // updated to match the table's current datacache.enable value.
+            partitionInfo.syncDataCacheInfoWithTable(table, rangePartitionInfo, partitionId);
+
             iterator.remove();
             idToRecycleTime.remove(partitionId);
 

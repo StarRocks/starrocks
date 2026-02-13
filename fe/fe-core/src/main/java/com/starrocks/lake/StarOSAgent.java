@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.manager.StarManagerServer;
+import com.staros.proto.CacheEnableState;
 import com.staros.proto.CreateMetaGroupInfo;
 import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
@@ -40,11 +41,13 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.UpdateShardGroupInfo;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
@@ -698,6 +701,28 @@ public class StarOSAgent {
             LOG.debug("Create virtual shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
             throw new DdlException("Failed to create virtual shard. error: " + e.getMessage());
+        }
+    }
+
+    public void updateShardGroup(List<Partition> partitionsList, boolean enableCache) throws DdlException {
+        try {
+            prepare();
+            List<UpdateShardGroupInfo> updateShardGroupInfoList = new ArrayList<>(partitionsList.size());
+            for (Partition partition : partitionsList) {
+                updateShardGroupInfoList.add(
+                        UpdateShardGroupInfo.newBuilder()
+                                .setGroupId(partition.getDefaultPhysicalPartition().getShardGroupId())
+                                .setEnableCache(enableCache ? CacheEnableState.ENABLED : CacheEnableState.DISABLED)
+                                .build());
+            }
+            client.updateShardGroup(serviceId, updateShardGroupInfoList);
+        } catch (StarClientException e) {
+            StringBuilder partitionNamesBuilder = new StringBuilder();
+            for (Partition partition : partitionsList) {
+                partitionNamesBuilder.append(partition.getName()).append(" ");
+            }
+            throw new DdlException("Failed to alter partition shardGroups, PartitionNames: " +
+                    partitionNamesBuilder.toString().trim() + ", error: " + e.getMessage());
         }
     }
 

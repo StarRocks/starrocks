@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
@@ -674,5 +675,231 @@ public class CatalogRecycleBinLakeTableTest {
         Assertions.assertNull(recycleBin.getPartition(p2.getId()));
         checkPartitionTablet(p1, false);
         checkPartitionTablet(p2, false);
+    }
+
+    /**
+     * Test corner case: user drops partition (non-force), then changes table's datacache.enable,
+     * then recovers the partition. The recovered partition should have the table's current
+     * datacache.enable value, not the stale value from before the drop.
+     */
+    @Test
+    public void testRecoverPartitionSyncsDataCacheWithTableProperty(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "recover_partition_datacache_sync_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+        // Create a range partitioned cloud native table (datacache.enable defaults to true)
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t_datacache" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')," +
+                        "  PARTITION p3 VALUES LESS THAN('2024-03-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        OlapTable olapTable = (OlapTable) table;
+
+        Partition p1 = table.getPartition("p1");
+        Assertions.assertNotNull(p1);
+
+        // Verify initial datacache is enabled for p1
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        DataCacheInfo initialDataCacheInfo = partitionInfo.getDataCacheInfo(p1.getId());
+        Assertions.assertNotNull(initialDataCacheInfo);
+        Assertions.assertTrue(initialDataCacheInfo.isEnabled(),
+                "DataCache should be enabled initially for cloud native table partition");
+
+        // Step 1: Drop partition p1 (non-force, goes to recycle bin)
+        alterTable(connectContext, String.format("ALTER TABLE %s.t_datacache DROP PARTITION p1", dbName));
+        Assertions.assertNull(table.getPartition("p1"));
+        Assertions.assertNotNull(recycleBin.getPartition(p1.getId()));
+
+        // Step 2: Change table's datacache.enable to false
+        // We directly set the table property to avoid StarOS RPC calls in the test environment
+        olapTable.setDataCacheEnable(false);
+
+        // Also update all existing partitions' DataCacheInfo to match (simulating what
+        // alterDataCacheEnable does for existing partitions)
+        for (Partition partition : olapTable.getPartitions()) {
+            DataCacheInfo dci = partitionInfo.getDataCacheInfo(partition.getId());
+            boolean asyncWriteBack = dci != null && dci.isAsyncWriteBack();
+            partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(false, asyncWriteBack));
+        }
+
+        // Verify table's datacache.enable is now false
+        Assertions.assertFalse(olapTable.getTableProperty().getStorageInfo().isEnableDataCache(),
+                "Table datacache.enable should be false after change");
+
+        // Step 3: Recover partition p1
+        recoverPartition(connectContext, String.format("RECOVER PARTITION p1 FROM %s.t_datacache", dbName));
+        Assertions.assertSame(p1, table.getPartition("p1"));
+
+        // Step 4: Verify recovered partition's DataCacheInfo matches table's current setting (false)
+        DataCacheInfo recoveredDataCacheInfo = partitionInfo.getDataCacheInfo(p1.getId());
+        Assertions.assertNotNull(recoveredDataCacheInfo,
+                "Recovered partition should have DataCacheInfo");
+        Assertions.assertFalse(recoveredDataCacheInfo.isEnabled(),
+                "Recovered partition's datacache should match table's current datacache.enable=false");
+
+        // Verify other partitions still have datacache disabled
+        DataCacheInfo p2DataCacheInfo = partitionInfo.getDataCacheInfo(table.getPartition("p2").getId());
+        Assertions.assertNotNull(p2DataCacheInfo);
+        Assertions.assertFalse(p2DataCacheInfo.isEnabled(),
+                "Existing partition p2 should still have datacache disabled");
+    }
+
+    /**
+     * Test corner case: replayRecoverPartition also syncs DataCacheInfo with the table's
+     * current datacache.enable property. This simulates the follower replay path.
+     */
+    @Test
+    public void testReplayRecoverPartitionSyncsDataCacheWithTableProperty(@Mocked LakeService lakeService)
+            throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "replay_recover_datacache_sync_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+        // Create a range partitioned cloud native table
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t_replay_datacache" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        OlapTable olapTable = (OlapTable) table;
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+
+        Partition p1 = table.getPartition("p1");
+        Assertions.assertNotNull(p1);
+        long p1Id = p1.getId();
+
+        // Get the range and datacache info before dropping
+        com.google.common.collect.Range<PartitionKey> p1Range = rangePartitionInfo.getRange(p1Id);
+        DataCacheInfo p1DataCacheInfo = rangePartitionInfo.getDataCacheInfo(p1Id);
+        Assertions.assertNotNull(p1DataCacheInfo);
+        Assertions.assertTrue(p1DataCacheInfo.isEnabled());
+
+        // Step 1: Drop partition p1 (non-force)
+        alterTable(connectContext, String.format("ALTER TABLE %s.t_replay_datacache DROP PARTITION p1", dbName));
+        Assertions.assertNull(table.getPartition("p1"));
+
+        // Step 2: Change table's datacache.enable to false (simulate what happens on leader)
+        olapTable.setDataCacheEnable(false);
+
+        // Step 3: Simulate follower replay of partition recovery
+        // Create a new RecycleBin (as follower would have) and put the partition info back
+        CatalogRecycleBin followerRecycleBin = new CatalogRecycleBin();
+        RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(
+                db.getId(), olapTable.getId(), p1, p1Range,
+                DataProperty.DEFAULT_DATA_PROPERTY, (short) 1,
+                new DataCacheInfo(true, false)); // Old datacache was enabled
+        followerRecycleBin.recyclePartition(recyclePartitionInfo);
+        Assertions.assertNotNull(followerRecycleBin.getPartition(p1Id));
+
+        // Remove p1 from the table (it was already dropped in step 1)
+        // But we already dropped it above, so the table doesn't have p1 anymore
+
+        // Replay recover partition
+        followerRecycleBin.replayRecoverPartition(olapTable, p1Id);
+
+        // Step 4: Verify the replayed partition has datacache=false (matching table's current property)
+        Assertions.assertNull(followerRecycleBin.getPartition(p1Id));
+        Partition recoveredP1 = olapTable.getPartition("p1");
+        Assertions.assertNotNull(recoveredP1);
+
+        DataCacheInfo replayedDataCacheInfo = rangePartitionInfo.getDataCacheInfo(p1Id);
+        Assertions.assertNotNull(replayedDataCacheInfo,
+                "Replayed recovered partition should have DataCacheInfo");
+        Assertions.assertFalse(replayedDataCacheInfo.isEnabled(),
+                "Replayed recovered partition's datacache should match table's current datacache.enable=false");
+    }
+
+    /**
+     * Test that syncDataCacheInfoWithTable does NOT change DataCacheInfo when table's
+     * datacache.enable matches the partition's current setting.
+     */
+    @Test
+    public void testRecoverPartitionDataCacheAlreadyInSync(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "recover_partition_datacache_in_sync_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+        // Create table with datacache enabled (default)
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t_datacache_sync" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        OlapTable olapTable = (OlapTable) table;
+
+        Partition p1 = table.getPartition("p1");
+        Assertions.assertNotNull(p1);
+
+        // Step 1: Drop partition p1 (non-force)
+        alterTable(connectContext, String.format("ALTER TABLE %s.t_datacache_sync DROP PARTITION p1", dbName));
+        Assertions.assertNull(table.getPartition("p1"));
+        Assertions.assertNotNull(recycleBin.getPartition(p1.getId()));
+
+        // Step 2: DO NOT change table's datacache.enable (keep it as default true)
+        // Table's datacache.enable is still true, matching the dropped partition's setting.
+
+        // Step 3: Recover partition p1
+        recoverPartition(connectContext, String.format("RECOVER PARTITION p1 FROM %s.t_datacache_sync", dbName));
+        Assertions.assertSame(p1, table.getPartition("p1"));
+
+        // Step 4: Verify recovered partition's DataCacheInfo is still enabled (no change needed)
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        DataCacheInfo recoveredDataCacheInfo = partitionInfo.getDataCacheInfo(p1.getId());
+        Assertions.assertNotNull(recoveredDataCacheInfo);
+        Assertions.assertTrue(recoveredDataCacheInfo.isEnabled(),
+                "Recovered partition should still have datacache enabled since table property didn't change");
     }
 }
