@@ -339,4 +339,215 @@ public class LocalMetaStoreTest {
                 "Tablets should not be changed when truncate fails");
         Assertions.assertTrue(writeLockAcquired.get(), "Write lock should be acquired during truncate");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTruncateTableEditLog() throws Exception {
+        String catalogName = connectContext.getCurrentCatalog();
+        String dbFullName = "test";
+        String tableName = "edit_log_t1";
+        starRocksAssert.useDatabase("test").withTable(
+                        "CREATE TABLE test.edit_log_t1(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        // Include catalog name in QualifiedName, use dbFullName for database name
+        QualifiedName qualifiedName = QualifiedName.of(List.of(catalogName, dbFullName, tableName));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef, NodePosition.ZERO);
+        // Analyze the statement (normally done before execution)
+        TruncateTableAnalyzer.analyze(stmt, connectContext);
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+        OlapTable table = (OlapTable) database.getTable(tableName);
+        OlapTable followerTable  = AnalyzerUtils.getShadowCopyTable(table);
+        long oldPartitionId = table.getPartition(tableName).getId();
+
+        // 3. Execute truncateTable
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        metastore.truncateTable(stmt, connectContext);
+
+        // 4. Verify master state - partition is replaced with new one
+        // For unpartitioned table, partition name should be the same as table name
+        Partition newPartition = table.getPartition(tableName);
+        Assertions.assertNotNull(newPartition);
+        Assertions.assertNotEquals(oldPartitionId, newPartition.getId());
+
+        // 5. Test follower replay
+        TruncateTableInfo replayInfo = (TruncateTableInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_TRUNCATE_TABLE);
+
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(database.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTblId());
+        Assertions.assertNotNull(replayInfo.getPartitions());
+        Assertions.assertFalse(replayInfo.getPartitions().isEmpty());
+
+        LocalMetastore followerLocalMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                GlobalStateMgr.getCurrentState().getRecycleBin(),
+                GlobalStateMgr.getCurrentState().getColocateTableIndex());
+        Database followerDatabase = new Database(database.getId(), database.getFullName());
+        followerLocalMetastore.replayCreateDb(followerDatabase);
+        followerDatabase.registerTableUnlocked(followerTable);
+        followerLocalMetastore.replayTruncateTable(replayInfo);
+        Partition followerPartition = followerTable.getPartition(tableName);
+        Assertions.assertNotNull(followerPartition);
+        Assertions.assertNotEquals(oldPartitionId, followerPartition.getId());
+
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testTruncateTableEditLogException() throws Exception {
+        String catalogName = connectContext.getCurrentCatalog();
+        String dbFullName = "test";
+        String tableName = "edit_log_t2";
+        starRocksAssert.useDatabase(dbFullName).withTable(
+                        "CREATE TABLE " + tableName + "(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        // Include catalog name in QualifiedName, use dbFullName for database name
+        QualifiedName qualifiedName = QualifiedName.of(List.of(catalogName, dbFullName, tableName));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef, NodePosition.ZERO);
+        // Analyze the statement (normally done before execution)
+        TruncateTableAnalyzer.analyze(stmt, connectContext);
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+        OlapTable table = (OlapTable) database.getTable(tableName);
+        long oldPartitionId = table.getPartition(tableName).getId();
+
+        // 3. Mock EditLog.logTruncateTable to throw exception
+        EditLog spyEditLog = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logTruncateTable(any(TruncateTableInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // 4. Execute truncateTable and expect exception
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            metastore.truncateTable(stmt, connectContext);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
+
+        // 5. Verify partition ID remains unchanged after exception
+        // For unpartitioned table, partition name should be the same as table name
+        Assertions.assertEquals(oldPartitionId, table.getPartition(tableName).getId());
+    }
+
+    @Test
+    public void testAddPhysicalPartitionForNonPartitionedTable() throws Exception {
+        // Create a non-partitioned table with random distribution
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_random(k1 INT, k2 VARCHAR(50), v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_random");
+        Assertions.assertEquals(1, table.getPhysicalPartitions().size());
+
+        // Record original mutableBucketNum to verify it is not modified
+        long originalMutableBucketNum = table.getMutableBucketNum();
+
+        // Add physical partition with custom bucket number
+        metastore.addPhysicalPartition("test", "add_pp_random", null, 4);
+        Assertions.assertEquals(2, table.getPhysicalPartitions().size());
+
+        // Verify the new physical partition has the specified bucket number
+        Partition partition = table.getPartitions().iterator().next();
+        List<PhysicalPartition> subPartitions = new java.util.ArrayList<>(partition.getSubPartitions());
+        // The newly added physical partition (not the default one) should have bucketNum = 4
+        PhysicalPartition newPartition = subPartitions.stream()
+                .filter(p -> p.getId() != partition.getDefaultPhysicalPartition().getId())
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(4, newPartition.getBucketNum());
+
+        // Verify the original table's mutableBucketNum is NOT modified (concurrency-safe)
+        Assertions.assertEquals(originalMutableBucketNum, table.getMutableBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_random");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionForPartitionedTable() throws Exception {
+        // Create a partitioned table with random distribution
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_part(k1 DATE, k2 INT, v1 VARCHAR(100)) " +
+                        "ENGINE=olap DUPLICATE KEY(k1, k2) " +
+                        "PARTITION BY RANGE (k1) (" +
+                        "  PARTITION p20240101 VALUES LESS THAN ('2024-01-02')," +
+                        "  PARTITION p20240102 VALUES LESS THAN ('2024-01-03')" +
+                        ") DISTRIBUTED BY RANDOM BUCKETS 10 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_part");
+        Partition partition = table.getPartition("p20240101");
+        Assertions.assertEquals(2, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(1, partition.getSubPartitions().size());
+
+        long originalMutableBucketNum = table.getMutableBucketNum();
+
+        // Add physical partition to a specific partition with default bucket
+        metastore.addPhysicalPartition("test", "add_pp_part", "p20240101", 0);
+        Assertions.assertEquals(3, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(2, partition.getSubPartitions().size());
+
+        // Add physical partition with custom bucket number to another partition
+        Partition partition2 = table.getPartition("p20240102");
+        metastore.addPhysicalPartition("test", "add_pp_part", "p20240102", 6);
+        Assertions.assertEquals(4, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(2, partition2.getSubPartitions().size());
+
+        // Verify the new physical partition in p20240102 has the specified bucket number
+        PhysicalPartition newPartition = partition2.getSubPartitions().stream()
+                .filter(p -> p.getId() != partition2.getDefaultPhysicalPartition().getId())
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(6, newPartition.getBucketNum());
+
+        // Verify the original table's mutableBucketNum is NOT modified
+        Assertions.assertEquals(originalMutableBucketNum, table.getMutableBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_part");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionErrors() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+
+        // 1. Database not found
+        Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("nonexistent_db", "t", null, 0));
+
+        // 2. Table not found
+        Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "nonexistent_table", null, 0));
+
+        // 3. Hash distribution table (t1 uses hash distribution)
+        DdlException hashEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "t1", null, 0));
+        Assertions.assertTrue(hashEx.getMessage().contains("random distribution"));
+
+        // 4. Partitioned table without partition name & non-existent partition & negative bucket
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_err(k1 DATE, k2 INT) ENGINE=olap DUPLICATE KEY(k1, k2) " +
+                        "PARTITION BY RANGE (k1) (PARTITION p1 VALUES LESS THAN ('2024-01-02')) " +
+                        "DISTRIBUTED BY RANDOM BUCKETS 8 PROPERTIES ('replication_num' = '1')");
+
+        DdlException partEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_err", null, 0));
+        Assertions.assertTrue(partEx.getMessage().contains("Partition name must be specified"));
+
+        DdlException notFoundEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_err", "no_such_partition", 0));
+        Assertions.assertTrue(notFoundEx.getMessage().contains("does not exist"));
+
+        DdlException bucketEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_err", "p1", -1));
+        Assertions.assertTrue(bucketEx.getMessage().contains("non-negative"));
+
+        starRocksAssert.dropTable("test.add_pp_err");
+    }
+>>>>>>> 75ccf7b1e8 ([Enhancement] Add interface to add physical partition for random distribution table (#68503))
 }

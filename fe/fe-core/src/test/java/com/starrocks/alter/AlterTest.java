@@ -1368,6 +1368,24 @@ public class AlterTest {
             Assertions.assertFalse(physicalPartition.isFirstLoad());
         }
 
+        // Test addSubPartitions with custom bucket number
+        long originalMutableBucketNum = table.getMutableBucketNum();
+        Set<Long> existingIds = partition.get().getSubPartitions().stream()
+                .map(PhysicalPartition::getId).collect(java.util.stream.Collectors.toSet());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 1,
+                    5, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertEquals(partition.get().getSubPartitions().size(), 5);
+        Assertions.assertEquals(table.getPhysicalPartitions().size(), 5);
+
+        // Verify the new physical partition has the specified bucket number
+        PhysicalPartition newPartition = partition.get().getSubPartitions().stream()
+                .filter(p -> !existingIds.contains(p.getId()))
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(5, newPartition.getBucketNum());
+
+        // Verify original table's mutableBucketNum is not modified
+        Assertions.assertEquals(originalMutableBucketNum, table.getMutableBucketNum());
+
         dropSQL = "drop table test_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);

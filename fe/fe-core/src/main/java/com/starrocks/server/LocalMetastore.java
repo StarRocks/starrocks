@@ -1681,6 +1681,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void addSubPartitions(Database db, OlapTable table, Partition partition,
                                  int numSubPartition, ComputeResource computeResource) throws DdlException {
+        addSubPartitions(db, table, partition, numSubPartition, 0, computeResource);
+    }
+
+    public void addSubPartitions(Database db, OlapTable table, Partition partition,
+                                 int numSubPartition, int bucketNum,
+                                 ComputeResource computeResource) throws DdlException {
         try {
             table.setAutomaticBucketing(true);
 
@@ -1698,6 +1704,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
+            }
+
+            // Set user-specified bucket number on the copied table (thread-safe, no impact on the original table)
+            if (bucketNum > 0) {
+                copiedTable.setMutableBucketNum(bucketNum);
             }
 
             Preconditions.checkNotNull(olapTable);
@@ -1743,6 +1754,88 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } finally {
             table.setAutomaticBucketing(false);
         }
+    }
+
+    /**
+     * Add a new physical partition to an existing logical partition.
+     * This method is designed to be called via admin execute script for cross-cluster
+     * data replication scenarios.
+     *
+     *
+     * @param dbName        the database name
+     * @param tableName     the table name
+     * @param partitionName the partition name (null for non-partitioned table)
+     * @param bucketNum     the bucket number (0 to use system default)
+     */
+    public void addPhysicalPartition(String dbName, String tableName, String partitionName,
+                                     int bucketNum) throws DdlException {
+        Database db = getDb(dbName);
+        if (db == null) {
+            throw new DdlException("Database '" + dbName + "' does not exist");
+        }
+
+        Table table = getTable(dbName, tableName);
+        if (table == null) {
+            throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
+        }
+
+        if (!(table instanceof OlapTable)) {
+            throw new DdlException("Only OLAP table supports adding physical partition");
+        }
+
+        OlapTable olapTable = (OlapTable) table;
+
+        // Check if the table uses random distribution
+        if (olapTable.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new DdlException("Only random distribution table supports adding physical partition");
+        }
+
+        Partition partition;
+        if (partitionName == null) {
+            // For non-partitioned table, get the single partition
+            if (olapTable.getPartitionInfo().isPartitioned()) {
+                throw new DdlException("Partition name must be specified for partitioned table");
+            }
+            Collection<Partition> partitions = olapTable.getPartitions();
+            if (partitions.size() != 1) {
+                throw new DdlException("Non-partitioned table should have exactly one partition");
+            }
+            partition = partitions.iterator().next();
+        } else {
+            partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException("Partition '" + partitionName + "' does not exist");
+            }
+        }
+
+        // Validate distribution type at partition level
+        if (partition.getDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new DdlException("Only random distribution table supports adding physical partition");
+        }
+
+        if (bucketNum < 0) {
+            throw new DdlException("Bucket number must be non-negative");
+        }
+
+        if (bucketNum > Config.max_bucket_number_per_partition) {
+            throw new DdlException("Bucket number exceeds maximum allowed: " + Config.max_bucket_number_per_partition);
+        }
+
+        // Get compute resource
+        long warehouseId = ConnectContext.get() != null
+                ? ConnectContext.get().getCurrentWarehouseId()
+                : WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+
+        // Add one physical partition with the specified bucket number.
+        // The bucketNum is set on the shadow-copied table inside addSubPartitions,
+        // so there is no concurrent safety issue with the original table object.
+        addSubPartitions(db, olapTable, partition, 1, bucketNum, computeResource);
+
+        LOG.info("Successfully added physical partition to partition '{}' in table '{}'",
+                partition.getName(), olapTable.getName());
     }
 
     public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
