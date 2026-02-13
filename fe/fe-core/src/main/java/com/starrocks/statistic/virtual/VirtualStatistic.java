@@ -39,7 +39,7 @@ public interface VirtualStatistic {
     }
 
     static boolean isVirtualColumnName(String columnName) {
-        return columnName.startsWith(getColumnNamePrefix());
+        return columnName.startsWith(getColumnNamePrefix() + "_");
     }
 
     private static int countUnderscore(String string) {

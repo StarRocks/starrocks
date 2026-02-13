@@ -70,7 +70,7 @@ public class VirtualStatisticPropagationTest extends PlanTestBase {
         try {
             ConnectContext.get().getSessionVariable().setEnableUnnestVirtualStatistics(false);
             starRocksAssert.dropTable("arr_table");
-            starRocksAssert.dropTable("join_table");
+            starRocksAssert.dropTable("join_partner");
         } catch (Exception e) {
             // ignore exceptions.
         }

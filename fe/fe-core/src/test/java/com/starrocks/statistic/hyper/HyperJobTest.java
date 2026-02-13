@@ -423,7 +423,6 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         for (HyperQueryJob job : jobs) {
             List<String> sqls = job.buildQuerySQL();
             for (String sql : sqls) {
-                System.out.println(sql);
                 Assertions.assertNotNull(getFragmentPlan(sql)); // Make sure the query can be executed.
                 List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
                 assertFalse(stmt.isEmpty());
