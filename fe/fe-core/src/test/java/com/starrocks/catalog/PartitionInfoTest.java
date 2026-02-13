@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.HashMap;
 
 public class PartitionInfoTest {
     private final long partitionId = 10086;
@@ -75,5 +76,33 @@ public class PartitionInfoTest {
         // with gsonPostProcess, the invalid partition id will be removed from idToStorageCacheInfo
         info.gsonPostProcess();
         Assertions.assertEquals(1L, info.idToStorageCacheInfo.size());
+    }
+
+    @Test
+    public void testGetIsInMemoryDefaultFalseWhenMissing() {
+        PartitionInfo info = new SinglePartitionInfo();
+        Assertions.assertFalse(info.getIsInMemory(partitionId));
+
+        info.idToInMemory = null;
+        Assertions.assertFalse(info.getIsInMemory(partitionId));
+    }
+
+    @Test
+    public void testGsonPostProcessBackfillIdToInMemory() throws IOException {
+        SinglePartitionInfo info = new SinglePartitionInfo();
+        info.addPartition(partitionId, dataProperty, replicationNum, true, dataCacheInfo);
+        long partitionId2 = partitionId + 1;
+        info.addPartition(partitionId2, dataProperty, replicationNum, true, dataCacheInfo);
+
+        info.idToInMemory = new HashMap<>();
+        info.setIsInMemory(partitionId2, true);
+        info.gsonPostProcess();
+        Assertions.assertEquals(false, info.getIsInMemory(partitionId));
+        Assertions.assertEquals(true, info.getIsInMemory(partitionId2));
+
+        info.idToInMemory = null;
+        info.gsonPostProcess();
+        Assertions.assertEquals(false, info.getIsInMemory(partitionId));
+        Assertions.assertEquals(false, info.getIsInMemory(partitionId2));
     }
 }
