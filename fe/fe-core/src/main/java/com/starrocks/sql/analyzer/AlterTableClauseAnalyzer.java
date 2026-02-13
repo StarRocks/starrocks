@@ -373,6 +373,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 }
             }
             PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISABLE_QUERY)) {
+            String disableQuery = properties.get(PropertyAnalyzer.PROPERTIES_DISABLE_QUERY);
+            if (!disableQuery.equalsIgnoreCase("true") && !disableQuery.equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_DISABLE_QUERY + " must be bool type(false/true)");
+            }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {

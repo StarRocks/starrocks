@@ -138,7 +138,14 @@ public class StatementPlanner {
                 Authorizer.check(stmt, session);
             }
             if (stmt instanceof QueryStatement) {
+                // After analysis and authorization, validate table property disable_query.
+                AnalyzerUtils.validateDisableQueryOnTables(stmt);
                 OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
+            } else {
+                QueryStatement queryStatement = getQueryStatementFromDmlStmt(stmt);
+                if (queryStatement != null) {
+                    AnalyzerUtils.validateDisableQueryOnTables(queryStatement);
+                }
             }
 
             // Note: we only could get the olap table after Analyzing phase
@@ -669,5 +676,16 @@ public class StatementPlanner {
             // Just print a log if abort txn failed, this failure do not need to pass to user.
             LOG.warn("errors when abort txn", e);
         }
+    }
+
+    private static QueryStatement getQueryStatementFromDmlStmt(StatementBase stmt) {
+        if (stmt instanceof InsertStmt) {
+            return ((InsertStmt) stmt).getQueryStatement();
+        } else if (stmt instanceof UpdateStmt) {
+            return ((UpdateStmt) stmt).getQueryStatement();
+        } else if (stmt instanceof DeleteStmt) {
+            return ((DeleteStmt) stmt).getQueryStatement();
+        }
+        return null;
     }
 }

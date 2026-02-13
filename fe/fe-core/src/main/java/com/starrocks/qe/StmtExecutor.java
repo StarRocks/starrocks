@@ -2895,6 +2895,17 @@ public class StmtExecutor {
         }
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
+            // Validate disable_query property before processing delete
+            TableRef tableRef = stmt.getTableRef();
+            if (tableRef != null) {
+                TableName tableNameObj = TableName.fromTableRef(tableRef);
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context,
+                        tableRef.getCatalogName(), tableRef.getDbName());
+                Table table = db != null ? MetaUtils.getSessionAwareTable(context, db, tableNameObj) : null;
+                if (table instanceof OlapTable && ((OlapTable) table).isDisableQuery()) {
+                    throw new SemanticException("The table " + tableNameObj + " property disable_query is true");
+                }
+            }
             try {
                 context.getGlobalStateMgr().getDeleteMgr().process((DeleteStmt) stmt);
                 context.getState().setOk();
