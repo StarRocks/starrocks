@@ -1289,6 +1289,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
     ASSERT_OK(mgr->init());
 
     // 1. Setup Tablet Metadata with a specific range [100, 200)
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
     auto* range = _tablet_metadata->mutable_range();
     auto* lower = range->mutable_lower_bound();
     auto* v_lower = lower->add_values();
@@ -1374,6 +1375,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
     c2->set_type("INT");
     c2->set_is_key(false);
     c2->set_is_nullable(false);
+    schema->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
 
     auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
     ASSERT_OK(mgr->init());
