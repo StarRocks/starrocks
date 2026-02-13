@@ -79,9 +79,16 @@ for COMP in "fe" "be" "cn"; do
     fi
 
     # Patch common log and PID paths
-    sed "${SED_I[@]}" "s|^#\?sys_log_dir.*|sys_log_dir = /var/log/starrocks/$COMP|" "$CONF_FILE"
-    sed "${SED_I[@]}" "s|^#\?LOG_DIR.*|LOG_DIR = /var/log/starrocks/$COMP|" "$CONF_FILE"
-    sed "${SED_I[@]}" "s|^#\?PID_DIR.*|PID_DIR = /run/starrocks|" "$CONF_FILE"
+    for VAR in "sys_log_dir" "LOG_DIR" "PID_DIR"; do
+        VALUE="/var/log/starrocks/$COMP"
+        [ "$VAR" == "PID_DIR" ] && VALUE="/run/starrocks"
+        
+        if grep -q "^#\?$VAR.*=" "$CONF_FILE"; then
+            sed "${SED_I[@]}" "s|^#\?$VAR.*=.*|$VAR = $VALUE|" "$CONF_FILE"
+        else
+            echo "$VAR = $VALUE" >> "$CONF_FILE"
+        fi
+    done
 
     # Inject Metadata
     cp "control.$COMP" "$STAGING_DIR/DEBIAN/control"
