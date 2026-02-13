@@ -166,6 +166,8 @@ message RowsetMetadataPB {
     // Whether segments are shared by multiple tablets
     repeated bool shared_segments = 15;
     repeated SegmentMetadataPB segment_metas = 17;
+    // Indicates the effective sort key range of this rowset for range distribution table.
+    optional TabletRangePB range = 18;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
