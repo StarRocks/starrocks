@@ -78,7 +78,7 @@ public:
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
-    void cancel() override;
+    void cancel(const std::string& reason) override;
 
     void abort() override;
 
@@ -844,8 +844,12 @@ void LakeTabletsChannel::abort() {
     }
 }
 
-void LakeTabletsChannel::cancel() {
-    //TODO: Current LakeDeltaWriter don't support fast cancel
+void LakeTabletsChannel::cancel(const std::string& reason) {
+    std::shared_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
+    auto cancel_status = Status::Cancelled(reason.empty() ? "tablet channel cancelled" : reason);
+    for (auto& it : _delta_writers) {
+        it.second->cancel(cancel_status);
+    }
 }
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(

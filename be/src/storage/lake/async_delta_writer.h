@@ -90,6 +90,13 @@ public:
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
 
+    // Cancel the writer with the given status.
+    // After cancellation, subsequent write/flush operations will fail quickly.
+    // This method delegates to the underlying DeltaWriter::cancel() which is thread-safe.
+    //
+    // [thread-safe]
+    void cancel(const Status& st);
+
     // This method will wait for all running tasks completed.
     //
     // This method can be called concurrently and multiple times and only the

@@ -124,6 +124,11 @@ public:
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
 
+    // Cancel the delta writer with the given status.
+    // This method can be called concurrently and it is thread-safe.
+    // After cancellation, subsequent write/flush operations will fail quickly.
+    void cancel(const Status& st);
+
     [[nodiscard]] int64_t partition_id() const;
 
     [[nodiscard]] int64_t tablet_id() const;
