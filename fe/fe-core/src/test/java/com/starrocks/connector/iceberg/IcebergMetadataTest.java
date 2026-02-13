@@ -781,7 +781,37 @@ public class IcebergMetadataTest extends TableTestBase {
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
-        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        // Mock NodeMgr and Frontend for commit audit info
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+                return frontend;
+            }
+        };
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version-3.5.0";
+            }
+        };
+
+        // Set ConnectContext to ensure commit audit info can get the current user
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo),
+                null, null, connectContext);
+
+        // Verify snapshot summary contains commit audit info
+        mockedNativeTableA.refresh();
+        Snapshot snapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(snapshot, "Current snapshot should exist");
+        Map<String, String> summary = snapshot.summary();
+        Assertions.assertEquals("StarRocks", summary.get("engine-name"),
+                "Snapshot summary should contain engine-name=StarRocks");
+        Assertions.assertEquals("test-version-3.5.0", summary.get("engine-version"),
+                "Snapshot summary should contain engine-version");
+        Assertions.assertEquals("root", summary.get("starrocks_user"),
+                "Snapshot summary should contain starrocks_user");
 
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
         Assertions.assertEquals(1, fileScanTasks.size());
@@ -812,8 +842,19 @@ public class IcebergMetadataTest extends TableTestBase {
 
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
-        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo),
+                null, null, connectContext);
         mockedNativeTableA.refresh();
+
+        // Verify overwrite operation also has commit audit info
+        snapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(snapshot, "Current snapshot should exist after overwrite");
+        summary = snapshot.summary();
+        Assertions.assertEquals("StarRocks", summary.get("engine-name"),
+                "Snapshot summary should contain engine-name=StarRocks after overwrite");
+        Assertions.assertEquals("test-version-3.5.0", summary.get("engine-version"),
+                "Snapshot summary should contain engine-version after overwrite");
+
         TableScan scan = mockedNativeTableA.newScan().includeColumnStats();
         fileScanTasks = Lists.newArrayList(scan.planFiles());
 
@@ -2320,11 +2361,39 @@ public class IcebergMetadataTest extends TableTestBase {
         TSinkCommitInfo commitInfo = new TSinkCommitInfo();
         commitInfo.setIceberg_data_file(deleteFile);
 
+        // Mock NodeMgr and Frontend for commit audit info
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+                return frontend;
+            }
+        };
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version-delete-3.5.0";
+            }
+        };
+
         // Test commit with delete operation
-        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null);
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo),
+                null, null, connectContext);
 
         // Verify the delete file was committed
         mockedNativeTableA.refresh();
+
+        // Verify snapshot summary contains commit audit info for delete operation
+        Snapshot snapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(snapshot, "Current snapshot should exist");
+        Map<String, String> summary = snapshot.summary();
+        Assertions.assertEquals("StarRocks", summary.get("engine-name"),
+                "Snapshot summary should contain engine-name=StarRocks for delete operation");
+        Assertions.assertEquals("test-version-delete-3.5.0", summary.get("engine-version"),
+                "Snapshot summary should contain engine-version for delete operation");
+        Assertions.assertEquals("root", summary.get("starrocks_user"),
+                "Snapshot summary should contain starrocks_user for delete operation");
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
         // We should have delete files in the scan
         boolean foundDelete = false;
@@ -2528,6 +2597,22 @@ public class IcebergMetadataTest extends TableTestBase {
 
             TSinkCommitInfo commitInfo = new TSinkCommitInfo();
             commitInfo.setIceberg_data_file(dataFile);
+
+            // Mock NodeMgr and Frontend for commit audit info
+            new MockUp<NodeMgr>() {
+                @Mock
+                public Frontend getMySelf() {
+                    Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+                    return frontend;
+                }
+            };
+
+            new MockUp<Frontend>() {
+                @Mock
+                public String getFeVersion() {
+                    return "test-version";
+                }
+            };
 
             // Commit should succeed even when queue is disabled
             metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null);
