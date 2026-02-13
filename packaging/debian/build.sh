@@ -70,12 +70,23 @@ for COMP in "fe" "be" "cn"; do
     echo "Patching $COMP.conf for standard paths..."
     CONF_FILE="$STAGING_DIR/etc/starrocks/$COMP/$COMP.conf"
 
+    # Define the key and path based on component
     if [ "$COMP" == "fe" ]; then
-        sed "${SED_I[@]}" "s|^#\?meta_dir.*|meta_dir = /var/lib/starrocks/fe/meta|" "$CONF_FILE"
+        KEY="meta_dir"
+        VAL="/var/lib/starrocks/fe/meta"
     elif [ "$COMP" == "cn" ]; then
-        sed "${SED_I[@]}" "s|^#\?storage_root_path.*|storage_root_path = /var/lib/starrocks/cn/cache|" "$CONF_FILE"
+        KEY="storage_root_path"
+        VAL="/var/lib/starrocks/cn/cache"
     else
-        sed "${SED_I[@]}" "s|^#\?storage_root_path.*|storage_root_path = /var/lib/starrocks/be/storage|" "$CONF_FILE"
+        KEY="storage_root_path"
+        VAL="/var/lib/starrocks/be/storage"
+    fi
+
+    # Robust Regex Patching
+    if grep -Eq "^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=" "$CONF_FILE"; then
+        sed "${SED_I[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=.*|$KEY = $VAL|" "$CONF_FILE"
+    else
+        echo "$KEY = $VAL" >> "$CONF_FILE"
     fi
 
     # Patch common log and PID paths
@@ -83,8 +94,8 @@ for COMP in "fe" "be" "cn"; do
         VALUE="/var/log/starrocks/$COMP"
         [ "$VAR" == "PID_DIR" ] && VALUE="/run/starrocks"
         
-        if grep -q "^#\?$VAR.*=" "$CONF_FILE"; then
-            sed "${SED_I[@]}" "s|^#\?$VAR.*=.*|$VAR = $VALUE|" "$CONF_FILE"
+        if grep -Eq "^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=" "$CONF_FILE"; then
+            sed "${SED_I[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=.*|$VAR = $VALUE|" "$CONF_FILE"
         else
             echo "$VAR = $VALUE" >> "$CONF_FILE"
         fi
