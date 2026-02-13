@@ -222,26 +222,18 @@ public class DropStmtAnalyzer {
                     argsDef.isVariadic());
 
             // check function existence
-            Function func;
+            Function func = null;
             if (functionName.isGlobalFunction()) {
                 func = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(funcDesc);
-                if (func == null) {
-                    if (!statement.dropIfExists()) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
-                    }
-                    return null;
-                }
             } else {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
                 if (db != null) {
                     func = db.getFunction(funcDesc);
-                    if (func == null) {
-                        if (!statement.dropIfExists()) {
-                            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
-                        }
-                        return null;
-                    }
                 }
+            }
+
+            if (func == null && !statement.dropIfExists()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
             }
 
             return null;
