@@ -26,6 +26,41 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.13
+
+リリース日：2026年2月13日
+
+### 改善点
+
+- テーブルレベルのメトリクス収集を制御するための FE 設定項目 `enable_table_metrics_collect` を追加しました。[#68691](https://github.com/StarRocks/starrocks/pull/68691)
+- ユーザーレベルで Merge Commit のデフォルト Warehouse を設定できるようになりました。[#68616](https://github.com/StarRocks/starrocks/pull/68616)
+
+### バグ修正
+
+以下の問題を修正しました。
+
+- レプリケーショントランザクションにおけるソースパーティションのチェック問題。[#68883](https://github.com/StarRocks/starrocks/pull/68883)
+- `BEGIN TRANSACTION` で label を指定した場合に、使用済み label が正しく識別されない問題。[#68660](https://github.com/StarRocks/starrocks/pull/68660)
+- CTE スコープに関連する `JOIN ON` 句の不具合。[#68809](https://github.com/StarRocks/starrocks/pull/68809)
+- 明示的に下限を指定した場合に、範囲パーティションが重複して作成される問題。[#68255](https://github.com/StarRocks/starrocks/pull/68255)
+- SQL 方言を Trino から StarRocks にダウングレードした際のパーサーロジックの誤り。[#68725](https://github.com/StarRocks/starrocks/pull/68725)
+- プロジェクション列のプルーニングに関する問題。[#68242](https://github.com/StarRocks/starrocks/pull/68242)
+- サブクエリのスコープチェックの問題。[#68415](https://github.com/StarRocks/starrocks/pull/68415)
+- 関数アナライザにおける型キャストの不一致。[#66749](https://github.com/StarRocks/starrocks/pull/66749)
+- 候補マテリアライズドビューの選択ロジックの誤り。[#68571](https://github.com/StarRocks/starrocks/pull/68571)
+- Thrift の `accept` スレッドが例外発生時に終了する問題。[#68644](https://github.com/StarRocks/starrocks/pull/68644)
+- Iceberg データファイルサイズの見積もりが不正確な問題。[#68787](https://github.com/StarRocks/starrocks/pull/68787)
+- Lake テーブルのメモリリーク問題。[#68678](https://github.com/StarRocks/starrocks/pull/68678)
+- HMS 接続プールが満杯の際にデッドロックが発生する問題。[#68033](https://github.com/StarRocks/starrocks/pull/68033)
+- Iceberg における削除列の NULL 許容属性の問題。[#68649](https://github.com/StarRocks/starrocks/pull/68649)
+- マテリアライズドビューが大規模な外部テーブルを保持する問題。[#68171](https://github.com/StarRocks/starrocks/pull/68171)
+- Iceberg テーブルキャッシュのメモリ制限に関する問題。[#67769](https://github.com/StarRocks/starrocks/pull/67769)
+- PocoHttpClient で誤ったタイムアウトパラメータが使用されていた問題。[#68765](https://github.com/StarRocks/starrocks/pull/68765)
+- Clang 使用時に BE のコンパイルが失敗する問題。[#68805](https://github.com/StarRocks/starrocks/pull/68805)
+- 起動時にマテリアライズドビューが複数回再読み込みされる問題。[#62351](https://github.com/StarRocks/starrocks/pull/62351)
+- CVE-2025-27821。[#68529](https://github.com/StarRocks/starrocks/pull/68529)
+- 特定のシナリオにおいて可変長引数関数が誤った日付値を返す問題。[#67947](https://github.com/StarRocks/starrocks/pull/67947)
+
 ## 3.5.12
 
 リリース日：2026 年 1 月 22 日
