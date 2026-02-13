@@ -1075,6 +1075,8 @@ public class DefaultCoordinator extends Coordinator {
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
+        clearExternalResources();
+
         if (!isInternalCancel(cancelReason) && StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             String errorMsg = String.format("[reason=%s] [msg=%s]", cancelReason, queryStatus.getErrorMsg());
             connectContext.getState().setError(errorMsg);
@@ -1095,6 +1097,17 @@ public class DefaultCoordinator extends Coordinator {
                 if (!unFinishedInstanceIds.isEmpty()) {
                     LOG.info("query: {} has unfinished instances: {}", connectContext.queryId, unFinishedInstanceIds);
                 }
+            }
+        }
+    }
+
+    @Override
+    public void clearExternalResources() {
+        for (ScanNode scanNode : jobSpec.getScanNodes()) {
+            try {
+                scanNode.clear();
+            } catch (Exception e) {
+                LOG.warn("clear scan code failed for {}", scanNode.getClass().getSimpleName(), e);
             }
         }
     }
