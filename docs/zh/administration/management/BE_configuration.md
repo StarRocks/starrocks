@@ -118,7 +118,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Strings
 - 单位：-
 - 是否动态：否
-- 描述：日志打印的模块。有效值为 BE 的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。
+- 描述：设置需要输出 VLOG 日志的文件名（去掉文件扩展名）或文件名通配符。可以指定多个文件名，用逗号分隔。例如，如果将此配置项设置为 `storage_engine,tablet_manager`，StarRocks 将打印 storage_engine.cpp、tablet_manager.cpp 文件的 VLOG 日志。您也可以使用通配符，如设置为 `*` 表示打印所有文件的 VLOG 日志。VLOG 日志打印级别通过 `sys_log_verbose_level` 参数控制。
 - 引入版本：-
 
 ### 服务器
