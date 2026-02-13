@@ -398,6 +398,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             continue;
         }
 
+        auto rowset_id = rowset->rowset_meta()->rowset_id();
+        if (params.rowset_id_to_drssid != nullptr && params.rowset_id_to_drssid->contains(rowset_id)) {
+            rs_opts.dynamic_rss_id_base = params.rowset_id_to_drssid->at(rowset_id);
+        }
+
         RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
     }
     return Status::OK();

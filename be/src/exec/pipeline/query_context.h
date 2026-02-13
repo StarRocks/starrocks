@@ -40,6 +40,7 @@
 namespace starrocks {
 
 class StreamEpochManager;
+class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
 
@@ -49,7 +50,6 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 struct ConnectorScanOperatorMemShareArbitrator;
-class GlobalLateMaterilizationContextMgr;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {

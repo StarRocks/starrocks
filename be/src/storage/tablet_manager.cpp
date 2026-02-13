@@ -545,6 +545,18 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     return Status::OK();
 }
 
+StatusOr<TabletSharedPtr> TabletManager::get_tablet_by_id(TTabletId tablet_id, bool include_deleted) {
+    std::string err;
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, include_deleted, &err);
+    if (!tablet) {
+        std::stringstream ss;
+        ss << "failed to get tablet. tablet_id=" << tablet_id << ", reason=" << err;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+    return tablet;
+}
+
 TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, bool include_deleted, std::string* err) {
     std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
     return _get_tablet_unlocked(tablet_id, include_deleted, err);

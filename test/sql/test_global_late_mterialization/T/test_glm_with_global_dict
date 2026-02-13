@@ -1,0 +1,23 @@
+-- name: test_glm_native_with_global_dict
+
+-- test with global dictionary
+set enable_global_late_materialization = true;
+
+CREATE TABLE `allstring` (
+   id int(11) NULL COMMENT "",
+  `v1` varchar(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+insert into allstring SELECT generate_series, generate_series % 10 FROM TABLE(generate_series(1,  1024));
+[UC]analyze full table allstring;
+function: wait_global_dict_ready('v1', 'allstring')
+select * from allstring order by id limit 10;
+select upper(v1) from allstring order by upper(id) limit 10;
