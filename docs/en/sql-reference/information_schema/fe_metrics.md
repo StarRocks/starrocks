@@ -14,3 +14,10 @@ The following fields are provided in `fe_metrics`:
 | NAME      | Name of the metric.                                          |
 | LABELS    | Labels associated with the metric.                           |
 | VALUE     | Current value of the metric.                                 |
+
+The following Iceberg delete metrics are exposed through this table:
+
+- `iceberg_delete_total`
+- `iceberg_delete_duration_ms_total`
+- `iceberg_delete_bytes`
+- `iceberg_delete_rows`
