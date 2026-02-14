@@ -811,10 +811,20 @@ alterMaterializedViewStatement
         refreshSchemeDesc |
         tableRenameClause |
         modifyPropertiesClause |
-        swapTableClause )
+        swapTableClause |
+        addMVColumnClause |
+        dropMVColumnClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     | ALTER MATERIALIZED VIEW qualifiedName applyMaskingPolicyClause
     | ALTER MATERIALIZED VIEW qualifiedName applyRowAccessPolicyClause
+    ;
+
+addMVColumnClause
+    : ADD COLUMN columnName=identifier AS aggregateExpression=expression defaultDesc? (COMMENT string)?
+    ;
+
+dropMVColumnClause
+    : DROP COLUMN columnName=identifier
     ;
 
 refreshMaterializedViewStatement

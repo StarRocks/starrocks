@@ -1,0 +1,199 @@
+-- name: test_mv_fast_schema_change
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+
+drop table if exists t1;
+drop materialized view if exists test_mv1;
+CREATE TABLE t1 (
+  dt datetime,
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`dt`, `c0`, `c1`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+  "replication_num" = "1"
+);
+insert into t1 SELECT '2026-01-01', generate_series % 10, generate_series, generate_series, generate_series FROM TABLE(generate_series(1, 100));
+
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY hash(c0) 
+PROPERTIES (
+  "replication_num" = "1",
+  "query_rewrite_consistency" = "force_mv"
+)
+AS 
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+set enable_materialized_view_rewrite = false;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by ALL limit 3;
+
+-- test mv add column cnt_c2
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN cnt_c2 AS count(c2);
+function: wait_alter_table_finish()
+DESC test_mv1;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- test mv add column with default value
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN cnt_c3 AS count(c3) DEFAULT "0";
+function: wait_alter_table_finish()
+DESC test_mv1;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, count(c3) as cnt_c3 from t1 group by dt, c0", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, count(c3) as cnt_c3 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- refresh mv after add column
+INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+
+-- t1 add column c4
+ALTER TABLE t1 ADD COLUMN c4 int;
+function: wait_alter_table_finish()
+DESC t1;
+-- refresh mv after add column
+INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+-- add sum aggregation column
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN sum_c4 AS sum(c4);
+function: wait_alter_table_finish()
+DESC test_mv1;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- refresh mv after insert
+INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+
+-- add group by key column
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN c4 AS c4;
+function: wait_alter_table_finish()
+DESC test_mv1;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- refresh mv after insert
+INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0, c4", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+
+-- test mv drop column
+ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN cnt_c2;
+function: wait_alter_table_finish()
+DESC test_mv1;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- refresh mv after drop
+INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0, c4", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL limit 3;
+
+-- test mv drop aggregation column
+ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN sum_c4;
+function: wait_alter_table_finish()
+DESC test_mv1;
+function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1 from t1 group by dt, c0, c4", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, c4 from t1 group by dt, c0, c4 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- refresh mv after drop
+INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, c4 from t1 group by dt, c0, c4", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, c4 from t1 group by dt, c0, c4 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL limit 3;
+
+-- test mv drop group by key column
+[UC]ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN c4;
+-- refresh mv after drop
+INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL limit 3;
+
+DROP MATERIALIZED VIEW test_mv1;
+DROP TABLE t1;
+
+-- test mv without group by key column
+CREATE TABLE t2 (
+  dt datetime,
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`dt`, `c0`, `c1`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`c0`, `c1`) 
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t2 SELECT '2026-01-01', generate_series % 5, generate_series, generate_series, generate_series FROM TABLE(generate_series(1, 100));
+
+CREATE MATERIALIZED VIEW test_mv2 
+PARTITION BY date_trunc('day', dt)  
+DISTRIBUTED BY HASH(`c0`, `c1`) 
+AS 
+SELECT dt, c0, c1 from t2;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+function: print_hit_materialized_view("select dt, c0, c1 from t2", "test_mv2")
+SELECT dt, c0, c1 FROM test_mv2 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, c1 from t2 order by ALL limit 3;
+
+-- test mv add column
+ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c3 AS c3 + 1;
+function: wait_alter_table_finish()
+DESC test_mv2;
+SELECT dt, c0, c1, c3 FROM test_mv2 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, c1, c3 + 1 from t2 order by ALL limit 3;
+
+-- test mv add column with default value
+ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c3_default AS c3 + 1 DEFAULT "0";
+function: wait_alter_table_finish()
+DESC test_mv2;
+SELECT dt, c0, c1, c3, c3_default FROM test_mv2 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, c1, c3 + 1, c3 + 1 from t2 order by ALL limit 3;
+
+-- base table add column
+ALTER TABLE t2 ADD COLUMN c4 int;
+function: wait_alter_table_finish()
+DESC t2;
+ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c4 AS c4 + 1;
+function: wait_alter_table_finish()
+DESC test_mv2;
+function: print_hit_materialized_view("select dt, c0, c1, c4 + 1 from t2", "test_mv2")
+SELECT dt, c0, c1, c4 FROM test_mv2 ORDER BY dt, c0, c1, c4 LIMIT 3;
+SELECT dt, c0, c1, c4 + 1 from t2 order by ALL limit 3;
+
+INSERT INTO t2 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+function: print_hit_materialized_view("select dt, c0, c1, c4 + 1 from t2", "test_mv2")
+SELECT dt, c0, c1, c4  FROM test_mv2 ORDER BY dt, c0, c1, c4 LIMIT 3;
+SELECT dt, c0, c1, c4 + 1 from t2 order by ALL limit 3;
+
+-- test mv drop column
+ALTER MATERIALIZED VIEW test_mv2 DROP COLUMN c4;
+function: wait_alter_table_finish()
+DESC test_mv2;
+
+DROP MATERIALIZED VIEW test_mv2;
+DROP TABLE t2;

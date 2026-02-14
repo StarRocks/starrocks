@@ -377,8 +377,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Assertions.assertNotNull(db);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv_replay");
         MaterializedView mv = (MaterializedView) table;
-        AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(db.getId(), mv.getId(), null,
-                mv.getBaseTableInfos(), mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap());
+        AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(null, mv);
         mv.replayAlterMaterializedViewBaseTableInfos(log);
 
         starRocksAssert.dropMaterializedView("mv_replay");
