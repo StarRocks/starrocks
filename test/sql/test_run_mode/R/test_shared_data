@@ -1,0 +1,6 @@
+-- name: test_shared_data @cloud
+select @@run_mode;
+-- result:
+shared_data
+-- !result
+

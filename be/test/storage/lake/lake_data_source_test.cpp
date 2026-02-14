@@ -27,6 +27,7 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -34,6 +35,7 @@
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -47,7 +49,6 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 

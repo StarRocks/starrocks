@@ -65,6 +65,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
@@ -670,6 +671,15 @@ public class AlterJobMgr {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                     olapTable.setReplicationNum(replicationNum);
                 }
+            }
+            // Only update datacache if the field was explicitly present in the log entry.
+            // Old OP_MODIFY_PARTITION entries (before dataCacheEnable was added) deserialize
+            // as null, so we skip the update to preserve the existing partition state.
+            if (olapTable.isCloudNativeTableOrMaterializedView() && info.getDataCacheEnable() != null) {
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(info.getPartitionId());
+                boolean asyncWriteBack = dataCacheInfo == null ? false : dataCacheInfo.isAsyncWriteBack();
+                partitionInfo.setDataCacheInfo(info.getPartitionId(),
+                        new DataCacheInfo(info.getDataCacheEnable(), asyncWriteBack));
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);

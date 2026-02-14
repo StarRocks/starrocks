@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "util/runtime_profile.h"
+#include "common/runtime_profile.h"
 
 namespace starrocks {
 struct AggStatistics {

@@ -20,9 +20,13 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public abstract class RecyclePartitionInfo extends JsonWriter {
+    private static final Logger LOG = LogManager.getLogger(RecyclePartitionInfo.class);
     @SerializedName(value = "dbId")
     protected long dbId;
     @SerializedName(value = "tableId")
@@ -135,6 +139,39 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
         partitionInfo.setReplicationNum(partitionId, this.getReplicationNum());
         if (this.getDataCacheInfo() != null) {
             partitionInfo.setDataCacheInfo(partitionId, this.getDataCacheInfo());
+        }
+
+        syncDataCacheInfoWithTable(table, partitionInfo, partitionId);
+    }
+
+    /**
+     * Synchronize the recovered partition's DataCacheInfo with the table's current
+     * datacache.enable property. This handles the scenario where:
+     * 1. User drops a partition (non-force, so it goes to recycle bin)
+     * 2. User alters the table's datacache.enable property
+     * 3. User recovers the partition from recycle bin
+     * The recovered partition should reflect the table's current datacache.enable setting.
+     */
+    protected void syncDataCacheInfoWithTable(OlapTable table, PartitionInfo partitionInfo, long partitionId) {
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            return;
+        }
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            return;
+        }
+        StorageInfo storageInfo = tableProperty.getStorageInfo();
+        if (storageInfo == null) {
+            return;
+        }
+        boolean tableDataCacheEnable = storageInfo.isEnableDataCache();
+        DataCacheInfo currentDataCacheInfo = partitionInfo.getDataCacheInfo(partitionId);
+        boolean asyncWriteBack = currentDataCacheInfo != null && currentDataCacheInfo.isAsyncWriteBack();
+
+        if (currentDataCacheInfo == null || currentDataCacheInfo.isEnabled() != tableDataCacheEnable) {
+            partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(tableDataCacheEnable, asyncWriteBack));
+            LOG.info("Synced recovered partition {} DataCacheInfo with table's current datacache.enable={}",
+                    partitionId, tableDataCacheEnable);
         }
     }
 }

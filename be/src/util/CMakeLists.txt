@@ -40,14 +40,12 @@ set(UTIL_FILES
   hash_util.hpp
   json_util.cpp
   json_flattener.cpp
-  starrocks_metrics.cpp
+  global_metrics_registry.cpp
   metrics/file_scan_metrics.cpp
   misc.cpp
-  network_util.cpp
   parse_util.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
-  runtime_profile.cpp
   static_asserts.cpp
   thrift_util.cpp
   thrift_client.cpp
@@ -58,8 +56,6 @@ set(UTIL_FILES
   url_parser.cpp
   filesystem_util.cc
 # coding_util.cpp
-  cidr.cpp
-  uid_util.cpp
   aes_util.cpp
   string_util.cpp
   thrift_rpc_helper.cpp
@@ -73,8 +69,6 @@ set(UTIL_FILES
   lru_cache.cpp
   debug/query_trace_impl.cpp
   stack_trace_mutex.cpp
-  bthreads/future.h
-  bthreads/future_impl.cpp
   debug_action.cpp
   memory_lock.cpp
   internal_service_recoverable_stub.cpp

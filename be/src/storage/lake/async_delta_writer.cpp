@@ -22,11 +22,11 @@
 
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
 #include "util/stack_trace_mutex.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -56,6 +56,8 @@ public:
     void flush(Callback cb);
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
+
+    void cancel(const Status& st);
 
     void close();
 
@@ -323,6 +325,10 @@ inline void AsyncDeltaWriterImpl::finish(DeltaWriterFinishMode mode, FinishCallb
     }
 }
 
+inline void AsyncDeltaWriterImpl::cancel(const Status& st) {
+    _writer->cancel(st);
+}
+
 inline void AsyncDeltaWriterImpl::close() {
     std::unique_lock l(_mtx);
     TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:1");
@@ -382,6 +388,10 @@ void AsyncDeltaWriter::flush(Callback cb) {
 void AsyncDeltaWriter::finish(DeltaWriterFinishMode mode, FinishCallback cb) {
     TEST_SYNC_POINT_CALLBACK("AsyncDeltaWriter:enter_finish", this);
     _impl->finish(mode, std::move(cb));
+}
+
+void AsyncDeltaWriter::cancel(const Status& st) {
+    _impl->cancel(st);
 }
 
 void AsyncDeltaWriter::close() {

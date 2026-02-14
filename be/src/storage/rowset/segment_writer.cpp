@@ -46,6 +46,7 @@
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
+#include "storage/chunk_variant_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
@@ -432,10 +433,10 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
         if (chunk_num_rows > 0) {
             if (_sort_key_min.empty()) {
                 // The append_chunk is ordered, so the first is min
-                _sort_key_min = chunk.get(0, _sort_column_indexes);
+                _sort_key_min = build_variant_tuple_from_chunk_row(chunk, 0, _sort_column_indexes);
             }
             // The append_chunk is ordered, so the last is max
-            _sort_key_max = chunk.get(chunk_num_rows - 1, _sort_column_indexes);
+            _sort_key_max = build_variant_tuple_from_chunk_row(chunk, chunk_num_rows - 1, _sort_column_indexes);
         }
 
         for (size_t i = 0; i < chunk_num_rows; i++) {

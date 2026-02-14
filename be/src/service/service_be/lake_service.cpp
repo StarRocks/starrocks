@@ -142,23 +142,9 @@ std::string txn_info_string(const TxnInfoPB& info) {
     return info.DebugString();
 }
 
-std::ostream& operator<<(std::ostream& os, const std::span<const lake::PublishTabletInfo>& tablet_infos) {
-    os << '[';
-    bool first = true;
-    for (const auto& tablet_info : tablet_infos) {
-        if (first) {
-            first = false;
-        } else {
-            os << ", ";
-        }
-        os << tablet_info;
-    }
-    return os << ']';
-}
-
-std::string publish_tablet_info_string(const std::span<const lake::PublishTabletInfo>& tablet_infos) {
+std::string publish_tablet_info_string(const lake::PublishTabletInfo& tablet_info) {
     std::stringstream ss;
-    ss << tablet_infos;
+    ss << tablet_info;
     return ss.str();
 }
 
@@ -166,12 +152,24 @@ void add_failed_tablets(PublishVersionResponse* response, const ReshardingTablet
     if (resharding_tablet_info.has_splitting_tablet_info()) {
         response->add_failed_tablets(resharding_tablet_info.splitting_tablet_info().old_tablet_id());
     } else if (resharding_tablet_info.has_merging_tablet_info()) {
-        for (auto old_tablet_id : resharding_tablet_info.merging_tablet_info().old_tablet_ids()) {
-            response->add_failed_tablets(old_tablet_id);
-        }
+        response->mutable_failed_tablets()->Add(resharding_tablet_info.merging_tablet_info().old_tablet_ids().begin(),
+                                                resharding_tablet_info.merging_tablet_info().old_tablet_ids().end());
     } else if (resharding_tablet_info.has_identical_tablet_info()) {
         response->add_failed_tablets(resharding_tablet_info.identical_tablet_info().old_tablet_id());
     }
+}
+
+bool should_rebuild_pindex(const std::unordered_set<int64>& rebuild_pindex_tablets,
+                           const lake::PublishTabletInfo& tablet_info) {
+    if (rebuild_pindex_tablets.count(tablet_info.get_tablet_id_in_metadata()) > 0) {
+        return true;
+    }
+    for (auto tablet_id_in_txn_log : tablet_info.get_tablet_ids_in_txn_logs()) {
+        if (rebuild_pindex_tablets.count(tablet_id_in_txn_log) > 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -251,10 +249,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 // Merging tablets
                 task_num += 1;
                 const auto& merging_tablet_info = resharding_tablet_info.merging_tablet_info();
-                for (auto old_tablet_id : merging_tablet_info.old_tablet_ids()) {
-                    publish_tablet_infos.emplace_back(lake::PublishTabletInfo::MERGING_TABLET, old_tablet_id,
-                                                      merging_tablet_info.new_tablet_id());
-                }
+                publish_tablet_infos.emplace_back(lake::PublishTabletInfo::MERGING_TABLET,
+                                                  merging_tablet_info.old_tablet_ids(),
+                                                  merging_tablet_info.new_tablet_id());
             } else if (resharding_tablet_info.has_identical_tablet_info()) {
                 // Identical tablet
                 task_num += 1;
@@ -293,128 +290,113 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     }
     bool skip_write_tablet_metadata = request->has_enable_aggregate_publish() && request->enable_aggregate_publish();
 
-    for (auto iter = publish_tablet_infos.begin(); iter != publish_tablet_infos.end(); ++iter) {
-        const auto begin_iter = iter;
-        auto end_iter = iter + 1;
-        // Tablets to be merged must be published in a batch task
-        if (begin_iter->get_publish_tablet_type() == lake::PublishTabletInfo::MERGING_TABLET) {
-            while (end_iter != publish_tablet_infos.end() &&
-                   end_iter->get_publish_tablet_type() == lake::PublishTabletInfo::MERGING_TABLET &&
-                   end_iter->get_tablet_id_in_metadata() == begin_iter->get_tablet_id_in_metadata()) {
-                ++end_iter;
-                ++iter;
-            }
-        }
-        std::span<lake::PublishTabletInfo> publish_tablet_batch(begin_iter, end_iter);
-
+    for (const auto& tablet_info : publish_tablet_infos) {
         auto task = std::make_shared<CancellableRunnable>(
-                [&, publish_tablet_batch] {
+                [&, tablet_info] {
                     DeferOp defer([&] { latch.count_down(); });
 
-                    for (const auto& tablet_info : publish_tablet_batch) {
-                        scoped_refptr<Trace> child_trace(new Trace);
-                        Trace* sub_trace = child_trace.get();
-                        trace->AddChildTrace("PublishTablet", sub_trace);
+                    scoped_refptr<Trace> child_trace(new Trace);
+                    Trace* sub_trace = child_trace.get();
+                    trace->AddChildTrace("PublishTablet", sub_trace);
 
-                        ADOPT_TRACE(sub_trace);
-                        TRACE("start publish tablet $0 at thread $1", tablet_info.get_tablet_id_in_metadata(),
-                              Thread::current_thread()->tid());
+                    ADOPT_TRACE(sub_trace);
+                    TRACE("start publish tablet $0 at thread $1", tablet_info.get_tablet_id_in_metadata(),
+                          Thread::current_thread()->tid());
 
-                        auto run_ts = butil::gettimeofday_us();
-                        auto queuing_latency = run_ts - start_ts;
-                        g_publish_tablet_version_queuing_latency << queuing_latency;
+                    auto run_ts = butil::gettimeofday_us();
+                    auto queuing_latency = run_ts - start_ts;
+                    g_publish_tablet_version_queuing_latency << queuing_latency;
 
-                        auto base_version = request->base_version();
-                        auto new_version = request->new_version();
-                        auto txns = std::vector<TxnInfoPB>();
-                        if (request->txn_infos_size() > 0) {
-                            txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
-                            if (rebuild_pindex_tablets.count(tablet_info.get_tablet_id_in_txn_log()) > 0) {
-                                for (auto& txn : txns) {
-                                    txn.set_rebuild_pindex(true);
-                                }
-                            }
-                        } else { // This is a request from older version FE
-                            // Construct TxnInfoPB from other fields
-                            txns.reserve(request->txn_ids_size());
-                            for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
-                                auto& info = txns.emplace_back();
-                                info.set_txn_id(request->txn_ids(i));
-                                info.set_txn_type(TXN_NORMAL);
-                                info.set_combined_txn_log(false);
-                                info.set_commit_time(request->commit_time());
-                                info.set_force_publish(false);
-                                if (rebuild_pindex_tablets.count(tablet_info.get_tablet_id_in_txn_log()) > 0) {
-                                    info.set_rebuild_pindex(true);
-                                }
+                    auto base_version = request->base_version();
+                    auto new_version = request->new_version();
+                    auto txns = std::vector<TxnInfoPB>();
+                    bool rebuild_pindex = should_rebuild_pindex(rebuild_pindex_tablets, tablet_info);
+                    if (request->txn_infos_size() > 0) {
+                        txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
+                        if (rebuild_pindex) {
+                            for (auto& txn : txns) {
+                                txn.set_rebuild_pindex(true);
                             }
                         }
-
-                        TRACE_COUNTER_INCREMENT("tablet_id", tablet_info.get_tablet_id_in_metadata());
-                        TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
-
-                        StatusOr<TabletMetadataPtr> res;
-                        if (std::chrono::system_clock::now() < timeout_deadline) {
-                            res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
-                                                        skip_write_tablet_metadata);
-                        } else {
-                            auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
-                            res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
+                    } else { // This is a request from older version FE
+                        // Construct TxnInfoPB from other fields
+                        txns.reserve(request->txn_ids_size());
+                        for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                            auto& info = txns.emplace_back();
+                            info.set_txn_id(request->txn_ids(i));
+                            info.set_txn_type(TXN_NORMAL);
+                            info.set_combined_txn_log(false);
+                            info.set_commit_time(request->commit_time());
+                            info.set_force_publish(false);
+                            if (rebuild_pindex) {
+                                info.set_rebuild_pindex(true);
+                            }
                         }
-                        if (res.ok()) {
-                            auto metadata = std::move(res).value();
-                            auto score = compaction_score(_tablet_mgr, metadata);
-                            TabletMetadataPB* prealloc_metadata = nullptr;
-                            {
-                                std::lock_guard l(response_mtx);
-                                response->mutable_compaction_scores()->insert({metadata->id(), score});
-                                if (request->base_version() == 1) {
-                                    int64_t row_nums = std::accumulate(
-                                            metadata->rowsets().begin(), metadata->rowsets().end(), 0,
-                                            [](int64_t sum, const auto& rowset) { return sum + rowset.num_rows(); });
-                                    // Used to collect statistics when the partition is first imported
-                                    response->mutable_tablet_row_nums()->insert({metadata->id(), row_nums});
-                                }
-                                if (skip_write_tablet_metadata) {
-                                    auto& map = *response->mutable_tablet_metas();
-                                    prealloc_metadata = &map[metadata->id()];
-                                }
-                            }
-                            // Move copy metadata out of the lock(response_mtx), to let it execute in parallel.
-                            if (prealloc_metadata != nullptr) {
-                                prealloc_metadata->CopyFrom(*metadata);
-                            }
-                        } else {
-                            g_publish_version_failed_tasks << 1;
-                            if (res.status().is_resource_busy()) {
-                                VLOG(2) << "Fail to publish version: " << res.status()
-                                        << ". tablet_info=" << tablet_info
-                                        << " txns=" << JoinMapped(txns, txn_info_string, ",")
-                                        << " version=" << new_version;
-                            } else {
-                                LOG(WARNING) << "Fail to publish version: " << res.status()
-                                             << ". tablet_info=" << tablet_info
-                                             << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
-                                             << " version=" << new_version;
-                            }
-
-                            std::lock_guard l(response_mtx);
-                            response->add_failed_tablets(tablet_info.get_tablet_id_in_txn_log());
-                            res.status().to_protobuf(response->mutable_status());
-                        }
-                        TRACE("finished");
-                        g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
                     }
+
+                    TRACE_COUNTER_INCREMENT("tablet_id", tablet_info.get_tablet_id_in_metadata());
+                    TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
+                    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::publish_version:before_publish", &txns);
+
+                    StatusOr<TabletMetadataPtr> res;
+                    if (std::chrono::system_clock::now() < timeout_deadline) {
+                        res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
+                                                    skip_write_tablet_metadata);
+                    } else {
+                        auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
+                        res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
+                    }
+                    if (res.ok()) {
+                        auto metadata = std::move(res).value();
+                        auto score = compaction_score(_tablet_mgr, metadata);
+                        TabletMetadataPB* prealloc_metadata = nullptr;
+                        {
+                            std::lock_guard l(response_mtx);
+                            response->mutable_compaction_scores()->insert({metadata->id(), score});
+                            if (request->base_version() == 1) {
+                                int64_t row_nums = std::accumulate(
+                                        metadata->rowsets().begin(), metadata->rowsets().end(), 0,
+                                        [](int64_t sum, const auto& rowset) { return sum + rowset.num_rows(); });
+                                // Used to collect statistics when the partition is first imported
+                                response->mutable_tablet_row_nums()->insert({metadata->id(), row_nums});
+                            }
+                            if (skip_write_tablet_metadata) {
+                                auto& map = *response->mutable_tablet_metas();
+                                prealloc_metadata = &map[metadata->id()];
+                            }
+                        }
+                        // Move copy metadata out of the lock(response_mtx), to let it execute in parallel.
+                        if (prealloc_metadata != nullptr) {
+                            prealloc_metadata->CopyFrom(*metadata);
+                        }
+                    } else {
+                        g_publish_version_failed_tasks << 1;
+                        if (res.status().is_resource_busy()) {
+                            VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_info=" << tablet_info
+                                    << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+                        } else {
+                            LOG(WARNING) << "Fail to publish version: " << res.status()
+                                         << ". tablet_info=" << tablet_info
+                                         << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
+                                         << " version=" << new_version;
+                        }
+
+                        std::lock_guard l(response_mtx);
+                        response->mutable_failed_tablets()->Add(tablet_info.get_tablet_ids_in_txn_logs().begin(),
+                                                                tablet_info.get_tablet_ids_in_txn_logs().end());
+                        res.status().to_protobuf(response->mutable_status());
+                    }
+                    TRACE("finished");
+                    g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
                 },
-                [&, publish_tablet_batch] {
+                [&, tablet_info] {
                     g_publish_version_failed_tasks << 1;
                     Status st = Status::Cancelled(fmt::format("publish version task has been cancelled, tablet_info={}",
-                                                              publish_tablet_info_string(publish_tablet_batch)));
+                                                              publish_tablet_info_string(tablet_info)));
                     LOG(WARNING) << st;
                     std::lock_guard l(response_mtx);
-                    for (const auto& tablet_info : publish_tablet_batch) {
-                        response->add_failed_tablets(tablet_info.get_tablet_id_in_txn_log());
-                    }
+                    response->mutable_failed_tablets()->Add(tablet_info.get_tablet_ids_in_txn_logs().begin(),
+                                                            tablet_info.get_tablet_ids_in_txn_logs().end());
                     if (response->status().status_code() == 0) {
                         st.to_protobuf(response->mutable_status());
                     }
@@ -424,12 +406,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
-            LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_info=" << publish_tablet_batch
+            LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_info=" << tablet_info
                          << " txn_ids=" << get_txn_ids_string(request);
             std::lock_guard l(response_mtx);
-            for (const auto& tablet_info : publish_tablet_batch) {
-                response->add_failed_tablets(tablet_info.get_tablet_id_in_txn_log());
-            }
+            response->mutable_failed_tablets()->Add(tablet_info.get_tablet_ids_in_txn_logs().begin(),
+                                                    tablet_info.get_tablet_ids_in_txn_logs().end());
             st.to_protobuf(response->mutable_status());
             latch.count_down();
         }

@@ -15,6 +15,7 @@
 #include "storage/chunk_helper.h"
 
 #include "column/chunk.h"
+#include "column/chunk_slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"

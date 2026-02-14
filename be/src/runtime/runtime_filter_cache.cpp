@@ -16,6 +16,7 @@
 
 #include <chrono>
 
+#include "base/uid_util.h"
 #include "gutil/strings/substitute.h"
 #include "util/thread.h"
 

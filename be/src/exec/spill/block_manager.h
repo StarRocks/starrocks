@@ -17,11 +17,11 @@
 #include <memory>
 
 #include "base/string/slice.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "io/input_stream.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 

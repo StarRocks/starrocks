@@ -31,6 +31,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/variant_tuple.h"
 #include "util/filesystem_util.h"
@@ -105,6 +106,31 @@ protected:
         return rowset;
     }
 
+    RowsetMetadataPB* add_rowset_with_predicate(TabletMetadataPB* metadata, uint32_t rowset_id, int64_t version,
+                                                bool has_predicate) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(version);
+        rowset->set_overlapped(false);
+        if (!has_predicate) {
+            rowset->add_segments(fmt::format("segment_{}.dat", rowset_id));
+            rowset->add_segment_size(128);
+            rowset->set_num_rows(1);
+            rowset->set_data_size(128);
+            return rowset;
+        }
+
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+        auto* delete_predicate = rowset->mutable_delete_predicate();
+        delete_predicate->set_version(-1);
+        auto* binary_predicate = delete_predicate->add_binary_predicates();
+        binary_predicate->set_column_name("c0");
+        binary_predicate->set_op(">");
+        binary_predicate->set_value("0");
+        return rowset;
+    }
+
     void add_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
                     const std::string& file_name, const std::string& content) {
         FileMetaPB file_meta;
@@ -154,10 +180,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
     rowset_meta_pb->set_id(2);
     rowset_meta_pb->add_segments("test_0.dat");
     rowset_meta_pb->add_segment_size(512);
-    auto* segment_meta = rowset_meta_pb->add_segment_metas();
-    segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(50));
-    segment_meta->set_num_rows(3);
+    auto* segment_meta0 = rowset_meta_pb->add_segment_metas();
+    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+    segment_meta0->set_num_rows(3);
+
     rowset_meta_pb->add_segments("test_1.dat");
     rowset_meta_pb->add_segment_size(512);
     auto* segment_meta1 = rowset_meta_pb->add_segment_metas();
@@ -165,7 +192,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
     segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
     segment_meta1->set_num_rows(2);
     rowset_meta_pb->add_del_files()->set_name("test.del");
-    rowset_meta_pb->set_overlapped(false);
+    rowset_meta_pb->set_overlapped(true);
     rowset_meta_pb->set_data_size(1024);
     rowset_meta_pb->set_num_rows(5);
 
@@ -348,9 +375,381 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
         ASSERT_TRUE(it != tablet_metadatas.end());
         auto* meta = it->second.get();
         ASSERT_EQ(1, meta->rowsets_size());
+        ASSERT_TRUE(meta->rowsets(0).has_range());
+        EXPECT_EQ(meta->rowsets(0).range().SerializeAsString(), meta->range().SerializeAsString());
         EXPECT_GT(meta->rowsets(0).num_rows(), 0);
         EXPECT_GT(meta->rowsets(0).data_size(), 0);
     }
+}
+
+TEST_F(LakeTabletReshardTest, test_merge_rowsets_reorder_by_predicate_version) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_a = next_id();
+    const int64_t tablet_b = next_id();
+    const int64_t new_tablet = next_id();
+
+    prepare_tablet_dirs(tablet_a);
+    prepare_tablet_dirs(tablet_b);
+    prepare_tablet_dirs(new_tablet);
+
+    TabletMetadataPB meta_a;
+    meta_a.set_id(tablet_a);
+    meta_a.set_version(base_version);
+    meta_a.set_next_rowset_id(4);
+    add_rowset_with_predicate(&meta_a, 1, 1, false);
+    add_rowset_with_predicate(&meta_a, 2, 10, true);
+    add_rowset_with_predicate(&meta_a, 3, 11, false);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+
+    TabletMetadataPB meta_b;
+    meta_b.set_id(tablet_b);
+    meta_b.set_version(base_version);
+    meta_b.set_next_rowset_id(4);
+    add_rowset_with_predicate(&meta_b, 1, 1, false);
+    add_rowset_with_predicate(&meta_b, 2, 10, true);
+    add_rowset_with_predicate(&meta_b, 3, 11, false);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.set_new_tablet_id(new_tablet);
+    merging_tablet.add_old_tablet_ids(tablet_a);
+    merging_tablet.add_old_tablet_ids(tablet_b);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto res = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_OK(res);
+
+    auto it = tablet_metadatas.find(new_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged_meta = it->second;
+    ASSERT_EQ(5, merged_meta->rowsets_size());
+
+    std::vector<uint32_t> rowset_ids;
+    int predicate_count = 0;
+    for (const auto& rowset : merged_meta->rowsets()) {
+        rowset_ids.push_back(rowset.id());
+        if (rowset.has_delete_predicate()) {
+            predicate_count++;
+            EXPECT_EQ(10, rowset.version());
+        }
+    }
+
+    EXPECT_EQ(1, predicate_count);
+    // Expected rowset order after reordering by predicate version:
+    // - Tablet A rowset 1 (id=1, version 1, data) -> comes before predicate
+    // - Tablet B rowset 1 (id=4, version 1, data, offset=3 from tablet A) -> comes before predicate
+    // - Tablet A rowset 2 (id=2, version 10, predicate) -> kept, tablet B's duplicate predicate removed
+    // - Tablet A rowset 3 (id=3, version 11, data) -> after predicate
+    // - Tablet B rowset 3 (id=6, version 11, data, offset=3) -> after predicate
+    EXPECT_EQ((std::vector<uint32_t>{1, 4, 2, 3, 6}), rowset_ids);
+}
+
+TEST_F(LakeTabletReshardTest, test_merge_rowsets_different_predicate_versions) {
+    // Test case: tablets with different predicate versions
+    // tablet_a: version 10 predicate
+    // tablet_b: version 10 and 20 predicates
+    // Expected: rowsets ordered by version 10, then 20
+    // Version 10 predicate deduplicated, version 20 kept only from tablet_b
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_a = next_id();
+    const int64_t tablet_b = next_id();
+    const int64_t new_tablet = next_id();
+
+    prepare_tablet_dirs(tablet_a);
+    prepare_tablet_dirs(tablet_b);
+    prepare_tablet_dirs(new_tablet);
+
+    // Tablet A: data(v1) -> predicate(v10) -> data(v11)
+    TabletMetadataPB meta_a;
+    meta_a.set_id(tablet_a);
+    meta_a.set_version(base_version);
+    meta_a.set_next_rowset_id(4);
+    add_rowset_with_predicate(&meta_a, 1, 1, false);  // data
+    add_rowset_with_predicate(&meta_a, 2, 10, true);  // predicate v10
+    add_rowset_with_predicate(&meta_a, 3, 11, false); // data
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+
+    // Tablet B: data(v1) -> predicate(v10) -> data(v11) -> predicate(v20) -> data(v21)
+    TabletMetadataPB meta_b;
+    meta_b.set_id(tablet_b);
+    meta_b.set_version(base_version);
+    meta_b.set_next_rowset_id(6);
+    add_rowset_with_predicate(&meta_b, 1, 1, false);  // data
+    add_rowset_with_predicate(&meta_b, 2, 10, true);  // predicate v10
+    add_rowset_with_predicate(&meta_b, 3, 11, false); // data
+    add_rowset_with_predicate(&meta_b, 4, 20, true);  // predicate v20 (only in tablet_b)
+    add_rowset_with_predicate(&meta_b, 5, 21, false); // data
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.set_new_tablet_id(new_tablet);
+    merging_tablet.add_old_tablet_ids(tablet_a);
+    merging_tablet.add_old_tablet_ids(tablet_b);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto res = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_OK(res);
+
+    auto it = tablet_metadatas.find(new_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged_meta = it->second;
+
+    // Expected: 3 data from A + 3 data from B + 1 predicate(v10) + 1 predicate(v20) = 8 rowsets
+    // But v10 is deduplicated, so: 3 + 3 + 2 - 1 = 7 rowsets
+    ASSERT_EQ(7, merged_meta->rowsets_size());
+
+    std::vector<uint32_t> rowset_ids;
+    int predicate_count = 0;
+    std::vector<int64_t> predicate_versions;
+    for (const auto& rowset : merged_meta->rowsets()) {
+        rowset_ids.push_back(rowset.id());
+        if (rowset.has_delete_predicate()) {
+            predicate_count++;
+            predicate_versions.push_back(rowset.version());
+        }
+    }
+
+    EXPECT_EQ(2, predicate_count);
+    // Predicate versions should be in order: v10, v20
+    EXPECT_EQ((std::vector<int64_t>{10, 20}), predicate_versions);
+    // Expected order after grouping by predicate version:
+    // 1. Process v10: A's data before v10 (id=1), B's data before v10 (id=4), predicate v10 (id=2)
+    // 2. Process v20: B's data before v20 (id=6), predicate v20 (id=7)
+    // 3. Trailing: A's data after v10 (id=3), B's data after v20 (id=8)
+    EXPECT_EQ((std::vector<uint32_t>{1, 4, 2, 6, 7, 3, 8}), rowset_ids);
+}
+
+TEST_F(LakeTabletReshardTest, test_merge_rowsets_no_predicates) {
+    // Test case: tablets with no predicates
+    // Both tablets have only data rowsets
+    // Expected: no reordering needed, rowsets in original order
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_a = next_id();
+    const int64_t tablet_b = next_id();
+    const int64_t new_tablet = next_id();
+
+    prepare_tablet_dirs(tablet_a);
+    prepare_tablet_dirs(tablet_b);
+    prepare_tablet_dirs(new_tablet);
+
+    TabletMetadataPB meta_a;
+    meta_a.set_id(tablet_a);
+    meta_a.set_version(base_version);
+    meta_a.set_next_rowset_id(4);
+    add_rowset_with_predicate(&meta_a, 1, 1, false);
+    add_rowset_with_predicate(&meta_a, 2, 2, false);
+    add_rowset_with_predicate(&meta_a, 3, 3, false);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+
+    TabletMetadataPB meta_b;
+    meta_b.set_id(tablet_b);
+    meta_b.set_version(base_version);
+    meta_b.set_next_rowset_id(4);
+    add_rowset_with_predicate(&meta_b, 1, 1, false);
+    add_rowset_with_predicate(&meta_b, 2, 2, false);
+    add_rowset_with_predicate(&meta_b, 3, 3, false);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.set_new_tablet_id(new_tablet);
+    merging_tablet.add_old_tablet_ids(tablet_a);
+    merging_tablet.add_old_tablet_ids(tablet_b);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto res = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_OK(res);
+
+    auto it = tablet_metadatas.find(new_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged_meta = it->second;
+
+    // All 6 rowsets should be present (no deduplication needed)
+    ASSERT_EQ(6, merged_meta->rowsets_size());
+
+    std::vector<uint32_t> rowset_ids;
+    int predicate_count = 0;
+    for (const auto& rowset : merged_meta->rowsets()) {
+        rowset_ids.push_back(rowset.id());
+        if (rowset.has_delete_predicate()) {
+            predicate_count++;
+        }
+    }
+
+    EXPECT_EQ(0, predicate_count);
+    // Original order: tablet_a rowsets (1,2,3) then tablet_b rowsets (4,5,6 with offset=3)
+    EXPECT_EQ((std::vector<uint32_t>{1, 2, 3, 4, 5, 6}), rowset_ids);
+}
+
+TEST_F(LakeTabletReshardTest, test_merge_rowsets_single_tablet_predicate) {
+    // Test case: only one tablet has predicates
+    // tablet_a: has predicate version 10
+    // tablet_b: no predicates
+    // Expected: tablet_a data before predicate, then predicate,
+    //           then all remaining data from both tablets
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_a = next_id();
+    const int64_t tablet_b = next_id();
+    const int64_t new_tablet = next_id();
+
+    prepare_tablet_dirs(tablet_a);
+    prepare_tablet_dirs(tablet_b);
+    prepare_tablet_dirs(new_tablet);
+
+    // Tablet A: data(v1) -> predicate(v10) -> data(v11)
+    TabletMetadataPB meta_a;
+    meta_a.set_id(tablet_a);
+    meta_a.set_version(base_version);
+    meta_a.set_next_rowset_id(4);
+    add_rowset_with_predicate(&meta_a, 1, 1, false);  // data
+    add_rowset_with_predicate(&meta_a, 2, 10, true);  // predicate v10
+    add_rowset_with_predicate(&meta_a, 3, 11, false); // data
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+
+    // Tablet B: data(v1) -> data(v2) -> data(v3) (no predicates)
+    TabletMetadataPB meta_b;
+    meta_b.set_id(tablet_b);
+    meta_b.set_version(base_version);
+    meta_b.set_next_rowset_id(4);
+    add_rowset_with_predicate(&meta_b, 1, 1, false);
+    add_rowset_with_predicate(&meta_b, 2, 2, false);
+    add_rowset_with_predicate(&meta_b, 3, 3, false);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.set_new_tablet_id(new_tablet);
+    merging_tablet.add_old_tablet_ids(tablet_a);
+    merging_tablet.add_old_tablet_ids(tablet_b);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto res = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_OK(res);
+
+    auto it = tablet_metadatas.find(new_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged_meta = it->second;
+
+    // 3 from A + 3 from B = 6 rowsets (no deduplication, only A has predicate)
+    ASSERT_EQ(6, merged_meta->rowsets_size());
+
+    std::vector<uint32_t> rowset_ids;
+    int predicate_count = 0;
+    for (const auto& rowset : merged_meta->rowsets()) {
+        rowset_ids.push_back(rowset.id());
+        if (rowset.has_delete_predicate()) {
+            predicate_count++;
+            EXPECT_EQ(10, rowset.version());
+        }
+    }
+
+    EXPECT_EQ(1, predicate_count);
+    // Expected order:
+    // - A's data before predicate (id=1)
+    // - predicate v10 (id=2)
+    // - A's data after predicate (id=3)
+    // - B's all data (ids=4,5,6 with offset=3, since B has no predicate, all go to trailing)
+    EXPECT_EQ((std::vector<uint32_t>{1, 2, 3, 4, 5, 6}), rowset_ids);
+}
+
+TEST_F(LakeTabletReshardTest, test_merge_rowsets_all_predicates) {
+    // Test case: all rowsets are predicates (edge case)
+    // Both tablets have only predicate rowsets (no data)
+    // Expected: deduplicated predicates only
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_a = next_id();
+    const int64_t tablet_b = next_id();
+    const int64_t new_tablet = next_id();
+
+    prepare_tablet_dirs(tablet_a);
+    prepare_tablet_dirs(tablet_b);
+    prepare_tablet_dirs(new_tablet);
+
+    // Tablet A: predicate(v10) -> predicate(v20)
+    TabletMetadataPB meta_a;
+    meta_a.set_id(tablet_a);
+    meta_a.set_version(base_version);
+    meta_a.set_next_rowset_id(3);
+    add_rowset_with_predicate(&meta_a, 1, 10, true); // predicate v10
+    add_rowset_with_predicate(&meta_a, 2, 20, true); // predicate v20
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+
+    // Tablet B: predicate(v10) -> predicate(v20) (same versions)
+    TabletMetadataPB meta_b;
+    meta_b.set_id(tablet_b);
+    meta_b.set_version(base_version);
+    meta_b.set_next_rowset_id(3);
+    add_rowset_with_predicate(&meta_b, 1, 10, true); // predicate v10
+    add_rowset_with_predicate(&meta_b, 2, 20, true); // predicate v20
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.set_new_tablet_id(new_tablet);
+    merging_tablet.add_old_tablet_ids(tablet_a);
+    merging_tablet.add_old_tablet_ids(tablet_b);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto res = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_OK(res);
+
+    auto it = tablet_metadatas.find(new_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged_meta = it->second;
+
+    // 4 predicates total, but v10 and v20 each deduplicated -> 2 rowsets
+    ASSERT_EQ(2, merged_meta->rowsets_size());
+
+    std::vector<uint32_t> rowset_ids;
+    std::vector<int64_t> predicate_versions;
+    for (const auto& rowset : merged_meta->rowsets()) {
+        rowset_ids.push_back(rowset.id());
+        EXPECT_TRUE(rowset.has_delete_predicate());
+        predicate_versions.push_back(rowset.version());
+    }
+
+    // Both rowsets are predicates
+    EXPECT_EQ(2u, rowset_ids.size());
+    EXPECT_EQ((std::vector<int64_t>{10, 20}), predicate_versions);
+    // First predicate for each version comes from tablet_a (ids 1 and 2)
+    EXPECT_EQ((std::vector<uint32_t>{1, 2}), rowset_ids);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
@@ -408,6 +807,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
                                               txn_info, false, tablet_metadatas, tablet_ranges));
 
     auto merged = tablet_metadatas.at(new_tablet_id);
+    ASSERT_TRUE(merged->has_range());
     const int64_t offset = static_cast<int64_t>(meta1->next_rowset_id()) - 1;
     const uint32_t expected_rowset_id = static_cast<uint32_t>(1 + offset);
 
@@ -415,6 +815,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
     for (const auto& rowset : merged->rowsets()) {
         if (rowset.id() == expected_rowset_id) {
             found_rowset = true;
+            ASSERT_TRUE(rowset.has_range());
+            EXPECT_EQ(rowset.range().SerializeAsString(), meta2->range().SerializeAsString());
             ASSERT_TRUE(rowset.has_max_compact_input_rowset_id());
             EXPECT_EQ(static_cast<uint32_t>(3 + offset), rowset.max_compact_input_rowset_id());
             ASSERT_EQ(1, rowset.del_files_size());
@@ -423,6 +825,17 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
         }
     }
     ASSERT_TRUE(found_rowset);
+
+    bool found_rowset_from_meta1 = false;
+    for (const auto& rowset : merged->rowsets()) {
+        if (rowset.id() == 10) {
+            found_rowset_from_meta1 = true;
+            ASSERT_TRUE(rowset.has_range());
+            EXPECT_EQ(rowset.range().SerializeAsString(), meta1->range().SerializeAsString());
+            break;
+        }
+    }
+    ASSERT_TRUE(found_rowset_from_meta1);
 
     auto rowset_schema_it = merged->rowset_to_schema().find(expected_rowset_id);
     ASSERT_TRUE(rowset_schema_it != merged->rowset_to_schema().end());
@@ -901,6 +1314,152 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_segment_overflow) {
     auto st = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
                                               txn_info, false, tablet_metadatas, tablet_ranges);
     EXPECT_TRUE(st.is_invalid_argument());
+}
+
+TEST_F(LakeTabletReshardTest, test_split_cross_publish_sets_rowset_range_in_txn_log) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t old_tablet_id = next_id();
+    const int64_t new_tablet_id = next_id();
+
+    prepare_tablet_dirs(old_tablet_id);
+    prepare_tablet_dirs(new_tablet_id);
+
+    auto old_meta = std::make_shared<TabletMetadataPB>();
+    old_meta->set_id(old_tablet_id);
+    old_meta->set_version(base_version);
+    old_meta->set_next_rowset_id(2);
+    auto* old_range = old_meta->mutable_range();
+    old_range->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+    old_range->set_lower_bound_included(true);
+    old_range->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+    old_range->set_upper_bound_included(false);
+
+    auto* old_rowset = old_meta->add_rowsets();
+    old_rowset->set_id(1);
+    old_rowset->set_overlapped(false);
+    old_rowset->set_num_rows(2);
+    old_rowset->set_data_size(100);
+    old_rowset->add_segments("segment.dat");
+    old_rowset->add_segment_size(100);
+
+    auto new_meta = std::make_shared<TabletMetadataPB>(*old_meta);
+    new_meta->set_id(new_tablet_id);
+    new_meta->set_version(base_version);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(old_meta));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(new_meta));
+
+    TxnLogPB log;
+    log.set_tablet_id(old_tablet_id);
+    log.set_txn_id(100);
+    auto* op_write_rowset = log.mutable_op_write()->mutable_rowset();
+    op_write_rowset->set_overlapped(false);
+    op_write_rowset->set_num_rows(1);
+    op_write_rowset->set_data_size(1);
+    op_write_rowset->add_segments("x.dat");
+    op_write_rowset->add_segment_size(1);
+
+    EXPECT_OK(_tablet_manager->put_txn_log(log));
+
+    lake::PublishTabletInfo tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet_id, new_tablet_id);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(100);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(1);
+    txn_info.set_force_publish(false);
+
+    auto published_or = lake::publish_version(_tablet_manager.get(), tablet_info, base_version, new_version,
+                                              std::span<const TxnInfoPB>(&txn_info, 1), false);
+    ASSERT_OK(published_or.status());
+
+    ASSIGN_OR_ABORT(auto published_meta, _tablet_manager->get_tablet_metadata(new_tablet_id, new_version));
+    ASSERT_GT(published_meta->rowsets_size(), 0);
+    const auto& added_rowset = published_meta->rowsets(published_meta->rowsets_size() - 1);
+    ASSERT_TRUE(added_rowset.has_range());
+    EXPECT_EQ(added_rowset.range().SerializeAsString(), published_meta->range().SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for_splitting) {
+    auto base_metadata = std::make_shared<TabletMetadataPB>();
+    base_metadata->set_id(next_id());
+    base_metadata->set_version(1);
+    base_metadata->set_next_rowset_id(1);
+    base_metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+    base_metadata->mutable_range()->set_lower_bound_included(true);
+    base_metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+    base_metadata->mutable_range()->set_upper_bound_included(false);
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    txn_log->set_tablet_id(base_metadata->id());
+    txn_log->set_txn_id(1000);
+
+    auto set_range = [&](TabletRangePB* range, int lower, int upper) {
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        range->set_upper_bound_included(false);
+    };
+    auto fill_rowset = [&](RowsetMetadataPB* rowset, const std::string& segment_name, int lower, int upper) {
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(1);
+        rowset->add_segments(segment_name);
+        rowset->add_segment_size(1);
+        set_range(rowset->mutable_range(), lower, upper);
+    };
+    auto fill_sstable = [&](PersistentIndexSstablePB* sstable, const std::string& filename) {
+        sstable->set_filename(filename);
+        sstable->set_filesize(1);
+        sstable->set_shared(false);
+    };
+    auto expect_shared_and_range = [&](const RowsetMetadataPB& rowset, int lower, int upper) {
+        ASSERT_EQ(rowset.segments_size(), rowset.shared_segments_size());
+        for (int i = 0; i < rowset.shared_segments_size(); ++i) {
+            EXPECT_TRUE(rowset.shared_segments(i));
+        }
+        TabletRangePB expected_range;
+        set_range(&expected_range, lower, upper);
+        EXPECT_TRUE(rowset.has_range());
+        EXPECT_EQ(expected_range.SerializeAsString(), rowset.range().SerializeAsString());
+    };
+
+    // op_write
+    fill_rowset(txn_log->mutable_op_write()->mutable_rowset(), "op_write.dat", 5, 15);
+    // op_compaction
+    fill_rowset(txn_log->mutable_op_compaction()->mutable_output_rowset(), "op_compaction.dat", 12, 25);
+    fill_sstable(txn_log->mutable_op_compaction()->mutable_output_sstable(), "op_compaction.sst");
+    fill_sstable(txn_log->mutable_op_compaction()->add_output_sstables(), "op_compaction_1.sst");
+    // op_schema_change
+    fill_rowset(txn_log->mutable_op_schema_change()->add_rowsets(), "op_schema_change.dat", 0, 30);
+    // op_replication
+    fill_rowset(txn_log->mutable_op_replication()->add_op_writes()->mutable_rowset(), "op_replication.dat", 18, 30);
+    // op_parallel_compaction
+    auto* op_parallel_compaction = txn_log->mutable_op_parallel_compaction();
+    fill_rowset(op_parallel_compaction->add_subtask_compactions()->mutable_output_rowset(),
+                "op_parallel_compaction.dat", 19, 21);
+    fill_sstable(op_parallel_compaction->mutable_output_sstable(), "op_parallel_compaction.sst");
+    fill_sstable(op_parallel_compaction->add_output_sstables(), "op_parallel_compaction_1.sst");
+
+    lake::PublishTabletInfo publish_tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, txn_log->tablet_id(),
+                                                next_id());
+    ASSIGN_OR_ABORT(auto converted, convert_txn_log(txn_log, base_metadata, publish_tablet_info));
+
+    EXPECT_EQ(publish_tablet_info.get_tablet_id_in_metadata(), converted->tablet_id());
+    expect_shared_and_range(converted->op_write().rowset(), 10, 15);
+    expect_shared_and_range(converted->op_compaction().output_rowset(), 12, 20);
+    ASSERT_TRUE(converted->op_compaction().has_output_sstable());
+    EXPECT_TRUE(converted->op_compaction().output_sstable().shared());
+    ASSERT_EQ(1, converted->op_compaction().output_sstables_size());
+    EXPECT_TRUE(converted->op_compaction().output_sstables(0).shared());
+    expect_shared_and_range(converted->op_schema_change().rowsets(0), 10, 20);
+    expect_shared_and_range(converted->op_replication().op_writes(0).rowset(), 18, 20);
+    expect_shared_and_range(converted->op_parallel_compaction().subtask_compactions(0).output_rowset(), 19, 20);
+    ASSERT_TRUE(converted->op_parallel_compaction().has_output_sstable());
+    EXPECT_TRUE(converted->op_parallel_compaction().output_sstable().shared());
+    ASSERT_EQ(1, converted->op_parallel_compaction().output_sstables_size());
+    EXPECT_TRUE(converted->op_parallel_compaction().output_sstables(0).shared());
 }
 
 } // namespace starrocks

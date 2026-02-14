@@ -43,8 +43,11 @@
 
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/network/network_util.h"
+#include "base/uid_util.h"
 #include "base/url_coding.h"
 #include "common/object_pool.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
@@ -59,16 +62,14 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
-#include "service/backend_options.h"
+#include "runtime/starrocks_metrics.h"
 #include "types/datetime_value.h"
+#include "util/global_metrics_registry.h"
 #include "util/misc.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

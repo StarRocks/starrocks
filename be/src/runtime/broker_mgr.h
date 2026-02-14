@@ -39,6 +39,7 @@
 #include <thread>
 #include <unordered_set>
 
+#include "base/uid_util.h"
 #include "gen_cpp/Types_types.h"
 #include "util/hash_util.hpp"
 

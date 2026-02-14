@@ -35,6 +35,7 @@
 #pragma once
 
 #include "column_reader.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/olap_common.h"
@@ -43,7 +44,6 @@
 #include "storage/range.h"
 #include "storage/rowset/common.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

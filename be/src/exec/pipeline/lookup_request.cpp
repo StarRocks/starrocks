@@ -19,6 +19,7 @@
 #include "base/container/raw_container.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "connector/hive_connector.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
@@ -28,7 +29,6 @@
 #include "serde/column_array_serde.h"
 #include "storage/range.h"
 #include "util/logging.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

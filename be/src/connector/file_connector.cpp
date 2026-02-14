@@ -23,7 +23,8 @@
 #include "exec/file_scanner/parquet_scanner.h"
 #include "exprs/expr.h"
 #include "file_chunk_sink.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::connector {
 
@@ -204,7 +205,7 @@ void FileDataSource::_update_counter() {
     _runtime_state->update_num_rows_load_filtered(_counter.num_rows_filtered);
     _runtime_state->update_num_rows_load_unselected(_counter.num_rows_unselected);
     // update the file scan metrics all together
-    auto* metric_repo = StarRocksMetrics::instance()->file_scan_metrics();
+    auto* metric_repo = GlobalMetricsRegistry::instance()->file_scan_metrics();
     if (metric_repo != nullptr) {
         metric_repo->update(_scanner->file_format(), _scanner->scan_type(), _counter);
     }

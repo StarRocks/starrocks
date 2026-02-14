@@ -14,9 +14,10 @@
 
 #include "iceberg_table_sink.h"
 
+#include "common/runtime_profile.h"
 #include "exprs/expr.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

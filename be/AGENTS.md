@@ -189,6 +189,11 @@ Use `#pragma once` instead of traditional include guards:
 - **No higher-level BE deps**: do not include headers from `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, etc.
 - **UT constraint**: keep `TypesCore` unit tests in `types_test` and avoid introducing `Util`/`Runtime` link requirements unless a dedicated integration test is used.
 
+### runtimecore (`RuntimeCore` target)
+- **Allowed deps only**: code compiled into `RuntimeCore` (currently selected files under `be/src/runtime`, starting with `mem_tracker.cpp`) may only depend on `chunkcore` (`ChunkCore`), `columncore` (`ColumnCore`), `typecore` (`TypesCore`), `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
+- **No higher-level BE deps**: do not include headers from `runtime/*` components that require full `Runtime`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, `exprs/*`, etc.
+- **UT constraint**: keep `RuntimeCore` unit tests in `runtime_core_test`, and ensure that `runtime_core_test` links only `RuntimeCore` plus its allowed core dependencies (similar to `column_test`/`types_test` style minimal linkage).
+
 ## Common Patterns
 
 ### Status and StatusOr

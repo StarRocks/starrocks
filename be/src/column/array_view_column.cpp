@@ -19,7 +19,6 @@
 #include <stdexcept>
 
 #include "column/array_column.h"
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 

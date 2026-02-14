@@ -1844,6 +1844,15 @@ CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 CONF_mInt64(load_spill_merge_max_thread, "16");
 // Enable parallel spill merge inside single tablet
 CONF_mBool(enable_load_spill_parallel_merge, "true");
+// Enable parallel finalize memtable when loading to lake table.
+// When enabled, the memtable finalize operation (sort/aggregate) will be moved from the
+// write thread to the flush thread, allowing the write thread to continue inserting data
+// into a new memtable while the previous one is being finalized and flushed in parallel.
+// This can significantly improve load throughput by overlapping CPU-intensive finalize
+// operations with I/O-bound flush operations.
+// Note: This optimization is disabled when auto-increment columns need to be filled,
+// as auto-increment ID assignment must happen before the memtable is submitted for flush.
+CONF_mBool(enable_parallel_memtable_finalize, "true");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 // Batch size for column mode partial update when processing insert rows.

@@ -20,7 +20,9 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
@@ -44,13 +46,12 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
-#include "util/runtime_profile.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 

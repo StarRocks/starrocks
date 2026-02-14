@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "serde/column_array_serde.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 class ChunkExtraColumnsData;

@@ -23,6 +23,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_hash_variant.h"
@@ -38,7 +39,6 @@
 #include "runtime/descriptors.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

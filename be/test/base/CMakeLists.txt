@@ -19,6 +19,11 @@ set(BASE_TEST_FILES
     bit/bit_packing_test.cpp
     bit/bit_stream_utils_test.cpp
     bit/bit_util_test.cpp
+    bthreads/future_test.cpp
+    bthreads/promise_test.cpp
+    bthreads/semaphore_test.cpp
+    bthreads/shared_future_test.cpp
+    bthreads/single_flight_test.cpp
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp
@@ -64,6 +69,7 @@ set(BASE_TEST_FILES
     utility/pretty_printer_test.cpp
     utility/scoped_cleanup_test.cpp
     utility/template_util_test.cpp
+    uid_util_test.cpp
     url_coding_test.cpp
     uuid/uuid_generator_test.cpp
     status_test.cpp

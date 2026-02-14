@@ -130,6 +130,7 @@ import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.lazymaterialize.GlobalLateMaterializationRewriter;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
@@ -315,11 +316,6 @@ public class QueryOptimizer extends Optimizer {
         // add mv db id to currentSqlDbIds, the resource group could use this to distinguish sql patterns
         Set<Long> currentSqlDbIds = context.getConnectContext().getCurrentSqlDbIds();
         mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
-
-        if (connectContext.getSessionVariable().isEnableGlobalLateMaterialization()) {
-            LateMaterializationRewriter lateMaterializationRewriter = new LateMaterializationRewriter();
-            finalPlan = lateMaterializationRewriter.rewrite(finalPlan, context);
-        }
 
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
             rootTaskContext.getPlanValidator().enableAllCheckers();
@@ -783,7 +779,10 @@ public class QueryOptimizer extends Optimizer {
         boolean isRewrittenSuccess = false;
         try (Timer ignored = Tracers.watchScope("MVViewRewrite")) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
-            OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
+            // Clone the tree to avoid modifying the original tree stored in QueryMaterializationContext
+            OptExpression treeWithView = MvUtils.cloneExpression(queryMaterializationContext.getQueryOptPlanWithView());
+            // Derive logical property for the cloned tree to ensure it has complete metadata
+            MvUtils.deriveLogicalProperty(treeWithView);
             OptimizerTraceUtil.logOptExpression("before ViewBasedMvRuleRewrite:\n%s", tree);
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
@@ -1041,7 +1040,7 @@ public class QueryOptimizer extends Optimizer {
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
         result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
 
-        // set subfield expr copy flag
+        // set a subfield expr copy flag
         if (rootTaskContext.getOptimizerContext().getSessionVariable().getEnableSubfieldNoCopy()) {
             result = new SubfieldExprNoCopyRule().rewrite(result, rootTaskContext);
         }
@@ -1050,6 +1049,8 @@ public class QueryOptimizer extends Optimizer {
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
         result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
         result = new RemoveUselessScanOutputPropertyRule().rewrite(result, rootTaskContext);
+        result = new GlobalLateMaterializationRewriter().rewrite(result, context);
+
         result.setPlanCount(planCount);
         return result;
     }

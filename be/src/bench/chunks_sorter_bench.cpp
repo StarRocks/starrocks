@@ -23,6 +23,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_heap_sort.h"
@@ -36,7 +37,6 @@
 #include "runtime/sorted_chunks_merger.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

@@ -24,6 +24,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
@@ -34,7 +35,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
 #include "util/reusable_closure.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

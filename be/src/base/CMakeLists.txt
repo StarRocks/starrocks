@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
 ADD_BE_LIB(Base
+  bthreads/future_impl.cpp
   concurrency/await.cpp
   concurrency/core_local.cpp
   concurrency/spinlock.cpp
@@ -22,6 +23,8 @@ ADD_BE_LIB(Base
   crypto/sha.cpp
   crypto/sm3.cpp
   coding.cpp
+  network/network_util.cpp
+  network/cidr.cpp
   gc/gc_helper_smoothstep.cpp
   hash/crc32c_sse_simd.cpp
   hash/hash_util.cpp
@@ -51,6 +54,7 @@ ADD_BE_LIB(Base
   testutil/assert.cpp
   testutil/sync_point.cc
   testutil/sync_point_impl.cc
+  uid_util.cpp
   url_coding.cpp
   uuid/uuid_generator.cpp
   status.cpp

@@ -24,6 +24,7 @@
 #include "common/system/cpu_info.h"
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
@@ -33,7 +34,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

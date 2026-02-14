@@ -52,6 +52,7 @@
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs_util.h"
@@ -59,7 +60,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
-#include "service/backend_options.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
@@ -71,7 +72,6 @@
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/misc.h"
-#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
 namespace starrocks {

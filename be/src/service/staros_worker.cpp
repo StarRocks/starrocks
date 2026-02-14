@@ -31,9 +31,10 @@
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
+#include "runtime/starrocks_metrics.h"
 #include "util/debug_util.h"
+#include "util/global_metrics_registry.h"
 #include "util/lru_cache.h"
-#include "util/starrocks_metrics.h"
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);
@@ -108,7 +109,7 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     l.unlock();
     if (ret.second) {
 #ifndef BE_TEST
-        StarRocksMetrics::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
+        GlobalMetricsRegistry::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
 #endif
         // it is an insert op to the map
         // NOTE:
@@ -141,7 +142,7 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     if (iter != _shards.end()) {
 #ifndef BE_TEST
         uint64_t table_id = get_table_id(iter->second.shard_info);
-        StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(table_id);
+        GlobalMetricsRegistry::instance()->table_metrics_mgr()->unregister_table(table_id);
 #endif
         _shards.erase(iter);
     }

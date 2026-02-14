@@ -562,4 +562,78 @@ public class JDBCMetadataTest {
         // This prevents cursor leaks (ORA-01000 in Oracle)
         Assertions.assertTrue(closed[0], "ResultSet must be closed after getTable() to prevent cursor leaks");
     }
+
+    @Test
+    public void testAllSupportedSchemaResolvers() {
+        // Test that all supported schema_resolver values create correct resolver instances
+        try {
+            Map<String, String> testProperties = new HashMap<>(properties);
+
+            // Test postgresql
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "postgresql");
+            JDBCMetadata metadata1 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata1.schemaResolver instanceof PostgresSchemaResolver,
+                    "postgresql should create PostgresSchemaResolver");
+
+            // Test mysql
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "mysql");
+            JDBCMetadata metadata2 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata2.schemaResolver instanceof MysqlSchemaResolver,
+                    "mysql should create MysqlSchemaResolver");
+
+            // Test oracle
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "oracle");
+            JDBCMetadata metadata3 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata3.schemaResolver instanceof OracleSchemaResolver,
+                    "oracle should create OracleSchemaResolver");
+
+            // Test sqlserver
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "sqlserver");
+            JDBCMetadata metadata4 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata4.schemaResolver instanceof SqlServerSchemaResolver,
+                    "sqlserver should create SqlServerSchemaResolver");
+
+            // Test clickhouse
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "clickhouse");
+            JDBCMetadata metadata5 = new JDBCMetadata(testProperties, "catalog", dataSource);
+            Assertions.assertTrue(metadata5.schemaResolver instanceof ClickhouseSchemaResolver,
+                    "clickhouse should create ClickhouseSchemaResolver");
+        } catch (Exception e) {
+            Assertions.fail("Test should not throw exception: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSchemaResolverEmptyString() {
+        // Test that empty string falls back to auto-detection
+        try {
+            Map<String, String> testProperties = new HashMap<>(properties);
+            testProperties.put(JDBCResource.SCHEMA_RESOLVER, "");
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(testProperties, "catalog", dataSource);
+
+            // Should fall back to auto-detection and use MysqlSchemaResolver (MariaDB driver auto-detects as MySQL)
+            Assertions.assertTrue(jdbcMetadata.schemaResolver instanceof MysqlSchemaResolver,
+                    "Empty schema_resolver should fall back to auto-detection");
+        } catch (Exception e) {
+            Assertions.fail("Test should not throw exception: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testAutoDetectionWithoutSchemaResolver() {
+        // Test that auto-detection still works when schema_resolver is not specified
+        try {
+            Map<String, String> testProperties = new HashMap<>(properties);
+            testProperties.remove(JDBCResource.SCHEMA_RESOLVER);
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(testProperties, "catalog", dataSource);
+
+            // Should auto-detect to MysqlSchemaResolver based on MariaDB driver
+            Assertions.assertTrue(jdbcMetadata.schemaResolver instanceof MysqlSchemaResolver,
+                    "Should auto-detect MysqlSchemaResolver for MariaDB driver");
+        } catch (Exception e) {
+            Assertions.fail("Test should not throw exception: " + e.getMessage());
+        }
+    }
 }

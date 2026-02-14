@@ -23,6 +23,7 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
@@ -38,7 +39,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/compression/block_compression.h"
-#include "util/runtime_profile.h"
 
 #define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
 

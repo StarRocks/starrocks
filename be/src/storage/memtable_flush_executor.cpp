@@ -143,6 +143,27 @@ Status FlushToken::wait() {
     return _status;
 }
 
+// Wait for all flush tasks to complete with a timeout.
+// This method supports memory-pressure-aware waiting patterns where the caller
+// can periodically check memory status and decide whether to continue waiting.
+// @param timeout_ms: Maximum time to wait in milliseconds
+// @return StatusOr<bool>:
+//   - Returns true if all tasks completed within the timeout
+//   - Returns false if timeout occurred but tasks are still running
+//   - Returns error Status if any flush task failed
+StatusOr<bool> FlushToken::wait_for(int64_t timeout_ms) {
+    bool completed = _flush_token->wait_for(MonoDelta::FromMilliseconds(timeout_ms));
+    std::lock_guard l(_status_lock);
+    RETURN_IF_ERROR(_status);
+    return completed;
+}
+
+// Flush a memtable to persistent storage.
+// When parallel memtable finalize is enabled (config::enable_parallel_memtable_finalize),
+// the finalize() operation is performed here in the flush thread instead of in the write thread.
+// This allows the write thread to continue inserting data into a new memtable while the
+// previous memtable is being finalized and flushed in parallel, significantly improving
+// overall load throughput by overlapping CPU-intensive finalize with I/O-bound flush.
 void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos, int64_t* flush_data_size,
                                  int64_t slot_idx) {
     // If previous flush has failed, return directly
@@ -150,6 +171,13 @@ void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment, bool eo
         return;
     }
 
+    // Finalize the memtable (sort/aggregate) - this may have already been done
+    // in the write thread for auto-increment columns or when parallel finalize is disabled.
+    // MemTable::finalize() handles the idempotency check internally.
+    set_status(memtable->finalize());
+    if (!status().ok()) {
+        return;
+    }
     set_status(memtable->flush(segment, eos, flush_data_size, slot_idx));
     _stats.flush_count++;
     _stats.memtable_stats += memtable->get_stat();

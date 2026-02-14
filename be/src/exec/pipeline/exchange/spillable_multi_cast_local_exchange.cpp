@@ -19,6 +19,7 @@
 #include "base/container/raw_container.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
@@ -33,7 +34,6 @@
 #include "fs/fs.h"
 #include "serde/column_array_serde.h"
 #include "serde/protobuf_serde.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

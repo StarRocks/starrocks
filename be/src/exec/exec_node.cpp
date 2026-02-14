@@ -44,6 +44,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/aggregate_streaming_node.h"
@@ -86,7 +87,6 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "util/debug_util.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

@@ -77,6 +77,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/zone_map_detail.h"
 #include "util/crc32c.h"
+#include "util/global_metrics_registry.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -1372,7 +1373,7 @@ int meta_tool_main(int argc, char** argv) {
     }
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
-    starrocks::MemChunkAllocator::init_metrics();
+    starrocks::register_mem_chunk_allocator_metrics(starrocks::GlobalMetricsRegistry::instance()->metrics());
 
     if (empty_args || FLAGS_operation.empty()) {
         show_usage();

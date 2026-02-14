@@ -14,13 +14,13 @@
 
 #include "exec/assert_num_rows_node.h"
 
+#include "common/runtime_profile.h"
 #include "exec/pipeline/assert_num_rows_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

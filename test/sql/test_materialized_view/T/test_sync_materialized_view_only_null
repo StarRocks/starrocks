@@ -1,0 +1,33 @@
+-- name: test_sync_materialized_view_only_null
+
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+
+CREATE TABLE `t1` (
+  `c1` varchar(300) NOT NULL COMMENT "",
+  `c2` json NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`)
+PROPERTIES (
+"compression" = "LZ4",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+INSERT INTO t1 (c1, c2) VALUES  ('key1', '{"res_id":"RES10033_001","status":"active","value":123.45}');
+
+CREATE MATERIALIZED VIEW MV_1
+AS
+SELECT
+    c1,
+    CAST(
+        get_json_string(c1, '$.expiresAt')
+        AS DATETIME
+    ) AS expires_at
+FROM t1;
+
+function: wait_materialized_view_finish()
+
+select * from MV_1 [_SYNC_MV_];
+
+drop materialized view MV_1;

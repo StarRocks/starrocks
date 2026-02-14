@@ -55,16 +55,17 @@
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "base/failpoint/fail_point.h"
+#include "base/uid_util.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "runtime/memory/roaring_hook.h"
-#include "service/backend_options.h"
 #include "service/daemon.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
@@ -74,7 +75,6 @@
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
-#include "util/uid_util.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero

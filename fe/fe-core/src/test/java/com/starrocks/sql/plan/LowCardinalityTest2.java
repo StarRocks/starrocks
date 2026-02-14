@@ -2803,6 +2803,20 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testLeadWindowFunctionLowCardinalityRewrite() throws Exception {
+        String sql = "select S_SUPPKEY, S_ADDRESS, lead(S_ADDRESS, 1) over(order by S_SUPPKEY) from supplier";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  <dict id 11> : <string id 9>\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, lead(10: S_ADDRESS, 1, NULL), ]\n" +
+                "  |  order by: 1: S_SUPPKEY ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING");
+    }
+
+    @Test
     public void testCreateDecodeInfoDoesNotReturnSharedMutableSingleton() {
         DecodeInfo empty1 = DecodeInfo.create();
         DecodeInfo empty2 = DecodeInfo.create();

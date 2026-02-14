@@ -37,7 +37,8 @@
 #include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::compression {
 
@@ -84,7 +85,7 @@ public:
               _deleter(std::move(deleter)),
               _resetter(std::move(resetter)),
               _created_counter(0) {
-        auto metrics = StarRocksMetrics::instance()->metrics();
+        auto metrics = GlobalMetricsRegistry::instance()->metrics();
         std::string full_name = pool_name + "_context_pool_create_count";
         _created_counter_metrics = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
         metrics->register_metric(full_name, _created_counter_metrics.get());

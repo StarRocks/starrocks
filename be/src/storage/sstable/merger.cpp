@@ -138,6 +138,11 @@ public:
         return current_->shared_version();
     }
 
+    int32_t rssid_offset() const override {
+        assert(Valid());
+        return current_->rssid_offset();
+    }
+
     DelVectorPtr delvec() const override {
         assert(Valid());
         return current_->delvec();

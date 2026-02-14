@@ -187,6 +187,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TX_READ_ONLY = "tx_read_only";
     public static final String TRANSACTION_ISOLATION = "transaction_isolation";
     public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
+    // Enable SQL transaction capability. If false, only keep syntax without enabling transaction behavior.
+    public static final String ENABLE_SQL_TRANSACTION = "enable_sql_transaction";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
     public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
@@ -953,6 +955,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OLAP_PARTITION_NUM_LIMIT = "scan_olap_partition_num_limit";
 
+    public static final String SCAN_LAKE_PARTITION_NUM_LIMIT = "scan_lake_partition_num_limit";
+
     public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
 
     public static final String ENABLE_NESTED_LOOP_JOIN = "enable_nested_loop_join";
@@ -1064,6 +1068,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
     public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION = "enable_global_late_materialization";
+    public static final String GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS = "global_late_materialization_max_fetch_ops";
+    public static final String GLOBAL_LATE_MATERIALIZE_MAX_LIMIT = "global_late_materialization_max_limit";
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
@@ -1279,6 +1285,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // this is used to make mysql client happy
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
     private boolean autoCommit = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_SQL_TRANSACTION)
+    private boolean enableSqlTransaction = true;
+
+    public boolean isEnableSqlTransaction() {
+        return enableSqlTransaction;
+    }
+
+    public void setEnableSqlTransaction(boolean enableSqlTransaction) {
+        this.enableSqlTransaction = enableSqlTransaction;
+    }
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = TX_ISOLATION)
@@ -2184,6 +2201,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION)
     private boolean enableGlobalLateMaterialization = false;
 
+    @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS)
+    private int globalLateMaterializeMaxFetchOps = 4;
+    @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_LIMIT)
+    private int globalLateMaterializeMaxLimit = 4096;
+
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
 
@@ -2894,13 +2916,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
     private boolean allowHiveWithoutPartitionFilter = true;
 
-    // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
-    @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
-    private int scanHivePartitionNumLimit = 0;
-
     // For the maximum number of partitions allowed to be scanned in a single olap table, 0 means no limit.
     @VarAttr(name = SCAN_OLAP_PARTITION_NUM_LIMIT)
     private int scanOlapPartitionNumLimit = 0;
+
+    // For the maximum number of partitions allowed to be scanned in a single lake table, 0 means no limit.
+    @VarAttr(name = SCAN_LAKE_PARTITION_NUM_LIMIT, alias = SCAN_HIVE_PARTITION_NUM_LIMIT)
+    private int scanLakePartitionNumLimit = 0;
 
     @VarAttr(name = ENABLE_CROSS_JOIN)
     private boolean enableCrossJoin = true;
@@ -5378,20 +5400,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.allowHiveWithoutPartitionFilter = allowHiveWithoutPartitionFilter;
     }
 
-    public int getScanHivePartitionNumLimit() {
-        return scanHivePartitionNumLimit;
-    }
-
-    public void setScanHivePartitionNumLimit(int scanHivePartitionNumLimit) {
-        this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
-    }
-
     public int getScanOlapPartitionNumLimit() {
         return scanOlapPartitionNumLimit;
     }
 
     public void setScanOlapPartitionNumLimit(int scanOlapPartitionNumLimit) {
         this.scanOlapPartitionNumLimit = scanOlapPartitionNumLimit;
+    }
+
+    public int getScanLakePartitionNumLimit() {
+        return scanLakePartitionNumLimit;
+    }
+
+    public void setScanLakePartitionNumLimit(int scanLakePartitionNumLimit) {
+        this.scanLakePartitionNumLimit = scanLakePartitionNumLimit;
     }
 
     public boolean isEnableCrossJoin() {
@@ -5882,6 +5904,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
         this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
+    }
+
+    public void setGlobalLateMaterializeMaxFetchOps(int maxOpts) {
+        this.globalLateMaterializeMaxFetchOps = maxOpts;
+    }
+    public int getGlobalLateMaterializeMaxFetchOps() {
+        return globalLateMaterializeMaxFetchOps;
+    }
+
+    public void setGlobalLateMaterializeMaxLimit(int limit) {
+        globalLateMaterializeMaxLimit = limit;
+    }
+    public int getGlobalLateMaterializeMaxLimit() {
+        return globalLateMaterializeMaxLimit;
     }
 
     public boolean isEnableJSONV2Rewrite() {

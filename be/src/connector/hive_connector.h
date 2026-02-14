@@ -20,6 +20,10 @@
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "hive_chunk_sink.h"
 
+namespace starrocks {
+class HiveTableDescriptor;
+}
+
 namespace starrocks::connector {
 
 class HiveConnector final : public Connector {

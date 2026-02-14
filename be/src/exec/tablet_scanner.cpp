@@ -18,18 +18,18 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
 #include "runtime/current_thread.h"
-#include "service/backend_options.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/runtime_profile.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

@@ -21,8 +21,8 @@
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
+#include "common/system/backend_options.h"
 #include "runtime/tablets_channel.h"
-#include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
 #include "util/reusable_closure.h"
 
@@ -59,7 +59,7 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const;
 
-    void cancel() override;
+    void cancel(const std::string& reason) override;
 
     void abort() override;
 

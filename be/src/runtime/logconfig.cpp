@@ -22,8 +22,8 @@
 
 #include <limits>
 
+#include "base/uid_util.h"
 #include "common/process_exit.h"
-#include "util/uid_util.h"
 #ifdef __APPLE__
 #include <mach/mach_init.h>
 #include <mach/mach_port.h>

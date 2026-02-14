@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
@@ -55,6 +56,12 @@ public:
     // Strictly inside the open interval of this range.
     bool strictly_contains(const VariantTuple& key) const;
 
+    // Return the intersection between this range and rhs.
+    StatusOr<TabletRange> intersect(const TabletRange& rhs) const;
+
+    // Empty range such as [x, x) or any range where lower bound is larger than upper bound.
+    bool is_empty() const;
+
     void to_proto(TabletRangePB* tablet_range_pb) const;
 
     Status from_proto(const TabletRangePB& tablet_range_pb);
@@ -95,10 +102,82 @@ inline bool TabletRange::strictly_contains(const VariantTuple& key) const {
 }
 
 inline void TabletRange::to_proto(TabletRangePB* tablet_range_pb) const {
-    _lower_bound.to_proto(tablet_range_pb->mutable_lower_bound());
-    _upper_bound.to_proto(tablet_range_pb->mutable_upper_bound());
-    tablet_range_pb->set_lower_bound_included(_lower_bound_included);
-    tablet_range_pb->set_upper_bound_included(_upper_bound_included);
+    tablet_range_pb->clear_lower_bound();
+    tablet_range_pb->clear_upper_bound();
+    tablet_range_pb->clear_lower_bound_included();
+    tablet_range_pb->clear_upper_bound_included();
+    if (!is_minimum()) {
+        _lower_bound.to_proto(tablet_range_pb->mutable_lower_bound());
+        tablet_range_pb->set_lower_bound_included(_lower_bound_included);
+    }
+    if (!is_maximum()) {
+        _upper_bound.to_proto(tablet_range_pb->mutable_upper_bound());
+        tablet_range_pb->set_upper_bound_included(_upper_bound_included);
+    }
+}
+
+inline bool TabletRange::is_empty() const {
+    if (is_minimum() || is_maximum()) {
+        return false;
+    }
+    const int cmp = _lower_bound.compare(_upper_bound);
+    return cmp > 0 || (cmp == 0 && (!_lower_bound_included || !_upper_bound_included));
+}
+
+inline StatusOr<TabletRange> TabletRange::intersect(const TabletRange& rhs) const {
+    TabletRange result;
+
+    if (is_minimum()) {
+        result._lower_bound = rhs._lower_bound;
+        result._lower_bound_included = rhs._lower_bound_included;
+    } else if (rhs.is_minimum()) {
+        result._lower_bound = _lower_bound;
+        result._lower_bound_included = _lower_bound_included;
+    } else {
+        const int cmp = _lower_bound.compare(rhs._lower_bound);
+        if (cmp > 0) {
+            result._lower_bound = _lower_bound;
+            result._lower_bound_included = _lower_bound_included;
+        } else if (cmp < 0) {
+            result._lower_bound = rhs._lower_bound;
+            result._lower_bound_included = rhs._lower_bound_included;
+        } else {
+            result._lower_bound = _lower_bound;
+            result._lower_bound_included = _lower_bound_included && rhs._lower_bound_included;
+        }
+    }
+
+    if (is_maximum()) {
+        result._upper_bound = rhs._upper_bound;
+        result._upper_bound_included = rhs._upper_bound_included;
+    } else if (rhs.is_maximum()) {
+        result._upper_bound = _upper_bound;
+        result._upper_bound_included = _upper_bound_included;
+    } else {
+        const int cmp = _upper_bound.compare(rhs._upper_bound);
+        if (cmp > 0) {
+            result._upper_bound = rhs._upper_bound;
+            result._upper_bound_included = rhs._upper_bound_included;
+        } else if (cmp < 0) {
+            result._upper_bound = _upper_bound;
+            result._upper_bound_included = _upper_bound_included;
+        } else {
+            result._upper_bound = _upper_bound;
+            result._upper_bound_included = _upper_bound_included && rhs._upper_bound_included;
+        }
+    }
+
+    if (!result.is_minimum() && !result.is_maximum()) {
+        const int cmp = result._lower_bound.compare(result._upper_bound);
+        if (cmp > 0 || (cmp == 0 && (!result._lower_bound_included || !result._upper_bound_included))) {
+            // Canonicalize empty range to [x, x).
+            result._upper_bound = result._lower_bound;
+            result._lower_bound_included = true;
+            result._upper_bound_included = false;
+        }
+    }
+
+    return result;
 }
 
 inline Status TabletRange::from_proto(const TabletRangePB& tablet_range_pb) {

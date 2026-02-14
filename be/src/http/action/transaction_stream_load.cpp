@@ -31,6 +31,7 @@
 #include "base/metrics.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/utils.h"
@@ -49,6 +50,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -57,9 +59,7 @@
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
 #include "util/json_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

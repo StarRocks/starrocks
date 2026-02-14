@@ -44,13 +44,13 @@
 #ifndef __APPLE__
 #include "runtime/file_result_writer.h"
 #endif
+#include "base/uid_util.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/statistic_result_writer.h"
 #include "runtime/variable_result_writer.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

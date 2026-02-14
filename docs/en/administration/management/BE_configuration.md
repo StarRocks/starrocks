@@ -140,7 +140,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Strings
 - Unit: -
 - Is mutable: No
-- Description: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`.
+- Description: Specifies the file names (without extensions) or file name wildcards for which VLOG logs should be printed. Multiple file names can be separated by commas. For example, if you set this configuration item to `storage_engine,tablet_manager`, StarRocks prints VLOG logs from the storage_engine.cpp and tablet_manager.cpp files. You can also use wildcards, e.g., set to `*` to print VLOG logs from all files. The VLOG log printing level is controlled by the `sys_log_verbose_level` parameter.
 - Introduced in: -
 
 ### Server
@@ -1248,6 +1248,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: -
 - Is mutable: Yes
 - Description: Specifies whether to enable parallel spill merge within a single tablet. Enabling this can improve the performance of spill merge during data loading.
+- Introduced in: -
+
+##### enable_parallel_memtable_finalize
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Specifies whether to enable parallel memtable finalize when loading data to lake tables (shared-data mode). When enabled, the memtable finalize operation (sort/aggregate) is moved from the write thread to the flush thread, allowing the write thread to continue inserting data into a new memtable while the previous one is being finalized and flushed in parallel. This can significantly improve load throughput by overlapping CPU-intensive finalize operations with I/O-bound flush operations. Note that this optimization is automatically disabled when auto-increment columns need to be filled, as auto-increment ID assignment must happen before the memtable is submitted for flush.
 - Introduced in: -
 
 ##### enable_stream_load_verbose_log

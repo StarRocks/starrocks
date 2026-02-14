@@ -19,9 +19,9 @@
 
 #include <utility>
 
+#include "base/uid_util.h"
 #include "formats/parquet/file_writer.h"
 #include "runtime/exec_env.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

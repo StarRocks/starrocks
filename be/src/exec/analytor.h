@@ -20,6 +20,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/memory/mem_hook_allocator.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -27,7 +28,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

@@ -22,7 +22,7 @@
 #include <iostream>
 
 #include "base/utility/pretty_printer.h"
-#include "util/runtime_profile.h"
+#include "common/runtime_profile.h"
 #include "util/threadpool.h"
 
 namespace starrocks {

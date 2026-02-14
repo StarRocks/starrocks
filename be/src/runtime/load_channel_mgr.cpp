@@ -47,10 +47,11 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/utils.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/thread.h"
 
 namespace starrocks {

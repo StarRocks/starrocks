@@ -118,7 +118,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Strings
 - 单位：-
 - 是否动态：否
-- 描述：日志打印的模块。有效值为 BE 的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。
+- 描述：设置需要输出 VLOG 日志的文件名（去掉文件扩展名）或文件名通配符。可以指定多个文件名，用逗号分隔。例如，如果将此配置项设置为 `storage_engine,tablet_manager`，StarRocks 将打印 storage_engine.cpp、tablet_manager.cpp 文件的 VLOG 日志。您也可以使用通配符，如设置为 `*` 表示打印所有文件的 VLOG 日志。VLOG 日志打印级别通过 `sys_log_verbose_level` 参数控制。
 - 引入版本：-
 
 ### 服务器
@@ -1042,6 +1042,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：是否启用单个 Tablet 内部的并行 Spill Merge。启用后可以提高导入过程中 Spill Merge 的性能。
+- 引入版本：-
+
+##### enable_parallel_memtable_finalize
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在存算分离（Lake）表导入数据时启用并行 MemTable Finalize。启用后，MemTable 的 Finalize 操作（排序/聚合）将从写入线程移至 Flush 线程执行，使写入线程可以继续向新的 MemTable 插入数据，同时前一个 MemTable 正在并行进行 Finalize 和 Flush。这可以通过重叠 CPU 密集型的 Finalize 操作与 I/O 密集型的 Flush 操作来显著提高导入吞吐量。注意：当需要填充自增列时，此优化会自动禁用，因为自增 ID 的分配必须在 MemTable 提交 Flush 之前完成。
 - 引入版本：-
 
 ##### enable_stream_load_verbose_log

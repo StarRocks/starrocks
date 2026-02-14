@@ -19,13 +19,13 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/dict_decode_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
