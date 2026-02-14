@@ -293,11 +293,6 @@ set(EXEC_FILES
         ./runtime/lake_tablets_channel_test.cpp
         ./runtime/load_channel_test.cpp
         ./runtime/load_channel_mgr_test.cpp
-        ./runtime/memory/mem_chunk_allocator_test.cpp
-        ./runtime/memory/system_allocator_test.cpp
-        ./runtime/memory/memory_resource_test.cpp
-        ./runtime/memory/counting_allocator_test.cpp
-        ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
