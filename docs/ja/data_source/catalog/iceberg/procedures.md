@@ -202,6 +202,7 @@ ALTER TABLE iceberg.sales.order
 EXECUTE remove_orphan_files(older_than = '2024-01-01 00:00:00');
 ```
 
+<<<<<<< HEAD
 デフォルトの保持期間（7日）を使用して孤立ファイルを削除します：
 
 ```SQL
@@ -211,6 +212,32 @@ EXECUTE remove_orphan_files();
 
 ---
 
+=======
+### マニフェストの再書き込み
+
+データマニフェストファイルを再書き込みし、パーティションごとにマージします。これにより、過剰な小規模マニフェストによるパフォーマンスの低下を回避します。
+
+:::note
+この操作は現在のスナップショットのデータマニフェストのみを再書き込みします。
+:::
+
+#### `rewrite_manifests` 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rewrite_manifests()
+```
+
+#### 例
+
+現在のスナップショットのデータマニフェストを書き換える:
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rewrite_manifests()
+```
+
+>>>>>>> cfe928e620 ([Doc] Add rewrite-manifests Doc (#69132))
 ## テーブル管理
 
 ### Add files

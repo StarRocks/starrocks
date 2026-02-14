@@ -202,6 +202,7 @@ ALTER TABLE iceberg.sales.order
 EXECUTE remove_orphan_files(older_than = '2024-01-01 00:00:00');
 ```
 
+<<<<<<< HEAD
 使用默认保留期（7 天）删除孤立文件：
 
 ```SQL
@@ -211,6 +212,32 @@ EXECUTE remove_orphan_files();
 
 ---
 
+=======
+### 重写 Data Manifest
+
+重写 Data Manifest 文件，并按分区合并，以避免过多小 Manifest 导致的性能下降。
+
+:::note
+此操作仅重写当前快照的 Data Manifest。
+:::
+
+#### `rewrite_manifests` 语法
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rewrite_manifests()
+```
+
+#### 示例
+
+重写当前快照的 Data Manifest：
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rewrite_manifests()
+```
+
+>>>>>>> cfe928e620 ([Doc] Add rewrite-manifests Doc (#69132))
 ## 表管理
 
 ### Add files

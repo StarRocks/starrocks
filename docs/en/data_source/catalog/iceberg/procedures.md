@@ -202,6 +202,30 @@ ALTER TABLE iceberg.sales.order
 EXECUTE remove_orphan_files();
 ```
 
+### Rewrite manifests
+
+Rewrites data manifest files and merges them by partition to avoid performance degradation caused by excessive small manifests.
+
+:::note
+This operation rewrites the data manifests of the current snapshot only.
+:::
+
+#### `rewrite_manifests` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rewrite_manifests()
+```
+
+#### Example
+
+Rewrite the data manifests of the current snapshot:
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rewrite_manifests()
+```
+
 ## Table management
 
 ### Add files
