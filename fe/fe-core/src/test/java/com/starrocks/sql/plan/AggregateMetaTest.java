@@ -15,11 +15,13 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
+import com.starrocks.statistic.StatisticUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Test;
@@ -67,6 +69,39 @@ public class AggregateMetaTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: max(2: v2)\n" +
                 "  |  group by:");
+    }
+
+    @Test
+    public void testAggregateMinMaxMetaDatetimeTypeFallback() throws Exception {
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return LocalDateTime.now();
+            }
+        };
+        new MockUp<ColumnMinMaxMgr>() {
+            @Mock
+            public Optional<IMinMaxStatsMgr.ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version) {
+                if ("t1b".equals(identifier.getColumnName().getId())) {
+                    return Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "100"));
+                }
+                return Optional.empty();
+            }
+        };
+
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        connectContext.getSessionVariable().setScanOlapPartitionNumLimit(0);
+        String sql = "SELECT min(id_datetime), max(t1b) FROM test_all_type_not_null";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 11> : 11: min\n" +
+                "  |  <slot 12> : 100\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(8: id_datetime)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
     }
 
     @Test
