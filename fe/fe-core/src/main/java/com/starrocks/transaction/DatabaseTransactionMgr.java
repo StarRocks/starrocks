@@ -946,17 +946,19 @@ public class DatabaseTransactionMgr {
                     TransactionState state = states.get(i);
                     TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
                     // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
-                    if (tableInfo == null) {
-                        states = states.subList(0, Math.max(i, 1));
-                        break;
-                    }
-                    // Handle replication transaction separately
+                    // Handle special transaction types separately to prevent batching:
+                    // 1. Replication transactions: may have non-consecutive versions
+                    // 2. DELETE transactions: each delete predicate needs its own version
+                    //    to ensure proper ordering during tablet merge operations
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
-                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep>, <txn_normal_1, txn_normal_2>
-                    if (state.getTransactionType() == TransactionType.TXN_REPLICATION) {
+                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep_0>, <txn_normal_1, txn_normal_2>
+                    if (tableInfo == null
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
+
                     Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                     for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
                         PartitionCommitInfo currTxnInfo = item.getValue();
