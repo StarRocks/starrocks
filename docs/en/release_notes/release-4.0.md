@@ -43,7 +43,6 @@ Release Date: February 14, 2026
 - Triggered refresh of related asynchronous materialized views when the base table undergoes Swap/Drop/Replace Partition operations. [#68430](https://github.com/StarRocks/starrocks/pull/68430)
 - Supports `VARBINARY` type for `count distinct`-like aggregate functions. [#68442](https://github.com/StarRocks/starrocks/pull/68442)
 - Enhanced expression statistics to propagate histogram MCV for semantics-safe expressions (for example, `cast(k as bigint) + 10`) to improve skew detection. [#68292](https://github.com/StarRocks/starrocks/pull/68292)
-  - 
 
 ### Bug Fixes
 
