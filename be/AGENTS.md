@@ -189,6 +189,17 @@ Use `#pragma once` instead of traditional include guards:
 - **No higher-level BE deps**: do not include headers from `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, etc.
 - **UT constraint**: keep `TypesCore` unit tests in `types_test` and avoid introducing `Util`/`Runtime` link requirements unless a dedicated integration test is used.
 
+### columncore (`ColumnCore` target)
+- **Allowed deps only**: code compiled into `ColumnCore` (the `be/src/column` module) may only depend on `TypesCore`, `Common`, `Base`, `Gutils`, `gen_cpp/*`, system headers, and third-party libraries.
+- **No circular deps**: do **not** introduce dependencies from `ColumnCore` to `Util`, `Runtime`, `Storage`, `Exec`, or any other higher-level module. Circular dependencies between modules are strictly forbidden.
+- **Goal**: `ColumnCore` should be buildable with minimal dependencies so that `column_test` can be compiled and run without building the entire codebase. This enables fast AI-agent iteration loops.
+- **UT constraint**: keep `ColumnCore` unit tests in `column_test`. To verify changes quickly, run:
+  ```bash
+  STARROCKS_LINKER=lld STARROCKS_THIRDPARTY=/var/local/thirdparty \
+  ./run-be-ut.sh --clean --with-dynamic --build-target column_test
+  ```
+  This builds only `column_test` and its minimal dependencies, making it extremely fast for iterative development.
+
 ### runtimecore (`RuntimeCore` target)
 - **Allowed deps only**: code compiled into `RuntimeCore` (currently selected files under `be/src/runtime`, starting with `mem_tracker.cpp`) may only depend on `chunkcore` (`ChunkCore`), `columncore` (`ColumnCore`), `typecore` (`TypesCore`), `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
 - **No higher-level BE deps**: do not include headers from `runtime/*` components that require full `Runtime`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, `exprs/*`, etc.
