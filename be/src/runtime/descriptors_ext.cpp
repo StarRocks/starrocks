@@ -451,7 +451,6 @@ std::string JDBCTableDescriptor::debug_string() const {
     return out.str();
 }
 
-
 Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl,
                              DescriptorTbl** tbl, int32_t chunk_size) {
     *tbl = pool->add(new DescriptorTbl());
@@ -572,6 +571,5 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
 
     return Status::OK();
 }
-
 
 } // namespace starrocks
