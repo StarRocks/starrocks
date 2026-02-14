@@ -264,6 +264,242 @@ struct TabletMergeInfo {
     int64_t rssid_offset = 0;
 };
 
+struct RowsetGroup {
+    // Rowset indexes of data rowsets that are protected by the predicate (if any).
+    std::vector<size_t> data_rowset_indices;
+    // Rowset index of the delete predicate rowset in this group.
+    size_t predicate_rowset_index = 0;
+    // Rowset version of the delete predicate rowset in this group.
+    int64_t predicate_rowset_version = 0;
+
+    bool has_predicate() const { return predicate_rowset_version > 0; }
+};
+
+struct TabletGroupState {
+    int64_t tablet_id = 0;
+    // Groups split by delete predicate rowsets.
+    std::vector<RowsetGroup> rowset_groups;
+    // Rowset group indices that contain delete predicate rowsets.
+    std::vector<size_t> predicate_rowset_group_indices;
+    // Rowset versions of delete predicate rowsets, in the same order as predicate_rowset_group_indices.
+    std::vector<int64_t> predicate_rowset_versions;
+    size_t next_predicate_index = 0;
+};
+
+static Status build_rowset_groups(const TabletMetadataPB& metadata, size_t start_rowset_index, size_t end_rowset_index,
+                                  TabletGroupState* state) {
+    // Split a tablet's rowsets into groups: data rowsets followed by a delete predicate rowset.
+    // Each delete predicate terminates the current group and starts the next.
+    RowsetGroup current_group;
+    int64_t last_predicate_version = -1;
+    for (size_t rowset_index = start_rowset_index; rowset_index < end_rowset_index; ++rowset_index) {
+        const auto& rowset = metadata.rowsets(static_cast<int>(rowset_index));
+        if (!rowset.has_delete_predicate()) {
+            current_group.data_rowset_indices.push_back(rowset_index);
+            continue;
+        }
+
+        const int64_t predicate_version = rowset.version();
+        if (predicate_version <= 0) {
+            return Status::InvalidArgument("Invalid delete predicate version");
+        }
+        // Delete predicate versions must be strictly increasing within one tablet.
+        if (last_predicate_version >= 0 && predicate_version <= last_predicate_version) {
+            return Status::InvalidArgument("Delete predicate version not increasing in one tablet");
+        }
+
+        current_group.predicate_rowset_index = rowset_index;
+        current_group.predicate_rowset_version = predicate_version;
+        state->rowset_groups.emplace_back(std::move(current_group));
+        state->predicate_rowset_group_indices.push_back(state->rowset_groups.size() - 1);
+        state->predicate_rowset_versions.push_back(predicate_version);
+        current_group = RowsetGroup();
+        last_predicate_version = predicate_version;
+    }
+
+    if (!current_group.data_rowset_indices.empty()) {
+        state->rowset_groups.emplace_back(std::move(current_group));
+    }
+
+    return Status::OK();
+}
+
+// Build rowset index offsets for mapping rowsets back to per-tablet slices.
+static Status build_rowset_index_offsets(const std::vector<TabletMergeInfo>& merge_infos,
+                                         const TabletMetadataPB& new_metadata,
+                                         std::vector<size_t>* rowset_index_offsets) {
+    rowset_index_offsets->reserve(merge_infos.size() + 1);
+    rowset_index_offsets->push_back(0);
+    for (const auto& info : merge_infos) {
+        rowset_index_offsets->push_back(rowset_index_offsets->back() + info.metadata->rowsets_size());
+    }
+    if (rowset_index_offsets->back() != static_cast<size_t>(new_metadata.rowsets_size())) {
+        return Status::Corruption("Rowset count mismatch during merge reorder");
+    }
+    return Status::OK();
+}
+
+// Build tablet group states and collect all predicate versions across tablets.
+static Status build_tablet_group_states(const std::vector<TabletMergeInfo>& merge_infos,
+                                        const TabletMetadataPB& new_metadata,
+                                        const std::vector<size_t>& rowset_index_offsets,
+                                        std::vector<TabletGroupState>* tablet_states,
+                                        std::vector<int64_t>* all_predicate_versions) {
+    tablet_states->reserve(merge_infos.size());
+    for (size_t i = 0; i < merge_infos.size(); ++i) {
+        TabletGroupState state;
+        state.tablet_id = merge_infos[i].metadata->id();
+        RETURN_IF_ERROR(
+                build_rowset_groups(new_metadata, rowset_index_offsets[i], rowset_index_offsets[i + 1], &state));
+
+        for (const auto& rowset_group : state.rowset_groups) {
+            if (rowset_group.has_predicate()) {
+                all_predicate_versions->push_back(rowset_group.predicate_rowset_version);
+            }
+        }
+        tablet_states->emplace_back(std::move(state));
+    }
+    return Status::OK();
+}
+
+// Build reordered rowsets by iterating through predicate versions in order.
+static Status build_reordered_rowsets(const std::vector<int64_t>& all_predicate_versions,
+                                      const TabletMetadataPB& new_metadata,
+                                      std::vector<TabletGroupState>* tablet_states,
+                                      std::vector<RowsetMetadataPB>* reordered_rowsets) {
+    reordered_rowsets->reserve(new_metadata.rowsets_size());
+
+    // Process rowsets grouped by predicate version.
+    for (int64_t version : all_predicate_versions) {
+        std::vector<size_t> predicate_rowset_indices;
+        for (auto& state : *tablet_states) {
+            if (state.next_predicate_index >= state.predicate_rowset_versions.size()) {
+                continue;
+            }
+
+            const int64_t next_version = state.predicate_rowset_versions[state.next_predicate_index];
+            if (next_version < version) {
+                return Status::Corruption("Delete predicate version order mismatch across tablets");
+            }
+            if (next_version == version) {
+                const size_t rowset_group_index = state.predicate_rowset_group_indices[state.next_predicate_index];
+                const auto& rowset_group = state.rowset_groups[rowset_group_index];
+                // Append data rowsets that are protected by this predicate version.
+                for (auto rowset_index : rowset_group.data_rowset_indices) {
+                    reordered_rowsets->emplace_back(new_metadata.rowsets(static_cast<int>(rowset_index)));
+                }
+                predicate_rowset_indices.push_back(rowset_group.predicate_rowset_index);
+                ++state.next_predicate_index;
+            }
+        }
+
+        if (predicate_rowset_indices.empty()) {
+            return Status::Corruption("Delete predicate version not found during merge reorder");
+        }
+
+        // Keep a single predicate rowset for this version across tablets.
+        reordered_rowsets->emplace_back(new_metadata.rowsets(static_cast<int>(predicate_rowset_indices.front())));
+    }
+
+    // Append trailing data-only groups after the last predicate for each tablet.
+    for (auto& state : *tablet_states) {
+        size_t start_rowset_group_index = 0;
+        if (state.next_predicate_index > 0) {
+            start_rowset_group_index = state.predicate_rowset_group_indices[state.next_predicate_index - 1] + 1;
+        }
+        for (size_t rowset_group_index = start_rowset_group_index; rowset_group_index < state.rowset_groups.size();
+             ++rowset_group_index) {
+            const auto& rowset_group = state.rowset_groups[rowset_group_index];
+            if (rowset_group.has_predicate()) {
+                return Status::Corruption("Unprocessed delete predicate group during merge reorder");
+            }
+            for (auto rowset_index : rowset_group.data_rowset_indices) {
+                reordered_rowsets->emplace_back(new_metadata.rowsets(static_cast<int>(rowset_index)));
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+// Remove orphan schema mappings that reference rowsets no longer present after deduplication.
+static void cleanup_orphan_schema_mappings(TabletMetadataPB* new_metadata) {
+    if (new_metadata->rowset_to_schema().empty()) {
+        return;
+    }
+
+    // Collect rowset IDs that are still present.
+    std::unordered_set<uint32_t> rowset_ids;
+    rowset_ids.reserve(new_metadata->rowsets_size());
+    for (const auto& rowset : new_metadata->rowsets()) {
+        rowset_ids.insert(rowset.id());
+    }
+
+    // Remove rowset-to-schema mappings for removed rowsets.
+    auto* rowset_to_schema = new_metadata->mutable_rowset_to_schema();
+    for (auto it = rowset_to_schema->begin(); it != rowset_to_schema->end();) {
+        if (rowset_ids.count(it->first) == 0) {
+            it = rowset_to_schema->erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Collect schema IDs that are still referenced.
+    std::unordered_set<int64_t> schema_ids;
+    for (const auto& pair : *rowset_to_schema) {
+        schema_ids.insert(pair.second);
+    }
+
+    // Remove historical schemas that are no longer referenced.
+    for (auto it = new_metadata->mutable_historical_schemas()->begin();
+         it != new_metadata->mutable_historical_schemas()->end();) {
+        if (schema_ids.count(it->first) == 0) {
+            it = new_metadata->mutable_historical_schemas()->erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Ensure current schema is always present in historical schemas.
+    if (new_metadata->historical_schemas().count(new_metadata->schema().id()) == 0) {
+        auto& item = (*new_metadata->mutable_historical_schemas())[new_metadata->schema().id()];
+        item.CopyFrom(new_metadata->schema());
+    }
+}
+
+static Status reorder_rowsets_by_delete_predicate(const std::vector<TabletMergeInfo>& merge_infos,
+                                                  TabletMetadataPB* new_metadata) {
+    std::vector<size_t> rowset_index_offsets;
+    RETURN_IF_ERROR(build_rowset_index_offsets(merge_infos, *new_metadata, &rowset_index_offsets));
+
+    std::vector<TabletGroupState> tablet_states;
+    std::vector<int64_t> all_predicate_versions;
+    RETURN_IF_ERROR(build_tablet_group_states(merge_infos, *new_metadata, rowset_index_offsets, &tablet_states,
+                                              &all_predicate_versions));
+
+    if (all_predicate_versions.empty()) {
+        return Status::OK();
+    }
+
+    // Collect unique predicate versions in ascending order for alignment across tablets.
+    std::sort(all_predicate_versions.begin(), all_predicate_versions.end());
+    all_predicate_versions.erase(std::unique(all_predicate_versions.begin(), all_predicate_versions.end()),
+                                 all_predicate_versions.end());
+
+    std::vector<RowsetMetadataPB> reordered_rowsets;
+    RETURN_IF_ERROR(build_reordered_rowsets(all_predicate_versions, *new_metadata, &tablet_states, &reordered_rowsets));
+
+    // Replace rowsets with reordered ones.
+    new_metadata->mutable_rowsets()->Clear();
+    for (auto& rowset : reordered_rowsets) {
+        new_metadata->add_rowsets()->Swap(&rowset);
+    }
+
+    cleanup_orphan_schema_mappings(new_metadata);
+    return Status::OK();
+}
+
 static Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMergeInfo>& merge_infos,
                             int64_t new_version, int64_t txn_id, TabletMetadataPB* new_metadata) {
     std::vector<DelvecFileInfo> old_delvec_files;
@@ -911,6 +1147,8 @@ CONTINUE_HANDLE_MERGING_TABLET:
         RETURN_IF_ERROR(
                 merge_delvecs(tablet_manager, merge_infos, new_version, txn_info.txn_id(), new_tablet_metadata.get()));
     }
+
+    RETURN_IF_ERROR(reorder_rowsets_by_delete_predicate(merge_infos, new_tablet_metadata.get()));
 
     tablet_ranges.emplace(merging_tablet.new_tablet_id(), new_tablet_metadata->range());
     new_metadatas.emplace(merging_tablet.new_tablet_id(), std::move(new_tablet_metadata));
