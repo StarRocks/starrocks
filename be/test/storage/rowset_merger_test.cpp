@@ -60,7 +60,7 @@ public:
     Status add_rowset(const RowsetSharedPtr& rowset) override { return Status::NotSupported(""); }
 
     Status add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
-                                              const SchemaMapping& schema_mapping) override {
+                                               const SchemaMapping& schema_mapping) override {
         return Status::NotSupported("");
     }
 
