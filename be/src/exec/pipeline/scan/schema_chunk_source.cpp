@@ -19,6 +19,7 @@
 
 #include "exec/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/descriptors_ext.h"
 
 namespace starrocks::pipeline {
 

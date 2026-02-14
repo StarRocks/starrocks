@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_CORE_FILES
     current_thread.cpp
+    descriptors.cpp
     mem_tracker.cpp
     mem_pool.cpp
     starrocks_metrics.cpp
@@ -52,7 +53,7 @@ set(RUNTIME_FILES
     sender_queue.cpp
     data_stream_sender.cpp
     multi_cast_data_stream_sink.cpp
-    descriptors.cpp
+    descriptors_ext.cpp
     exec_env.cpp
     exec.cpp
     global_variables.cpp

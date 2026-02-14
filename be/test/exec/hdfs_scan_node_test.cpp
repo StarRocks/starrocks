@@ -23,6 +23,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/starrocks_metrics.h"
