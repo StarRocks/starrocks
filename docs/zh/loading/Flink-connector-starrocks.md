@@ -20,11 +20,10 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及更高版本 | 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 
 ## 获取 Flink connector
 
@@ -94,38 +93,242 @@ Flink connector JAR 文件的命名格式如下：
 
 ## 参数说明
 
-| 参数                              | 是否必填 | 默认值        | 描述                                                         |
-| --------------------------------- | -------- | ------------- | ------------------------------------------------------------ |
-| connector                         | Yes      | NONE          | 固定设置为 `starrocks`。                                     |
-| jdbc-url                          | Yes      | NONE          | 用于访问 FE 节点上的 MySQL 服务器。多个地址用英文逗号（,）分隔。格式：`jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>`。 |
-| load-url                          | Yes      | NONE          | 用于访问 FE 节点上的 HTTP 服务器。多个地址用英文分号（;）分隔。格式：`<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`。 |
-| database-name                     | Yes      | NONE          | StarRocks 数据库名。                                         |
-| table-name                        | Yes      | NONE          | StarRocks 表名。                                             |
-| username                          | Yes      | NONE          | StarRocks 集群的用户名。使用 Flink connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。|
-| password                          | Yes      | NONE          | StarRocks 集群的用户密码。                                   |
-| sink.semantic                     | No           | at-least-once     | sink 保证的语义。有效值：**at-least-once** 和 **exactly-once**。 |
-| sink.version                      | No       | AUTO          | 导入数据的接口。此参数自 Flink connector 1.2.4 开始支持。<ul><li>V1：使用 [Stream Load](./StreamLoad.md) 接口导入数据。1.2.4 之前的 Flink connector 仅支持此模式。</li> <li>V2：使用 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本大于等于 2.4。建议选择 V2，因为其降低内存使用，并提供了更稳定的 exactly-once 实现。</li> <li>AUTO：如果 StarRocks 版本支持 Stream Load 事务接口，将自动选择 V2，否则选择 V1。</li></ul> |
-| sink.label-prefix                 | No       | NONE          | 指定 Stream Load 使用的 label 的前缀。 如果 Flink connector 版本为 1.2.8 及以上，并且 sink 保证 exactly-once 语义，则建议配置 label 前缀。详细信息，参见[exactly once](#exactly-once)。                      |
-| sink.buffer-flush.max-bytes       | No       | 94371840(90M) | 积攒在内存的数据大小，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64MB, 10GB]。将此参数设置为较大的值可以提高导入性能，但可能会增加导入延迟。 该参数只在 `sink.semantic` 为`at-least-once`才会生效。 `sink.semantic` 为 `exactly-once`，则只有 Flink checkpoint 触发时 flush 内存的数据，因此该参数不生效。 |
-| sink.buffer-flush.max-rows        | No       | 500000        | 积攒在内存的数据条数，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64000, 5000000]。该参数只在 `sink.version` 为 `V1`，`sink.semantic` 为 `at-least-once` 才会生效。 |
-| sink.buffer-flush.interval-ms     | No       | 300000        | 数据发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。该参数只在 `sink.semantic` 为 `at-least-once`才会生效。 |
-| sink.max-retries                  | No       | 3             | Stream Load 失败后的重试次数。超过该数量上限，则数据导入任务报错。取值范围：[0, 10]。该参数只在 `sink.version` 为 `V1` 才会生效。 |
-| sink.connect.timeout-ms           | No       |  30000        | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。  Flink connector v1.2.9 之前，默认值为 `1000`。  |
-| sink.socket.timeout-ms            | No       | -1            | 此参数自 Flink connector 1.2.10 开始支持。HTTP 客户端等待数据的超时时间。单位：毫秒。默认值 `-1` 表示没有超时时间。|
-| sink.sanitize-error-log          | No           | false             | 此参数自 Flink connector 1.2.12 开始支持。用于控制是否对错误日志中的敏感数据进行清理，保护生产环境数据安全。当此项设置为 `true` 时，Stream Load 错误日志中的敏感行数据和列值将在连接器和 SDK 日志中被屏蔽。为保持向后兼容性，默认值为 `false`。 |
-| sink.wait-for-continue.timeout-ms | No       | 10000         | 此参数自 Flink connector 1.2.7 开始支持。等待 FE HTTP 100-continue 应答的超时时间。取值范围：[3000, 60000]。 |
-| sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键表中视为 DELETE 操作。 |
-| sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于 Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
-| sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
-| sink.properties.format            | No       | csv           | Stream Load 导入时的数据格式。Flink connector 会将内存的数据转换为对应格式，然后通过 Stream Load 导入至 StarRocks。取值为 CSV 或者 JSON。 |
-| sink.properties.column_separator  | No       | \t            | CSV 数据的列分隔符。                                         |
-| sink.properties.row_delimiter     | No       | \n            | CSV 数据的行分隔符。                                         |
-| sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
-| sink.properties.partial_update    | No       | false         | 是否使用部分更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。 |
-| sink.properties.partial_update_mode | No     | row           | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
-| sink.properties.strict_mode       | No       | false         | 是否为 Stream Load 启用严格模式。在导入数据中出现不合格行（如列值不一致）时，严格模式会影响导入行为。有效值： `true` 和 `false`。具体参考 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
-| sink.properties.compression       | No       | NONE          | 用于 Stream Load 的压缩算法。有效值：`lz4_frame`。压缩 JSON 格式需要 Flink Connector 1.2.10+ 和 StarRocks v3.2.7+。压缩 CSV 格式仅需要 Flink Connector 1.2.11+。 |
-| sink.properties.prepared_timeout  | No           | NONE              | 自 Flink Connector 1.2.12版本起支持，且仅当 `sink.version` 为 `V2` 时生效。需StarRocks 3.5.4 及以上版本。设置事务 Stream Load 阶段从 `PREPARED` 到 `COMMITTED` 的超时时间（单位：秒）。通常仅需在 exactly-once 模式下设置；at-least-once 模式通常无需设置（Connector 默认值为 300 秒）。若在精确一次模式下未设置，则采用 StarRocks FE 配置项 `prepared_transaction_default_timeout_second`（默认 86400 秒）。详见[StarRocks 事务超时管理](./Stream_Load_transaction_interface.md#超时管理)。 |
+### 常用选项
+
+#### connector
+
+- **是否必填**: 是
+- **默认值**: NONE
+- **描述**: 您要使用的连接器。该值必须为 "starrocks"。
+
+#### jdbc-url
+
+- **是否必填**: 是
+- **默认值**: NONE
+- **描述**: 用于连接 FE 的 MySQL 服务器的地址。您可以指定多个地址，地址之间必须使用英文逗号 (,) 分隔。格式：`jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>,<fe_host3>:<fe_query_port3>`。
+
+#### load-url
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：用于连接 FE 的 HTTP 服务的地址。您可以指定多个地址，地址之间使用分号 (;) 分隔。格式：`<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`。
+
+#### database-name
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：您要将数据导入的 StarRocks 数据库的名称。
+
+#### table-name
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：您要将数据导入到 StarRocks 中的表的名称。
+
+#### username
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：用于将数据导入到 StarRocks 中的帐户的用户名。该帐户需要具有目标 StarRocks 表的 [SELECT 和 INSERT 权限](../sql-reference/sql-statements/account-management/GRANT.md) 。
+
+#### password
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：上述账号的密码。
+
+#### sink.version
+
+- **是否必填**：否
+- **默认值**：AUTO
+- **描述**：用于数据导入的接口。该参数自 Flink connector 1.2.4 版本起支持。取值范围：
+  - `V1`: 使用 [Stream Load](../loading/StreamLoad.md) 接口导入数据。1.2.4 之前的 Connector 仅支持此模式。
+  - `V2`: 使用 [Stream Load transaction](./Stream_Load_transaction_interface.md) 接口导入数据。要求 StarRocks 版本至少为 2.4。推荐使用 `V2`，因为它优化了内存使用，并提供了更稳定的 exactly-once 实现。
+  - `AUTO`: 如果 StarRocks 版本支持事务 Stream Load，则自动选择 `V2`，否则选择 `V1`。
+
+#### sink.label-prefix
+
+- **是否必填**：否
+- **默认值**：无
+- **描述**：Stream Load使用的标签前缀。如果您正在使用connector 1.2.8及更高版本的exactly-once，建议您配置它。请参见 [exactly-once 使用说明](#exactly-once)。
+
+#### sink.semantic
+
+- **是否必填**: 否
+- **默认值**: at-least-once
+- **描述**: sink 提供的语义保障。有效值：**at-least-once** 和 **exactly-once**。
+
+#### sink.buffer-flush.max-bytes
+
+- **是否必须配置**：否
+- **默认值**：94371840(90M)
+- **描述**：在一次性发送到 StarRocks 之前，可以在内存中累积的最大数据量。最大值的范围是 64 MB 到 10 GB。将此参数设置为较大的值可以提高数据导入性能，但也可能会增加数据导入延迟。此参数仅在 `sink.semantic` 设置为 `at-least-once` 时生效。如果 `sink.semantic` 设置为 `exactly-once`，则会在触发 Flink checkpoint 时刷新内存中的数据。在这种情况下，此参数不生效。
+
+#### sink.buffer-flush.max-rows
+
+- **是否必填**：否
+- **默认值**：500000
+- **描述**：一次发送到 StarRocks 之前可以在内存中累积的最大行数。此参数仅在 `sink.version` 为 `V1` 且 `sink.semantic` 为 `at-least-once` 时可用。有效值：64000 到 5000000。
+
+#### sink.buffer-flush.interval-ms
+
+- **是否必填**: 否
+- **默认值**: 300000
+- **描述**: 数据刷新的间隔。仅当 `sink.semantic` 为 `at-least-once` 时，此参数才可用。单位：毫秒。有效取值范围：
+  - v1.2.14 之前的版本：[1000, 3600000]
+  - v1.2.14 及更高版本：(0, 3600000]
+
+#### sink.max-retries
+
+- **是否必填**：否
+- **默认值**：3
+- **描述**：系统重试执行 Stream Load 作业的次数。仅当您将 `sink.version` 设置为 `V1` 时，此参数才可用。有效值：0 到 10。
+
+#### sink.connect.timeout-ms
+
+- **是否必填**：否
+- **默认值**：30000
+- **描述**：建立 HTTP 连接的超时时间。有效值：100 到 60000。单位：毫秒。在 Flink connector v1.2.9 之前的版本中，默认值为 `1000`。
+
+#### sink.socket.timeout-ms
+
+- **是否必填**：否
+- **默认值**：-1
+- **描述**：自 1.2.10 版本起支持。HTTP 客户端等待数据的时间。单位：毫秒。默认值 `-1` 表示没有超时时间。
+
+#### sink.sanitize-error-log
+
+- **Required**: No
+- **Default value**: false
+- **Description**:  自 1.2.12 版本起支持。是否对生产环境安全相关的错误日志中的敏感数据进行脱敏。如果设置为 `true`，连接器和 SDK 日志中的 Stream Load 错误日志中的敏感行数据和列值将被删除。为了向后兼容，该值默认为 `false`。
+
+#### sink.wait-for-continue.timeout-ms
+
+- **是否必填**：否
+- **默认值**：10000
+- **描述**：自 1.2.7 版本起支持。等待 FE 返回 HTTP 100-continue 响应的超时时间。取值范围：`3000` 到 `60000`。单位：毫秒（ms）。
+
+#### sink.ignore.update-before
+
+- **是否必填**：否
+- **默认值**：true
+- **描述**：自 1.2.8 版本起支持。是否在向主键表导入数据时忽略来自 Flink 的 `UPDATE_BEFORE` 类型记录。如果设置为 false，则该记录会被当做删除操作。
+
+#### sink.parallelism
+
+- **是否必填**：否
+- **默认值**：NONE
+- **描述**：数据导入的并行度。仅适用于 Flink SQL。如果未指定此参数，则由 Flink planner 决定并行度。**在多并行度的情况下，用户需要保证数据以正确的顺序写入。**
+
+#### sink.properties.*
+
+- **是否必填**：否
+- **默认值**：无
+- **描述**：用于控制 Stream Load 行为的参数。例如，参数 `sink.properties.format` 指定用于 Stream Load 的格式，例如 CSV 或 JSON。有关支持的参数及其描述的列表，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) 。
+
+#### sink.properties.format
+
+- **是否必填**：否
+- **默认值**：csv
+- **描述**：用于 Stream Load 的数据格式。Flink Connector 会将每批数据转换为指定格式，然后再发送到 StarRocks。有效值：`csv` 和 `json`。
+
+#### sink.properties.column_separator
+
+- **是否必填**: 否
+- **默认值**: \t
+- **描述**: CSV 格式数据的列分隔符。
+
+#### sink.properties.row_delimiter
+
+- **是否必填**：否
+- **默认值**：\n
+- **描述**：CSV 格式数据中的行分隔符。
+
+#### sink.properties.max_filter_ratio
+
+- **是否必填**：否
+- **默认值**：0
+- **描述**：Stream Load 的最大容错率。表示因数据质量不合格而允许过滤掉的数据记录的最大百分比。取值范围：`0` ~ `1`。默认值：`0`。更多信息，请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) 。
+
+#### sink.properties.partial_update
+
+- **是否必填**：否
+- **默认值**：`FALSE`
+- **描述**：是否使用部分更新。有效值为 `TRUE` 和 `FALSE`。默认值为 `FALSE`，表示禁用此功能。
+
+#### sink.properties.partial_update_mode
+
+- **是否必填**：否
+- **默认值**：`row`
+- **描述**：指定部分更新的模式。有效值：`row` 和 `column`。
+  -  `row`（默认值）表示行模式下的部分更新，更适合多列、小批量的实时更新。
+  -  `column` 表示列模式下的部分更新，更适合少列、多行的批量更新。在这种情况下，启用列模式可以提供更快的更新速度。例如，在一张有 100 列的表中，如果只更新所有行的 10 列（总列数的 10%），那么列模式的更新速度会快 10 倍。
+
+#### sink.properties.strict_mode
+
+- **是否必填**：否
+- **默认值**：false
+- **描述**：是否开启 Stream Load 的严格模式。它会影响存在不合格行（例如列值不一致）时的数据导入行为。有效值：`true` 和 `false`。默认值：`false`。详情请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) 。
+
+#### sink.properties.compression
+
+- **是否必填**: 否
+- **默认值**: NONE
+- **描述**: 用于 Stream Load 的压缩算法。有效值：`lz4_frame`。JSON 格式的压缩需要 Flink connector 1.2.10+ 和 StarRocks v3.2.7+。CSV 格式的压缩只需要 Flink connector 1.2.11+。
+
+#### sink.properties.prepared_timeout
+
+- **是否必填**：否
+- **默认值**：NONE
+- **描述**：自 1.2.12 版本起支持，仅当 `sink.version` 设置为 `V2` 时生效。需要 StarRocks 3.5.4 或更高版本。设置从 `PREPARED` 到 `COMMITTED` 的事务性 Stream Load 阶段的超时时间，单位为秒。通常，仅在 exactly-once 语义时需要设置；at-least-once 语义通常不需要设置此项（连接器默认为 300 秒）。如果在 exactly-once 语义中未设置，则应用 StarRocks FE 配置 `prepared_transaction_default_timeout_second`（默认为 86400 秒）。请参阅 [StarRocks 事务超时管理](./Stream_Load_transaction_interface.md#transaction-timeout-management) 。
+
+#### sink.publish-timeout.ms
+
+- **是否必填**：否
+- **默认值**：-1
+- **描述**：自 1.2.14 版本起支持，且仅当 `sink.version` 设置为 `V2` 时生效。Publish 阶段的超时时间，单位为毫秒。如果事务保持在 COMMITTED 状态的时间超过此超时时间，系统将认为该事务已成功。默认值 `-1` 表示使用 StarRocks 服务器端的默认行为。当启用 Merge Commit 时，默认超时时间为 10000 毫秒。
+
+### Merge Commit 选项
+
+从 v1.2.14 版本开始支持。Merge Commit 允许系统将来自多个子任务的数据合并到单个 Stream Load 事务中，以获得更好的性能。您可以通过将 `sink.properties.enable_merge_commit` 设置为 `true` 来启用此功能。有关 StarRocks 中 merge commit 功能的更多详细信息，请参见 [Merge Commit 参数](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#merge-commit-parameters) 。
+
+以下 Stream Load 属性用于控制 Merge Commit 的行为：
+
+#### sink.properties.enable_merge_commit
+
+- **是否必填**：否
+- **默认值**：false
+- **描述**：是否开启 Merge Commit。
+
+#### sink.properties.merge_commit_interval_ms
+
+- **是否必填**：是（当启用 Merge Commit 时）
+- **默认值**：无
+- **描述**：Merge Commit 的时间窗口，单位为毫秒。系统会将在此窗口内收到的数据导入请求合并到单个事务中。较大的值可以提高合并效率，但会增加延迟。当 `enable_merge_commit` 设置为 `true` 时，必须设置此属性。
+
+#### sink.properties.merge_commit_parallel
+
+- **是否必填**：否
+- **默认值**：3
+- **描述**：为每个启用 Merge Commit 的事务创建的导入计划的并行度。它与控制 Flink sink operator 的并行度的 `sink.parallelism` 不同。
+
+#### sink.properties.merge_commit_async
+
+- **是否必须**: 否
+- **默认值**: true
+- **描述**: 服务器对 Merge Commit 的返回模式。 默认值为 `true` (异步)，覆盖系统默认行为（同步），以获得更好的吞吐量。 在异步模式下，服务器在收到数据后立即返回。 连接器利用 Flink 的 checkpoint 机制来确保异步模式下不会丢失数据，从而提供至少一次的保证。 在大多数情况下，您不需要更改此值。
+
+#### sink.merge-commit.max-concurrent-requests
+
+- **是否必须**：否
+- **默认值**：Integer.MAX_VALUE
+- **描述**：并发 Stream Load 请求的最大数量。将此属性设置为 `0` 可确保按顺序（串行）导入，这对于主键表非常有用。负值被视为 `Integer.MAX_VALUE`（无限制并发）。
+
+#### sink.merge-commit.chunk.size
+
+- **是否必填**：否
+- **默认值**：20971520
+- **描述**：在刷新并通过 Stream Load 请求发送到 StarRocks 之前，一个 chunk 中累积的最大数据量（以字节为单位）。较大的值可以提高吞吐量，但会增加内存使用量和延迟；较小的值会减少内存使用量和延迟，但可能会降低吞吐量。当 `max-concurrent-requests` 设置为 `0`（顺序模式）时，此属性的默认值将更改为 500 MB，因为一次只运行一个请求，因此更大的批处理可以最大限度地提高吞吐量。
 
 ## 数据类型映射
 
@@ -200,6 +403,42 @@ Flink connector 先在内存中 buffer 数据，然后通过 Stream Load 将其�
 - 触发了 checkpoint
 
 对于 exactly-once，仅在触发 checkpoint 时触发 flush。
+
+### Merge Commit
+
+Merge Commit 有助于扩展吞吐量，而不会成比例地增加 StarRocks 事务开销。如果没有 Merge Commit，每个 Flink sink 子任务都维护自己的 Stream Load 事务，因此增加 `sink.parallelism` 会导致更多的并发事务，并增加 StarRocks 上的 I/O 和 Compaction 成本。相反，保持较低的并行度会限制管道的整体容量。启用 Merge Commit 后，来自多个 sink 子任务的数据会在每个 Merge 窗口中合并到单个事务中。这允许您增加 `sink.parallelism` 以获得更高的吞吐量，而无需增加事务的数量。有关配置示例，请参见 [使用 merge commit 导入数据](#load-data-with-merge-commit)。
+
+以下是使用 Merge Commit 时的一些重要注意事项：
+
+- **单个并行度没有好处**
+
+  如果 Flink sink 并行度为 1，则启用 Merge Commit 没有好处，因为只有一个子任务发送数据。由于服务器端的 Merge Commit 时间窗口，它甚至可能引入额外的延迟。
+
+- **仅保证 at-least-once 语义**
+
+  Merge Commit 仅保证 at-least-once 语义。它不支持 exactly-once 语义。启用 Merge Commit 后，请勿将 `sink.semantic` 设置为 `exactly-once`。
+
+- **主键表的排序**
+
+  默认情况下，`sink.merge-commit.max-concurrent-requests` 为 `Integer.MAX_VALUE`，这意味着单个 sink 子任务可能会并发发送多个 Stream Load 请求。这可能会导致乱序导入，这对于主键表来说可能存在问题。为了确保按顺序导入，请将 `sink.merge-commit.max-concurrent-requests` 设置为 `0`，但这会降低吞吐量。或者，您可以使用条件更新来防止较新的数据被较旧的数据覆盖。有关配置示例，请参见 [主键表的顺序导入](#in-order-loading-for-primary-key-tables)。
+
+- **端到端导入延迟**
+
+  总导入延迟包括两个部分：
+  - **Connector 批处理延迟**：由 `sink.buffer-flush.interval-ms` 和 `sink.merge-commit.chunk.size` 控制。当达到 chunk 大小限制或经过刷新间隔时，数据将从 connector 中刷新，以先到者为准。最大 connector 端延迟为 `sink.buffer-flush.interval-ms`。较小的 `sink.buffer-flush.interval-ms` 会降低 connector 端延迟，但会以较小的批次发送数据。
+  - **StarRocks merge 窗口**：由 `sink.properties.merge_commit_interval_ms` 控制。系统会等待此持续时间，以将来自多个子任务的请求合并到单个事务中。较大的值会提高合并效率（更多请求将合并到一个事务中），但会增加服务器端延迟。
+  - 作为一般准则，请将 `sink.buffer-flush.interval-ms` 设置为小于或等于 `sink.properties.merge_commit_interval_ms`，以便每个子任务可以在每个 Merge 窗口中至少刷新一次。例如，如果 `merge_commit_interval_ms` 为 `10000`（10 秒），则可以将 `sink.buffer-flush.interval-ms` 设置为 `5000`（5 秒）或更短。
+
+- **调整 `sink.parallelism` 和 `sink.properties.merge_commit_parallel`**
+
+  这两个参数控制不同层的并行度，应独立调整：
+  - `sink.parallelism` 控制 Flink sink 子任务的数量。每个子任务缓冲数据并将其发送到 StarRocks。当 Flink sink operator 受到 CPU 或内存限制时，增加此值——您可以监视 Flink 的每个 operator 的 CPU 和内存使用情况，以确定是否需要更多子任务。
+  - `sink.properties.merge_commit_parallel` 控制 StarRocks 为每个 Merge Commit 事务创建的导入计划的并行度。当 StarRocks 成为瓶颈时，增加此值。您可以监视 StarRocks 指标 [merge_commit_pending_total](../administration/management/monitoring/metrics.md#merge_commit_pending_total)（待处理的 Merge Commit 任务数）和 [merge_commit_pending_bytes](../administration/management/monitoring/metrics.md#merge_commit_pending_bytes)（待处理任务持有的字节数），以确定是否需要在 StarRocks 端增加并行度——持续的高值表示导入计划无法跟上输入数据。
+
+- **`sink.merge-commit.chunk.size` 和 `sink.buffer-flush.max-bytes` 之间的关系**：
+  - `sink.merge-commit.chunk.size` 控制每个 Stream Load 请求（每个 chunk）的最大数据大小。当 chunk 中的数据达到此大小时，将立即刷新。
+  - `sink.buffer-flush.max-bytes` 控制所有表的缓存数据的总内存限制。当总缓存数据超过此限制时，connector 将提前驱逐 chunk 以释放内存。
+  - 因此，应将 `sink.buffer-flush.max-bytes` 设置为大于 `sink.merge-commit.chunk.size`，以允许累积至少一个完整的 chunk。通常，`sink.buffer-flush.max-bytes` 应比 `sink.merge-commit.chunk.size` 大几倍，尤其是在有多个表或高并发的情况下。
 
 ### 监控导入指标
 
@@ -595,6 +834,119 @@ DISTRIBUTED BY HASH(`id`);
       ```
 
     您会注意到仅第二行数据发生了变化，而第一行数据未发生变化。
+
+### 使用 Merge Commit 导入数据
+
+本节介绍当您有多个 Flink sink 子任务写入同一个 StarRocks 表时，如何使用 Merge Commit 来提高数据导入吞吐量。以下示例使用 Flink SQL 和 StarRocks v3.4.0 或更高版本。
+
+#### 准备工作
+
+在 StarRocks 中创建数据库 `test`，并在该数据库中创建主键表 `score_board`。
+
+```SQL
+CREATE DATABASE `test`;
+
+CREATE TABLE `test`.`score_board`
+(
+    `id` int(11) NOT NULL COMMENT "",
+    `name` varchar(65533) NULL DEFAULT "" COMMENT "",
+    `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`);
+```
+
+#### 基本配置
+
+此 Flink SQL 语句开启了 merge commit，合并窗口为 10 秒。来自所有 Sink 子任务的数据在每个窗口中合并到一个事务中。
+
+```SQL
+CREATE TABLE `score_board` (
+    `id` INT,
+    `name` STRING,
+    `score` INT,
+    PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+    'connector' = 'starrocks',
+    'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+    'load-url' = '127.0.0.1:8030',
+    'database-name' = 'test',
+    'table-name' = 'score_board',
+    'username' = 'root',
+    'password' = '',
+    'sink.properties.enable_merge_commit' = 'true',
+    'sink.properties.merge_commit_interval_ms' = '10000',
+    'sink.buffer-flush.interval-ms' = '5000'
+);
+```
+
+将数据插入到 Flink 表中。这些数据将通过合并提交的方式加载到 StarRocks 中。
+
+```SQL
+INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 95), (3, 'spark', 90);
+```
+
+#### 主键表的顺序导入
+
+默认情况下，单个 Sink 子任务可能会并发发送多个 Stream Load 请求，这可能会导致乱序导入。对于数据顺序很重要的主键表，有两种方法可以解决此问题。
+
+**方法 1：使用 `sink.merge-commit.max-concurrent-requests`**
+
+将 `sink.merge-commit.max-concurrent-requests` 设置为 `0`，以确保每个子任务一次发送一个请求。这可以保证顺序导入，但可能会降低吞吐量。
+
+```SQL
+CREATE TABLE `score_board` (
+    `id` INT,
+    `name` STRING,
+    `score` INT,
+    PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+    'connector' = 'starrocks',
+    'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+    'load-url' = '127.0.0.1:8030',
+    'database-name' = 'test',
+    'table-name' = 'score_board',
+    'username' = 'root',
+    'password' = '',
+    'sink.properties.enable_merge_commit' = 'true',
+    'sink.properties.merge_commit_interval_ms' = '10000',
+    'sink.buffer-flush.interval-ms' = '5000',
+    'sink.merge-commit.max-concurrent-requests' = '0'
+);
+
+INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 95), (3, 'spark', 90);
+```
+
+**方法 2：使用条件更新**
+
+如果您希望保持并发请求以获得更高的吞吐量，但仍要防止旧数据覆盖新数据，则可以使用[条件更新](#conditional-update) 。将 `sink.properties.merge_condition` 设置为某一列（例如，版本列或时间戳列），以便仅当传入值大于或等于现有值时，更新才会生效。
+
+```SQL
+CREATE TABLE `score_board` (
+    `id` INT,
+    `name` STRING,
+    `score` INT,
+    PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+    'connector' = 'starrocks',
+    'jdbc-url' = 'jdbc:mysql://127.0.0.1:9030',
+    'load-url' = '127.0.0.1:8030',
+    'database-name' = 'test',
+    'table-name' = 'score_board',
+    'username' = 'root',
+    'password' = '',
+    'sink.properties.enable_merge_commit' = 'true',
+    'sink.properties.merge_commit_interval_ms' = '10000',
+    'sink.buffer-flush.interval-ms' = '5000',
+    'sink.properties.merge_condition' = 'score'
+);
+
+INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 95), (3, 'spark', 90);
+```
+
+通过此配置，允许并发请求（默认 `sink.merge-commit.max-concurrent-requests` 为 `Integer.MAX_VALUE`），但仅当新的 `score` 大于或等于现有 `score` 时，对行的更新才会生效。 这样可以防止较新的数据被乱序导入的较旧数据覆盖。
 
 ### 导入至 Bitmap 列
 
