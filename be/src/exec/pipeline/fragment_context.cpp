@@ -24,6 +24,7 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -39,7 +40,6 @@
 #include "runtime/logconfig.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {

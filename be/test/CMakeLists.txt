@@ -341,8 +341,6 @@ set(EXEC_FILES
         ./util/rle_encoding_test.cpp
         ./base/raw_container_test.cpp
         ./util/string_util_test.cpp
-        ./util/thread_test.cpp
-        ./util/threadpool_test.cpp
         ./util/thrift_customize_test.cpp
         ./util/trace_test.cpp
         ./base/types/int96_test.cpp
@@ -355,7 +353,6 @@ set(EXEC_FILES
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
-        ./util/cpu_usage_info_test.cpp
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp

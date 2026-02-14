@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/threadpool.h"
+#include "common/thread/threadpool.h"
 
 #include <gflags/gflags_declare.h>
 #include <gtest/gtest.h>
@@ -71,6 +71,8 @@ static const char* kDefaultPoolName = "test";
 class ThreadPoolTest : public ::testing::Test {
 public:
     static constexpr int64_t kThreadIdleTimeoutMs = 500; // 500ms
+
+    static void SetUpTestSuite() { CpuInfo::init(); }
 
     void SetUp() override { ASSERT_TRUE(ThreadPoolBuilder(kDefaultPoolName).build(&_pool).ok()); }
 

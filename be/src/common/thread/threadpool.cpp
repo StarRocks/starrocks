@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/threadpool.h"
+#include "common/thread/threadpool.h"
 
 #include <limits>
 #include <ostream>
@@ -41,13 +41,13 @@
 #include "base/utility/defer_op.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/logging.h"
+#include "common/stack_util.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/thread.h"
 #include "gutil/macros.h"
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
-#include "util/stack_util.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

@@ -30,8 +30,6 @@ set(UTIL_FILES
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
-  cpu_usage_info.cpp
-  cpu_util.cpp
   crc32c.cpp
   date_func.cpp
   dynamic_util.cpp
@@ -60,8 +58,6 @@ set(UTIL_FILES
   string_util.cpp
   thrift_rpc_helper.cpp
   frame_of_reference_coding.cpp
-  thread.cpp
-  threadpool.cpp
   trace.cpp
   trace_metrics.cpp
   hdfs_util.cpp

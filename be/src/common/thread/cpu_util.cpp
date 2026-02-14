@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/cpu_util.h"
+#include "common/thread/cpu_util.h"
 
 #include <fmt/format.h>
 
@@ -25,7 +25,7 @@
 #endif
 
 #include "common/config.h"
-#include "util/thread.h"
+#include "common/thread/thread.h"
 
 namespace starrocks {
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/cpu_usage_info.h"
+#include "common/system/cpu_usage_info.h"
 
 #include <glog/logging.h>
 

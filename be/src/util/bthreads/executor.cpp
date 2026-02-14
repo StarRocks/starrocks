@@ -15,7 +15,7 @@
 #include "util/bthreads/executor.h"
 
 #include "common/config.h"
-#include "util/threadpool.h"
+#include "common/thread/threadpool.h"
 
 namespace starrocks::bthreads {
 

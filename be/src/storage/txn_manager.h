@@ -55,6 +55,7 @@
 #include "base/concurrency/countdown_latch.h"
 #include "base/time/time.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
@@ -66,7 +67,6 @@
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet.h"
 #include "util/lru_cache.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

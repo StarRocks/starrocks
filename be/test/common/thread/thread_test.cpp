@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/thread.h"
+#include "common/thread/thread.h"
 
 #include <gtest/gtest.h>
 #include <sys/types.h>

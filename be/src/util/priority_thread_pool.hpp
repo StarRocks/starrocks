@@ -40,8 +40,8 @@
 #include <functional>
 
 #include "common/logging.h"
+#include "common/thread/thread.h"
 #include "util/blocking_priority_queue.hpp"
-#include "util/thread.h"
 
 namespace starrocks {
 

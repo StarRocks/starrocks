@@ -48,6 +48,8 @@
 #include "base/url_coding.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
+#include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
@@ -66,8 +68,6 @@
 #include "types/datetime_value.h"
 #include "util/global_metrics_registry.h"
 #include "util/misc.h"
-#include "util/thread.h"
-#include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_util.h"
 

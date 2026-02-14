@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/cpu_usage_info.h"
+#pragma once
 
-#include <gtest/gtest.h>
-
-#include "base/testutil/parallel_test.h"
+#include <cstdint>
+#include <string>
 
 namespace starrocks {
 
-PARALLEL_TEST(CpuUsageRecorderTest, normal) {
-    CpuUsageRecorder recorder;
-    ASSERT_EQ(0, recorder.cpu_used_permille());
-
-    recorder.update_interval();
-    int cpu_used_permille = recorder.cpu_used_permille();
-    ASSERT_GE(cpu_used_permille, 0);
-}
+struct BeThreadInfo {
+    std::string group;
+    std::string name;
+    int64_t pthread_id{0};
+    int64_t tid{0};
+    bool idle{false};
+    int64_t finished_tasks{0};
+    int64_t num_bound_cpu_cores{0};
+};
 
 } // namespace starrocks

@@ -26,6 +26,8 @@
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
 #include "exec/write_combined_txn_log.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/tablet_schema.pb.h"
@@ -47,8 +49,6 @@
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "util/brpc_stub_cache.h"
-#include "util/thread.h"
-#include "util/threadpool.h"
 #include "util/trace.h"
 
 namespace starrocks {

@@ -26,6 +26,7 @@
 
 #include "base/container/raw_container.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "common/tracer_fwd.h"
 #include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
@@ -36,7 +37,6 @@
 #include "util/internal_service_recoverable_stub.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

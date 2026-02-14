@@ -12,26 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "common/system/cpu_usage_info.h"
 
-#include <memory>
+#include <gtest/gtest.h>
 
-#include "common/thread/threadpool.h"
-#include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "base/testutil/parallel_test.h"
 
-namespace starrocks::pipeline {
-class AuditStatisticsReporter {
-public:
-    AuditStatisticsReporter();
+namespace starrocks {
 
-    static Status report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
-                                          const TNetworkAddress& fe_addr);
+PARALLEL_TEST(CpuUsageRecorderTest, normal) {
+    CpuUsageRecorder recorder;
+    ASSERT_EQ(0, recorder.cpu_used_permille());
 
-    Status submit(std::function<void()>&& report_task);
+    recorder.update_interval();
+    int cpu_used_permille = recorder.cpu_used_permille();
+    ASSERT_GE(cpu_used_permille, 0);
+}
 
-private:
-    std::unique_ptr<ThreadPool> _thread_pool;
-};
-} // namespace starrocks::pipeline
+} // namespace starrocks

@@ -17,9 +17,9 @@
 #include <numeric>
 
 #include "base/metrics.h"
+#include "common/thread/threadpool.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
-#include "util/threadpool.h"
 
 namespace starrocks::pipeline {
 
