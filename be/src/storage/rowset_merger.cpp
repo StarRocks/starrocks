@@ -20,6 +20,7 @@
 #include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
 #include "gutil/stl_util.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
@@ -29,7 +30,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet.h"
 #include "storage/union_iterator.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

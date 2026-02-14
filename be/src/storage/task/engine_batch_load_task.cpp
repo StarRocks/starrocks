@@ -43,13 +43,13 @@
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/spark_load.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_common.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
-#include "util/starrocks_metrics.h"
 
 using apache::thrift::ThriftDebugString;
 using std::list;

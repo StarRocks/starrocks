@@ -19,7 +19,8 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 #ifdef WITH_STARCACHE
 #include "base/testutil/assert.h"
@@ -49,8 +50,7 @@ TEST_F(DataCacheMetricsTest, test_register_datacache_metrics_basic) {
 #ifdef WITH_STARCACHE
 // Test metrics registration with StarCache enabled
 TEST_F(DataCacheMetricsTest, test_datacache_metrics_registration) {
-    auto instance = StarRocksMetrics::instance();
-    auto metrics = instance->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
 
     // Verify that datacache metrics are registered
     ASSERT_NE(nullptr, metrics->get_metric("datacache_mem_quota_bytes"));
@@ -73,7 +73,7 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
 // Test metrics update through hook mechanism
 TEST_F(DataCacheMetricsTest, test_metrics_update_hook) {
     auto instance = StarRocksMetrics::instance();
-    auto metrics = instance->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
 
     // Register the metrics hook
     register_datacache_metrics(false);
@@ -94,8 +94,7 @@ TEST_F(DataCacheMetricsTest, test_metrics_update_hook) {
 
 // Test metrics types are correct (should be INT_GAUGE)
 TEST_F(DataCacheMetricsTest, test_metrics_types) {
-    auto instance = StarRocksMetrics::instance();
-    auto metrics = instance->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
 
     auto mem_quota_metric = metrics->get_metric("datacache_mem_quota_bytes");
     auto mem_used_metric = metrics->get_metric("datacache_mem_used_bytes");

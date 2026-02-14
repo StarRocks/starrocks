@@ -19,6 +19,7 @@
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
@@ -28,7 +29,6 @@
 #include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/union_iterator.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

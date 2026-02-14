@@ -21,8 +21,9 @@
 #include <unordered_set>
 
 #include "fmt/format.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/stack_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -206,7 +207,7 @@ void IOProfiler::_add_tls_read(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.read_ops += 1;
     tls_io_stat.read_bytes += bytes;
     tls_io_stat.read_time_ns += latency_ns;
-    auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
+    auto* metrics = GlobalMetricsRegistry::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
     if (UNLIKELY(metrics == nullptr)) {
         // some r/w operations may be performed before metrics are initialized, in which case updating metrics is ignored.
         return;
@@ -219,7 +220,7 @@ void IOProfiler::_add_tls_write(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.write_ops += 1;
     tls_io_stat.write_bytes += bytes;
     tls_io_stat.write_time_ns += latency_ns;
-    auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
+    auto* metrics = GlobalMetricsRegistry::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
     if (UNLIKELY(metrics == nullptr)) {
         return;
     }

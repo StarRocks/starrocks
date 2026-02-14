@@ -42,7 +42,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/time_guard.h"
 
 namespace starrocks {

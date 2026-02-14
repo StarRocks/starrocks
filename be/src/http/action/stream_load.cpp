@@ -73,6 +73,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -80,8 +81,8 @@
 #include "simdjson.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
+#include "util/global_metrics_registry.h"
 #include "util/json_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -134,12 +135,13 @@ static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int
 
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
         : _exec_env(exec_env), _http_concurrent_limiter(limiter) {
-    StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_requests_total",
-                                                             &streaming_load_requests_total);
-    StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
-    StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_duration_ms", &streaming_load_duration_ms);
-    StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_current_processing",
-                                                             &streaming_load_current_processing);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_requests_total",
+                                                                  &streaming_load_requests_total);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_duration_ms",
+                                                                  &streaming_load_duration_ms);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("streaming_load_current_processing",
+                                                                  &streaming_load_current_processing);
 }
 
 StreamLoadAction::~StreamLoadAction() = default;

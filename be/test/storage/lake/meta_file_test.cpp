@@ -26,6 +26,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -34,7 +35,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 

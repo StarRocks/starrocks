@@ -27,6 +27,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/persistent_index_sstable.h"
@@ -39,7 +40,7 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {

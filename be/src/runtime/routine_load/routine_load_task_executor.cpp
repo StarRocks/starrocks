@@ -45,6 +45,7 @@
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

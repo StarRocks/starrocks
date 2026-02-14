@@ -42,8 +42,9 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/misc.h"
-#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 

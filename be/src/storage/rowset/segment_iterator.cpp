@@ -30,6 +30,7 @@
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
 #include "io/shared_buffered_input_stream.h"
+#include "runtime/starrocks_metrics.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -66,7 +67,6 @@
 #include "storage/virtual_column_utils.h"
 #include "types/logical_type.h"
 #include "types/type_info.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

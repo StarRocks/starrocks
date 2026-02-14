@@ -23,6 +23,7 @@
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 #include <gtest/gtest.h>
 
@@ -40,6 +40,7 @@
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -111,7 +112,7 @@ private:
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
     auto instance = StarRocksMetrics::instance();
-    auto metrics = instance->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->collect(&visitor);
     // check metric
     {
@@ -280,8 +281,7 @@ TEST_F(StarRocksMetricsTest, Normal) {
 
 TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     TestMetricsVisitor visitor;
-    auto instance = StarRocksMetrics::instance();
-    auto metrics = instance->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->collect(&visitor);
     LOG(INFO) << "\n" << visitor.to_string();
 
@@ -327,7 +327,7 @@ void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegi
 TEST_F(StarRocksMetricsTest, test_metrics_register) {
     pipeline::ExecStateReporterMetrics exec_metrics;
     exec_metrics.register_all_metrics();
-    auto instance = StarRocksMetrics::instance()->metrics();
+    auto instance = GlobalMetricsRegistry::instance()->metrics();
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_io_time_us"));

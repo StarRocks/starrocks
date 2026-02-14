@@ -52,6 +52,7 @@
 #include "storage/virtual_column_utils.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
+#include "util/global_metrics_registry.h"
 #include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
@@ -668,8 +669,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
-    _table_metrics =
-            StarRocksMetrics::instance()->table_metrics_mgr()->get_table_metrics(_tablet->tablet_meta()->table_id());
+    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics_mgr()->get_table_metrics(
+            _tablet->tablet_meta()->table_id());
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 

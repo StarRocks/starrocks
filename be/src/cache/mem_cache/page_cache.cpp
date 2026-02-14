@@ -39,8 +39,9 @@
 #include "base/metrics.h"
 #include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/lru_cache.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -56,36 +57,36 @@ METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
 METRIC_DEFINE_UINT_GAUGE(page_cache_pinned_count, MetricUnit::BYTES);
 
 void StoragePageCache::init_metrics() {
-    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
-    StarRocksMetrics::instance()->metrics()->register_hook(
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
+    GlobalMetricsRegistry::instance()->metrics()->register_hook(
             "page_cache_lookup_count", [this]() { page_cache_lookup_count.set_value(get_lookup_count()); });
 
-    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_hit_count", &page_cache_hit_count);
-    StarRocksMetrics::instance()->metrics()->register_hook(
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_hit_count", &page_cache_hit_count);
+    GlobalMetricsRegistry::instance()->metrics()->register_hook(
             "page_cache_hit_count", [this]() { page_cache_hit_count.set_value(get_hit_count()); });
 
-    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_insert_count", &page_cache_insert_count);
-    StarRocksMetrics::instance()->metrics()->register_hook(
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_insert_count", &page_cache_insert_count);
+    GlobalMetricsRegistry::instance()->metrics()->register_hook(
             "page_cache_insert_count", [this]() { page_cache_insert_count.set_value(get_insert_count()); });
 
-    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_insert_evict_count",
-                                                             &page_cache_insert_evict_count);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_insert_evict_count", [this]() {
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_insert_evict_count",
+                                                                  &page_cache_insert_evict_count);
+    GlobalMetricsRegistry::instance()->metrics()->register_hook("page_cache_insert_evict_count", [this]() {
         page_cache_insert_evict_count.set_value(get_insert_evict_count());
     });
 
-    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_release_evict_count",
-                                                             &page_cache_release_evict_count);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_release_evict_count", [this]() {
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_release_evict_count",
+                                                                  &page_cache_release_evict_count);
+    GlobalMetricsRegistry::instance()->metrics()->register_hook("page_cache_release_evict_count", [this]() {
         page_cache_release_evict_count.set_value(get_release_evict_count());
     });
 
-    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity",
-                                                           [this]() { page_cache_capacity.set_value(get_capacity()); });
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
+    GlobalMetricsRegistry::instance()->metrics()->register_hook(
+            "page_cache_capacity", [this]() { page_cache_capacity.set_value(get_capacity()); });
 
-    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_pinned_count", &page_cache_pinned_count);
-    StarRocksMetrics::instance()->metrics()->register_hook(
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("page_cache_pinned_count", &page_cache_pinned_count);
+    GlobalMetricsRegistry::instance()->metrics()->register_hook(
             "page_cache_pinned_count", [this]() { page_cache_pinned_count.set_value(get_pinned_count()); });
 }
 

@@ -47,9 +47,9 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "util/compression/block_compression.h"
 #include "util/lru_cache.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_util.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \

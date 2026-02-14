@@ -30,6 +30,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
@@ -37,7 +38,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
