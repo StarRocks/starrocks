@@ -23,6 +23,8 @@
 
 namespace starrocks {
 
+class HiveTableDescriptor;
+
 class JniScanner : public HdfsScanner {
 public:
     struct CreateOptions {

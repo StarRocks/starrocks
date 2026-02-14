@@ -22,6 +22,7 @@
 namespace starrocks {
 
 class ExprContext;
+class IcebergTableDescriptor;
 struct TExprNode;
 
 class IcebergTableSink : public DataSink {

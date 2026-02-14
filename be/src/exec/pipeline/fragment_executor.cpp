@@ -46,6 +46,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"

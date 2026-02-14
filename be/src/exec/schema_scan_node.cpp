@@ -21,6 +21,7 @@
 #include "exec/pipeline/scan/schema_scan_context.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/schema_scanner/schema_helper.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
