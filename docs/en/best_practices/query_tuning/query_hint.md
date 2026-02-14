@@ -45,7 +45,7 @@ REFRESH ASYNC
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 ```
 
-ネストされたクエリ内でシステム変数を指定する:
+Specify system variables in a nested query:
 
 ```SQL
 -- To specify hints in the main query
