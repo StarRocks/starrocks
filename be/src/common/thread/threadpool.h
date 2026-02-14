@@ -56,7 +56,7 @@
 #include "base/container/priority_queue.h"
 #include "base/metrics.h"
 #include "base/time/monotime.h"
-#include "cpu_util.h"
+#include "common/thread/cpu_util.h"
 
 namespace starrocks {
 

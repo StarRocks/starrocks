@@ -51,6 +51,7 @@
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/status.h"
+#include "common/thread/thread.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
 #include "fs/fs_util.h"
@@ -82,7 +83,6 @@
 #include "util/bthreads/executor.h"
 #include "util/global_metrics_registry.h"
 #include "util/lru_cache.h"
-#include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/trace.h"
 

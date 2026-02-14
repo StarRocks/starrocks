@@ -17,6 +17,7 @@
 #include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "connector/connector_sink_profile.h"
 #include "connector/utils.h"
 #include "exec/sorting/sorting.h"
@@ -24,7 +25,6 @@
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
 #include "storage/load_chunk_spiller.h"
-#include "util/threadpool.h"
 
 namespace starrocks::connector {
 

@@ -63,6 +63,7 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/thread.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "gutil/cpu.h"
@@ -78,7 +79,6 @@
 #include "util/logging.h"
 #include "util/memory_lock.h"
 #include "util/misc.h"
-#include "util/thread.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {

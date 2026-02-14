@@ -41,10 +41,10 @@
 #include <string_view>
 
 #include "base/uid_util.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/routine_load/data_consumer_pool.h"
 #include "runtime/starrocks_metrics.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

@@ -50,11 +50,11 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/threadpool.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "util/global_metrics_registry.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

@@ -46,6 +46,7 @@
 #include "cache/datacache.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "common/thread/thread.h"
 #include "fs/fs_util.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
@@ -60,7 +61,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "tablet_meta_manager.h"
-#include "util/thread.h"
 
 using std::string;
 

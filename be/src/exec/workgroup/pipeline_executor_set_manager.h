@@ -16,9 +16,9 @@
 
 #include <cstdint>
 
+#include "common/thread/cpu_util.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/cpu_util.h"
 
 namespace starrocks::workgroup {
 

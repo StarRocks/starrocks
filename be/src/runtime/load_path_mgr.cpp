@@ -41,6 +41,7 @@
 #include <string>
 
 #include "common/config.h"
+#include "common/thread/thread.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
@@ -49,7 +50,6 @@
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

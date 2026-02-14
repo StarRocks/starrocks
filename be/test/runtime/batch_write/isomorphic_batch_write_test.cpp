@@ -19,12 +19,12 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/monotime.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/FrontendService.h"
 #include "http/http_common.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 #include "util/bthreads/executor.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

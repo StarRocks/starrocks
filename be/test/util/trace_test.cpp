@@ -36,11 +36,11 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "base/time/monotime.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/thread/thread.h"
 #include "gutil/macros.h"
 #include "gutil/port.h"
 #include "gutil/ref_counted.h"
 #include "gutil/walltime.h"
-#include "util/thread.h"
 #include "util/trace_metrics.h"
 
 using rapidjson::Document;

@@ -18,6 +18,7 @@
 
 #include "column/chunk.h"
 #include "common/config.h"
+#include "common/thread/threadpool.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -27,7 +28,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/rowset/segment_writer.h"
-#include "util/threadpool.h"
 
 namespace starrocks::lake {
 

@@ -42,16 +42,17 @@
 #endif
 
 #include <atomic>
+#include <functional>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "base/concurrency/countdown_latch.h"
 #include "common/status.h"
+#include "common/thread/thread_info.h"
 #include "gutil/ref_counted.h"
 
 namespace starrocks {
-
-class BeThreadInfo;
 
 class Thread : public RefCountedThreadSafe<Thread> {
 public:

@@ -52,13 +52,13 @@
 #include "base/system/errno.h"
 #include "common/logging.h"
 #include "common/system/backend_options.h"
+#include "common/thread/thread.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "service/brpc.h"
 #include "util/debug_util.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

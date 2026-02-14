@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
+#include "common/thread/threadpool.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "gen_cpp/AgentService_types.h"
@@ -32,7 +33,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

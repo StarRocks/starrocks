@@ -23,7 +23,7 @@
 
 #include "base/utility/pretty_printer.h"
 #include "common/runtime_profile.h"
-#include "util/threadpool.h"
+#include "common/thread/threadpool.h"
 
 namespace starrocks {
 class UniqueRowsetIdGeneratorTest : public testing::Test {};

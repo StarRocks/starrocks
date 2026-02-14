@@ -21,10 +21,14 @@ ADD_BE_LIB(Common
   runtime_profile.cpp
   stack_util.cpp
   system/backend_options.cpp
+  system/cpu_usage_info.cpp
   system/disk_info.cpp
   system/cpu_info.cpp
   system/cpu_info_debug.cpp
   system/mem_info.cpp
+  thread/cpu_util.cpp
+  thread/thread.cpp
+  thread/threadpool.cpp
   s3_uri.cpp
   tracer.cpp
   process_exit.cpp

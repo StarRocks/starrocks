@@ -19,6 +19,9 @@ set(COMMON_TEST_FILES
     cow_test.cpp
     process_exit_test.cpp
     runtime_profile_test.cpp
+    thread/cpu_usage_info_test.cpp
+    thread/thread_test.cpp
+    thread/threadpool_test.cpp
     tracer_test.cpp
 )
 

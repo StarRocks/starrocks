@@ -51,6 +51,7 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "common/statusor.h"
+#include "common/thread/thread.h"
 #include "common/tracer.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/range_tablet_sink_sender.h"
@@ -68,7 +69,6 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/stack_util.h"
-#include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;

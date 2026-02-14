@@ -35,10 +35,10 @@
 #include "runtime/routine_load/data_consumer_pool.h"
 
 #include "common/config.h"
+#include "common/thread/thread.h"
 #include "data_consumer.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "util/misc.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

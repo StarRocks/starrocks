@@ -20,9 +20,9 @@
 #include <unordered_map>
 
 #include "common/statusor.h"
+#include "common/thread/threadpool.h"
 #include "exprs/ai_functions.h"
 #include "util/llm_cache.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

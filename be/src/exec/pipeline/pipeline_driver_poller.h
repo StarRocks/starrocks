@@ -20,9 +20,9 @@
 #include <memory>
 #include <mutex>
 
+#include "common/thread/thread.h"
 #include "pipeline_driver.h"
 #include "pipeline_driver_queue.h"
-#include "util/thread.h"
 
 namespace starrocks::pipeline {
 

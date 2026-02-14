@@ -19,13 +19,13 @@
 #include <utility>
 #include <vector>
 
+#include "common/thread/threadpool.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/olap_common.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

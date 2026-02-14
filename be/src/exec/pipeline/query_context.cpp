@@ -20,6 +20,7 @@
 #include "agent/master_info.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -33,7 +34,6 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
 #include "util/global_metrics_registry.h"
-#include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {

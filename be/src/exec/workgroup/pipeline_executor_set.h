@@ -15,9 +15,9 @@
 #pragma once
 
 #include "common/status.h"
+#include "common/thread/cpu_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/cpu_util.h"
 
 namespace starrocks::pipeline {
 class PipelineExecutorMetrics;

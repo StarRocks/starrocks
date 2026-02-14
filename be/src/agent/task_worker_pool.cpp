@@ -53,6 +53,7 @@
 #include "cache/datacache_utils.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs_util.h"
@@ -72,7 +73,6 @@
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/misc.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

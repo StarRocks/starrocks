@@ -27,13 +27,13 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
-#include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
 
 // NOLINT

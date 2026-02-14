@@ -52,7 +52,7 @@
 
 #include "common/config.h"
 #include "common/system/backend_options.h"
-#include "util/thread.h"
+#include "common/thread/thread.h"
 
 namespace starrocks {
 

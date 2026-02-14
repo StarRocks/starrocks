@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "common/thread/threadpool.h"
 #include "exec/spill/file_block_manager.h"
 #include "exec/spill/hybird_block_manager.h"
 #include "exec/spill/log_block_manager.h"
@@ -24,7 +25,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

@@ -15,9 +15,9 @@
 #pragma once
 
 #include "base/phmap/btree.h"
+#include "common/thread/threadpool.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
-#include "util/threadpool.h"
 
 namespace starrocks::lake {
 

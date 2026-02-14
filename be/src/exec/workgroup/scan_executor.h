@@ -15,8 +15,8 @@
 #pragma once
 
 #include "base/concurrency/limit_setter.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_metrics.h"
-#include "util/threadpool.h"
 #include "work_group.h"
 
 namespace starrocks::pipeline {

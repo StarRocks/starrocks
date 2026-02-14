@@ -39,6 +39,7 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
@@ -48,7 +49,6 @@
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "storage/options.h"
-#include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecessary includes will cause compilation very slow.
 // So please consider use forward declaration as much as possible.
