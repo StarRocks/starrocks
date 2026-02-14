@@ -426,7 +426,7 @@ public class TaskRun implements Comparable<TaskRun> {
                 LOG.warn("Task {} has failed {} times continuously, so we disable it",
                         task.getName(), task.getConsecutiveFailCount());
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                taskManager.suspendTask(task);
+                taskManager.suspendTask(task, false);
                 String mvName = "";
                 MaterializedView mv = TaskBuilder.getMvFromTask(task);
                 if (mv != null) {
