@@ -90,8 +90,14 @@ StarRocks' asynchronous materialized views can be created on the following base 
 
 - StarRocks' native tables (all StarRocks table types are supported)
 - Tables in [external catalogs](./feature-support-asynchronous-materialized-views.md#materialized-views-on-external-catalogs)
-- Existing asynchronous materialized views (Since v2.5)
-- Existing views (Since v3.1)
+  - Hive Catalog
+  - Hudi Catalog
+  - Iceberg Catalog
+  - JDBC Catalog
+  - Paimon Catalog
+  - DeltaLake Catalog
+- Existing asynchronous materialized views
+- Existing views
 
 ### Before you begin
 
