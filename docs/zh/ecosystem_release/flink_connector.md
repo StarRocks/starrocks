@@ -30,11 +30,13 @@ displayed_sidebar: docs
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+<<<<<<< HEAD
+=======
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
+>>>>>>> f82b388ff1 ([Doc] Flink Connector 1.2.14 Doc (#69257))
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17      | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15      | 2.1 及以上     | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -44,7 +46,48 @@ displayed_sidebar: docs
 
 ### 1.2
 
+<<<<<<< HEAD
 ## 版本 1.2.11
+=======
+#### 1.2.14
+
+发布日期：2026年2月11日
+
+##### 新增特性
+
+- 支持合并提交。[#474](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/474)
+
+##### 功能优化
+
+- 支持将 `sink.buffer-flush.interval-ms` 设置为小于 1 秒。[#475](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/475)
+- 支持配置事务 Publish 超时。[#480](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/480)
+
+##### 错误修复
+
+已修复以下问题：
+
+- 通过升级 guava 版本至 `32.0.1-jre` 修复 CVE-2023-2976。[#467](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/467)
+
+#### 1.2.12
+
+发布日期：2025年9月19日
+
+##### 功能优化
+
+- 支持为 Source 指定 Warehouse。 [#423](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/423)
+- 新增安全策略。 [#434](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/434)
+- 对错误日志中的敏感数据进行脱敏。 [#446](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/446)
+- 支持在 Stream Load 事务接口中配置 `prepared_timeout`。 [#453](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/453)
+
+##### 问题修复
+
+修复了以下问题：
+
+- 当 Open 失败时，Source Reader 未被关闭。 [#441](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/441)
+- 在 StreamLoadManagerV2.flush 中遇到异常时错误地返回成功。 [#451](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/451)
+
+#### 1.2.11
+>>>>>>> f82b388ff1 ([Doc] Flink Connector 1.2.14 Doc (#69257))
 
 发布日期：2025 年 6 月 3 日
 
