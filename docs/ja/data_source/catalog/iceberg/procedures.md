@@ -229,6 +229,30 @@ ALTER TABLE iceberg.sales.order
 EXECUTE remove_orphan_files('2024-01-01 00:00:00', 's3://bucket-test/iceberg_db/iceberg_table/sub_dir');
 ```
 
+### マニフェストの再書き込み
+
+データマニフェストファイルを再書き込みし、パーティションごとにマージします。これにより、過剰な小規模マニフェストによるパフォーマンスの低下を回避します。
+
+:::note
+この操作は現在のスナップショットのデータマニフェストのみを再書き込みします。
+:::
+
+#### `rewrite_manifests` 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rewrite_manifests()
+```
+
+#### 例
+
+現在のスナップショットのデータマニフェストを書き換える:
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rewrite_manifests()
+```
+
 ## テーブル管理
 
 ### ファイルの追加
