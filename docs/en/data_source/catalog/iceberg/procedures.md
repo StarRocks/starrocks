@@ -155,20 +155,37 @@ Expires snapshots older than a specific timestamp. This operation deletes the da
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
-EXECUTE expire_snapshots('<datetime>')
+EXECUTE expire_snapshots(
+    [ [older_than =] '<datetime>' ] [,  [retain_last =] <int> ]
+)
 ```
 
 #### Parameters
 
-`datetime`: The timestamp before which snapshots will be expired. Format: 'YYYY-MM-DD HH:MM:SS'.
+##### `older_than`
+
+- Description: The timestamp before which snapshots will be removed. If not specified, files older than 5 days (from the current time) will be removed by default. Format: 'YYYY-MM-DD HH:MM:SS'.
+- Type: DATETIME
+- Required: No
+
+##### `retain_last`
+
+- Description: The maximum number of most recent snapshots to retain. The less recent snapshots will be removed when this threshold is reached. If not specified, only one snapshot will be retained by default.
+- Type: Integer
+- Required: No
 
 #### Example
 
-Expire snapshots before '2023-12-17 00:14:38':
+Expire snapshots before '2023-12-17 00:14:38' and retain two snapshots:
 
 ```SQL
+-- With the parameter key specified:
 ALTER TABLE iceberg.sales.order
-EXECUTE expire_snapshots('2023-12-17 00:14:38')
+EXECUTE expire_snapshots(older_than = '2023-12-17 00:14:38', retain_last = 2);
+
+-- With the parameter key unspecified:
+ALTER TABLE iceberg.sales.order
+EXECUTE expire_snapshots('2023-12-17 00:14:38', 2);
 ```
 
 ### Remove orphan files
@@ -179,27 +196,37 @@ Removes orphan files from the table that are not referenced by any valid snapsho
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
-EXECUTE remove_orphan_files([older_than = '<datetime>'])
+EXECUTE remove_orphan_files(
+    [ [older_than =] '<datetime>' ] [,  [location =] '<string>' ]
+)
 ```
 
 #### Parameters
 
-`older_than` (optional): The timestamp before which orphan files will be removed. If not specified, files older than 7 days will be removed by default. Format: 'YYYY-MM-DD HH:MM:SS'.
+##### `older_than`
+
+- Description: The timestamp before which orphan files will be removed. If not specified, files older than 7 days (from the current time) will be removed by default. Format: 'YYYY-MM-DD HH:MM:SS'.
+- Type: DATETIME
+- Required: No
+
+##### `location`
+
+- Description: The directory from which you want to remove orphan files. It must be a sub-directory of the table location. If not specified, the table location will be used by default.
+- Type: STRING
+- Required: No
 
 #### Example
 
-Remove orphan files older than '2024-01-01 00:00:00':
+Remove orphan files older than '2024-01-01 00:00:00' from the sub-directory `sub_dir` of the table location:
 
 ```SQL
+-- With the parameter key specified:
 ALTER TABLE iceberg.sales.order
-EXECUTE remove_orphan_files(older_than = '2024-01-01 00:00:00');
-```
+EXECUTE remove_orphan_files(older_than = '2024-01-01 00:00:00', location = 's3://iceberg-bucket/iceberg_db/iceberg_table/sub_dir');
 
-Remove orphan files using the default retention period (7 days):
-
-```SQL
+-- With the parameter key unspecified:
 ALTER TABLE iceberg.sales.order
-EXECUTE remove_orphan_files();
+EXECUTE remove_orphan_files('2024-01-01 00:00:00', 's3://bucket-test/iceberg_db/iceberg_table/sub_dir');
 ```
 
 ## Table management
@@ -222,26 +249,30 @@ EXECUTE add_files(
 
 Either `source_table` or `location` must be provided, but not both.
 
-##### `source_table` (optional)
+##### `source_table`
 
 - Description: The source table from which to add files. Format: 'catalog.database.table'.
 - Type: String
+- Required: No
 
-##### `location` (optional)
+##### `location`
 
 - Description: The directory path or file path from which to add files.
 - Type: String
+- Required: No
 
-##### `file_format` (required when using `location`)
+##### `file_format`
 
 - Description: The format of the data files. Supported values: 'parquet', 'orc'.
 - Type: String
+- Required: No (required when using `location`)
 
-##### `recursive` (optional)
+##### `recursive`
 
 - Description: Whether to recursively scan subdirectories when adding files from a location.
 - Type: Boolean
 - Default: true
+- Required: No
 
 #### Example
 
