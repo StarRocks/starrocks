@@ -90,14 +90,14 @@ StarRocks 支持在以下数据源创建异步物化视图：
 
 - StarRocks 内部表（基表支持所有 StarRocks 表类型）
 - External Catalog 中的表
-
-  - Hive Catalog（自 v2.5 起）
-  - Hudi Catalog（自 v2.5 起）
-  - Iceberg  Catalog（自 v2.5 起）
-  - JDBC Catalog（自 v3.0 起）
-
-- 已有异步物化视图（自 v2.5 起）
-- 已有视图（自 v3.1 起）
+  - Hive Catalog
+  - Hudi Catalog
+  - Iceberg Catalog
+  - JDBC Catalog
+  - Paimon Catalog
+  - DeltaLake Catalog
+- 已有异步物化视图
+- 已有视图
 
 ### 准备工作
 
