@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <limits>
 
 #include "base/string/string_searcher.h"
 
