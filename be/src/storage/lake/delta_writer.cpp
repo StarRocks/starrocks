@@ -883,10 +883,10 @@ void DeltaWriterImpl::close() {
     _merge_condition.clear();
 }
 
-<<<<<<< HEAD
 std::vector<FileInfo> DeltaWriterImpl::files() const {
     return (_tablet_writer != nullptr) ? _tablet_writer->files() : std::vector<FileInfo>();
-=======
+}
+
 void DeltaWriterImpl::cancel(const Status& st) {
     if (st.ok()) {
         return;
@@ -907,25 +907,6 @@ void DeltaWriterImpl::cancel(const Status& st) {
 
     LOG(INFO) << "Lake DeltaWriter cancelled. tablet_id=" << _tablet_id << ", txn_id=" << _txn_id
               << ", status=" << st.message();
-}
-
-const std::vector<SegmentFileInfo>& DeltaWriterImpl::segments() const {
-    if (_tablet_writer != nullptr) {
-        return _tablet_writer->segments();
-    } else {
-        static std::vector<SegmentFileInfo> empty_segments;
-        return empty_segments;
-    }
-}
-
-const std::vector<FileInfo>& DeltaWriterImpl::dels() const {
-    if (_tablet_writer != nullptr) {
-        return _tablet_writer->dels();
-    } else {
-        static std::vector<FileInfo> empty_dels;
-        return empty_dels;
-    }
->>>>>>> 6cbf16379d ([Enhancement] Support fast cancel for lake DeltaWriter in shared-data mode (#68877))
 }
 
 int64_t DeltaWriterImpl::data_size() const {
