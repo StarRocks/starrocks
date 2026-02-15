@@ -32,6 +32,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/logging.h"
+#include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
@@ -51,7 +52,6 @@
 #include "testutil/exprs_test_helper.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
-#include "util/thrift_util.h"
 #include "util/variant_encoder.h"
 
 namespace starrocks::parquet {

@@ -27,6 +27,7 @@
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
+#include "common/util/stack_trace_mutex.h"
 #include "exec/tablet_info.h"
 #include "fs/bundle_file.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -47,7 +48,6 @@
 #include "storage/storage_engine.h"
 #include "util/compression/block_compression.h"
 #include "util/global_metrics_registry.h"
-#include "util/stack_trace_mutex.h"
 
 namespace starrocks {
 

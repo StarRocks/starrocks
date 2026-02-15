@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/debug_util.h"
+#include "common/util/debug_util.h"
 
 #include <iomanip>
 #include <sstream>

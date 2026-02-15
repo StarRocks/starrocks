@@ -21,7 +21,7 @@
 
 #include "base/metrics.h"
 #include "common/config.h"
-#include "util/table_metrics.h"
+#include "common/util/table_metrics.h"
 
 namespace starrocks {
 

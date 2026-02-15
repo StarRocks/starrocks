@@ -40,8 +40,8 @@
 #include "common/config.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/util/minidump.h"
 #include "exec/workgroup/work_group.h"
-#include "util/minidump.h"
 #include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -64,6 +64,9 @@
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "common/thread/thread.h"
+#include "common/util/debug_util.h"
+#include "common/util/misc.h"
+#include "common/util/thrift_util.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "gutil/cpu.h"
@@ -74,12 +77,9 @@
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "types/time_types.h"
-#include "util/debug_util.h"
 #include "util/global_metrics_registry.h"
 #include "util/logging.h"
 #include "util/memory_lock.h"
-#include "util/misc.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");

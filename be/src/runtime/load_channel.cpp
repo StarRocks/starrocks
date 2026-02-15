@@ -39,6 +39,7 @@
 #include "base/string/faststring.h"
 #include "common/runtime_profile.h"
 #include "common/tracer.h"
+#include "common/util/thrift_util.h"
 #include "fmt/format.h"
 #include "runtime/closure_guard.h"
 #include "runtime/diagnose_daemon.h"
@@ -50,7 +51,6 @@
 #include "runtime/starrocks_metrics.h"
 #include "util/compression/block_compression.h"
 #include "util/lru_cache.h"
-#include "util/thrift_util.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \

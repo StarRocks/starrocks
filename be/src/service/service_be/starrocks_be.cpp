@@ -45,11 +45,11 @@
 #endif
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
+#include "common/util/thrift_server.h"
 #include "service/staros_worker.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_server.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"

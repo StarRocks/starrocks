@@ -18,7 +18,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/util")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
 
 set(UTIL_FILES
-  bthreads/executor.cpp
   arrow/row_batch.cpp
   arrow/starrocks_column_to_arrow.cpp
   bloom_filter.cpp
@@ -28,22 +27,16 @@ set(UTIL_FILES
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
-  debug_util.cpp
   download_util.cpp
   hash_util.hpp
   json_util.cpp
   json_flattener.cpp
   global_metrics_registry.cpp
   metrics/file_scan_metrics.cpp
-  misc.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
   static_asserts.cpp
-  thrift_util.cpp
-  thrift_client.cpp
-  thrift_server.cpp
   stack_util.cpp
-  table_metrics.cpp
   system_metrics.cpp
   url_parser.cpp
 # coding_util.cpp
@@ -51,7 +44,6 @@ set(UTIL_FILES
   frame_of_reference_coding.cpp
   lru_cache.cpp
   debug/query_trace_impl.cpp
-  stack_trace_mutex.cpp
   memory_lock.cpp
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
@@ -63,10 +55,6 @@ set(UTIL_FILES
   llm_cache.cpp
   llm_query_service.cpp
 )
-
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    list(APPEND UTIL_FILES minidump.cpp)
-endif()
 
 ADD_BE_LIB(Util
     ${UTIL_FILES}

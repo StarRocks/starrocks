@@ -24,6 +24,7 @@
 #include "common/config.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
+#include "common/util/thrift_util.h"
 #include "common/utils.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
@@ -36,7 +37,6 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

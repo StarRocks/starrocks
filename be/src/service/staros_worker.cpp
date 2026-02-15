@@ -26,6 +26,7 @@
 #include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
+#include "common/util/debug_util.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
 #include "fslib/star_cache_configuration.h"
@@ -33,7 +34,6 @@
 #include "gflags/gflags.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/lake/tablet_manager.h"
-#include "util/debug_util.h"
 #include "util/global_metrics_registry.h"
 #include "util/lru_cache.h"
 

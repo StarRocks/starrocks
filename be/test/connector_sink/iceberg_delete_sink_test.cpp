@@ -26,6 +26,7 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/column_evaluator.h"
 #include "gen_cpp/Exprs_types.h"
@@ -37,7 +38,6 @@
 #include "testutil/column_test_helper.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::connector {
 

@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "exec/scan_node.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
@@ -27,7 +28,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 Status ShortCircuitHybridScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {

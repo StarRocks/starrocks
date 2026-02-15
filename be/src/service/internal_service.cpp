@@ -57,6 +57,7 @@
 #include "common/config.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
@@ -90,7 +91,6 @@
 #include "types/type_descriptor.h"
 #include "util/arrow/row_batch.h"
 #include "util/hash_util.hpp"
-#include "util/thrift_util.h"
 #include "util/time_guard.h"
 
 namespace starrocks {

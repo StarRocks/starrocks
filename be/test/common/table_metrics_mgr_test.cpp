@@ -15,7 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "common/config.h"
-#include "util/table_metrics.h"
+#include "common/util/table_metrics.h"
 
 namespace starrocks {
 
@@ -23,6 +23,7 @@ class TableMetricsMgrTest : public testing::Test {};
 
 TEST_F(TableMetricsMgrTest, register_unregister) {
     config::enable_table_metrics = true;
+    config::max_table_metrics_num = 100;
     auto mgr = std::make_shared<TableMetricsManager>();
     mgr->register_table(1);
     mgr->register_table(2);

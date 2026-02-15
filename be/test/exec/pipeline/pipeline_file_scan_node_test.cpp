@@ -27,6 +27,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "common/util/thrift_util.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
@@ -47,7 +48,6 @@
 #include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "util/global_metrics_registry.h"
-#include "util/thrift_util.h"
 
 // TODO: test multi thread
 // TODO: test runtime filter

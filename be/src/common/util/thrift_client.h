@@ -34,8 +34,8 @@
 #include "base/time/time.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/util/thrift_server.h"
 #include "gen_cpp/Types_types.h"
-#include "util/thrift_server.h"
 
 namespace starrocks {
 

@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/thrift_server.h"
+#include "common/util/thrift_server.h"
 
 #include <thrift/concurrency/Thread.h>
 #include <thrift/concurrency/ThreadFactory.h>

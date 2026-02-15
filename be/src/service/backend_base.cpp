@@ -46,6 +46,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/util/thrift_server.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -58,7 +59,6 @@
 #include "service_be/backend_service.h"
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
-#include "util/thrift_server.h"
 
 namespace starrocks {
 

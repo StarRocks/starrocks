@@ -44,6 +44,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/runtime_profile.h"
+#include "common/util/debug_util.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
 #include "gen_cpp/data.pb.h"
@@ -55,7 +56,6 @@
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "util/compression/block_compression.h"
-#include "util/debug_util.h"
 #include "util/logging.h"
 
 namespace starrocks {
