@@ -20,6 +20,7 @@
 #include <string>
 #include <utility>
 
+#include "base/utility/arrow_utils.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -27,7 +28,6 @@
 #include "gutil/casts.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
-#include "util/arrow/utils.h"
 
 namespace starrocks {
 

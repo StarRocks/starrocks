@@ -17,6 +17,7 @@
 #include <future>
 #include <unordered_set>
 
+#include "base/debug/trace.h"
 #include "column/datum_convert.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
@@ -41,7 +42,6 @@
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

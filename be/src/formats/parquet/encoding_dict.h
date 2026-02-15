@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/bit/rle_encoding.h"
 #include "base/coding.h"
 #include "base/simd/expand.h"
 #include "base/simd/simd.h"
@@ -30,7 +31,6 @@
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "formats/parquet/encoding.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks::parquet {
 

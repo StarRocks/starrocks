@@ -16,6 +16,7 @@
 
 #include <optional>
 
+#include "base/crypto/aes_util.h"
 #include "base/crypto/md5.h"
 #include "base/crypto/sha.h"
 #include "column/column_builder.h"
@@ -24,7 +25,6 @@
 #include "common/status.h"
 #include "exprs/base64.h"
 #include "types/logical_type_infra.h"
-#include "util/aes_util.h"
 
 namespace starrocks {
 

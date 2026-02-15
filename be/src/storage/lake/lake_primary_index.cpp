@@ -16,6 +16,7 @@
 
 #include <bvar/bvar.h>
 
+#include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
@@ -28,7 +29,6 @@
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

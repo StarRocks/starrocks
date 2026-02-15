@@ -16,13 +16,13 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/debug/trace.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

@@ -44,6 +44,7 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
+#include "base/time/ratelimit.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/tracer.h"
@@ -68,7 +69,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "util/global_metrics_registry.h"
-#include "util/ratelimit.h"
 
 namespace starrocks {
 

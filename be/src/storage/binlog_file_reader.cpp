@@ -16,11 +16,11 @@
 
 #include "base/coding.h"
 #include "base/container/raw_container.h"
+#include "base/hash/crc32c.h"
 #include "fs/fs.h"
 #include "storage/binlog_file_writer.h"
 #include "storage/binlog_util.h"
 #include "storage/rowset/page_io.h"
-#include "util/crc32c.h"
 
 namespace starrocks {
 

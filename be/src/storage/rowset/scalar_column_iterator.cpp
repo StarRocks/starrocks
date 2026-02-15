@@ -34,6 +34,7 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+#include "base/bit/bitmap.h"
 #include "common/status.h"
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
@@ -43,7 +44,6 @@
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/page_handle_fwd.h"
 #include "types/logical_type.h"
-#include "util/bitmap.h"
 
 namespace starrocks {
 

@@ -37,6 +37,7 @@
 #include <sstream>
 #include <string>
 
+#include "base/path/filesystem_util.h"
 #include "base/path/path_util.h"
 #include "base/time/time.h"
 #include "fs/fs.h"
@@ -45,7 +46,6 @@
 #include "http/http_request.h"
 #include "http/utils.h"
 #include "runtime/exec_env.h"
-#include "util/filesystem_util.h"
 
 namespace starrocks {
 

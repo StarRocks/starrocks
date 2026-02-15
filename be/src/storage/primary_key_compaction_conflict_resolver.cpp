@@ -14,6 +14,7 @@
 
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
+#include "base/debug/trace.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -21,7 +22,6 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
-#include "util/trace.h"
 
 namespace starrocks {
 

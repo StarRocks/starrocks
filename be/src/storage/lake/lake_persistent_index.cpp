@@ -14,6 +14,7 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include "base/debug/trace.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "serde/column_array_serde.h"
@@ -36,7 +37,6 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

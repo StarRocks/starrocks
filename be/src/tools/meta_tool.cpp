@@ -41,6 +41,7 @@
 #include <string>
 
 #include "base/coding.h"
+#include "base/hash/crc32c.h"
 #include "base/path/path_util.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
@@ -76,7 +77,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/zone_map_detail.h"
-#include "util/crc32c.h"
 #include "util/global_metrics_registry.h"
 
 using starrocks::DataDir;

@@ -14,6 +14,7 @@
 
 #include "cache/datacache.h"
 
+#include "base/string/parse_util.h"
 #include "cache/datacache_utils.h"
 #include "cache/disk_space_monitor.h"
 #include "cache/mem_cache/lrucache_engine.h"
@@ -24,7 +25,6 @@
 #include "gutil/strings/strip.h"
 #include "runtime/exec_env.h"
 #include "storage/options.h"
-#include "util/parse_util.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"

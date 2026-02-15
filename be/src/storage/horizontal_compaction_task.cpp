@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "base/debug/trace.h"
 #include "base/time/time.h"
 #include "column/schema.h"
 #include "common/statusor.h"
@@ -27,7 +28,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
-#include "util/trace.h"
 
 namespace starrocks {
 

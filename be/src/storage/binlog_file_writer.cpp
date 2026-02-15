@@ -14,10 +14,10 @@
 
 #include "storage/binlog_file_writer.h"
 
+#include "base/hash/crc32c.h"
+#include "base/path/filesystem_util.h"
 #include "storage/binlog_util.h"
 #include "storage/rowset/page_io.h"
-#include "util/crc32c.h"
-#include "util/filesystem_util.h"
 
 namespace starrocks {
 

@@ -20,6 +20,7 @@
 
 #include <limits>
 
+#include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
@@ -34,7 +35,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/variant_tuple.h"
-#include "util/filesystem_util.h"
 
 namespace starrocks {
 

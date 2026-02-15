@@ -16,6 +16,7 @@
 
 #include <algorithm>
 
+#include "base/utility/arrow_utils.h"
 #include "benchgen/benchmark_suite.h"
 #include "benchgen/record_batch_iterator_factory.h"
 #include "column/chunk.h"
@@ -24,7 +25,6 @@
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "runtime/runtime_state.h"
-#include "util/arrow/utils.h"
 
 namespace starrocks {
 

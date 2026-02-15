@@ -18,13 +18,13 @@
 
 #include "base/coding.h"
 #include "base/container/raw_container.h"
+#include "base/hash/crc32c.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "lake/filenames.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
-#include "util/crc32c.h"
 
 namespace starrocks {
 
