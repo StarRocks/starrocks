@@ -21,8 +21,6 @@ set(UTIL_FILES
   bthreads/executor.cpp
   arrow/row_batch.cpp
   arrow/starrocks_column_to_arrow.cpp
-  arrow/utils.cpp
-  base85.cpp
   bloom_filter.cpp
   block_split_bloom_filter.cpp
   brpc_stub_cache.cpp
@@ -30,9 +28,6 @@ set(UTIL_FILES
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
-  crc32c.cpp
-  date_func.cpp
-  dynamic_util.cpp
   debug_util.cpp
   download_util.cpp
   hash_util.hpp
@@ -41,7 +36,6 @@ set(UTIL_FILES
   global_metrics_registry.cpp
   metrics/file_scan_metrics.cpp
   misc.cpp
-  parse_util.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
   static_asserts.cpp
@@ -52,26 +46,19 @@ set(UTIL_FILES
   table_metrics.cpp
   system_metrics.cpp
   url_parser.cpp
-  filesystem_util.cc
 # coding_util.cpp
-  aes_util.cpp
-  string_util.cpp
   thrift_rpc_helper.cpp
   frame_of_reference_coding.cpp
-  trace.cpp
-  trace_metrics.cpp
-  hdfs_util.cpp
-  gc_helper.cpp
   lru_cache.cpp
   debug/query_trace_impl.cpp
   stack_trace_mutex.cpp
-  debug_action.cpp
   memory_lock.cpp
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
   variant_converter.cpp
   variant_encoder.cpp
+  hdfs_util.cpp
   jvm_metrics.cpp
   llm_cache.cpp
   llm_query_service.cpp

@@ -48,12 +48,12 @@
 
 #include <memory>
 
+#include "base/utility/arrow_utils.h"
 #include "common/logging.h"
 #include "exprs/column_ref.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "util/arrow/utils.h"
 
 namespace starrocks {
 

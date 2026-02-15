@@ -20,6 +20,7 @@
 #include "agent/agent_server.h"
 #endif
 
+#include "base/debug/trace.h"
 #include "base/network/network_util.h"
 #include "base/string/string_parser.hpp"
 #include "common/system/backend_options.h"
@@ -34,7 +35,6 @@
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/trace.h"
 
 namespace starrocks {
 

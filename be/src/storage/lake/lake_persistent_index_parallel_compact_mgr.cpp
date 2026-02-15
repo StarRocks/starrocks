@@ -22,6 +22,7 @@
 #include <utility>
 
 #include "base/concurrency/countdown_latch.h"
+#include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs_util.h"
@@ -41,7 +42,6 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "util/global_metrics_registry.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

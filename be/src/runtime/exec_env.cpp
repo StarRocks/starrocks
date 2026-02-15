@@ -40,6 +40,7 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "base/string/parse_util.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
 #include "common/config.h"
@@ -106,7 +107,6 @@
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
 #include "util/global_metrics_registry.h"
-#include "util/parse_util.h"
 #include "util/priority_thread_pool.hpp"
 
 #ifdef STARROCKS_JIT_ENABLE

@@ -14,7 +14,7 @@
 
 #include <benchmark/benchmark.h>
 
-#include "util/crc32c.h"
+#include "base/hash/crc32c.h"
 
 namespace starrocks {
 

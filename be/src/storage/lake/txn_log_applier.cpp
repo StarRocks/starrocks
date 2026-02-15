@@ -18,6 +18,7 @@
 
 #include <climits>
 
+#include "base/debug/trace.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
 #include "gutil/strings/join.h"
@@ -30,7 +31,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
 #include "util/dynamic_cache.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

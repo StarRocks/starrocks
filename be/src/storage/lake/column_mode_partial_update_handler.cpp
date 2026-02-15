@@ -14,6 +14,7 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
@@ -38,7 +39,6 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
 #include "util/stack_util.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

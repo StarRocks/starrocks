@@ -320,42 +320,30 @@ set(EXEC_FILES
         ./types/type_checker_xml_loader_test.cpp 
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
-        ./util/aes_util_test.cpp
-        ./util/base85_test.cpp
-        ./util/bitmap_test.cpp
         ./util/block_compression_test.cpp
         ./util/brpc_stub_cache_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
-        ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
         ./util/fail_point_test.cpp
-        ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
-        ./util/parse_util_test.cpp
-        ./util/rle_encoding_test.cpp
         ./base/raw_container_test.cpp
-        ./util/string_util_test.cpp
         ./util/thrift_customize_test.cpp
-        ./util/trace_test.cpp
         ./base/types/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
-        ./util/ratelimit_test.cpp
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
-        ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
         ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc

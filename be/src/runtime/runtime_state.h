@@ -44,6 +44,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/debug/debug_action.h"
 #include "base/phmap/phmap.h"
 #include "base/uid_util.h"
 #include "cache/datacache_utils.h"
@@ -60,7 +61,6 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "util/debug_action.h"
 #include "util/logging.h"
 
 namespace starrocks {

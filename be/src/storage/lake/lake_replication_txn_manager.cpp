@@ -15,6 +15,7 @@
 #include "storage/lake/lake_replication_txn_manager.h"
 
 #include "agent/master_info.h"
+#include "base/debug/trace.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -28,7 +29,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/segment_stream_converter.h"
 #include "util/dynamic_cache.h"
-#include "util/trace.h"
 #include "vacuum.h"
 
 namespace starrocks::lake {

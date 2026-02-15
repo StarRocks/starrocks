@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/string/parse_util.h"
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "runtime/exec_env.h"
@@ -26,7 +27,6 @@
 #include "storage/primary_index.h"
 #include "storage/update_manager.h"
 #include "util/dynamic_cache.h"
-#include "util/parse_util.h"
 
 namespace starrocks {
 
