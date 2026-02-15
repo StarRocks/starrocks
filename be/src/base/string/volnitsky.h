@@ -20,7 +20,7 @@
 #include <algorithm>
 #include <functional>
 
-#include "runtime/StringSearcher.h"
+#include "base/string/string_searcher.h"
 
 namespace starrocks {
 

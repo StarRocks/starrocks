@@ -58,7 +58,6 @@
 #include <vector>
 
 #include "base/string/slice.h"
-#include "common/logging.h"
 
 namespace starrocks {
 
