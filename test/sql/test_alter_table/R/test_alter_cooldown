@@ -14,7 +14,8 @@ PROPERTIES (
 "fast_schema_evolution" = "true",
 "partition_live_number" = "5",
 "replicated_storage" = "true",
-"replication_num" = "1"
+"replication_num" = "1",
+"storage_medium" = "SSD"
 );
 -- result:
 -- !result
