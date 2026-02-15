@@ -28,6 +28,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/util/table_metrics.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
@@ -53,7 +54,6 @@
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "util/global_metrics_registry.h"
-#include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
 

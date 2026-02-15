@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/minidump.h"
+#include "common/util/minidump.h"
 
 #include <client/linux/handler/exception_handler.h>
 #include <common/linux/linux_libc_support.h>
@@ -29,7 +29,7 @@
 #include <system_error>
 
 #include "common/config.h"
-#include "util/logging.h"
+#include "common/logging.h"
 
 namespace starrocks {
 void Minidump::init() {

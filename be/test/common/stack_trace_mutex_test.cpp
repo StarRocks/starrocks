@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/stack_trace_mutex.h"
+#include "common/util/stack_trace_mutex.h"
 
 #include <gtest/gtest.h>
 

@@ -17,11 +17,11 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "common/util/thrift_util.h"
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/thrift_client.h"
+#include "common/util/thrift_client.h"
 
 #include <sys/poll.h>
 #include <sys/types.h>

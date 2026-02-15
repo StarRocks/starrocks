@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
-ADD_BE_LIB(Common
+set(COMMON_FILES
   configbase.cpp
   config.cpp
   memory/column_allocator.cpp
@@ -32,6 +32,22 @@ ADD_BE_LIB(Common
   s3_uri.cpp
   tracer.cpp
   process_exit.cpp
+  util/bthreads/executor.cpp
+  util/debug_util.cpp
+  util/misc.cpp
+  util/stack_trace_mutex.cpp
+  util/table_metrics.cpp
+  util/thrift_client.cpp
+  util/thrift_server.cpp
+  util/thrift_util.cpp
+)
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    list(APPEND COMMON_FILES util/minidump.cpp)
+endif()
+
+ADD_BE_LIB(Common
+  ${COMMON_FILES}
 )
 
 # Generate env_config.h according to env_config.h.in

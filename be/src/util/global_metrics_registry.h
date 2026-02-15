@@ -25,9 +25,9 @@
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
+#include "common/util/table_metrics.h"
 #include "util/metrics/file_scan_metrics.h"
 #include "util/system_metrics.h"
-#include "util/table_metrics.h"
 
 namespace starrocks {
 

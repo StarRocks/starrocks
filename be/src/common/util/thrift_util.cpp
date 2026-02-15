@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/thrift_util.h"
+#include "common/util/thrift_util.h"
 
 #include <thrift/Thrift.h>
 #include <thrift/concurrency/ThreadManager.h>
@@ -41,9 +41,8 @@
 #include <thrift/transport/TSocket.h>
 
 #include "base/time/monotime.h"
+#include "common/util/thrift_server.h"
 #include "gen_cpp/Types_types.h"
-#include "util/hash_util.hpp"
-#include "util/thrift_server.h"
 
 // TCompactProtocol requires some #defines to work right.  They also define UNLIKLEY
 // so we need to undef this.

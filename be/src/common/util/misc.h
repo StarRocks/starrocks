@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <util/stack_util.h>
+#include <common/stack_util.h>
 
 #include <cstdint>
 #include <functional>

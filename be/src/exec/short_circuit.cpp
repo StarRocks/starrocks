@@ -22,6 +22,7 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "connector/connector.h"
 #include "exec/scan_node.h"
 #include "exec/short_circuit_hybrid.h"
@@ -32,7 +33,6 @@
 #include "service/brpc.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 class MysqlResultMemorySink : public DataSink {

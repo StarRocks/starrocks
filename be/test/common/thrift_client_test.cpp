@@ -12,24 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "common/util/thrift_client.h"
+
 #include <gtest/gtest.h>
-#include <thrift/concurrency/Thread.h>
-#include <thrift/concurrency/ThreadFactory.h>
-#include <thrift/concurrency/ThreadManager.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TSimpleServer.h>
-#include <thrift/server/TThreadPoolServer.h>
 #include <thrift/transport/TServerSocket.h>
-#include <thrift/transport/TSocket.h>
 #include <unistd.h>
 
 #include <memory>
+#include <thread>
 
-#include "base/network/network_util.h"
 #include "base/testutil/assert.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -85,20 +80,19 @@ void MockedFrontendService::init() {
     sleep(1);
 }
 
-TEST(ThriftRpcClientCacheTest, test_all) {
+TEST(ThriftClientTest, test_open_close_and_reopen) {
     MockedFrontendService service;
     service.init();
     TGetProfileResponse rep;
     TGetProfileRequest req;
 
-    auto client_cache = std::make_unique<FrontendServiceClientCache>(config::max_client_cache_size_per_host);
-    TNetworkAddress address = make_network_address("127.0.0.1", service.get_port());
-    Status status;
-    FrontendServiceConnection client(client_cache.get(), address, 1000, &status);
-    ASSERT_OK(status);
-    client->getQueryProfile(rep, req);
-    ASSERT_OK(client.reopen(100));
-    client->getQueryProfile(rep, req);
+    ThriftClient<FrontendServiceClient> client("127.0.0.1", service.get_port());
+    ASSERT_OK(client.open());
+    client.iface()->getQueryProfile(rep, req);
+
+    client.close();
+    ASSERT_OK(client.open_with_retry(3, 100));
+    client.iface()->getQueryProfile(rep, req);
 }
 
 } // namespace starrocks

@@ -18,11 +18,11 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/util/thrift_util.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Row_types.h"
 #include "runtime/buffer_control_block.h"
 #include "types/logical_type.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

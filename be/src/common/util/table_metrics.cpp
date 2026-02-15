@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/table_metrics.h"
+#include "common/util/table_metrics.h"
 
 #include "base/phmap/btree.h"
 #include "base/time/time.h"

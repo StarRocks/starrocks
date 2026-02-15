@@ -342,7 +342,6 @@ set(EXEC_FILES
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
-        ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
         ./util/stack_util_test.cpp
         ./util/url_parser_test.cpp
@@ -360,11 +359,9 @@ set(EXEC_FILES
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
-        ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
-        ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
         ./util/llm_query_service_test.cpp

@@ -46,6 +46,7 @@
 #include "column/chunk.h"
 #include "common/logging.h"
 #include "common/system/backend_options.h"
+#include "common/util/thrift_client.h"
 #include "exprs/expr.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
@@ -62,7 +63,6 @@
 #include "util/compression/compression_utils.h"
 #include "util/internal_service_recoverable_stub.h"
 #include "util/ref_count_closure.h"
-#include "util/thrift_client.h"
 
 namespace starrocks {
 

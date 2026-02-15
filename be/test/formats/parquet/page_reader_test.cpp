@@ -18,13 +18,13 @@
 
 #include <iostream>
 
+#include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "io/string_input_stream.h"
-#include "util/thrift_util.h"
 namespace starrocks::parquet {
 
 class ParquetPageReaderTest : public testing::Test {

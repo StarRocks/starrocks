@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

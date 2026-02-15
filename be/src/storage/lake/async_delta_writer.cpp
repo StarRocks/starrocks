@@ -22,11 +22,11 @@
 
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
+#include "common/util/stack_trace_mutex.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
-#include "util/stack_trace_mutex.h"
 
 namespace starrocks::lake {
 

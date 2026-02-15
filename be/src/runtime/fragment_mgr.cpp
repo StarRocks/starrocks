@@ -50,6 +50,8 @@
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"
+#include "common/util/misc.h"
+#include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
@@ -67,9 +69,7 @@
 #include "runtime/starrocks_metrics.h"
 #include "types/datetime_value.h"
 #include "util/global_metrics_registry.h"
-#include "util/misc.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

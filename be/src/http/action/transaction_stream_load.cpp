@@ -34,6 +34,7 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
+#include "common/util/debug_util.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -57,7 +58,6 @@
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/byte_buffer.h"
-#include "util/debug_util.h"
 #include "util/json_util.h"
 #include "util/thrift_rpc_helper.h"
 

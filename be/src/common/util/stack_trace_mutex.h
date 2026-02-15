@@ -28,8 +28,8 @@
 #include "base/time/time.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
+#include "common/stack_util.h"
 #include "gutil//macros.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

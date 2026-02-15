@@ -36,9 +36,9 @@
 
 #include "common/config.h"
 #include "common/thread/thread.h"
+#include "common/util/misc.h"
 #include "data_consumer.h"
 #include "runtime/routine_load/data_consumer_group.h"
-#include "util/misc.h"
 
 namespace starrocks {
 
