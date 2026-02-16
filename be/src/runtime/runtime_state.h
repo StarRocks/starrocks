@@ -37,23 +37,22 @@
 #include <atomic>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "base/debug/debug_action.h"
 #include "base/phmap/phmap.h"
 #include "base/uid_util.h"
-#include "cache/datacache_utils.h"
-#include "cache/disk_cache/block_cache.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
@@ -61,6 +60,7 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state_helper.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -82,7 +82,8 @@ class QueryStatisticsRecvr;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
-}
+class FragmentContext;
+} // namespace pipeline
 
 #define EXTRACE_SPILL_PARAM(query_option, spill_option, var) \
     spill_option.has_value() ? spill_option->var : query_option.var
@@ -124,7 +125,6 @@ public:
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
-    ObjectPool* global_obj_pool() const;
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
@@ -244,8 +244,6 @@ public:
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
-    Status create_rejected_record_file();
-
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
@@ -291,7 +289,7 @@ public:
         load_params->__set_unselected_rows(num_rows_load_unselected());
         load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
         // Update datacache load metrics
-        update_load_datacache_metrics(load_params);
+        RuntimeStateHelper::update_load_datacache_metrics(this, load_params);
     }
 
     void update_num_datacache_read_bytes(const int64_t read_bytes) {
@@ -313,10 +311,6 @@ public:
     void update_num_datacache_count(const int64_t count) {
         _num_datacache_count.fetch_add(count, std::memory_order_relaxed);
     }
-
-    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const;
-
-    std::atomic_int64_t* mutable_total_spill_bytes();
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
@@ -510,8 +504,6 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    std::shared_ptr<QueryStatisticsRecvr> query_recv();
-
     Status reset_epoch();
 
     int64_t get_rpc_http_min_size() {
@@ -528,8 +520,6 @@ public:
     bool enable_wait_dependent_event() const {
         return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }
-
-    bool is_jit_enabled() const;
 
     bool is_adaptive_jit() const { return _query_options.__isset.jit_level && _query_options.jit_level == 1; }
 
@@ -590,11 +580,11 @@ public:
     void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
 
 private:
+    friend class RuntimeStateHelper;
+
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                const TQueryGlobals& query_globals, ExecEnv* exec_env);
-
-    Status create_error_log_file();
 
     Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
                               phmap::flat_hash_map<uint32_t, int64_t>* version);

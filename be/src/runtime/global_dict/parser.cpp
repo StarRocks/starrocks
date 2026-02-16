@@ -34,6 +34,7 @@
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -511,7 +512,8 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
 
     for (auto& slot_desc : *slot_descs) {
         if (global_dict.count(slot_desc->id()) && slot_desc->type().type == LowCardDictType) {
-            SlotDescriptor* newSlot = runtime_state->global_obj_pool()->add(new SlotDescriptor(*slot_desc));
+            SlotDescriptor* newSlot =
+                    RuntimeStateHelper::global_obj_pool(runtime_state)->add(new SlotDescriptor(*slot_desc));
             newSlot->type().type = TYPE_VARCHAR;
             slot_desc = newSlot;
         }

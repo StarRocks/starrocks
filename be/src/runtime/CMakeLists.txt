@@ -63,6 +63,7 @@ set(RUNTIME_FILES
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
+    runtime_state_helper.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp

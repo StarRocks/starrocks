@@ -38,6 +38,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/logconfig.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/thrift_rpc_helper.h"
@@ -426,7 +427,7 @@ void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val)
 }
 
 void FragmentContext::init_jit_profile() {
-    if (runtime_state() && runtime_state()->is_jit_enabled() && runtime_state()->runtime_profile()) {
+    if (runtime_state() && RuntimeStateHelper::is_jit_enabled(runtime_state()) && runtime_state()->runtime_profile()) {
         _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
         _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
     }
