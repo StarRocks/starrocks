@@ -19,8 +19,9 @@
 
 #include <algorithm>
 #include <functional>
+#include <limits>
 
-#include "runtime/StringSearcher.h"
+#include "base/string/string_searcher.h"
 
 namespace starrocks {
 

@@ -34,7 +34,7 @@
 
 #pragma once
 
-#include "runtime/string_search.hpp"
+#include "base/string/string_search.hpp"
 
 namespace starrocks {
 
