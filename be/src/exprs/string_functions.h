@@ -56,6 +56,7 @@ template <LogicalType T>
 struct FieldFuncState {
     bool all_const = false;
     bool list_all_const = false;
+    RunTimeCppType<T> const_value;
     std::map<RunTimeCppType<T>, int> mp;
 };
 
@@ -785,6 +786,9 @@ Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext:
     if (state->list_all_const) {
         if (context->is_constant_column(0)) {
             state->all_const = true;
+            if (auto const_column = context->get_constant_column(0); !const_column->only_null()) {
+                state->const_value = ColumnHelper::get_const_value<Type>(const_column);
+            }
         }
         for (int i = 1; i < context->get_num_args(); i++) {
             const auto list_col = context->get_constant_column(i);
@@ -823,9 +827,7 @@ StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Colum
         return result.build(true);
     } else if (state != nullptr) {
         if (state->all_const) {
-            const auto list_col = context->get_constant_column(0);
-            const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
-            auto it = state->mp.find(list_val);
+            auto it = state->mp.find(state->const_value);
             if (it != state->mp.end()) {
                 result.append(it->second);
             } else {
