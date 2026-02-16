@@ -156,6 +156,7 @@ public class SampleInfoTest extends PlanTestBase {
 
         // THEN
         Assertions.assertTrue(sql.contains("unnest(`carr`)"));
+        Assertions.assertTrue(sql.contains("cte_0 as ("));
         Assertions.assertNotNull(getFragmentPlan(sql));
     }
 
@@ -174,7 +175,6 @@ public class SampleInfoTest extends PlanTestBase {
             columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
         } finally {
             ConnectContext.get().getSessionVariable().setStatisticCollectParallelism(1);
-
         }
 
         // WHEN
@@ -189,6 +189,10 @@ public class SampleInfoTest extends PlanTestBase {
         Assertions.assertTrue(sql.contains("carr"));
         Assertions.assertTrue(sql.contains("carr2"));
         Assertions.assertTrue(sql.contains("c3"));
+        // Separate CTEs
+        Assertions.assertTrue(sql.contains("cte_0 as ("));
+        Assertions.assertTrue(sql.contains("cte_1 as ("));
+        Assertions.assertTrue(sql.contains("cte_2 as ("));
 
         Assertions.assertNotNull(getFragmentPlan(sql));
     }
@@ -204,8 +208,8 @@ public class SampleInfoTest extends PlanTestBase {
         final var sampleInfo = new SampleInfo(
                 0.5, 50_000_000, 50_000_000,
                 List.of(dummyTabletStats), List.of(dummyTabletStats), List.of(dummyTabletStats), List.of(dummyTabletStats));
-        List<String> columnNames = Lists.newArrayList("carr");
-        List<Type> columnTypes = Lists.newArrayList(ArrayType.ARRAY_INT);
+        List<String> columnNames = Lists.newArrayList("carr", "carr2");
+        List<Type> columnTypes = Lists.newArrayList(ArrayType.ARRAY_INT, ArrayType.ARRAY_INT);
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
                 sampleInfo, Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true"));
         List<List<ColumnStats>> columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
@@ -216,6 +220,9 @@ public class SampleInfoTest extends PlanTestBase {
 
         // THEN
         Assertions.assertTrue(sql.contains("unnest(`carr`)"));
+        Assertions.assertTrue(sql.contains("cte_0 as ("));
+        Assertions.assertTrue(sql.contains("unnest(`carr2`)"));
+        Assertions.assertTrue(sql.contains("cte_1 as ("));
         Assertions.assertNotNull(getFragmentPlan(sql));
     }
 

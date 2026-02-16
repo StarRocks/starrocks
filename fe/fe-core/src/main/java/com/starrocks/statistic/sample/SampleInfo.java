@@ -39,7 +39,7 @@ public class SampleInfo {
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
     }
 
-    private static final String CTE_TEMPLATE = "SELECT $columnNames FROM $fullyQualifiedName $tabletsHint " +
+    private static final String CTE_TEMPLATE = "SELECT $columnName FROM $fullyQualifiedName $tabletsHint " +
             "$laterals $whereAndLimit";
 
     private final double tabletSampleRatio;
@@ -168,26 +168,33 @@ public class SampleInfo {
         String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
         StringBuilder builder = new StringBuilder();
         builder.append(prefix).append(columnNames).append(" ");
-        builder.append("WITH base_cte_table as (");
-        String queryDataSql = generateQueryDataSql(tableName, dbName, primitiveTypeStats, manager);
-        builder.append(queryDataSql).append(") ");
 
-        int idx = 0;
-        int size = primitiveTypeStats.size();
-        for (ColumnStats columnStats : primitiveTypeStats) {
-            idx++;
-            builder.append(generateQueryColumnSql(tableId, dbId, tableName, dbName, columnStats, "col_" + idx));
-            if (idx != size) {
+        // CTEs
+        builder.append("WITH ");
+        for (int i = 0; i < primitiveTypeStats.size(); i++) {
+            if (i > 0) {
+                builder.append(", ");
+            }
+            builder.append("cte_").append(i).append(" as (");
+            String queryDataSql = generateQueryDataSql(tableName, dbName, primitiveTypeStats.get(i), manager);
+            builder.append(queryDataSql).append(")");
+        }
+        builder.append(" ");
+
+        // Generate SELECT statements for each column referencing its own CTE
+        for (int i = 0; i < primitiveTypeStats.size(); i++) {
+            if (i > 0) {
                 builder.append(" UNION ALL ");
             }
+            builder.append(generateQueryColumnSql(tableId, dbId, tableName, dbName, primitiveTypeStats.get(i), "cte_" + i));
         }
         return builder.toString();
     }
 
-    private static String getSampleCte(String columnNames, String fullyQualifiedName, String tabletsHint, String laterals,
+    private static String getSampleCte(String columnName, String fullyQualifiedName, String tabletsHint, String laterals,
                                        String whereAndLimit) {
         final var velocityContext = new VelocityContext();
-        velocityContext.put("columnNames", columnNames);
+        velocityContext.put("columnName", columnName);
         velocityContext.put("fullyQualifiedName", fullyQualifiedName);
         velocityContext.put("tabletsHint", tabletsHint);
         velocityContext.put("laterals", laterals);
@@ -199,46 +206,20 @@ public class SampleInfo {
         return cteWriter.toString();
     }
 
-    private String buildLaterals(List<ColumnStats> columnStats) {
-        final var laterals = columnStats.stream() //
-                .filter(stat -> stat instanceof VirtualPrimitiveTypeColumnStats
-                        && ((VirtualPrimitiveTypeColumnStats) stat).getVirtualStatistic().requiresLateralJoin()) //
-                .map(statThatNeedsLateralJoin -> { //
-                    final var virtualPrimitiveColumnStat = ((VirtualPrimitiveTypeColumnStats) statThatNeedsLateralJoin);
-                    final var columnName = statThatNeedsLateralJoin.columnName;
-                    final var virtualStat = virtualPrimitiveColumnStat.getVirtualStatistic();
-                    return String.format("%s %s(%s)",
-                            virtualStat.getVirtualExpression(virtualPrimitiveColumnStat.getBaseColumnName()), columnName,
-                            columnName);
-                }) //
-                .collect(Collectors.joining(", "));
-
-        if (laterals.isEmpty()) {
-            return "";
-        }
-
-        return ", " + laterals;
-    }
-
     private String generateQueryDataSql(String tableName, String dbName,
-                                        List<ColumnStats> primitiveTypeStats,
+                                        ColumnStats columnStat,
                                         TabletSampleManager manager) {
         StringBuilder sql = new StringBuilder();
         String fullQualifiedName = "`" + dbName + "`.`" + tableName + "`";
-        StringJoiner joiner = new StringJoiner(", ");
-        String laterals = buildLaterals(primitiveTypeStats);
-
-        for (int i = 0; i < primitiveTypeStats.size(); i++) {
-            joiner.add(primitiveTypeStats.get(i).getQuotedColumnName() + " as col_" + (i + 1));
-        }
-        String columnNames = joiner.toString();
+        String columnName = columnStat.getQuotedColumnName() + " as col";
+        String lateral = columnStat.getLateralJoin();
 
         if (!highWeightTablets.isEmpty()) {
             final var tabletsHint = generateTabletHint(highWeightTablets, manager.getHighWeight().getTabletReadRatio());
             final var whereAndLimit = getWhereAndLimit(manager.getHighWeight().getTabletReadRatio(),
                     manager.getSampleRowsLimit());
             sql.append("SELECT * FROM (") //
-                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, laterals, whereAndLimit)) //
+                    .append(getSampleCte(columnName, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
                     .append(") t_high");
         }
 
@@ -252,7 +233,7 @@ public class SampleInfo {
             final var whereAndLimit = getWhereAndLimit(manager.getMediumHighWeight().getTabletReadRatio(),
                     manager.getSampleRowsLimit());
             sql.append("SELECT * FROM (") //
-                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, laterals, whereAndLimit)) //
+                    .append(getSampleCte(columnName, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
                     .append(") t_medium_high");
         }
 
@@ -265,7 +246,7 @@ public class SampleInfo {
             final var whereAndLimit = getWhereAndLimit(manager.getMediumLowWeight().getTabletReadRatio(),
                     manager.getSampleRowsLimit());
             sql.append("SELECT * FROM (") //
-                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, laterals, whereAndLimit)) //
+                    .append(getSampleCte(columnName, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
                     .append(") t_medium_low");
         }
 
@@ -277,13 +258,13 @@ public class SampleInfo {
             final var whereAndLimit = getWhereAndLimit(manager.getLowWeight().getTabletReadRatio(),
                     manager.getSampleRowsLimit());
             sql.append("SELECT * FROM (") //
-                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, laterals, whereAndLimit)) //
+                    .append(getSampleCte(columnName, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
                     .append(") t_low");
         }
 
         if (sql.isEmpty()) {
             sql.append("SELECT * FROM ( ") //
-                    .append(getSampleCte(columnNames, fullQualifiedName, "", laterals, "")) //
+                    .append(getSampleCte(columnName, fullQualifiedName, "", lateral, "")) //
                     .append(") t_no_hint LIMIT ") //
                     .append(Config.statistic_sample_collect_rows);
         }
@@ -317,7 +298,7 @@ public class SampleInfo {
     }
 
     private String generateQueryColumnSql(long tableId, long dbId, String tableName, String dbName,
-                                          ColumnStats columnStats, String alias) {
+                                          ColumnStats columnStats, String cteName) {
         String sep = ", ";
         StringBuilder builder = new StringBuilder();
         builder.append("SELECT ");
@@ -335,7 +316,7 @@ public class SampleInfo {
         builder.append(columnStats.getMin()).append(sep);
         builder.append("NOW() FROM (");
         builder.append("SELECT t0.`column_key`, COUNT(1) as count FROM (SELECT ");
-        builder.append(alias).append(" AS column_key FROM `base_cte_table`) as t0 GROUP BY t0.column_key) AS t1");
+        builder.append("col").append(" AS column_key FROM `").append(cteName).append("`) as t0 GROUP BY t0.column_key) AS t1");
         return builder.toString();
     }
 

@@ -164,7 +164,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         String plan = getFragmentPlan(simpleSql);
 
-        Assertions.assertEquals(1, StringUtils.countMatches(plan, "OlapScanNode"));
+        Assertions.assertEquals(2, StringUtils.countMatches(plan, "OlapScanNode"));
         assertCContains(plan, "left(");
     }
 

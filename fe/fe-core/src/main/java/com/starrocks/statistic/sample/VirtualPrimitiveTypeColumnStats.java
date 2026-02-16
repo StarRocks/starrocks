@@ -27,11 +27,11 @@ public class VirtualPrimitiveTypeColumnStats extends PrimitiveTypeColumnStats {
         this.baseColumnName = columnName;
     }
 
-    public VirtualStatistic getVirtualStatistic() {
-        return virtualStatistic;
-    }
-
-    public String getBaseColumnName() {
-        return baseColumnName;
+    @Override
+    public String getLateralJoin() {
+        if (virtualStatistic.requiresLateralJoin()) {
+            return ", %s %s(%s)".formatted(virtualStatistic.getVirtualExpression(baseColumnName), columnName, columnName);
+        }
+        return super.getLateralJoin();
     }
 }
