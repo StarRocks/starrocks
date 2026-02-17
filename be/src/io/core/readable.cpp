@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/readable.h"
+#include "io/core/readable.h"
 
 namespace starrocks::io {
 

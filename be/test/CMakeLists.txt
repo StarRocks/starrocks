@@ -267,7 +267,6 @@ set(EXEC_FILES
         ./http/transaction_stream_load_test.cpp
         ./http/action/update_config_action_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
-        ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/formatted_output_stream_file_test.cpp
         ./io/io_profiler_test.cpp
@@ -275,7 +274,6 @@ set(EXEC_FILES
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
-        ./io/seekable_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./io/spill_block_manager_test.cpp
@@ -376,6 +374,7 @@ add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
 add_subdirectory(runtime)
+add_subdirectory(io)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)

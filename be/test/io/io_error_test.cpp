@@ -12,24 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "io/core/io_error.h"
 
-#include <string>
+#include <gtest/gtest.h>
 
-#include "io/array_input_stream.h"
+#include <cerrno>
 
 namespace starrocks::io {
 
-class StringInputStream : public io::SeekableInputStreamWrapper {
-public:
-    StringInputStream(std::string contents)
-            : io::SeekableInputStreamWrapper(&_stream, kDontTakeOwnership),
-              _contents(std::move(contents)),
-              _stream(_contents.data(), _contents.size()) {}
-
-private:
-    std::string _contents;
-    ArrayInputStream _stream;
-};
+TEST(IOErrorTest, ErrorTypeMapping) {
+    EXPECT_TRUE(io_error("read", ENOENT).is_not_found());
+    EXPECT_TRUE(io_error("create", EEXIST).is_already_exist());
+    EXPECT_TRUE(io_error("read", EIO).is_io_error());
+}
 
 } // namespace starrocks::io

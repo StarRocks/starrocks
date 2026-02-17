@@ -34,7 +34,7 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 #include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "storage/options.h"
