@@ -1,8 +1,0 @@
-# Format: "Bad Term" : "Canonical Term"
-# The script is case-insensitive, so "high-concurrency" matches "High-Concurrency"
-high-concurrency: high concurrency
-distributed-architecture: distributed architecture
-shared-nothing: shared nothing
-dist-arch: distributed architecture
-query planning: query plan
-query analysis: query plan
