@@ -23,8 +23,8 @@
 #include "formats/parquet/column_reader.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"
+#include "io/core/string_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
-#include "io/string_input_stream.h"
 namespace starrocks::parquet {
 
 class ParquetPageReaderTest : public testing::Test {

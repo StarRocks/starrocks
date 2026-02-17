@@ -17,7 +17,7 @@
 #include <chrono>
 #include <thread>
 
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 
 namespace starrocks::io {
 

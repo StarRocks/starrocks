@@ -25,8 +25,8 @@
 #include "fs/credential/cloud_configuration_factory.h"
 #include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
+#include "io/core/output_stream.h"
 #include "io/io_profiler.h"
-#include "io/output_stream.h"
 
 namespace starrocks {
 

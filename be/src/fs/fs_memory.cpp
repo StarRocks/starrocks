@@ -19,7 +19,7 @@
 
 #include "base/container/raw_container.h"
 #include "fs/encrypt_file.h"
-#include "io/array_input_stream.h"
+#include "io/core/array_input_stream.h"
 
 namespace starrocks {
 

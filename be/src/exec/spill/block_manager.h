@@ -21,7 +21,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 
 namespace starrocks::spill {
 

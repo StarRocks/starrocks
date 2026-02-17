@@ -17,7 +17,7 @@
 #include <chrono>
 #include <thread>
 
-#include "io/output_stream.h"
+#include "io/core/output_stream.h"
 
 // Sleeping is done before writing the stream.
 namespace starrocks::io {

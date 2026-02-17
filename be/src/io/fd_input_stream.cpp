@@ -21,7 +21,7 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "gutil/macros.h"
-#include "io/io_error.h"
+#include "io/core/io_error.h"
 #include "io_profiler.h"
 
 #ifdef USE_STAROS

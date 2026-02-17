@@ -17,8 +17,8 @@
 #include "base/string/slice.h"
 #include "common/ownership.h"
 #include "common/statusor.h"
-#include "io/input_stream.h"
-#include "io/writable.h"
+#include "io/core/input_stream.h"
+#include "io/core/writable.h"
 
 namespace starrocks::io {
 

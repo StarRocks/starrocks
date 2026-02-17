@@ -21,7 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "fs/fs_posix.h"
-#include "io/string_input_stream.h"
+#include "io/core/string_input_stream.h"
 #include "io_test_base.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/stream_decompressor.h"

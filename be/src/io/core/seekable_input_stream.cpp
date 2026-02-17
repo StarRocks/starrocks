@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 
 #include <fmt/format.h>
 

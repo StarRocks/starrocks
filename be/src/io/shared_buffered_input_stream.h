@@ -19,7 +19,7 @@
 #include <memory>
 
 #include "common/status.h"
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 
 namespace starrocks::io {
 
