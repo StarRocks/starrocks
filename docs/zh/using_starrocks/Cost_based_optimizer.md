@@ -264,7 +264,7 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name
   - `PREDICATE COLUMNS`：仅收集谓词列的统计信息。自 v3.5.0 起支持。
   - `MULTIPLE COLUMNS`：从指定的多个列收集联合统计信息。目前，仅支持多列的手动同步收集。手动统计信息收集的列数不能超过 `statistics_max_multi_column_combined_num`，默认值为 `10`。自 v3.5.0 起支持。
 
-- [WITH SYNC | ASYNC MODE]：手动收集任务是以同步还是异步模式运行。如果未指定此参数，则默认使用同步收集。
+- `[WITH SYNC | ASYNC MODE]`：手动收集任务是以同步还是异步模式运行。如果未指定此参数，则默认使用同步收集。
 
 - `PROPERTIES`：自定义参数。如果未指定 `PROPERTIES`，则使用 `fe.conf` 文件中的默认设置。实际使用的属性可以通过 SHOW ANALYZE STATUS 输出中的 `Properties` 列查看。
 

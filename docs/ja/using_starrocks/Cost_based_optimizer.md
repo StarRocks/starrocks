@@ -260,7 +260,7 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name
   - `PREDICATE COLUMNS`: Predicate Columnのみから統計を収集します。v3.5.0以降サポート。
   - `MULTIPLE COLUMNS`: 指定された複数のカラムから結合統計を収集します。現在、複数カラムの手動同期収集のみがサポートされています。手動統計収集のカラム数は `statistics_max_multi_column_combined_num` を超えることはできません。デフォルト値は `10` です。v3.5.0以降サポート。
 
-- [WITH SYNC | ASYNC MODE]: 手動収集タスクを同期モードで実行するか、非同期モードで実行するか。このパラメーターを指定しない場合、デフォルトで同期収集が使用されます。
+- `[WITH SYNC | ASYNC MODE]`: 手動収集タスクを同期モードで実行するか、非同期モードで実行するか。このパラメーターを指定しない場合、デフォルトで同期収集が使用されます。
 
 - `PROPERTIES`: カスタムパラメーター。`PROPERTIES` が指定されていない場合、`fe.conf` ファイルのデフォルト設定が使用されます。実際に使用されるプロパティは、SHOW ANALYZE STATUSの出力の `Properties` カラムで確認できます。
 
