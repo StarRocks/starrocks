@@ -41,7 +41,7 @@ public:
     Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); }
 
     Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        SAFE_DELETE(state);
+        delete state;
         return Status::OK();
     }
 
