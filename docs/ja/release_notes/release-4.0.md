@@ -24,6 +24,40 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.6
+
+リリース日：2026 年 2 月 14 日
+
+### 改善点
+
+- Iceberg テーブル作成時に、括弧付きのパーティション変換（例：`PARTITION BY (bucket(k1, 3))`）をサポートしました。[#68945](https://github.com/StarRocks/starrocks/pull/68945)
+- Iceberg テーブルにおいて、パーティション列を列リストの末尾に配置する必要があるという制限を削除し、任意の位置に定義できるようになりました。[#68340](https://github.com/StarRocks/starrocks/pull/68340)
+- Iceberg テーブルの sink に対してホストレベルのソート機能を導入しました。システム変数 `connector_sink_sort_scope`（デフォルト：FILE）で制御し、データレイアウトを最適化して読み取り性能を向上させます。[#68121](https://github.com/StarRocks/starrocks/pull/68121)
+- Iceberg のパーティション変換関数（例：`bucket`、`truncate`）において、引数の数が誤っている場合のエラーメッセージを改善しました。[#68349](https://github.com/StarRocks/starrocks/pull/68349)
+- テーブルプロパティ処理をリファクタリングし、Iceberg テーブルにおける異なるファイル形式（ORC/Parquet）および圧縮コーデックのサポートを強化しました。[#68588](https://github.com/StarRocks/starrocks/pull/68588)
+- よりきめ細かな制御を可能にするため、テーブルレベルのクエリタイムアウト設定 `table_query_timeout` を追加しました（優先順位：Session &gt; Table &gt; Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` ステートメントにより、自動スナップショットの状態およびスケジュールを確認できるようになりました。[#68455](https://github.com/StarRocks/starrocks/pull/68455)
+- `SHOW CREATE VIEW` で、コメントを含む元のユーザー定義 SQL を表示できるようになりました。[#68040](https://github.com/StarRocks/starrocks/pull/68040)
+- `information_schema.loads` において、Merge Commit を有効にした Stream Load タスクを表示し、可観測性を向上させました。[#67879](https://github.com/StarRocks/starrocks/pull/67879)
+- FE のメモリ使用量を推定するユーティリティ API `/api/memory_usage` を追加しました。[#68287](https://github.com/StarRocks/starrocks/pull/68287)
+- パーティションリサイクル時の `CatalogRecycleBin` における不要なログ出力を削減しました。[#68533](https://github.com/StarRocks/starrocks/pull/68533)
+- ベーステーブルで Swap/Drop/Replace Partition 操作が実行された際、関連する非同期マテリアライズドビューを自動的にリフレッシュするようにしました。[#68430](https://github.com/StarRocks/starrocks/pull/68430)
+- `count distinct` 系の集約関数で `VARBINARY` 型をサポートしました。[#68442](https://github.com/StarRocks/starrocks/pull/68442)
+- 式統計情報を強化し、セマンティクス的に安全な式（例：`cast(k as bigint) + 10`）に対してヒストグラムの MCV を伝播することで、データスキュー検出を改善しました。[#68292](https://github.com/StarRocks/starrocks/pull/68292)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- Skew Join V2 のランタイムフィルタで発生する可能性のあるクラッシュ。[#67611](https://github.com/StarRocks/starrocks/pull/67611)
+- 低カーディナリティ書き換えにより発生する Join 述語の型不一致（例：INT = VARCHAR）。[#68568](https://github.com/StarRocks/starrocks/pull/68568)
+- クエリキューの割り当て時間および待機タイムアウトロジックに関する問題。[#65802](https://github.com/StarRocks/starrocks/pull/65802)
+- スキーマ変更後の Flat JSON 拡張列における `unique_id` の競合。[#68279](https://github.com/StarRocks/starrocks/pull/68279)
+- `OlapTableSink.complete()` におけるパーティションの同時アクセス問題。[#68853](https://github.com/StarRocks/starrocks/pull/68853)
+- 手動でダウンロードしたクラスタスナップショットを復元する際のメタデータ追跡不整合。[#68368](https://github.com/StarRocks/starrocks/pull/68368)
+- リポジトリパスが `/` で終わる場合に、バックアップパスに二重スラッシュが含まれる問題。[#68764](https://github.com/StarRocks/starrocks/pull/68764)
+- `SHOW CREATE CATALOG` の出力において、OBS の AK/SK 認証情報がマスクされていなかった問題。[#65462](https://github.com/StarRocks/starrocks/pull/65462)
+
 ## 4.0.5
 
 リリース日：2026年2月3日
