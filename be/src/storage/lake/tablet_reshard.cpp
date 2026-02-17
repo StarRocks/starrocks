@@ -307,7 +307,7 @@ static Status get_tablet_split_ranges(TabletManager* tablet_manager, const Table
             segment_info.stat.num_rows = segment_meta.num_rows();
             segment_info.stat.data_size = rowset.segment_size(i);
             if (use_delvec) {
-                const uint32_t segment_id = rowset.id() + i;
+                const uint32_t segment_id = rowset.id() + get_segment_idx(rowset, i);
                 DelVector delvec;
                 LakeIOOptions lake_io_opts{.fill_data_cache = false};
                 auto st = lake::get_del_vec(tablet_manager, *tablet_metadata, segment_id, false, lake_io_opts, &delvec);
@@ -808,7 +808,7 @@ CONTINUE_HANDLE_MERGING_TABLET:
 
         uint32_t max_end = 0;
         for (const auto& rowset : merge_infos[i].metadata->rowsets()) {
-            max_end = std::max(max_end, rowset.id() + std::max(1, rowset.segments_size()));
+            max_end = std::max(max_end, rowset.id() + get_rowset_id_step(rowset));
         }
         if (max_end > 0) {
             next_rowset_id = std::max(next_rowset_id, static_cast<uint32_t>(static_cast<int64_t>(max_end) + offset));

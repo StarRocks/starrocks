@@ -23,6 +23,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -239,6 +240,7 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // update new rowset meta
     for (const auto& f : writer->segments()) {
+        uint32_t segment_idx = new_rowset_metadata->segments_size();
         new_rowset_metadata->add_segments(f.path);
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
@@ -246,13 +248,14 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
         f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
         segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     new_rowset_metadata->set_overlapped(rowset->is_overlapped());
-    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
+    _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
 
@@ -329,6 +332,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(writer->finish());
 
     for (const auto& f : writer->segments()) {
+        uint32_t segment_idx = new_rowset_metadata->segments_size();
         new_rowset_metadata->add_segments(f.path);
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
@@ -336,6 +340,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
         f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
         segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
@@ -343,7 +348,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     new_rowset_metadata->set_data_size(writer->data_size());
     // TODO: support writer final merge
     new_rowset_metadata->set_overlapped(true);
-    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
+    _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
 
