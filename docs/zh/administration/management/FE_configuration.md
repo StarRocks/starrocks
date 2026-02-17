@@ -194,7 +194,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否启用 Profile 日志。当此功能启用时，FE 会将每个查询的 Profile 日志（由 `ProfileManager` 生成并序列化的 `queryDetail` JSON）写入 Profile Log Sink。只有在 `enable_collect_query_detail_info` 也启用时才会执行此日志记录；当启用 `enable_profile_log_compress` 时，JSON 可能会在记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 Profile 日志（从而减少磁盘 I/O、压缩 CPU 和存储使用）。
+- 描述：是否启用 Profile 日志。当此功能启用时，FE 会将每个查询的 Profile 日志（由 `ProfileManager` 生成并序列化的 `queryDetail` JSON）写入 Profile Log Sink。只有在 `enable_collect_query_detail_info` 也启用时才会执行此日志记录；当启用 `enable_profile_log_compress` 时，JSON 可能会在记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 Profile 日志（从而减少磁盘 I/O、压缩 CPU 和存储使用）。具体记录哪些查询还可由 `profile_log_latency_threshold_ms` 过滤。
 - 引入版本：v3.2.5
 
 ##### enable_qe_slow_log
@@ -331,6 +331,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：FE profile 日志写入的目录路径。`Log4jConfig` 使用此值来放置与 profile 相关的 appender（在该目录下创建类似 `fe.profile.log` 和 `fe.features.log` 的文件）。这些文件的轮换和保留由 `profile_log_roll_size_mb`、`profile_log_roll_num` 和 `profile_log_delete_age` 控制；时间戳后缀格式由 `profile_log_roll_interval` 控制（支持 DAY 或 HOUR）。由于默认值位于 `STARROCKS_HOME_DIR` 内，请确保 FE 进程对该目录具有写入及轮换/删除权限。
 - 引入版本：v3.2.5
+
+##### profile_log_latency_threshold_ms
+
+- 默认值：0
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：写入 `fe.profile.log` 的查询最小延迟（毫秒）。仅当查询执行时间大于或等于该值时才记录 profile。设为 0 表示记录所有 profile（无阈值）。设为正数可仅记录较慢的查询以降低日志量。
+- 引入版本：-
 
 ##### profile_log_roll_interval
 

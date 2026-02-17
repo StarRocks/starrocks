@@ -1460,8 +1460,14 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
-                String jsonString = GSON.toJson(queryDetail);
-                PROFILE_LOG.info(jsonString);
+                long latencyThresholdMs = Config.profile_log_latency_threshold_ms;
+                if (context.getSessionVariable().getProfileLogLatencyThresholdMs() >= 0) {
+                    latencyThresholdMs = context.getSessionVariable().getProfileLogLatencyThresholdMs();
+                }
+                if (totalTimeMs >= latencyThresholdMs) {
+                    String jsonString = GSON.toJson(queryDetail);
+                    PROFILE_LOG.info(jsonString);
+                }
             }
         };
         return coord.tryProcessProfileAsync(task);

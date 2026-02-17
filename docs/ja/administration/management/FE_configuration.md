@@ -349,6 +349,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: FE の profile ログが書き込まれるディレクトリです。Log4jConfig はこの値を用いてプロファイル関連のアペンダ（このディレクトリ配下に `fe.profile.log` や `fe.features.log` のようなファイルを作成）を配置します。これらのファイルのローテーションと保持は `profile_log_roll_size_mb`、`profile_log_roll_num`、`profile_log_delete_age` によって制御され、タイムスタンプのサフィックス形式は `profile_log_roll_interval`（DAY または HOUR をサポート）で制御されます。デフォルトのディレクトリは `STARROCKS_HOME_DIR` の下にあるため、FE プロセスがこのディレクトリに対して書き込みおよびローテーション/削除権限を持っていることを確認してください。
 - 導入バージョン: v3.2.5
 
+##### profile_log_latency_threshold_ms
+
+- デフォルト: 0
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: Yes
+- 説明: `fe.profile.log` に書き込むクエリの最小レイテンシ（ミリ秒）。実行時間がこの値以上の場合にのみ profile を記録します。0 に設定するとすべての profile を記録します（しきい値なし）。正の値に設定すると、遅いクエリのみを記録してログ量を削減できます。
+- 導入バージョン: -
+
 ##### profile_log_roll_size_mb
 
 - デフォルト: 1024
