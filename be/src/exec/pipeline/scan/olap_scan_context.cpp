@@ -18,6 +18,7 @@
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/runtime_filter_bank.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/tablet.h"
 
 namespace starrocks::pipeline {
@@ -159,7 +160,8 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     // rewrite after push down scan predicate, scan predicate should rewrite by local-dict
     RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
 
-    WARN_IF_ERROR(_jit_rewriter.rewrite(_not_push_down_conjuncts, &_obj_pool, state->is_jit_enabled()), "");
+    WARN_IF_ERROR(
+            _jit_rewriter.rewrite(_not_push_down_conjuncts, &_obj_pool, RuntimeStateHelper::is_jit_enabled(state)), "");
 
     return Status::OK();
 }

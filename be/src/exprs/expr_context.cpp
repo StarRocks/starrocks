@@ -47,6 +47,7 @@
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -216,7 +217,7 @@ bool ExprContext::error_if_overflow() const {
 }
 
 Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
-    if (_runtime_state == nullptr || !_runtime_state->is_jit_enabled()) {
+    if (_runtime_state == nullptr || !RuntimeStateHelper::is_jit_enabled(_runtime_state)) {
         return Status::OK();
     }
 #ifdef STARROCKS_JIT_ENABLE

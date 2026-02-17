@@ -15,6 +15,8 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 
+#include "runtime/runtime_state_helper.h"
+
 namespace starrocks::pipeline {
 
 bool SpillablePartitionWiseAggregateSinkOperator::need_input() const {
@@ -91,7 +93,7 @@ Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state)
 
     DCHECK(!_agg_op->aggregator()->is_none_group_by_exprs());
     _agg_op->aggregator()->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;

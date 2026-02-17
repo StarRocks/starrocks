@@ -19,6 +19,7 @@
 #include "base/concurrency/race_detect.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "exec/spill/spiller.hpp"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {
@@ -79,7 +80,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* sta
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::prepare_local_state(state));
     DCHECK(!_aggregator->is_none_group_by_exprs());
     _aggregator->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }

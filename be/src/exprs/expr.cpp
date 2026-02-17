@@ -77,6 +77,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
 
 #ifdef STARROCKS_JIT_ENABLE
@@ -264,7 +265,7 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
                                               int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
     // Enable JIT based on the "jit_level" parameters.
-    if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
+    if (state == nullptr || !status.ok() || !RuntimeStateHelper::is_jit_enabled(state)) {
         return status;
     }
 

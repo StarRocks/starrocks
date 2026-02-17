@@ -44,6 +44,7 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "cache/datacache.h"
+#include "cache/datacache_utils.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/configbase.h"
 #include "common/status.h"
