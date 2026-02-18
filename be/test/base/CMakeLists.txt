@@ -57,6 +57,7 @@ set(BASE_TEST_FILES
     path/path_builder_test.cpp
     path/path_util_test.cpp
     path/path_trie_test.cpp
+    process/lite_exec_test.cpp
     random/random_test.cpp
     simd/byte_stream_split_test.cpp
     simd/batch_run_counter_test.cpp

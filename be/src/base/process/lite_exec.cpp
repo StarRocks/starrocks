@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/process/lite_exec.h"
+
 #include <fcntl.h>
 #include <spawn.h>
 #include <sys/poll.h>
@@ -23,9 +25,6 @@
 #include <chrono>
 #include <csignal>
 #include <cstring>
-#include <string>
-#include <vector>
-
 extern char** environ;
 
 namespace starrocks {

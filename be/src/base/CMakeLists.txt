@@ -37,6 +37,7 @@ ADD_BE_LIB(Base
   hash/murmur_hash3.cpp
   failpoint/fail_point.cpp
   path/filesystem_util.cc
+  process/lite_exec.cpp
   types/decimal12.cpp
   types/int128.cpp
   types/int256.cpp
