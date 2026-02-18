@@ -112,4 +112,19 @@ public class SessionVariableTest {
         Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.NEVER,
                 sessionVariable.getConnectorSinkShuffleMode());
     }
+
+    @Test
+    public void testEnableMVPlanner() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // Test default value
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
+
+        // Test setter and getter
+        sessionVariable.setMVPlanner(true);
+        Assertions.assertTrue(sessionVariable.isMVPlanner());
+
+        sessionVariable.setMVPlanner(false);
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
+    }
 }
