@@ -156,6 +156,44 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
     return Status::OK();
 }
 
+void apply_replication_dcg_meta(const TxnLogPB_OpReplication& op_replication,
+                                const std::unordered_map<uint32_t, uint32_t>& rssid_remap, TabletMetadataPB* metadata) {
+    if (!op_replication.has_dcg_meta()) return;
+    // Remapping source rssid to target rssid using the provided map.
+    // Keys not found in the map are kept unchanged.
+    for (const auto& [src_rssid, dcg_ver] : op_replication.dcg_meta().dcgs()) {
+        auto it = rssid_remap.find(src_rssid);
+        uint32_t target_rssid = (it != rssid_remap.end()) ? it->second : src_rssid;
+        (*metadata->mutable_dcg_meta()->mutable_dcgs())[target_rssid].CopyFrom(dcg_ver);
+    }
+}
+
+void apply_replication_dcg_meta(const TxnLogPB_OpReplication& op_replication, uint32_t rssid_offset,
+                                TabletMetadataPB* metadata) {
+    if (!op_replication.has_dcg_meta()) return;
+    // Adding a fixed offset to each source rssid.
+    for (const auto& [src_rssid, dcg_ver] : op_replication.dcg_meta().dcgs()) {
+        (*metadata->mutable_dcg_meta()->mutable_dcgs())[src_rssid + rssid_offset].CopyFrom(dcg_ver);
+    }
+}
+
+void collect_dcg_orphan_files(const DeltaColumnGroupMetadataPB& old_dcg_meta,
+                              const std::unordered_set<std::string>& new_referenced_files, TabletMetadataPB* metadata) {
+    // Move old delta column group files to orphan files list for later cleanup.
+    // Files still referenced by new metadata (in new_referenced_files) are skipped.
+    for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
+        for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
+            if (new_referenced_files.count(dcg_ver.column_files(i)) > 0) continue;
+            FileMetaPB file_meta;
+            file_meta.set_name(dcg_ver.column_files(i));
+            if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
+                file_meta.set_shared(dcg_ver.shared_files(i));
+            }
+            metadata->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+    }
+}
+
 } // namespace
 
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -566,9 +604,31 @@ private:
         }
 
         if (txn_meta.incremental_snapshot()) {
+            // Pre-compute source rssid -> target rssid mapping for DCG application.
+            // Each op_write's rowset gets assigned a new ID starting from next_rowset_id.
+            // We simulate this mapping before applying writes so DCG keys can be remapped.
+            std::unordered_map<uint32_t, uint32_t> rssid_remap;
+            {
+                uint32_t target_id = _metadata->next_rowset_id();
+                for (const auto& op_write : op_replication.op_writes()) {
+                    if (op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
+                        op_write.rowset().has_delete_predicate()) {
+                        uint32_t source_id = op_write.rowset().id();
+                        uint32_t step = get_rowset_id_step(op_write.rowset());
+                        for (uint32_t i = 0; i < step; i++) {
+                            rssid_remap[source_id + i] = target_id + i;
+                        }
+                        target_id += step;
+                    }
+                }
+            }
+
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
             }
+
+            apply_replication_dcg_meta(op_replication, rssid_remap, _metadata.get());
+
             LOG(INFO) << "Apply pk incremental replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
@@ -615,6 +675,7 @@ private:
                         << ", rowsets size: " << _metadata->rowsets_size();
             } else {
                 // Non-Lake replication (replication from shared-nothing cluster).
+                auto old_next_rowset_id = _metadata->next_rowset_id();
                 auto new_next_rowset_id = _metadata->next_rowset_id();
                 for (const auto& op_write : op_replication.op_writes()) {
                     auto rowset = _metadata->add_rowsets();
@@ -628,8 +689,9 @@ private:
                 for (const auto& [segment_id, delvec_data] : op_replication.delvecs()) {
                     auto delvec = std::make_shared<DelVector>();
                     RETURN_IF_ERROR(delvec->load(_new_version, delvec_data.data().data(), delvec_data.data().size()));
-                    _builder.append_delvec(delvec, segment_id + _metadata->next_rowset_id());
+                    _builder.append_delvec(delvec, segment_id + old_next_rowset_id);
                 }
+                apply_replication_dcg_meta(op_replication, old_next_rowset_id, _metadata.get());
                 _metadata->set_next_rowset_id(new_next_rowset_id);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
             }
@@ -671,18 +733,7 @@ private:
                 file_meta.set_shared(sstable.shared());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
-            // Clear dcg_meta and add to orphan files.
-            for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
-                for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
-                    if (new_referenced_files.count(dcg_ver.column_files(i)) > 0) continue;
-                    FileMetaPB file_meta;
-                    file_meta.set_name(dcg_ver.column_files(i));
-                    if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
-                        file_meta.set_shared(dcg_ver.shared_files(i));
-                    }
-                    _metadata->mutable_orphan_files()->Add(std::move(file_meta));
-                }
-            }
+            collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
 
             _tablet.update_mgr()->unload_primary_index(_tablet.id());
             LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
@@ -1121,19 +1172,43 @@ private:
 
         int64_t base_version = _metadata->version();
         if (txn_meta.incremental_snapshot()) {
+            // Pre-compute source rssid -> target rssid mapping for DCG application.
+            // Non-PK apply_write_log assigns new IDs from next_rowset_id to each rowset.
+            std::unordered_map<uint32_t, uint32_t> rssid_remap;
+            {
+                uint32_t target_id = _metadata->next_rowset_id();
+                for (const auto& op_write : op_replication.op_writes()) {
+                    if (op_write.has_rowset() &&
+                        (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
+                        uint32_t source_id = op_write.rowset().id();
+                        uint32_t step = get_rowset_id_step(op_write.rowset());
+                        for (uint32_t i = 0; i < step; i++) {
+                            rssid_remap[source_id + i] = target_id + i;
+                        }
+                        target_id += step;
+                    }
+                }
+            }
+
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
             }
+
+            apply_replication_dcg_meta(op_replication, rssid_remap, _metadata.get());
+
             LOG(INFO) << "Apply incremental replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_meta.txn_id();
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            auto old_dcg_meta = std::move(*_metadata->mutable_dcg_meta());
             _metadata->mutable_rowsets()->Clear();
+            _metadata->mutable_dcg_meta()->Clear();
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
+                _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 // In lake replication scenario, we need to carefully handle compaction_inputs.
@@ -1151,11 +1226,37 @@ private:
                 }
             } else {
                 // Non-Lake replication (replication from shared-nothing cluster).
+                // Build rssid remapping: source rssid -> target rssid.
+                // Use the same condition as apply_write_log to ensure current_next_id advances
+                // in lockstep with the actual next_rowset_id updates.
+                std::unordered_map<uint32_t, uint32_t> rssid_remap;
+                uint32_t current_next_id = _metadata->next_rowset_id();
+                for (const auto& op_write : op_replication.op_writes()) {
+                    if (op_write.has_rowset() &&
+                        (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
+                        const auto& rowset = op_write.rowset();
+                        uint32_t source_id = rowset.id();
+                        uint32_t step = get_rowset_id_step(rowset);
+                        for (uint32_t i = 0; i < step; i++) {
+                            rssid_remap[source_id + i] = current_next_id + i;
+                        }
+                        current_next_id += step;
+                    }
+                }
                 for (const auto& op_write : op_replication.op_writes()) {
                     RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
                 }
+                apply_replication_dcg_meta(op_replication, rssid_remap, _metadata.get());
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
             }
+            std::unordered_set<std::string> new_referenced_files;
+            for (const auto& [_, dcg] : _metadata->dcg_meta().dcgs()) {
+                for (const auto& cf : dcg.column_files()) {
+                    new_referenced_files.insert(cf);
+                }
+            }
+            // Clear dcg_meta and add to orphan files.
+            collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
             _metadata->set_cumulative_point(0);
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version
