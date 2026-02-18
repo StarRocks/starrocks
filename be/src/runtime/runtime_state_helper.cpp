@@ -208,9 +208,10 @@ std::atomic_int64_t* RuntimeStateHelper::mutable_total_spill_bytes(RuntimeState*
 
 DictOptimizeParser* RuntimeStateHelper::dict_optimize_parser(RuntimeState* state) {
     DCHECK(state != nullptr);
-    std::call_once(state->_dict_optimize_parser_once,
-                   [state]() { state->_dict_optimize_parser.reset(new DictOptimizeParser()); });
-    state->_dict_optimize_parser->set_mutable_dict_maps(state, &state->_query_global_dicts);
+    std::call_once(state->_dict_optimize_parser_once, [state]() {
+        state->_dict_optimize_parser.reset(new DictOptimizeParser());
+        state->_dict_optimize_parser->set_mutable_dict_maps(state, &state->_query_global_dicts);
+    });
     return state->_dict_optimize_parser.get();
 }
 
