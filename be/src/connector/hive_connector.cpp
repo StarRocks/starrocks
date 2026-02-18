@@ -30,6 +30,8 @@
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/global_dict/parser.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -523,7 +525,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         }
     }
     // rewrite dict
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_scanner_conjunct_ctxs));
+    RETURN_IF_ERROR(RuntimeStateHelper::dict_optimize_parser(state)->rewrite_conjuncts(&_scanner_conjunct_ctxs));
     return Status::OK();
 }
 

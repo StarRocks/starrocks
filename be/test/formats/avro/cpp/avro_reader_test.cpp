@@ -24,6 +24,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -84,7 +85,7 @@ private:
         std::shared_ptr<RuntimeState> state =
                 std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
         TUniqueId id;
-        state->init_mem_trackers(id);
+        RuntimeStateHelper::init_mem_trackers(state.get(), id);
         return state;
     }
 

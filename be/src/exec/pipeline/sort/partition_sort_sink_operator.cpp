@@ -30,6 +30,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/chunk_helper.h"
 #include "types/logical_type.h"
 
@@ -91,7 +92,7 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
                     std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, std::move(lst)));
         }
 
-        state->runtime_filter_port()->publish_runtime_filters(build_descs);
+        RuntimeStateHelper::runtime_filter_port(state)->publish_runtime_filters(build_descs);
     }
 
     return Status::OK();

@@ -16,7 +16,9 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 DictMappingExpr::DictMappingExpr(const TExprNode& node) : Expr(node, false) {}
@@ -27,7 +29,7 @@ Status DictMappingExpr::open(RuntimeState* state, ExprContext* context, Function
         return Status::OK();
     }
 
-    return state->mutable_dict_optimize_parser()->rewrite_expr(context, this, _output_id);
+    return RuntimeStateHelper::dict_optimize_parser(state)->rewrite_expr(context, this, _output_id);
 }
 
 StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {

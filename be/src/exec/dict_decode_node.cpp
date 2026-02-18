@@ -25,7 +25,9 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -85,7 +87,7 @@ Status DictDecodeNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(_children[0]->open(state));
 
     const auto& global_dict = state->get_query_global_dict_map();
-    auto* dict_optimize_parser = state->mutable_dict_optimize_parser();
+    auto* dict_optimize_parser = RuntimeStateHelper::dict_optimize_parser(state);
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);

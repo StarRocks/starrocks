@@ -56,6 +56,7 @@
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 
@@ -112,7 +113,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     }
 
     if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(RuntimeStateHelper::init_query_global_dict_exprs(_runtime_state,
+                                                                         request.fragment.query_global_dict_exprs));
     }
 
     if (request.fragment.__isset.load_global_dicts) {

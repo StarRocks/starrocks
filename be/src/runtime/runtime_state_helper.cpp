@@ -29,7 +29,9 @@
 #endif
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/load_path_mgr.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
@@ -40,8 +42,43 @@
 
 namespace starrocks {
 
-void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
-    state->_runtime_filter_port = state->_obj_pool->add(new RuntimeFilterPort(state));
+namespace {
+constexpr int64_t kMaxErrorNum = 50;
+}
+
+void DictOptimizeParserDeleter::operator()(DictOptimizeParser* parser) const {
+    if (parser != nullptr) {
+        parser->close();
+        delete parser;
+    }
+}
+
+RuntimeFilterPort* RuntimeStateHelper::runtime_filter_port(RuntimeState* state) {
+    DCHECK(state != nullptr);
+    std::call_once(state->_runtime_filter_port_once,
+                   [state]() { state->_runtime_filter_port = state->_obj_pool->add(new RuntimeFilterPort(state)); });
+    return state->_runtime_filter_port;
+}
+
+void RuntimeStateHelper::init_mem_trackers(RuntimeState* state, const TUniqueId& query_id, MemTracker* parent) {
+    (void)query_id;
+
+    bool has_query_mem_tracker = state->_query_options.__isset.mem_limit && (state->_query_options.mem_limit > 0);
+    int64_t bytes_limit = has_query_mem_tracker ? state->_query_options.mem_limit : -1;
+    RuntimeProfile::Counter* mem_tracker_counter =
+            ADD_COUNTER_SKIP_MERGE(state->_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
+    COUNTER_SET(mem_tracker_counter, bytes_limit);
+
+    if (parent == nullptr) {
+        parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+    }
+
+    state->_query_mem_tracker =
+            std::make_shared<MemTracker>(MemTrackerType::QUERY, bytes_limit, state->runtime_profile()->name(), parent);
+    state->_instance_mem_tracker =
+            std::make_shared<MemTracker>(state->_profile.get(), std::make_tuple(true, true, true), "Instance", -1,
+                                         state->runtime_profile()->name(), state->_query_mem_tracker.get());
+    state->_instance_mem_pool = std::make_unique<MemPool>();
 }
 
 ObjectPool* RuntimeStateHelper::global_obj_pool(const RuntimeState* state) {
@@ -83,12 +120,102 @@ Status RuntimeStateHelper::create_rejected_record_file(RuntimeState* state) {
     return Status::OK();
 }
 
+void RuntimeStateHelper::append_error_msg_to_file(RuntimeState* state, const std::string& line,
+                                                  const std::string& error_msg, bool is_summary) {
+    std::lock_guard<std::mutex> l(state->_error_log_lock);
+    if (state->_query_options.query_type != TQueryType::LOAD) {
+        return;
+    }
+    // If file havn't been opened, open it here
+    if (state->_error_log_file == nullptr) {
+        Status status = RuntimeStateHelper::create_error_log_file(state);
+        if (!status.ok()) {
+            LOG(WARNING) << "Create error file log failed. because: " << status.message();
+            if (state->_error_log_file != nullptr) {
+                state->_error_log_file->close();
+                delete state->_error_log_file;
+                state->_error_log_file = nullptr;
+            }
+            return;
+        }
+    }
+
+    // if num of printed error row exceeds the limit, and this is not a summary message,
+    // return
+    if (state->_num_print_error_rows.fetch_add(1, std::memory_order_relaxed) > kMaxErrorNum && !is_summary) {
+        return;
+    }
+
+    std::stringstream out;
+    if (is_summary) {
+        out << "Error: ";
+        out << error_msg;
+    } else {
+        // Note: export reason first in case src line too long and be truncated.
+        out << "Error: " << error_msg << ". Row: " << line;
+    }
+
+    if (!out.str().empty()) {
+        (*state->_error_log_file) << out.str() << std::endl;
+    }
+}
+
+void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, const std::string& record,
+                                                        const std::string& error_msg, const std::string& source) {
+    std::lock_guard<std::mutex> l(state->_rejected_record_lock);
+    // Only load job need to write rejected record
+    if (state->_query_options.query_type != TQueryType::LOAD) {
+        return;
+    }
+
+    // If file havn't been opened, open it here
+    if (state->_rejected_record_file == nullptr) {
+        Status status = RuntimeStateHelper::create_rejected_record_file(state);
+        if (!status.ok()) {
+            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
+            if (state->_rejected_record_file != nullptr) {
+                state->_rejected_record_file->close();
+                state->_rejected_record_file.reset();
+            }
+            return;
+        }
+    }
+    state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
+
+    // TODO(meegoo): custom delimiter
+    (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+}
+
+void RuntimeStateHelper::update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params) {
+    load_params->__set_loaded_rows(state->num_rows_load_sink());
+    load_params->__set_sink_load_bytes(state->num_bytes_load_sink());
+    load_params->__set_source_load_rows(state->num_rows_load_from_source());
+    load_params->__set_source_load_bytes(state->num_bytes_load_from_source());
+    load_params->__set_filtered_rows(state->num_rows_load_filtered());
+    load_params->__set_unselected_rows(state->num_rows_load_unselected());
+    load_params->__set_source_scan_bytes(state->num_bytes_scan_from_source());
+    // Update datacache load metrics
+    RuntimeStateHelper::update_load_datacache_metrics(state, load_params);
+}
+
 std::shared_ptr<QueryStatisticsRecvr> RuntimeStateHelper::query_recv(RuntimeState* state) {
     return state->_query_ctx->maintained_query_recv();
 }
 
 std::atomic_int64_t* RuntimeStateHelper::mutable_total_spill_bytes(RuntimeState* state) {
     return state->_query_ctx->mutable_total_spill_bytes();
+}
+
+DictOptimizeParser* RuntimeStateHelper::dict_optimize_parser(RuntimeState* state) {
+    DCHECK(state != nullptr);
+    std::call_once(state->_dict_optimize_parser_once,
+                   [state]() { state->_dict_optimize_parser.reset(new DictOptimizeParser()); });
+    state->_dict_optimize_parser->set_mutable_dict_maps(state, &state->_query_global_dicts);
+    return state->_dict_optimize_parser.get();
+}
+
+Status RuntimeStateHelper::init_query_global_dict_exprs(RuntimeState* state, const std::map<int, TExpr>& exprs) {
+    return dict_optimize_parser(state)->init_dict_exprs(exprs);
 }
 
 bool RuntimeStateHelper::is_jit_enabled(const RuntimeState* state) {

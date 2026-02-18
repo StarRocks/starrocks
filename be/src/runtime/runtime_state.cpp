@@ -44,11 +44,8 @@
 #include "base/uid_util.h"
 #include "base/utility/pretty_printer.h"
 #include "common/constexpr.h"
-#include "common/logging.h"
 #include "common/status.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
 
 namespace starrocks {
@@ -127,8 +124,6 @@ RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
 }
 
 RuntimeState::~RuntimeState() {
-    // dict exprs
-    _dict_optimize_parser.close();
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -183,8 +178,6 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     if (_query_options.batch_size <= 0) {
         _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     }
-
-    RuntimeStateHelper::init_runtime_filter_port(this);
 }
 
 bool RuntimeState::set_timezone(const std::string& tz) {
@@ -194,24 +187,6 @@ bool RuntimeState::set_timezone(const std::string& tz) {
     } else {
         return false;
     }
-}
-
-void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
-    bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
-    int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
-    RuntimeProfile::Counter* mem_tracker_counter =
-            ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-    COUNTER_SET(mem_tracker_counter, bytes_limit);
-
-    if (parent == nullptr) {
-        parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
-    }
-
-    _query_mem_tracker =
-            std::make_shared<MemTracker>(MemTrackerType::QUERY, bytes_limit, runtime_profile()->name(), parent);
-    _instance_mem_tracker = std::make_shared<MemTracker>(_profile.get(), std::make_tuple(true, true, true), "Instance",
-                                                         -1, runtime_profile()->name(), _query_mem_tracker.get());
-    _instance_mem_pool = std::make_unique<MemPool>();
 }
 
 void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker) {
@@ -296,71 +271,6 @@ bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
     }
 }
 
-void RuntimeState::append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary) {
-    std::lock_guard<std::mutex> l(_error_log_lock);
-    if (_query_options.query_type != TQueryType::LOAD) {
-        return;
-    }
-    // If file havn't been opened, open it here
-    if (_error_log_file == nullptr) {
-        Status status = RuntimeStateHelper::create_error_log_file(this);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create error file log failed. because: " << status.message();
-            if (_error_log_file != nullptr) {
-                _error_log_file->close();
-                delete _error_log_file;
-                _error_log_file = nullptr;
-            }
-            return;
-        }
-    }
-
-    // if num of printed error row exceeds the limit, and this is not a summary message,
-    // return
-    if (_num_print_error_rows.fetch_add(1, std::memory_order_relaxed) > MAX_ERROR_NUM && !is_summary) {
-        return;
-    }
-
-    std::stringstream out;
-    if (is_summary) {
-        out << "Error: ";
-        out << error_msg;
-    } else {
-        // Note: export reason first in case src line too long and be truncated.
-        out << "Error: " << error_msg << ". Row: " << line;
-    }
-
-    if (!out.str().empty()) {
-        (*_error_log_file) << out.str() << std::endl;
-    }
-}
-
-void RuntimeState::append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
-                                                  const std::string& source) {
-    std::lock_guard<std::mutex> l(_rejected_record_lock);
-    // Only load job need to write rejected record
-    if (_query_options.query_type != TQueryType::LOAD) {
-        return;
-    }
-
-    // If file havn't been opened, open it here
-    if (_rejected_record_file == nullptr) {
-        Status status = RuntimeStateHelper::create_rejected_record_file(this);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
-            if (_rejected_record_file != nullptr) {
-                _rejected_record_file->close();
-                _rejected_record_file.reset();
-            }
-            return;
-        }
-    }
-    _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
-
-    // TODO(meegoo): custom delimiter
-    (*_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
-}
-
 int64_t RuntimeState::get_load_mem_limit() const {
     if (_query_options.__isset.load_mem_limit && _query_options.load_mem_limit > 0) {
         return _query_options.load_mem_limit;
@@ -380,18 +290,8 @@ GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
     return &_query_global_dicts;
 }
 
-DictOptimizeParser* RuntimeState::mutable_dict_optimize_parser() {
-    return &_dict_optimize_parser;
-}
-
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
-    RETURN_IF_ERROR(_build_global_dict(global_dict_list, &_query_global_dicts, nullptr));
-    _dict_optimize_parser.set_mutable_dict_maps(this, &_query_global_dicts);
-    return Status::OK();
-}
-
-Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
-    return _dict_optimize_parser.init_dict_exprs(exprs);
+    return _build_global_dict(global_dict_list, &_query_global_dicts, nullptr);
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {

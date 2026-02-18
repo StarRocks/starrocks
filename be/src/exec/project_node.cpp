@@ -36,6 +36,7 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

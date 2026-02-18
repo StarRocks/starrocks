@@ -145,7 +145,7 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
         RuntimeMembershipFilterList bloom_filters;
         runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
                                             std::make_unique<RuntimeFilterCollector>(in_filter_lists));
-        state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
+        RuntimeStateHelper::runtime_filter_port(state)->publish_local_colocate_filters(bloom_filters);
     } else {
         auto merged = _partial_rf_merger->set_always_true();
         // for spillable operator, this interface never returns error status because we skip building rf here
@@ -155,7 +155,7 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
             RuntimeInFilterList in_filters;
             RuntimeMembershipFilterList bloom_filters;
             // publish empty runtime bloom-filters
-            state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
+            RuntimeStateHelper::runtime_filter_port(state)->publish_runtime_filters(bloom_filters);
             // move runtime filters into RuntimeFilterHub.
             runtime_filter_hub()->set_collector(
                     _plan_node_id,

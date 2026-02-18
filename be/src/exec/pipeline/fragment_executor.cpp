@@ -49,6 +49,7 @@
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_sink.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
@@ -827,7 +828,8 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     }
 
     if (fragment.__isset.query_global_dicts && fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(
+                RuntimeStateHelper::init_query_global_dict_exprs(runtime_state, fragment.query_global_dict_exprs));
     }
 
     if (fragment.__isset.load_global_dicts) {

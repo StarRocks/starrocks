@@ -24,6 +24,7 @@
 #include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {

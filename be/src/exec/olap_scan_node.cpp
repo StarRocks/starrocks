@@ -40,6 +40,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
@@ -696,7 +698,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager->get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&conjunct_ctxs));
+    RETURN_IF_ERROR(RuntimeStateHelper::dict_optimize_parser(state)->rewrite_conjuncts(&conjunct_ctxs));
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {

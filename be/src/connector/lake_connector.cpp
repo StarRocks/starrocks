@@ -24,6 +24,7 @@
 #include "exprs/jsonpath.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/parser.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -716,7 +717,7 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager->get_key_ranges(&_key_ranges));
     _conjuncts_manager->get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
+    RETURN_IF_ERROR(RuntimeStateHelper::dict_optimize_parser(state)->rewrite_conjuncts(&_not_push_down_conjuncts));
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();

@@ -25,6 +25,7 @@
 #include "exec/agg_runtime_filter_builder.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -153,7 +154,7 @@ void AggregateBlockingSinkOperator::_build_in_runtime_filters(RuntimeState* stat
             merged_runtime_filters.emplace_back(desc);
         }
     }
-    state->runtime_filter_port()->publish_runtime_filters(merged_runtime_filters);
+    RuntimeStateHelper::runtime_filter_port(state)->publish_runtime_filters(merged_runtime_filters);
     _in_runtime_filter_built = true;
 }
 

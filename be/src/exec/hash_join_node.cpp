@@ -48,6 +48,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -1038,7 +1039,7 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
     }
 
     // publish runtime filters
-    state->runtime_filter_port()->publish_runtime_filters(_build_runtime_filters);
+    RuntimeStateHelper::runtime_filter_port(state)->publish_runtime_filters(_build_runtime_filters);
     COUNTER_UPDATE(_push_down_expr_num, static_cast<int64_t>(_build_runtime_filters.size()));
     return Status::OK();
 }

@@ -34,6 +34,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -95,7 +96,7 @@ public:
         TQueryGlobals query_globals;
         _state = _pool.add(
                 new RuntimeState(query_id, fragment_id, query_options, query_globals, ExecEnv::GetInstance()));
-        _state->init_mem_trackers(query_id);
+        RuntimeStateHelper::init_mem_trackers(_state, query_id);
 
         // Setup FragmentContext with fe_addr for schema RPC
         _fragment_ctx = std::make_unique<pipeline::FragmentContext>();

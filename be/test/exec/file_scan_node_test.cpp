@@ -24,6 +24,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "util/global_metrics_registry.h"
@@ -121,7 +122,7 @@ void FileScanNodeTest::_create_runtime_state() {
     _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
-    _runtime_state->init_mem_trackers(id);
+    RuntimeStateHelper::init_mem_trackers(_runtime_state.get(), id);
 }
 
 std::shared_ptr<TPlanNode> FileScanNodeTest::_create_tplan_node() {

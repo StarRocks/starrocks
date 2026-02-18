@@ -40,6 +40,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/predicate_tree_params.h"
 #include "util/hash_util.hpp"
 
@@ -117,7 +118,7 @@ public:
 
     RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
 
-    RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
+    RuntimeFilterPort* runtime_filter_port() { return RuntimeStateHelper::runtime_filter_port(_runtime_state.get()); }
 
     void prepare_pass_through_chunk_buffer();
     void destroy_pass_through_chunk_buffer();

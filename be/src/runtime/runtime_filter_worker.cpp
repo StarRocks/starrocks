@@ -34,6 +34,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "util/brpc_stub_cache.h"
 #include "util/internal_service_recoverable_stub.h"
 #include "util/time_guard.h"
@@ -118,7 +119,7 @@ void RuntimeFilterPort::publish_runtime_filters_for_skew_broadcast_join(
     for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
         if (filter == nullptr) continue;
-        _state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
+        RuntimeStateHelper::runtime_filter_port(_state)->receive_runtime_filter(rf_desc->filter_id(), filter);
     }
 
     for (size_t i = 0; i < rf_descs.size(); i++) {
@@ -143,7 +144,7 @@ void RuntimeFilterPort::publish_runtime_filters(const std::list<RuntimeFilterBui
     for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
         if (filter == nullptr) continue;
-        state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
+        RuntimeStateHelper::runtime_filter_port(state)->receive_runtime_filter(rf_desc->filter_id(), filter);
     }
     int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
@@ -287,7 +288,7 @@ void RuntimeFilterPort::publish_local_colocate_filters(std::list<RuntimeFilterBu
     for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
         if (filter == nullptr) continue;
-        state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
+        RuntimeStateHelper::runtime_filter_port(state)->receive_runtime_filter(rf_desc->filter_id(), filter);
     }
 }
 

@@ -17,6 +17,8 @@
 #include "column/column_helper.h"
 #include "common/logging.h"
 #include "runtime/global_dict/decoder.h"
+#include "runtime/global_dict/parser.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -94,7 +96,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
 
     const auto& global_dict = state->get_query_global_dict_map();
-    auto dict_optimize_parser = state->mutable_dict_optimize_parser();
+    auto dict_optimize_parser = RuntimeStateHelper::dict_optimize_parser(state);
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);

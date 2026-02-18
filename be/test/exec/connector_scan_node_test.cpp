@@ -23,6 +23,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
@@ -74,7 +75,7 @@ std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state(const 
     std::shared_ptr<RuntimeState> runtime_state =
             std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
     TUniqueId id;
-    runtime_state->init_mem_trackers(id);
+    RuntimeStateHelper::init_mem_trackers(runtime_state.get(), id);
     return runtime_state;
 }
 

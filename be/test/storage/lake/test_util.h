@@ -28,6 +28,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "service/service_be/lake_service.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -362,7 +363,7 @@ inline std::shared_ptr<RuntimeState> create_runtime_state(const TQueryOptions& q
     std::shared_ptr<RuntimeState> runtime_state =
             std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
     TUniqueId id;
-    runtime_state->init_mem_trackers(id);
+    RuntimeStateHelper::init_mem_trackers(runtime_state.get(), id);
     return runtime_state;
 }
 

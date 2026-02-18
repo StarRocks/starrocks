@@ -22,6 +22,7 @@ set(RUNTIME_CORE_FILES
     descriptors.cpp
     mem_tracker.cpp
     mem_pool.cpp
+    runtime_state.cpp
     starrocks_metrics.cpp
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
@@ -62,7 +63,6 @@ set(RUNTIME_FILES
     plan_fragment_executor.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
-    runtime_state.cpp
     runtime_state_helper.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp

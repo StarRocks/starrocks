@@ -28,6 +28,7 @@
 #include "exec/tablet_info.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/chunk_helper.h"
 #include "types/decimalv2_value.h"
 
@@ -53,7 +54,7 @@ protected:
         TQueryGlobals query_globals;
         auto runtime_state = std::make_unique<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
         TUniqueId id;
-        runtime_state->init_mem_trackers(id);
+        RuntimeStateHelper::init_mem_trackers(runtime_state.get(), id);
         runtime_state->set_db("test_db");
         runtime_state->set_load_label("test_label");
         runtime_state->set_txn_id(_txn_id);

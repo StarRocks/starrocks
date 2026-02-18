@@ -21,6 +21,7 @@
 #include "common/config.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state_helper.h"
 namespace starrocks::pipeline {
 
 Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
@@ -128,7 +129,7 @@ Status AggregateStreamingSinkOperator::_build_topn_runtime_filter(RuntimeState* 
 
     if (std::all_of(build_descs.begin(), build_descs.end(),
                     [](auto* desc) { return desc->runtime_filter() != nullptr; })) {
-        state->runtime_filter_port()->publish_runtime_filters(build_descs);
+        RuntimeStateHelper::runtime_filter_port(state)->publish_runtime_filters(build_descs);
         for (auto* desc : build_descs) {
             VLOG(2) << "publish topn runtime filter: " << desc->runtime_filter()->rf_version() << ","
                     << desc->runtime_filter()->debug_string() << desc->runtime_filter();

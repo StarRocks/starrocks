@@ -51,17 +51,15 @@
 #include "base/uid_util.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
+#include "common/logging.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/global_dict/parser.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state_helper.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -79,6 +77,10 @@ class RowDescriptor;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
+class DictOptimizeParser;
+struct DictOptimizeParserDeleter {
+    void operator()(DictOptimizeParser* parser) const;
+};
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
@@ -116,8 +118,6 @@ public:
     // Specific parts of the fragment (i.e. exec nodes, sinks, data stream senders, etc)
     // will add a fourth level when they are initialized.
     // This function also initializes a user function mem tracker (in the fourth level).
-    void init_mem_trackers(const TUniqueId& query_id, MemTracker* parent = nullptr);
-
     void init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker);
 
     // for ut only
@@ -152,7 +152,6 @@ public:
     }
     const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
-    RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
     void set_fragment_root_id(PlanNodeId id) {
@@ -239,18 +238,12 @@ public:
 
     const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
 
-    // is_summary is true, means we are going to write the summary line
-    void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
-
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
-
-    void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
-                                        const std::string& source);
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -279,18 +272,6 @@ public:
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
 
     void update_num_bytes_scan_from_source(int64_t scan_bytes) { _num_bytes_scan_from_source.fetch_add(scan_bytes); }
-
-    void update_report_load_status(TReportExecStatusParams* load_params) {
-        load_params->__set_loaded_rows(num_rows_load_sink());
-        load_params->__set_sink_load_bytes(num_bytes_load_sink());
-        load_params->__set_source_load_rows(num_rows_load_from_source());
-        load_params->__set_source_load_bytes(num_bytes_load_from_source());
-        load_params->__set_filtered_rows(num_rows_load_filtered());
-        load_params->__set_unselected_rows(num_rows_load_unselected());
-        load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
-        // Update datacache load metrics
-        RuntimeStateHelper::update_load_datacache_metrics(this, load_params);
-    }
 
     void update_num_datacache_read_bytes(const int64_t read_bytes) {
         _num_datacache_read_bytes.fetch_add(read_bytes, std::memory_order_relaxed);
@@ -486,15 +467,11 @@ public:
 
     const GlobalDictMaps& get_load_global_dict_map() const;
 
-    DictOptimizeParser* mutable_dict_optimize_parser();
-
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
     using GlobalDictLists = std::vector<TGlobalDict>;
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     Status init_load_global_dict(const GlobalDictLists& global_dict_list);
-
-    Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -702,11 +679,13 @@ private:
     RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
+    std::once_flag _runtime_filter_port_once;
 
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
     phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
-    DictOptimizeParser _dict_optimize_parser;
+    std::unique_ptr<DictOptimizeParser, DictOptimizeParserDeleter> _dict_optimize_parser;
+    std::once_flag _dict_optimize_parser_once;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;

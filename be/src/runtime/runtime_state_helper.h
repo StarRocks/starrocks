@@ -15,27 +15,43 @@
 #pragma once
 
 #include <atomic>
+#include <map>
 #include <memory>
+#include <string>
 
 #include "common/status.h"
+#include "gen_cpp/FrontendService.h"
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 
+class DictOptimizeParser;
+class MemTracker;
 class ObjectPool;
 class QueryStatisticsRecvr;
+class RuntimeFilterPort;
 class RuntimeState;
 struct TReportExecStatusParams;
 
 class RuntimeStateHelper {
 public:
-    static void init_runtime_filter_port(RuntimeState* state);
+    static RuntimeFilterPort* runtime_filter_port(RuntimeState* state);
+    static void init_mem_trackers(RuntimeState* state, const TUniqueId& query_id, MemTracker* parent = nullptr);
     static ObjectPool* global_obj_pool(const RuntimeState* state);
 
     static Status create_error_log_file(RuntimeState* state);
     static Status create_rejected_record_file(RuntimeState* state);
+    static void append_error_msg_to_file(RuntimeState* state, const std::string& line, const std::string& error_msg,
+                                         bool is_summary = false);
+    static void append_rejected_record_to_file(RuntimeState* state, const std::string& record,
+                                               const std::string& error_msg, const std::string& source);
+    static void update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params);
 
     static std::shared_ptr<QueryStatisticsRecvr> query_recv(RuntimeState* state);
     static std::atomic_int64_t* mutable_total_spill_bytes(RuntimeState* state);
+
+    static DictOptimizeParser* dict_optimize_parser(RuntimeState* state);
+    static Status init_query_global_dict_exprs(RuntimeState* state, const std::map<int, TExpr>& exprs);
 
     static bool is_jit_enabled(const RuntimeState* state);
     static void update_load_datacache_metrics(const RuntimeState* state, TReportExecStatusParams* load_params);

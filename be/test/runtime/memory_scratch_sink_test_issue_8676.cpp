@@ -62,6 +62,7 @@
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
 #include "types/logical_type.h"
@@ -233,7 +234,7 @@ void MemoryScratchSinkIssue8676Test::init_runtime_state() {
     _state = new RuntimeState(query_id, query_options, TQueryGlobals(), _exec_env);
     _state->init_instance_mem_tracker();
     _state->set_desc_tbl(_desc_tbl);
-    _state->init_mem_trackers(TUniqueId());
+    RuntimeStateHelper::init_mem_trackers(_state, TUniqueId());
 }
 
 void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
