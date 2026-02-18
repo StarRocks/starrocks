@@ -10,14 +10,14 @@ StarRocks は、誤って削除されたデータベース/テーブル/パー�
 
 構文:
 
-~~~sql
+```sql
 -- 1) データベースを復元
 RECOVER DATABASE db_name;
 -- 2) テーブルを復元
 RECOVER TABLE [db_name.]table_name;
 -- 3) パーティションを復元
 RECOVER PARTITION partition_name FROM [db_name.]table_name;
-~~~
+```
 
 ## 注意事項
 
@@ -28,18 +28,18 @@ RECOVER PARTITION partition_name FROM [db_name.]table_name;
 
 1. `example_db` という名前のデータベースを復元
 
-    ~~~sql
+    ```sql
     RECOVER DATABASE example_db;
-    ~~~
+    ```
 
 2. `example_tbl` という名前のテーブルを復元
 
-    ~~~sql
+    ```sql
     RECOVER TABLE example_db.example_tbl;
-    ~~~
+    ```
 
 3. テーブル `example_tbl` のパーティション `p1` を復元
 
-    ~~~sql
+    ```sql
     RECOVER PARTITION p1 FROM example_tbl;
-    ~~~
+    ```
