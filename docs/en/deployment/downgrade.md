@@ -99,13 +99,13 @@ After the compatibility configuration and the availability test, you can downgra
 
 1. Create a metadata snapshot.
 
-   a. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) to create a meatedata snapshot.
+   a. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) to create a metadata snapshot.
 
    b. You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized. 
 
    > **CAUTION**
    >
-   > The ALTER SYSTEM CREATE IMAGE statement is supported in v2.5.3 and later. In earlier versions, you need to create a meatadata snapshot by restarting the Leader FE.
+   > The ALTER SYSTEM CREATE IMAGE statement is supported in v2.5.3 and later. In earlier versions, you need to create a metadata snapshot by restarting the Leader FE.
 
 2. Navigate to the working directory of the FE node and stop the node.
 
@@ -136,7 +136,7 @@ After the compatibility configuration and the availability test, you can downgra
 4. Start the FE node.
 
    ```Bash
-   sh bin/start_fe.sh --daemon
+   ./bin/start_fe.sh --daemon
    ```
 
 5. Check if the FE node is started successfully.
@@ -175,7 +175,7 @@ Having downgraded the FE nodes, you can then downgrade the BE nodes in the clust
 3. Start the BE node.
 
    ```Bash
-   sh bin/start_be.sh --daemon
+   ./bin/start_be.sh --daemon
    ```
 
 4. Check if the BE node is started successfully.
@@ -208,7 +208,7 @@ Having downgraded the FE nodes, you can then downgrade the BE nodes in the clust
 3. Start the CN node.
 
    ```Bash
-   sh bin/start_cn.sh --daemon
+   ./bin/start_cn.sh --daemon
    ```
 
 4. Check if the CN node is started successfully.
