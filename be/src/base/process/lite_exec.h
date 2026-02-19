@@ -12,26 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gtest/gtest.h>
+#pragma once
 
 #include <string>
 #include <vector>
 
-#include "common/logging.h"
-
 namespace starrocks {
+
 std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms = 1200000);
 
-TEST(TestLiteFork, fork) {
-    {
-        std::vector<std::string> argv = {"/bin/echo", "hello", "world"};
-        auto res = lite_exec(argv);
-        ASSERT_EQ(res, "hello world\n");
-    }
-    {
-        std::vector<std::string> argv = {"/bin/sleep", "3600"};
-        auto res = lite_exec(argv, 1000);
-        ASSERT_TRUE(res.find("timeout") != std::string::npos);
-    }
-}
 } // namespace starrocks

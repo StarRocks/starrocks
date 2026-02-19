@@ -20,6 +20,7 @@
 #include <fstream>
 #include <mutex>
 
+#include "base/process/lite_exec.h"
 #include "common/config.h"
 #include "fmt/format.h"
 #include "jemalloc/jemalloc.h"
@@ -67,9 +68,6 @@ bool dump_snapshot(const std::string& filename) {
 #endif
                    ("prof.dump", nullptr, nullptr, &fname, sizeof(const char*))) == 0;
 }
-
-// declare exec from runtime/exec.cpp
-std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms = 1200000);
 
 void HeapProf::enable_prof() {
 #ifndef __APPLE__

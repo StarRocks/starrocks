@@ -42,6 +42,7 @@
 #include <memory>
 #include <mutex>
 
+#include "base/process/lite_exec.h"
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
@@ -224,7 +225,6 @@ static void failure_function() {
     std::abort();
 }
 
-std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms);
 static std::mutex gcore_mutex;
 static bool gcore_done = false;
 void hook_on_query_timeout(const TUniqueId& query_id, size_t timeout_seconds) {

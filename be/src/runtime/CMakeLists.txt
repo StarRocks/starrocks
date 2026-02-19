@@ -55,7 +55,6 @@ set(RUNTIME_FILES
     multi_cast_data_stream_sink.cpp
     descriptors_ext.cpp
     exec_env.cpp
-    exec.cpp
     global_variables.cpp
     user_function_cache.cpp
     jdbc_driver_manager.cpp
