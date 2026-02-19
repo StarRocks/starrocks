@@ -125,11 +125,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
-                            BaseTable updateTable = 
+                            BaseTable updateTable =
                                     (BaseTable) delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
+                            // REST catalogs may vend temporary credentials (STS tokens) embedded in the
+                            // Table object. Always return the freshly loaded table so callers get valid
+                            // credentials, even when the metadata-file location has not changed.
+                            if (delegate instanceof IcebergRESTCatalog) {
+                                return updateTable;
+                            }
                             TableOperations newOps = updateTable.operations();
                             TableOperations oldOps = ((BaseTable) oldValue).operations();
-                            if (oldOps.current().metadataFileLocation().equals(newOps.current().metadataFileLocation())) {
+                            if (oldOps.current().metadataFileLocation().equals(
+                                    newOps.current().metadataFileLocation())) {
                                 return oldValue;
                             }
                             return updateTable;
