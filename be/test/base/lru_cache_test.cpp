@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/lru_cache.h"
+#include "base/container/lru_cache.h"
 
 #include <gtest/gtest.h>
 

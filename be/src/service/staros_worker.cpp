@@ -20,6 +20,7 @@
 #include <worker.h>
 
 #include "base/concurrency/await.h"
+#include "base/container/lru_cache.h"
 #include "base/crypto/sha.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
@@ -34,7 +35,6 @@
 #include "gflags/gflags.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
-#include "util/lru_cache.h"
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);
