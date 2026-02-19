@@ -63,6 +63,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "serde/protobuf_serde.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -738,11 +739,12 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
                     ss << "The row is out of partition ranges. Please add a new partition.";
                     if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
                         std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
-                        state->append_error_msg_to_file(debug_row, ss.str());
+                        RuntimeStateHelper::append_error_msg_to_file(state, debug_row, ss.str());
                     }
                     for (auto i : invalid_row_indexs) {
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(), "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","),
+                                                                               ss.str(), "");
                         } else {
                             break;
                         }
@@ -914,7 +916,7 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
     }
     std::string error_msg = strings::Substitute("String '$0'(length=$1) is too long. The max length of '$2' is $3",
                                                 error_str, str.get_size(), desc->col_name(), desc->type().len);
-    state->append_error_msg_to_file(chunk->debug_row(row_index), error_msg);
+    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc,
@@ -924,7 +926,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
     }
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
                                                 decimal.to_string(), desc->col_name(), desc->type().debug_string());
-    state->append_error_msg_to_file(chunk->debug_row(row_index), error_msg);
+    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
@@ -936,7 +938,7 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-    state->append_error_msg_to_file(chunk->debug_row(row_index), error_msg);
+    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 template <LogicalType LT>
@@ -964,7 +966,8 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
                     std::string error_msg =
                             strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg, "");
+                    RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","), error_msg,
+                                                                       "");
                 }
             }
         }
@@ -1003,12 +1006,13 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         LOG(INFO) << ss.str();
 #else
                         if (!state->has_reached_max_error_msg_num()) {
-                            state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                            RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(j), ss.str());
                         }
 #endif
                         // If enable_log_rejected_record is true, we need to log the rejected record.
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                               ss.str(), "");
                         }
                     }
                 }
@@ -1040,11 +1044,12 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         LOG(INFO) << ss.str();
 #else
                         if (!state->has_reached_max_error_msg_num()) {
-                            state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                            RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(j), ss.str());
                         }
 #endif
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                               ss.str(), "");
                         }
                     }
                 }
@@ -1083,7 +1088,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg =
                                     strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
                                                         binary->get_slice(j).size, desc->col_name(), desc->type().len);
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                               error_msg, "");
                         }
                     }
                 }
@@ -1108,7 +1114,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg = strings::Substitute(
                                     "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
                                     desc->col_name(), desc->type().debug_string());
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                               error_msg, "");
                         }
                     }
                 }

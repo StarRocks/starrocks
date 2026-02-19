@@ -240,18 +240,12 @@ public:
 
     const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
 
-    // is_summary is true, means we are going to write the summary line
-    void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
-
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
-
-    void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
-                                        const std::string& source);
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
