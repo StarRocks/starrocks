@@ -38,6 +38,7 @@ public:
                                          bool is_summary = false);
     static void append_rejected_record_to_file(RuntimeState* state, const std::string& record,
                                                const std::string& error_msg, const std::string& source);
+    static void update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params);
 
     static std::shared_ptr<QueryStatisticsRecvr> query_recv(RuntimeState* state);
     static std::atomic_int64_t* mutable_total_spill_bytes(RuntimeState* state);

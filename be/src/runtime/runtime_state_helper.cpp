@@ -153,6 +153,18 @@ void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, con
     (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
 }
 
+void RuntimeStateHelper::update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params) {
+    load_params->__set_loaded_rows(state->num_rows_load_sink());
+    load_params->__set_sink_load_bytes(state->num_bytes_load_sink());
+    load_params->__set_source_load_rows(state->num_rows_load_from_source());
+    load_params->__set_source_load_bytes(state->num_bytes_load_from_source());
+    load_params->__set_filtered_rows(state->num_rows_load_filtered());
+    load_params->__set_unselected_rows(state->num_rows_load_unselected());
+    load_params->__set_source_scan_bytes(state->num_bytes_scan_from_source());
+    // Update datacache load metrics
+    RuntimeStateHelper::update_load_datacache_metrics(state, load_params);
+}
+
 std::shared_ptr<QueryStatisticsRecvr> RuntimeStateHelper::query_recv(RuntimeState* state) {
     return state->_query_ctx->maintained_query_recv();
 }

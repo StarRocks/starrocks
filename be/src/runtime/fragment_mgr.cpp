@@ -66,6 +66,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/starrocks_metrics.h"
 #include "types/datetime_value.h"
 #include "util/global_metrics_registry.h"
@@ -252,11 +253,11 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     DCHECK(runtime_state != nullptr);
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
-        runtime_state->update_report_load_status(&params);
+        RuntimeStateHelper::update_report_load_status(runtime_state, &params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            runtime_state->update_report_load_status(&params);
+            RuntimeStateHelper::update_report_load_status(runtime_state, &params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
         profile->to_thrift(&params.profile);
@@ -640,7 +641,7 @@ void FragmentMgr::report_fragments_with_same_host(
                 RuntimeState* runtime_state = executor->runtime_state();
                 DCHECK(runtime_state != nullptr);
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                    runtime_state->update_report_load_status(&params);
+                    RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                     params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
@@ -705,7 +706,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             RuntimeState* runtime_state = executor->runtime_state();
             DCHECK(runtime_state != nullptr);
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                runtime_state->update_report_load_status(&params);
+                RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                 params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 
