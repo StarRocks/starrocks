@@ -801,7 +801,7 @@ Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext:
                 state->const_field_idx = 0;
             } else {
                 auto const_value = ColumnHelper::get_const_value<Type>(const_column);
-                auto it = state->mp.find(state->const_value);
+                auto it = state->mp.find(const_value);
                 if (it != state->mp.end()) {
                     state->const_field_idx = it->second;
                 } else {
