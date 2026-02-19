@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# is_json_scalar
+# `is_json_scalar`
 
 Returns whether a JSON value is a scalar (not an object or array).
 
@@ -36,8 +36,8 @@ Returns a BOOLEAN:
 
 ## Examples
 
-```Plain
-mysql> SELECT is_json_scalar(CAST('{"a": 1}' AS JSON));
+```SQL
+SELECT is_json_scalar(CAST('{"a": 1}' AS JSON));
 +----------------------------------------------+
 | is_json_scalar(CAST('{"a": 1}' AS JSON))     |
 +----------------------------------------------+
@@ -45,8 +45,8 @@ mysql> SELECT is_json_scalar(CAST('{"a": 1}' AS JSON));
 +----------------------------------------------+
 ```
 
-```Plain
-mysql> SELECT is_json_scalar(CAST('[1, 2, 3]' AS JSON));
+```SQL
+SELECT is_json_scalar(CAST('[1, 2, 3]' AS JSON));
 +-----------------------------------------+
 | is_json_scalar(CAST('[1, 2, 3]' AS JSON)) |
 +-----------------------------------------+
@@ -54,8 +54,8 @@ mysql> SELECT is_json_scalar(CAST('[1, 2, 3]' AS JSON));
 +-----------------------------------------+
 ```
 
-```Plain
-mysql> SELECT is_json_scalar(CAST('"hello"' AS JSON));
+```SQL
+SELECT is_json_scalar(CAST('"hello"' AS JSON));
 +-------------------------------------------+
 | is_json_scalar(CAST('"hello"' AS JSON))   |
 +-------------------------------------------+
@@ -63,8 +63,8 @@ mysql> SELECT is_json_scalar(CAST('"hello"' AS JSON));
 +-------------------------------------------+
 ```
 
-```Plain
-mysql> SELECT is_json_scalar(CAST('123' AS JSON));
+```SQL
+SELECT is_json_scalar(CAST('123' AS JSON));
 +----------------------------------------+
 | is_json_scalar(CAST('123' AS JSON))    |
 +----------------------------------------+
@@ -72,8 +72,8 @@ mysql> SELECT is_json_scalar(CAST('123' AS JSON));
 +----------------------------------------+
 ```
 
-```Plain
-mysql> SELECT is_json_scalar(CAST('true' AS JSON));
+```SQL
+SELECT is_json_scalar(CAST('true' AS JSON));
 +-----------------------------------------+
 | is_json_scalar(CAST('true' AS JSON))    |
 +-----------------------------------------+
@@ -81,8 +81,8 @@ mysql> SELECT is_json_scalar(CAST('true' AS JSON));
 +-----------------------------------------+
 ```
 
-```Plain
-mysql> SELECT is_json_scalar(CAST('null' AS JSON));
+```SQL
+SELECT is_json_scalar(CAST('null' AS JSON));
 +----------------------------------------+
 | is_json_scalar(CAST('null' AS JSON))   |
 +----------------------------------------+
@@ -90,14 +90,11 @@ mysql> SELECT is_json_scalar(CAST('null' AS JSON));
 +----------------------------------------+
 ```
 
-```Plain
-mysql> SELECT is_json_scalar(CAST(NULL AS JSON));
+```SQL
+SELECT is_json_scalar(CAST(NULL AS JSON));
 +------------------------------+
 | is_json_scalar(CAST(NULL AS JSON)) |
 +------------------------------+
 | NULL                         |
 +------------------------------+
 ```
-
-## keyword
-IS_JSON_SCALAR, None
