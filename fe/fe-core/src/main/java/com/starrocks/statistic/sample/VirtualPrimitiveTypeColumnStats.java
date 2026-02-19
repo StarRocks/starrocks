@@ -30,7 +30,7 @@ public class VirtualPrimitiveTypeColumnStats extends PrimitiveTypeColumnStats {
     @Override
     public String getLateralJoin() {
         if (virtualStatistic.requiresLateralJoin()) {
-            return ", %s %s(%s)".formatted(virtualStatistic.getVirtualExpression(baseColumnName), columnName, columnName);
+            return ", %s `%s`(`%s`)".formatted(virtualStatistic.getVirtualExpression(baseColumnName), columnName, columnName);
         }
         return super.getLateralJoin();
     }

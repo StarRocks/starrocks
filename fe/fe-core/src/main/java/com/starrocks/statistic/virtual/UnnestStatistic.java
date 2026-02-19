@@ -31,7 +31,14 @@ public class UnnestStatistic implements VirtualStatistic {
 
     @Override
     public boolean appliesTo(Type columnType) {
-        return columnType.isArrayType();
+        final var isArrayType = columnType.isArrayType();
+
+        if (isArrayType) {
+            final var itemType = ((ArrayType) columnType).getItemType();
+            return itemType.canStatistic() && !itemType.isCollectionType();
+        }
+
+        return false;
     }
 
     @Override
