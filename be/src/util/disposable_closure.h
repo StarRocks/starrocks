@@ -20,7 +20,7 @@
 #include <string_view>
 #include <utility>
 
-#include "service/brpc.h"
+#include "base/brpc/brpc.h"
 
 namespace starrocks {
 

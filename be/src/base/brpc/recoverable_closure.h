@@ -14,11 +14,15 @@
 
 #pragma once
 
+#include <errno.h>
+#include <google/protobuf/stubs/common.h>
+
 #include <memory>
 #include <shared_mutex>
 
-#include "common/status.h"
-#include "service/brpc.h"
+#include "base/brpc/brpc.h"
+#include "base/logging.h"
+#include "base/status.h"
 
 namespace starrocks {
 

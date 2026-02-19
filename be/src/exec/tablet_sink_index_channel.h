@@ -24,6 +24,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/brpc/ref_count_closure.h"
+#include "base/brpc/reusable_closure.h"
 #include "base/container/raw_container.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
@@ -35,8 +37,6 @@
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/ref_count_closure.h"
-#include "util/reusable_closure.h"
 
 namespace starrocks {
 

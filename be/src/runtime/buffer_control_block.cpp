@@ -39,12 +39,12 @@
 
 #include <utility>
 
+#include "base/brpc/brpc.h"
 #include "base/concurrency/race_detect.h"
 #include "base/utility/defer_op.h"
 #include "common/util/thrift_util.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "service/brpc.h"
 
 namespace starrocks {
 

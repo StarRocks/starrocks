@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "util/ref_count_closure.h"
+#include "base/brpc/ref_count_closure.h"
 
 using namespace starrocks;
 

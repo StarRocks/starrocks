@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "base/brpc/reusable_closure.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -34,7 +35,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "util/reusable_closure.h"
 
 namespace starrocks {
 

@@ -21,6 +21,7 @@
 
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
+#include "base/brpc/brpc.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config.h"
@@ -33,7 +34,6 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
-#include "service/brpc.h"
 #include "service/daemon.h"
 #include "service/service.h"
 #include "service/service_be/arrow_flight_sql_service.h"

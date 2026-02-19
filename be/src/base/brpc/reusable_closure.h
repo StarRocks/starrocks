@@ -18,8 +18,8 @@
 
 #include <atomic>
 
+#include "base/brpc/brpc.h"
 #include "base/time/time.h"
-#include "service/brpc.h"
 
 namespace starrocks {
 

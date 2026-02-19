@@ -14,6 +14,8 @@
 
 #include "runtime/load_fail_point.h"
 
+#include <fmt/format.h>
+
 #ifdef FIU_ENABLE
 #include "base/uid_util.h"
 #include "common/system/backend_options.h"

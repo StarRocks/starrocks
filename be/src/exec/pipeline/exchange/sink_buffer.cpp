@@ -23,6 +23,7 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc_helper.h"
 #include "common/config.h"
 #include "fmt/core.h"
 #include "runtime/exec_env.h"

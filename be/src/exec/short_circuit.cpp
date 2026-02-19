@@ -17,6 +17,7 @@
 
 #include "exec/short_circuit.h"
 
+#include "base/brpc/brpc.h"
 #include "column/column_helper.h"
 #include "column/mysql_row_buffer.h"
 #include "common/object_pool.h"
@@ -30,7 +31,6 @@
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_sink.h"
-#include "service/brpc.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

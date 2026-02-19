@@ -21,6 +21,7 @@
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "common/brpc_helper.h"
 #include "common/config.h"
 #include "common/statusor.h"
 #include "common/tracer.h"

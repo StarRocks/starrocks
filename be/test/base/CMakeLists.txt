@@ -26,6 +26,9 @@ set(BASE_TEST_FILES
     bthreads/semaphore_test.cpp
     bthreads/shared_future_test.cpp
     bthreads/single_flight_test.cpp
+    brpc/ref_count_closure_test.cpp
+    brpc/recoverable_closure_test.cpp
+    brpc/reusable_closure_test.cpp
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp

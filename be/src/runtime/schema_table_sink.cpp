@@ -18,6 +18,7 @@
 #include <sstream>
 
 #include "agent/master_info.h"
+#include "base/brpc/ref_count_closure.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/configbase.h"
@@ -29,7 +30,6 @@
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "util/brpc_stub_cache.h"
-#include "util/ref_count_closure.h"
 #include "util/stack_util.h"
 
 namespace starrocks {

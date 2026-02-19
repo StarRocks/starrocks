@@ -42,6 +42,8 @@
 #include <memory>
 #include <random>
 
+#include "base/brpc/brpc.h"
+#include "base/brpc/ref_count_closure.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
 #include "common/logging.h"
@@ -57,12 +59,10 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "service/brpc.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/ref_count_closure.h"
 
 namespace starrocks {
 

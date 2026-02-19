@@ -20,6 +20,7 @@
 #include <butil/time.h> // NOLINT
 
 #include "agent/agent_server.h"
+#include "base/brpc/brpc.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
@@ -36,7 +37,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
 #include "runtime/load_channel_mgr.h"
-#include "service/brpc.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
