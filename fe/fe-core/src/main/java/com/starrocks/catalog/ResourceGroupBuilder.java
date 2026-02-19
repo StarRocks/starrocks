@@ -64,7 +64,10 @@ public class ResourceGroupBuilder {
         }
 
         // Validate CPU parameters
-        ResourceGroup.validateCpuParameters(resourceGroup.getRawCpuWeight(), resourceGroup.getExclusiveCpuCores());
+        ResourceGroup.validateCpuParameters(resourceGroup.getRawCpuWeight(), resourceGroup.getCpuWeightPercent(),
+                resourceGroup.getExclusiveCpuCores(), resourceGroup.getExclusiveCpuPercent(),
+                resourceGroup.getMaxCpuCores(),
+                resourceGroup.getResourceGroupType(), resourceGroup.getWarehouses());
 
         // Validate required properties
         if (resourceGroup.getMemLimit() == null) {
@@ -124,17 +127,20 @@ public class ResourceGroupBuilder {
 
         // Validate that at least one property is specified
         if (changedProperties.getRawCpuWeight() == null &&
+                changedProperties.getCpuWeightPercent() == null &&
                 changedProperties.getExclusiveCpuCores() == null &&
+                changedProperties.getExclusiveCpuPercent() == null &&
                 changedProperties.getMemLimit() == null &&
                 changedProperties.getConcurrencyLimit() == null &&
                 changedProperties.getMaxCpuCores() == null &&
                 changedProperties.getBigQueryCpuSecondLimit() == null &&
                 changedProperties.getBigQueryMemLimit() == null &&
                 changedProperties.getBigQueryScanRowsLimit() == null &&
-                changedProperties.getSpillMemLimitThreshold() == null) {
-            throw new SemanticException("At least one of ('cpu_weight','exclusive_cpu_cores','mem_limit'," +
-                    "'max_cpu_cores','concurrency_limit','big_query_mem_limit', 'big_query_scan_rows_limit'," +
-                    "'big_query_cpu_second_limit','spill_mem_limit_threshold') " +
+                changedProperties.getSpillMemLimitThreshold() == null &&
+                changedProperties.getWarehouses() == null) {
+            throw new SemanticException("At least one of ('cpu_weight','cpu_weight_percent','exclusive_cpu_cores'," +
+                    "'exclusive_cpu_percent','mem_limit','max_cpu_cores','concurrency_limit','big_query_mem_limit', " +
+                    "'big_query_scan_rows_limit','big_query_cpu_second_limit','spill_mem_limit_threshold','warehouses') " +
                     "should be specified");
         }
 

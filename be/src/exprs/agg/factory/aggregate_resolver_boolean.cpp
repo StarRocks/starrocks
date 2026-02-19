@@ -21,7 +21,7 @@
 namespace starrocks {
 
 void AggregateFuncResolver::register_boolean() {
-    auto bool_or_func = std::make_shared<BoolOrAggregateFunction>();
+    auto bool_or_func = new BoolOrAggregateFunction();
     add_aggregate_mapping_notnull<TYPE_BOOLEAN, TYPE_BOOLEAN>("bool_or", true, bool_or_func);
 }
 

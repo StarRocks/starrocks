@@ -44,7 +44,11 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.createTableStmt = createTableStmt;
         this.columnNames = columnNames;
         this.queryStatement = queryStatement;
-        this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
+        TableRef tableRef = createTableStmt.getTableRef();
+        if (tableRef == null) {
+            throw new IllegalStateException("CreateTableStmt tableRef cannot be null");
+        }
+        this.insertStmt = new InsertStmt(tableRef, queryStatement);
     }
 
     public List<String> getColumnNames() {

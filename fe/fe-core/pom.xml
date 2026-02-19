@@ -437,6 +437,12 @@ under the License.
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.slf4j/jul-to-slf4j -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jul-to-slf4j</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.github.oshi/oshi-core -->
         <dependency>
             <groupId>com.github.oshi</groupId>
@@ -979,8 +985,6 @@ under the License.
                             </includes>
                             <excludes>
                                 <exclude>com/starrocks/proto/**</exclude>
-                                <exclude>com/starrocks/rpc/**</exclude>
-                                <exclude>com/starrocks/server/**</exclude>
                                 <exclude>**/*$$JProtoBufClass</exclude>
                                 <exclude>**/*$$JProtoBuf*</exclude>
                             </excludes>

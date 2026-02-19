@@ -19,6 +19,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -33,30 +34,30 @@ public class LoadsSystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("ID", IntegerType.BIGINT)
-                        .column("LABEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PROFILE_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("USER", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("WAREHOUSE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PROGRESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIORITY", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("LABEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PROFILE_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DB_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("USER", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("WAREHOUSE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PROGRESS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PRIORITY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("SCAN_ROWS", IntegerType.BIGINT)
                         .column("SCAN_BYTES", IntegerType.BIGINT)
                         .column("FILTERED_ROWS", IntegerType.BIGINT)
                         .column("UNSELECTED_ROWS", IntegerType.BIGINT)
                         .column("SINK_ROWS", IntegerType.BIGINT)
-                        .column("RUNTIME_DETAILS", TypeFactory.createJsonType())
+                        .column("RUNTIME_DETAILS", JsonType.JSON)
                         .column("CREATE_TIME", DateType.DATETIME)
                         .column("LOAD_START_TIME", DateType.DATETIME)
                         .column("LOAD_COMMIT_TIME", DateType.DATETIME)
                         .column("LOAD_FINISH_TIME", DateType.DATETIME)
-                        .column("PROPERTIES", TypeFactory.createJsonType())
-                        .column("ERROR_MSG", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_SQL", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("REJECTED_RECORD_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PROPERTIES", JsonType.JSON)
+                        .column("ERROR_MSG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TRACKING_SQL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("REJECTED_RECORD_PATH", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("JOB_ID", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_LOADS);
     }

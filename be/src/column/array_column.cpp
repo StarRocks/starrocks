@@ -17,15 +17,13 @@
 #include <cstdint>
 
 #include "column/column_helper.h"
-#include "column/column_view/column_view.h"
 #include "column/fixed_length_column.h"
+#include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/function_helper.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 void ArrayColumn::check_or_die() const {
@@ -123,7 +121,7 @@ void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
 
 void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_array_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     for (uint32_t i = 0; i < size; i++) {
@@ -456,52 +454,6 @@ void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* 
     }
 }
 
-void ArrayColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    const auto offsets = _offsets->immutable_data();
-
-    uint32_t offset = offsets[idx];
-    // Should use size_t not uint32_t for compatible
-    size_t array_size = offsets[idx + 1] - offset;
-
-    *hash = HashUtil::fnv_hash(&array_size, sizeof(array_size), *hash);
-    for (size_t i = 0; i < array_size; ++i) {
-        uint32_t ele_offset = offset + static_cast<uint32_t>(i);
-        _elements->fnv_hash_at(hash, ele_offset);
-    }
-}
-
-void ArrayColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    const auto offsets = _offsets->immutable_data();
-
-    uint32_t offset = offsets[idx];
-    // Should use size_t not uint32_t for compatible
-    size_t array_size = offsets[idx + 1] - offset;
-
-    *hash = HashUtil::zlib_crc_hash(&array_size, static_cast<uint32_t>(sizeof(array_size)), *hash);
-    for (size_t i = 0; i < array_size; ++i) {
-        uint32_t ele_offset = offset + static_cast<uint32_t>(i);
-        _elements->crc32_hash_at(hash, ele_offset);
-    }
-}
-
-// TODO: fnv_hash and crc32_hash in array column may has performance problem
-// We need to make it possible in the future to provide vistor interface to iterator data
-// as much as possible
-
-void ArrayColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        fnv_hash_at(hash + i, i);
-    }
-}
-
-void ArrayColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        crc32_hash_at(hash + i, i);
-    }
-}
-
 int64_t ArrayColumn::xor_checksum(uint32_t from, uint32_t to) const {
     const auto offsets = _offsets->immutable_data();
     // The XOR of ArrayColumn
@@ -622,21 +574,30 @@ std::string ArrayColumn::debug_string() const {
     return ss.str();
 }
 
-StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> ArrayColumn::upgrade_if_overflow() {
     if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of ArrayColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_elements);
+    auto ret = upgrade_helper_func(_elements->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _elements = std::move(ret.value());
+    }
+    return ret;
 }
 
-StatusOr<ColumnPtr> ArrayColumn::downgrade() {
-    return downgrade_helper_func(&_elements);
+StatusOr<MutableColumnPtr> ArrayColumn::downgrade() {
+    auto ret = downgrade_helper_func(_elements->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _elements = std::move(ret.value());
+    }
+    return ret;
 }
 
 Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     DCHECK(type.children.size() == 1) << "Array schema does not match data's";
-    _elements = ColumnHelper::unfold_const_column(type.children[0], _elements->size(), _elements);
+    size_t col_size = _elements->size();
+    _elements = ColumnHelper::unfold_const_column(type.children[0], col_size, _elements);
     return Status::OK();
 }
 
@@ -699,8 +660,15 @@ bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPt
     if (v1->size() != v2->size()) {
         return false;
     }
-    auto data_v1 = FunctionHelper::get_data_column_of_const(v1);
-    auto data_v2 = FunctionHelper::get_data_column_of_const(v2);
+    auto unpack_const_data_column = [](const ColumnPtr& column) -> ColumnPtr {
+        if (column->is_constant()) {
+            return down_cast<const ConstColumn*>(column.get())->data_column();
+        }
+        return column;
+    };
+
+    auto data_v1 = unpack_const_data_column(v1);
+    auto data_v2 = unpack_const_data_column(v2);
     auto* array_v1 = down_cast<const ArrayColumn*>(data_v1.get());
     auto* array_v2 = down_cast<const ArrayColumn*>(data_v2.get());
     const auto& offsets_v1 = array_v1->offsets();

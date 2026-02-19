@@ -23,13 +23,17 @@
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
+#include "base/string/faststring.h"
 #include "column/chunk.h"
-#include "common/closure_guard.h"
+#include "common/brpc_helper.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
+#include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
@@ -38,6 +42,7 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/delta_writer.h"
@@ -50,10 +55,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/disposable_closure.h"
-#include "util/failpoint/fail_point.h"
-#include "util/faststring.h"
-#include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -152,7 +154,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 #ifndef BE_TEST
-    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
 #endif
 
     _senders = std::vector<Sender>(params.num_senders());
@@ -525,11 +527,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     COUNTER_UPDATE(_submit_commit_task_timer, finish_submit_commit_task_ts - finish_submit_write_task_ts);
     COUNTER_UPDATE(_wait_write_timer, wait_writer_ns);
     COUNTER_UPDATE(_wait_replica_timer, wait_replica_ns);
-
-    // remove tablets channel and load channel after all things done
-    if (close_channel) {
-        _load_channel->remove_tablets_channel(_key);
-    }
 }
 
 Status LocalTabletsChannel::log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id,
@@ -820,10 +817,11 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     return Status::OK();
 }
 
-void LocalTabletsChannel::cancel() {
+void LocalTabletsChannel::cancel(const std::string& reason) {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    auto cancel_status = Status::Cancelled(reason.empty() ? "cancel" : reason);
     for (auto& it : _delta_writers) {
-        it.second->cancel(Status::Cancelled("cancel"));
+        it.second->cancel(cancel_status);
     }
 }
 

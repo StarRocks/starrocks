@@ -89,5 +89,66 @@ public class AnalyzeCTETest {
                 "View's SELECT and view's field list have different column counts");
         analyzeSuccess("with cte1(c1,c2) as (select v1,v2 from test.t0) select c1,c2 from cte1");
     }
+
+    @Test
+    public void testRecursiveCTE() {
+        // Basic recursive CTE
+        analyzeSuccess("with recursive cte as " +
+                "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) " +
+                "select * from cte");
+
+        // Recursive CTE with column names
+        analyzeSuccess("with recursive cte(n) as " +
+                "(select v1 from t0 union all select n + 1 from cte where n < 100) " +
+                "select * from cte");
+
+        // Recursive CTE with multiple columns
+        analyzeSuccess("with recursive cte(id, parent_id) as " +
+                "(select v1, v2 from t0 where v2 is null " +
+                "union all " +
+                "select t0.v1, t0.v2 from t0 join cte on t0.v2 = cte.id) " +
+                "select * from cte");
+
+        // Multiple recursive CTEs
+        analyzeSuccess("with recursive " +
+                "cte1 as (select v1 from t0 union all select v1 + 1 from cte1 where v1 < 5), " +
+                "cte2 as (select v4 from t1 union all select v4 + 1 from cte2 where v4 < 5) " +
+                "select * from cte1, cte2");
+
+        // Recursive CTE with join in main query
+        analyzeSuccess("with recursive cte as " +
+                "(select v1, v2 from t0 union all select cte.v1 + 1, cte.v2 from cte where cte.v1 < 10) " +
+                "select cte.*, t1.* from cte join t1 on cte.v1 = t1.v4");
+
+        // Recursive CTE with aggregation in final query
+        analyzeSuccess("with recursive cte as " +
+                "(select v1 from t0 union all select v1 + 1 from cte where v1 < 100) " +
+                "select count(*), sum(v1) from cte");
+
+        // Nested recursive CTE reference
+        analyzeSuccess("with recursive cte1 as " +
+                "(select v1 from t0 union all select v1 + 1 from cte1 where v1 < 10) " +
+                "select * from (select * from cte1 where v1 > 5) t");
+
+        // Recursive CTE with UNION (not UNION ALL)
+        analyzeSuccess("with recursive cte as " +
+                "(select v1 from t0 union select v1 + 1 from cte where v1 < 10) " +
+                "select * from cte");
+
+        // multiple recursive references
+        analyzeSuccess("with recursive cte as " +
+                "(select v1 from t0 union all select cte1.v1 + cte2.v1 from cte cte1, cte cte2) " +
+                "select * from cte");
+
+        // Error: recursive reference in non-recursive part
+        analyzeFail("with recursive cte as " +
+                        "(select v1 from cte union all select v1 + 1 from cte where v1 < 10) " +
+                        "select * from cte",
+                "Unknown table 'test.cte'");
+
+        // Error: recursive CTE without UNION/UNION ALL
+        analyzeFail("with recursive cte as (select v1 from cte where v1 < 10) select * from cte",
+                "Unknown table 'test.cte'");
+    }
 }
 

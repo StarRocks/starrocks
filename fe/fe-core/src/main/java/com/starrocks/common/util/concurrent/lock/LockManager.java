@@ -17,6 +17,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.metric.MetricRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -59,6 +60,7 @@ public class LockManager {
     public void lock(long rid, Locker locker, LockType lockType, long timeout) throws LockException {
         final long startTime = System.currentTimeMillis();
         locker.setLockRequestTimeMs(startTime);
+        long slowLockThreshold = Config.slow_lock_threshold_ms;
 
         synchronized (locker) {
             int lockTableIdx = getLockTableIndex(rid);
@@ -95,7 +97,7 @@ public class LockManager {
              * If a lock is obtained during this period, there is no need to perform deadlock detection.
              * Avoid frequent and unnecessary deadlock detection due to lock contention
              */
-            long deadLockDetectionDelayTimeMs = Config.slow_lock_threshold_ms;
+            long deadLockDetectionDelayTimeMs = slowLockThreshold;
             if (deadLockDetectionDelayTimeMs > 0) {
                 if (timeout != 0) {
                     deadLockDetectionDelayTimeMs = Math.min(deadLockDetectionDelayTimeMs, timeRemain(timeout, startTime));
@@ -136,6 +138,23 @@ public class LockManager {
             logSlowLockTrace(rid);
         }
 
+        // handle lock acquire slow path and possibly deadlock detection
+        lockAcquireSlowPath(rid, locker, lockType, timeout, startTime);
+        final long lockWaitTimeMs = System.currentTimeMillis() - startTime;
+        if (slowLockThreshold > 0 && lockWaitTimeMs >= slowLockThreshold) {
+            LOG.debug("Lock[rid={}, lockType={}] acquisition takes {}ms", rid, lockType, lockWaitTimeMs);
+            MetricRepo.HISTO_SLOW_LOCK_WAIT_TIME_MS.update(lockWaitTimeMs);
+        }
+    }
+
+    /**
+     * Handles lock acquisition when fast path fails, including deadlock detection and waiting.
+     * This is the "slow path" that involves blocking and potential deadlock detection.
+     *
+     * @throws LockException if timeout occurs or deadlock is detected
+     */
+    private void lockAcquireSlowPath(long rid, Locker locker, LockType lockType, long timeout, long startTime)
+            throws LockException {
         while (true) {
             Locker victim = null;
             synchronized (locker) {
@@ -384,16 +403,20 @@ public class LockManager {
         JsonObject ownerInfo = new JsonObject();
         ownerInfo.addProperty("rid", rid);
 
+        // Track the maximum lock held time among all owners for this slow lock event
+        long maxHeldForTimeMs = 0;
         //owner
         JsonArray ownerArray = new JsonArray();
         for (LockHolder owner : owners) {
             Locker locker = owner.getLocker();
+            long heldForTimeMs = nowMs - owner.getLockAcquireTimeMs();
+            maxHeldForTimeMs = Math.max(maxHeldForTimeMs, heldForTimeMs);
 
             JsonObject readerInfo = new JsonObject();
             readerInfo.addProperty("id", owner.getLocker().getThreadId());
             readerInfo.addProperty("name", owner.getLocker().getThreadName());
             readerInfo.addProperty("type", owner.getLockType().toString());
-            readerInfo.addProperty("heldFor", nowMs - owner.getLockAcquireTimeMs());
+            readerInfo.addProperty("heldFor", heldForTimeMs);
             if (locker.getQueryId() != null) {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
@@ -423,6 +446,7 @@ public class LockManager {
         }
         ownerInfo.add("waiter", waiterArray);
 
+        MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS.update(maxHeldForTimeMs);
         LOG.warn("LockManager detects slow lock : {}", ownerInfo.toString());
     }
 

@@ -16,12 +16,16 @@
 
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "common/brpc_helper.h"
 #include "common/config.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
+#include "common/util/thrift_util.h"
 #include "common/utils.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
@@ -31,12 +35,9 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
-#include "util/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -659,13 +660,13 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     AddMultiChunkReq add_chunk = std::move(_request_queue.front());
     _request_queue.pop_front();
 
-    auto chunk = std::move(add_chunk.first);
+    const auto& chunk = add_chunk.first;
 
     // reset mem tracker since we don't want to send the brpc request under query_mem_tracker
     // and the memory usage of the request is recorded by the olap_sink's mem tracker
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
 
-    auto request = add_chunk.second;
+    auto& request = add_chunk.second;
 
     _mem_tracker->release(chunk->memory_usage());
 
@@ -1242,45 +1243,52 @@ IndexChannel::~IndexChannel() {
 }
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
-    for (const auto& tablet : tablets) {
-        auto* location = _parent->_location->find_tablet(tablet.tablet_id());
-        if (location == nullptr) {
-            auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
-            return Status::NotFound(msg);
-        }
-        auto node_ids_size = location->node_ids.size();
-        for (size_t i = 0; i < node_ids_size; ++i) {
-            auto& node_id = location->node_ids[i];
-            NodeChannel* channel = nullptr;
-            auto it = _node_channels.find(node_id);
-            if (it == std::end(_node_channels)) {
-                auto channel_ptr = std::make_unique<NodeChannel>(_parent, node_id, is_incremental, _where_clause);
-                channel = channel_ptr.get();
-                _node_channels.emplace(node_id, std::move(channel_ptr));
-                if (is_incremental) {
-                    _has_incremental_node_channel = true;
+    {
+        std::unique_lock<std::shared_mutex> lock(_node_channels_mutex);
+        for (const auto& tablet : tablets) {
+            auto* location = _parent->_location->find_tablet(tablet.tablet_id());
+            if (location == nullptr) {
+                auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
+                return Status::NotFound(msg);
+            }
+            auto node_ids_size = location->node_ids.size();
+            for (size_t i = 0; i < node_ids_size; ++i) {
+                auto& node_id = location->node_ids[i];
+                NodeChannel* channel = nullptr;
+                auto it = _node_channels.find(node_id);
+                if (it == std::end(_node_channels)) {
+                    auto channel_ptr = std::make_unique<NodeChannel>(_parent, node_id, is_incremental, _where_clause);
+                    channel = channel_ptr.get();
+                    _node_channels.emplace(node_id, std::move(channel_ptr));
+                    if (is_incremental) {
+                        _has_incremental_node_channel = true;
+                    }
+                } else {
+                    channel = it->second.get();
                 }
-            } else {
-                channel = it->second.get();
-            }
-            channel->add_tablet(_index_id, tablet);
-            if (_parent->_enable_replicated_storage && i == 0) {
-                channel->set_has_primary_replica(true);
+                channel->add_tablet(_index_id, tablet);
+                if (_parent->_enable_replicated_storage && i == 0) {
+                    channel->set_has_primary_replica(true);
+                }
             }
         }
-    }
-    for (auto& it : _node_channels) {
-        RETURN_IF_ERROR(it.second->init(state));
+        for (auto& it : _node_channels) {
+            RETURN_IF_ERROR(it.second->init(state));
+        }
     }
     if (_where_clause != nullptr) {
         RETURN_IF_ERROR(_where_clause->prepare(_parent->_state));
         RETURN_IF_ERROR(_where_clause->open(_parent->_state));
     }
-    _write_quorum_type = _parent->_write_quorum_type;
+    {
+        std::unique_lock<std::shared_mutex> lock(_failure_state_mutex);
+        _write_quorum_type = _parent->_write_quorum_type;
+    }
     return Status::OK();
 }
 
 void IndexChannel::mark_as_failed(const NodeChannel* ch) {
+    std::unique_lock<std::shared_mutex> lock(_failure_state_mutex);
     // primary replica use for replicated storage
     // if primary replica failed, we should mark this index as failed
     if (ch->has_primary_replica()) {
@@ -1290,6 +1298,7 @@ void IndexChannel::mark_as_failed(const NodeChannel* ch) {
 }
 
 bool IndexChannel::has_intolerable_failure() {
+    std::shared_lock<std::shared_mutex> lock(_failure_state_mutex);
     if (_has_intolerable_failure) {
         return _has_intolerable_failure;
     }

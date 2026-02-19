@@ -107,8 +107,8 @@ public:
                  uint32_t segment_id, EditVersion latest_applied_version, const PrimaryIndex& index,
                  MutableColumnPtr& delete_pks, int64_t* append_column_size);
 
-    const std::vector<MutableColumnPtr>& upserts() const { return _upserts; }
-    const std::vector<MutableColumnPtr>& deletes() const { return _deletes; }
+    const MutableColumns& upserts() const { return _upserts; }
+    const MutableColumns& deletes() const { return _deletes; }
 
     std::size_t memory_usage() const { return _memory_usage; }
 
@@ -169,9 +169,9 @@ private:
     std::once_flag _load_once_flag;
     Status _status;
     // one for each segment file
-    std::vector<MutableColumnPtr> _upserts;
+    MutableColumns _upserts;
     // one for each delete file
-    std::vector<MutableColumnPtr> _deletes;
+    MutableColumns _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
     TabletSchemaCSPtr _tablet_schema = nullptr;

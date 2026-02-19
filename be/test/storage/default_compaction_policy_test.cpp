@@ -19,6 +19,7 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -35,7 +36,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -196,7 +196,7 @@ public:
             auto chunk = ChunkHelper::new_chunk(schema, 128);
             for (size_t i = 0; i < 128; ++i) {
                 test_data.push_back("well" + std::to_string(i));
-                auto& cols = chunk->columns();
+                auto cols = chunk->mutable_columns();
                 cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
                 Slice field_1(test_data[i]);
                 cols[1]->append_datum(Datum(field_1));
@@ -294,7 +294,9 @@ protected:
 };
 
 TEST_F(DefaultCompactionPolicyTest, test_init_succeeded) {
+    create_tablet_schema(DUP_KEYS);
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
+    tablet_meta->set_tablet_schema(_tablet_schema);
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     init_compaction_context(tablet);
     ASSERT_FALSE(compact(tablet).ok());

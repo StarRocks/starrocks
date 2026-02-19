@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "base/bit/bit_util.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
@@ -26,7 +27,6 @@
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
 #include "runtime/mem_pool.h"
-#include "util/bit_util.h"
 
 namespace starrocks {
 
@@ -87,7 +87,7 @@ public:
             std::vector<Column*> data_columns;
             data_columns.reserve(new_columns.size());
             for (size_t i = 0; i < new_columns.size(); i++) {
-                data_columns.emplace_back(ColumnHelper::get_data_column(new_columns[i].get()));
+                data_columns.emplace_back(ColumnHelper::get_data_column(new_columns[i]->as_mutable_raw_ptr()));
             }
             for (size_t i = 0; i < chunk_size; i++) {
                 _function->create(_nested_ctx, agg_state);

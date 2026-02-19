@@ -172,7 +172,12 @@ public class ScalarOperatorToExpr {
         public Expr visitVariableReference(ColumnRefOperator node, FormatterContext context) {
             Expr expr = context.colRefToExpr.get(node);
             if (context.projectOperatorMap.containsKey(node) && expr == null) {
-                expr = buildExpr.build(context.projectOperatorMap.get(node), context);
+                final ScalarOperator projected = context.projectOperatorMap.get(node);
+                if (projected.equals(node)) {
+                    throw new SemanticException("Cannot convert ColumnRefOperator to Expr, " +
+                            "please check the input expression: " + node);
+                }
+                expr = buildExpr.build(projected, context);
                 hackTypeNull(expr);
                 context.colRefToExpr.put(node, expr);
                 return expr;
@@ -500,6 +505,7 @@ public class ScalarOperatorToExpr {
                 case "current_user":
                 case "current_role":
                 case "current_group":
+                case "current_warehouse":
                 case "session_id":
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),

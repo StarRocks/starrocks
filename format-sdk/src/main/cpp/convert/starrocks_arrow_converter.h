@@ -56,7 +56,7 @@ public:
 
     virtual ~RecordBatchToChunkConverter() = default;
 
-    virtual arrow::Result<std::unique_ptr<Chunk>> convert(std::shared_ptr<arrow::RecordBatch> recordBatch) = 0;
+    virtual arrow::Result<ChunkUniquePtr> convert(std::shared_ptr<arrow::RecordBatch> recordBatch) = 0;
 
 public:
     RecordBatchToChunkConverter(RecordBatchToChunkConverter&&) = delete;
@@ -66,7 +66,7 @@ public:
 protected:
     RecordBatchToChunkConverter(const std::shared_ptr<Schema>& sr_schema,
                                 const std::shared_ptr<arrow::Schema>& arrow_schema, arrow::MemoryPool* pool)
-            : BaseArrowConverter(sr_schema, arrow_schema, pool) {};
+            : BaseArrowConverter(sr_schema, arrow_schema, pool){};
 };
 
 /**
@@ -90,7 +90,7 @@ public:
 protected:
     ChunkToRecordBatchConverter(const std::shared_ptr<Schema>& sr_schema,
                                 const std::shared_ptr<arrow::Schema>& arrow_schema, arrow::MemoryPool* pool)
-            : BaseArrowConverter(sr_schema, arrow_schema, pool) {};
+            : BaseArrowConverter(sr_schema, arrow_schema, pool){};
 };
 
 } // namespace starrocks::lake::format

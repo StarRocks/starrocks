@@ -935,13 +935,13 @@ public class PartitionUtil {
             return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap, differ);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
-                    functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
+                    functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
                 return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap,
                         mvPartitionMap, functionCallExpr, differ);
             } else {
                 throw new SemanticException("Materialized view partition function " +
-                        functionCallExpr.getFnName().getFunction() +
+                        functionCallExpr.getFunctionName() +
                         " is not supported yet.", functionCallExpr.getPos());
             }
         } else {

@@ -40,6 +40,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/failpoint/fail_point.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -48,6 +49,7 @@
 #include "exprs/array_element_expr.h"
 #include "exprs/array_expr.h"
 #include "exprs/array_map_expr.h"
+#include "exprs/array_sort_lambda_expr.h"
 #include "exprs/arrow_function_call.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/case_expr.h"
@@ -75,8 +77,8 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
-#include "util/failpoint/fail_point.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include <llvm/IR/Value.h>
@@ -201,6 +203,9 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
     if (node.__isset.is_index_only_filter) {
         _is_index_only_filter = node.is_index_only_filter;
     }
+    if (node.__isset.is_nondeterministic) {
+        _is_nondeterministic = node.is_nondeterministic;
+    }
 }
 
 Expr::~Expr() = default;
@@ -260,7 +265,7 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
                                               int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
     // Enable JIT based on the "jit_level" parameters.
-    if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
+    if (state == nullptr || !status.ok() || !RuntimeStateHelper::is_jit_enabled(state)) {
         return status;
     }
 
@@ -400,6 +405,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
             *expr = pool->add(VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
         } else if (texpr_node.fn.name.function_name == "array_map") {
             *expr = pool->add(new ArrayMapExpr(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "array_sort_lambda") {
+            *expr = pool->add(new ArraySortLambdaExpr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "map_apply") {
             *expr = pool->add(new MapApplyExpr(texpr_node));
         } else {
@@ -915,6 +922,13 @@ SlotId Expr::max_used_slot_id() const {
     SlotId max_slot_id = 0;
     for_each_slot_id([&max_slot_id](SlotId slot_id) { max_slot_id = std::max(max_slot_id, slot_id); });
     return max_slot_id;
+}
+
+Status Expr::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    for (auto& child : _children) {
+        RETURN_IF_ERROR(callback(child));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

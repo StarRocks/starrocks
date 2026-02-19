@@ -17,8 +17,8 @@
 #include <tuple>
 #include <variant>
 
+#include "base/phmap/phmap.h"
 #include "runtime/runtime_state.h"
-#include "util/phmap/phmap.h"
 
 #define APPLY_FOR_AGG_VARIANT_ALL(M) \
     M(phase1_uint8)                  \
@@ -489,5 +489,8 @@ auto HashVariantResolver<HashVariantType>::instance() -> HashVariantResolver<Has
 
 template class HashVariantResolver<AggHashSetVariant>;
 template class HashVariantResolver<AggHashMapVariant>;
+
+DEFINE_FAIL_POINT(agg_hash_set_bad_alloc);
+DEFINE_FAIL_POINT(aggregate_build_hash_map_bad_alloc);
 
 } // namespace starrocks

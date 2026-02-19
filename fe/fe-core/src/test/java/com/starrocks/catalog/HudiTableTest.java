@@ -46,6 +46,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
+import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.exception.HoodieIOException;
 import org.junit.jupiter.api.Assertions;
@@ -56,6 +57,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -303,5 +305,35 @@ public class HudiTableTest {
         HudiTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
         HudiTable table = newBuilder.build();
         Assertions.assertEquals(table.getResourceName(), resourceName);
+    }
+
+    @Test
+    public void testGetSupportedOperations() {
+        Map<String, String> props = new HashMap<>();
+        props.put(HudiTable.HUDI_TABLE_TYPE, HoodieTableType.COPY_ON_WRITE.name());
+        props.put(HudiTable.HUDI_BASE_PATH, "/warehouse/hudi/db/table");
+        props.put(HudiTable.HUDI_TABLE_INPUT_FOAMT, HudiTable.COW_INPUT_FORMAT);
+        props.put(HudiTable.HUDI_TABLE_COLUMN_NAMES, "c1,c2");
+        props.put(HudiTable.HUDI_TABLE_COLUMN_TYPES, "int,varchar");
+        props.put(HudiTable.HUDI_HMS_TABLE_TYPE, "EXTERNAL_TABLE");
+
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("col1", IntegerType.INT, true));
+        columns.add(new Column("col2", IntegerType.INT, true));
+        long createTime = System.currentTimeMillis();
+
+        HudiTable.Builder tableBuilder = HudiTable.builder()
+                .setId(2)
+                .setTableName("table0")
+                .setCatalogName("catalog")
+                .setHiveDbName("db0")
+                .setHiveTableName("table0")
+                .setResourceName("catalog")
+                .setFullSchema(columns)
+                .setPartitionColNames(Lists.newArrayList("col1"))
+                .setCreateTime(createTime)
+                .setHudiProperties(props);
+        HudiTable table = tableBuilder.build();
+        Assertions.assertEquals(Set.of(TableOperation.READ, TableOperation.ALTER), table.getSupportedOperations());
     }
 }

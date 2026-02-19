@@ -289,10 +289,13 @@ public class TableFunctionTest extends PlanTestBase {
                 "\t r2 as (select sub_bitmap(b1, 0, 10) as b2 from test_agg),\n" +
                 "\t r3 as (select bitmap_and(t0.b2, t1.b2) as b2 from r1 t0 join r2 t1)\n" +
                 "select unnest as r1 from r3, unnest(bitmap_to_array(b2)) order by r1;";
-        String plan = getFragmentPlan(sql);
-        PlanTestBase.assertContains(plan, "5:Project\n" +
-                "  |  <slot 28> : bitmap_and(10: b1, 25: sub_bitmap)");
+        String plan = getCostExplain(sql);
+        PlanTestBase.assertContains(plan, "5:Project\n" + "  |  output columns:\n" +
+                "  |  28 <-> bitmap_and[([10: b1, BITMAP, true], [25: sub_bitmap, BITMAP, true]);");
         PlanTestBase.assertContains(plan, "tableFunctionName: unnest_bitmap");
+        PlanTestBase.assertContains(plan, "2:Project\n" + "  |  output columns:\n" +
+                "  |  25 <-> sub_bitmap[([22: b1, BITMAP, true], 0, 10); args: BITMAP,BIGINT,BIGINT; result: BITMAP; " +
+                "args nullable: true; result nullable: true]");
         PlanTestBase.assertNotContains(plan, "bitmap_to_array");
     }
 

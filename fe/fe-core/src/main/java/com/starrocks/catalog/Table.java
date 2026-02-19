@@ -48,6 +48,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -79,7 +80,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     //   1.2 Cloud native: LAKE, LAKE_MATERIALIZED_VIEW
     // 2. System table: SCHEMA
     // 3. View: INLINE_VIEW, VIEW
-    // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC
+    // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC, BENCHMARK
     public enum TableType {
         @SerializedName("MYSQL")
         MYSQL,
@@ -127,10 +128,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         METADATA,
         @SerializedName("KUDU")
         KUDU,
+        @SerializedName("BENCHMARK")
+        BENCHMARK,
         @SerializedName("HIVE_VIEW")
         HIVE_VIEW,
         @SerializedName("ICEBERG_VIEW")
-        ICEBERG_VIEW;
+        ICEBERG_VIEW,
+        @SerializedName("PAIMON_VIEW")
+        PAIMON_VIEW;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -200,6 +205,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * column names can change, but the column ID of a specific column will never change.
      * Use case-insensitive tree map, because the column name is case-insensitive in the system.
      */
+    @IgnoreMemoryTrack
     protected Map<String, Column> nameToColumn;
     protected Map<ColumnId, Column> idToColumn;
 
@@ -272,7 +278,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         throw new NotImplementedException();
     }
 
-    public Optional<String> mayGetDatabaseName() {
+    public Optional<Long> mayGetDatabaseId() {
         return Optional.empty();
     }
 
@@ -308,7 +314,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isOlapTable() {
-        return type == TableType.OLAP;
+        return getType() == TableType.OLAP;
     }
 
     public boolean isOlapExternalTable() {
@@ -331,6 +337,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.ICEBERG_VIEW;
     }
 
+    public boolean isPaimonView() {
+        return type == TableType.PAIMON_VIEW;
+    }
+
     public boolean isMetadataTable() {
         return type == TableType.METADATA;
     }
@@ -344,7 +354,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isConnectorView() {
-        return isHiveView() || isIcebergView();
+        return isHiveView() || isIcebergView() || isPaimonView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -419,6 +429,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.KUDU;
     }
 
+    public boolean isBenchmarkTable() {
+        return type == TableType.BENCHMARK;
+    }
+
     public boolean isHMSTable() {
         return type == TableType.HIVE || type == TableType.HUDI || type == TableType.ODPS;
     }
@@ -490,6 +504,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public Column getColumnByUniqueId(long uniqueId) {
         return fullSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst().orElse(null);
+    }
+
+    /**
+     * Get all virtual columns for this table. Virtual columns are not persisted 
+     * but are available during query execution.
+     * Default implementation returns empty list. Subclasses can override to provide virtual columns.
+     * @return List of virtual columns
+     */
+    public List<Column> getVirtualColumns() {
+        return new ArrayList<>();
     }
 
     public boolean containColumn(String columnName) {
@@ -842,6 +866,27 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
                 !type.equals(TableType.VIEW) &&
                 !isConnectorView();
+    }
+
+    /**
+     * Get the set of operations supported by this table type.
+     * Subclasses can override this method to define their own supported operations.
+     * By default, tables support read operations.
+     *
+     * @return Set of supported operations
+     */
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ);
+    }
+
+    /**
+     * Check if this table supports the specified operation.
+     *
+     * @param operation The operation to check
+     * @return true if the operation is supported, false otherwise
+     */
+    public boolean supportsOperation(TableOperation operation) {
+        return getSupportedOperations().contains(operation);
     }
 
     public boolean isSupportBackupRestore() {

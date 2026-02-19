@@ -16,6 +16,8 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.proto.ReshardingTabletInfoPB;
+import com.starrocks.proto.SplittingTabletInfoPB;
 
 import java.util.List;
 
@@ -31,25 +33,13 @@ public class SplittingTablet implements ReshardingTablet {
     protected final List<Long> newTabletIds;
 
     public SplittingTablet(long oldTabletId, List<Long> newTabletIds) {
-        // New tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(TabletReshardUtils.isPowerOfTwo(newTabletIds.size()),
-                "New tablet size must be a power of 2, actual: " + newTabletIds.size());
-
         this.oldTabletId = oldTabletId;
         this.newTabletIds = newTabletIds;
     }
 
-    public long getOldTabletId() {
-        return oldTabletId;
-    }
-
-    public List<Long> getNewTabletIds() {
-        return newTabletIds;
-    }
-
     @Override
     public SplittingTablet getSplittingTablet() {
-        return this;
+        return isIdenticalTablet() ? null : this;
     }
 
     @Override
@@ -59,7 +49,11 @@ public class SplittingTablet implements ReshardingTablet {
 
     @Override
     public IdenticalTablet getIdenticalTablet() {
-        return null;
+        return isIdenticalTablet() ? new IdenticalTablet(oldTabletId, newTabletIds.get(0)) : null;
+    }
+
+    public long getOldTabletId() {
+        return oldTabletId;
     }
 
     @Override
@@ -68,7 +62,35 @@ public class SplittingTablet implements ReshardingTablet {
     }
 
     @Override
+    public List<Long> getOldTabletIds() {
+        return List.of(oldTabletId);
+    }
+
+    @Override
+    public List<Long> getNewTabletIds() {
+        return newTabletIds;
+    }
+
+    @Override
     public long getParallelTablets() {
         return newTabletIds.size();
+    }
+
+    @Override
+    public ReshardingTabletInfoPB toProto() {
+        ReshardingTabletInfoPB reshardingTabletInfoPB = new ReshardingTabletInfoPB();
+        reshardingTabletInfoPB.splittingTabletInfo = new SplittingTabletInfoPB();
+        reshardingTabletInfoPB.splittingTabletInfo.oldTabletId = oldTabletId;
+        reshardingTabletInfoPB.splittingTabletInfo.newTabletIds = newTabletIds;
+        return reshardingTabletInfoPB;
+    }
+
+    public void fallbackToIdenticalTablet() {
+        Preconditions.checkState(!newTabletIds.isEmpty());
+        newTabletIds.subList(1, newTabletIds.size()).clear();
+    }
+
+    public boolean isIdenticalTablet() {
+        return newTabletIds.size() == 1;
     }
 }

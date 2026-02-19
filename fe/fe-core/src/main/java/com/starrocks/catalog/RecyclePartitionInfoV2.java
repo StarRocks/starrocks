@@ -24,9 +24,9 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
     private DataCacheInfo dataCacheInfo;
 
     public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
-                                  DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                  DataProperty dataProperty, short replicationNum,
                                   DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+        super(dbId, tableId, partition, dataProperty, replicationNum);
         this.dataCacheInfo = dataCacheInfo;
     }
 
@@ -41,10 +41,12 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
     }
 
     @Override
-    void recover(OlapTable table) throws DdlException {
-        RecyclePartitionInfo.recoverRangePartition(table, this);
+    public void checkRecoverable(OlapTable table) throws DdlException {
+        checkRecoverableForRangePartition(table);
     }
 
-
-
+    @Override
+    public void recover(OlapTable table) {
+        recoverRangePartition(table);
+    }
 }

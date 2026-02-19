@@ -178,7 +178,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                                     ExecGroupSets execGroupSets) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         // only support the runtime filter in TopN when limit > 0
-        if (limit < 0 || !sessionVariable.getEnableTopNRuntimeFilter() ||
+        // When agg topn runtime filter is enabled, we don't need to build runtime filter for SortNode.
+        if ((perPipeline && sessionVariable.getTopNPushDownAggMode() >= 1) || limit < 0 || !sessionVariable.getEnableTopNRuntimeFilter() ||
                 getSortInfo().getOrderingExprs().isEmpty()) {
             return;
         }
@@ -228,10 +229,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.SORT_NODE;
-        TSortInfo sortInfo = new TSortInfo(
-                ExprToThrift.treesToThrift(info.getOrderingExprs()),
-                info.getIsAscOrder(),
-                info.getNullsFirst());
+        TSortInfo sortInfo = info.toTSortInfo();
         sortInfo.setSort_tuple_slot_exprs(ExprToThrift.treesToThrift(resolvedTupleExprs));
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);

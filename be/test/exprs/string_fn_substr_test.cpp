@@ -146,7 +146,7 @@ TEST_F(StringFunctionSubstrTest, substrConstASCIITest) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
-        auto* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<const BinaryColumn*>(result.get());
         ASSERT_EQ(binary->size(), 2);
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
@@ -194,7 +194,7 @@ TEST_F(StringFunctionSubstrTest, substrConstZhTest) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
-        auto* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<const BinaryColumn*>(result.get());
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
@@ -277,7 +277,7 @@ TEST_F(StringFunctionSubstrTest, substrConstUtf8Test) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
-        auto* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<const BinaryColumn*>(result.get());
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
@@ -305,7 +305,7 @@ TEST_F(StringFunctionSubstrTest, substringOverleftTest) {
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
 
-    auto v = ColumnHelper::as_column<BinaryColumn>(result);
+    auto v = ColumnHelper::as_column<const BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
         ASSERT_EQ("", v->get_data()[k].to_string());
     }
@@ -439,20 +439,20 @@ static void test_left_and_right_not_const(
     // left_not_const and right_not_const
     std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context());
     Columns columns;
-    BinaryColumn::Ptr str_col = BinaryColumn::create();
-    Int32Column::Ptr len_col = Int32Column::create();
+    auto str_col = BinaryColumn::create();
+    auto len_col = Int32Column::create();
     for (auto& c : cases) {
         auto s = std::get<0>(c);
         auto len = std::get<1>(c);
         str_col->append(Slice(s));
         len_col->append(len);
     }
-    columns.push_back(str_col);
-    columns.push_back(len_col);
+    columns.emplace_back(str_col);
+    columns.emplace_back(len_col);
     ColumnPtr left_result = StringFunctions::left(context.get(), columns).value();
     ColumnPtr right_result = StringFunctions::right(context.get(), columns).value();
-    auto* binary_left_result = down_cast<BinaryColumn*>(left_result.get());
-    auto* binary_right_result = down_cast<BinaryColumn*>(right_result.get());
+    auto* binary_left_result = down_cast<const BinaryColumn*>(left_result.get());
+    auto* binary_right_result = down_cast<const BinaryColumn*>(right_result.get());
     ASSERT_TRUE(binary_left_result != nullptr);
     ASSERT_TRUE(binary_right_result != nullptr);
     const auto size = cases.size();
@@ -477,8 +477,8 @@ static void test_left_and_right_not_const(
         str_col->append(Slice(s));
         len_col->append(len);
         columns.resize(0);
-        columns.push_back(str_col);
-        columns.push_back(ConstColumn::create(len_col, 1));
+        columns.emplace_back(str_col);
+        columns.emplace_back(ConstColumn::create(len_col, 1));
 
         auto substr_state = std::make_unique<SubstrState>();
         context->set_function_state(FunctionContext::FRAGMENT_LOCAL, substr_state.get());
@@ -488,8 +488,8 @@ static void test_left_and_right_not_const(
         left_result = StringFunctions::left(context.get(), columns).value();
         substr_state->pos = -len;
         right_result = StringFunctions::right(context.get(), columns).value();
-        binary_left_result = down_cast<BinaryColumn*>(left_result.get());
-        binary_right_result = down_cast<BinaryColumn*>(right_result.get());
+        binary_left_result = down_cast<const BinaryColumn*>(left_result.get());
+        binary_right_result = down_cast<const BinaryColumn*>(right_result.get());
         ASSERT_TRUE(binary_left_result != nullptr);
         ASSERT_TRUE(binary_right_result != nullptr);
         ASSERT_EQ(binary_left_result->size(), 1);
@@ -569,7 +569,7 @@ static void test_left_and_right_const(
         auto len_col = Int32Column::create();
         len_col->append(len);
         columns.emplace_back(std::move(str_col));
-        columns.push_back(ConstColumn::create(std::move(len_col), 1));
+        columns.emplace_back(ConstColumn::create(std::move(len_col), 1));
         auto substr_state = std::make_unique<SubstrState>();
         std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context());
         context->set_function_state(FunctionContext::FRAGMENT_LOCAL, substr_state.get());
@@ -578,8 +578,8 @@ static void test_left_and_right_const(
         substr_state->len = len;
         auto left_result = StringFunctions::left(context.get(), columns).value();
         auto right_result = StringFunctions::right(context.get(), columns).value();
-        auto binary_left_result = down_cast<BinaryColumn*>(left_result.get());
-        auto binary_right_result = down_cast<BinaryColumn*>(right_result.get());
+        auto binary_left_result = down_cast<const BinaryColumn*>(left_result.get());
+        auto binary_right_result = down_cast<const BinaryColumn*>(right_result.get());
         ASSERT_TRUE(binary_left_result != nullptr);
         ASSERT_TRUE(binary_right_result != nullptr);
         const auto size = str_col->size();
@@ -662,7 +662,7 @@ static void test_substr_not_const(std::vector<std::tuple<std::string, int, int, 
     }
     Columns columns{std::move(str_col), std::move(off_col), std::move(len_col)};
     auto result = StringFunctions::substring(context.get(), columns).value();
-    auto* binary_result = down_cast<BinaryColumn*>(result.get());
+    auto* binary_result = down_cast<const BinaryColumn*>(result.get());
     const auto size = cases.size();
     ASSERT_TRUE(binary_result != nullptr);
     ASSERT_EQ(binary_result->size(), size);
@@ -674,7 +674,7 @@ static void test_substr_not_const(std::vector<std::tuple<std::string, int, int, 
 }
 
 TEST_F(StringFunctionSubstrTest, substrNotConstASCIITest) {
-    MutableColumnPtr str_col = BinaryColumn::create();
+    auto str_col = BinaryColumn::create();
     std::string ascii_1_9 = "123456789";
     std::vector<std::tuple<std::string, int, int, std::string>> cases = {
             {"", 0, 1, ""},
@@ -750,7 +750,7 @@ TEST_F(StringFunctionSubstrTest, substrNotConstASCIITest) {
 }
 
 TEST_F(StringFunctionSubstrTest, substrNotConstUtf8Test) {
-    MutableColumnPtr str_col = BinaryColumn::create();
+    auto str_col = BinaryColumn::create();
     std::string zh_1_9 = "壹贰叁肆伍陆柒捌玖";
     std::vector<std::tuple<std::string, int, int, std::string>> cases = {
             {"", 0, 1, ""},

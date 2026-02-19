@@ -24,16 +24,16 @@
 namespace starrocks {
 
 class VariantColumn final
-        : public CowFactory<ColumnFactory<ObjectColumn<VariantValue>, VariantColumn>, VariantColumn, Column> {
+        : public CowFactory<ColumnFactory<ObjectColumn<VariantRowValue>, VariantColumn>, VariantColumn, Column> {
 public:
-    using ValueType = VariantValue;
-    using SuperClass = CowFactory<ColumnFactory<ObjectColumn<VariantValue>, VariantColumn>, VariantColumn, Column>;
+    using ValueType = VariantRowValue;
+    using SuperClass = CowFactory<ColumnFactory<ObjectColumn<VariantRowValue>, VariantColumn>, VariantColumn, Column>;
     using BaseClass = VariantColumnBase;
     using ImmContainer = ObjectDataProxyContainer;
 
     VariantColumn() = default;
     explicit VariantColumn(size_t size) : SuperClass(size) {}
-    VariantColumn(const VariantColumn& rhs) : SuperClass(rhs) {}
+    DISALLOW_COPY(VariantColumn);
 
     VariantColumn(VariantColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {}
 
@@ -51,9 +51,9 @@ public:
 
     // Add a forwarding function to expose the base class append function
     void append(const Column& src) { append(src, 0, src.size()); }
-    void append(const VariantValue* object);
-    void append(VariantValue&& object);
-    void append(const VariantValue& object);
+    void append(const VariantRowValue* object);
+    void append(VariantRowValue&& object);
+    void append(const VariantRowValue& object);
     bool append_nulls(size_t count) override;
 
     bool is_variant() const override { return true; }
@@ -63,6 +63,8 @@ public:
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
     std::string debug_item(size_t idx) const override;
+
+    std::string debug_string() const override;
 };
 
 } // namespace starrocks

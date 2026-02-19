@@ -14,7 +14,6 @@
 
 package com.starrocks.qe.scheduler.slot;
 
-import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -22,7 +21,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.system.SystemInfoService;
-import mockit.Expectations;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -66,21 +65,13 @@ public class WarehouseQueryQueueOptionsTest {
         };
 
         long warehouseId = 10000L;
-        new Expectations() {
-            {
-                ConnectContext.get();
-                minTimes = 0;
-                result = connectContext;
+        connectContext.setThreadLocalInfo();
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(warehouseId, "wh10000"));
+        connectContext.setCurrentWarehouseId(warehouseId);
 
-                connectContext.getCurrentWarehouseId();
-                minTimes = 0;
-                result = warehouseId;
-
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(anyLong);
-                minTimes = 0;
-                result = Lists.newArrayList(10003L, 10004L, 10005L);
-            }
-        };
+        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10003L, 16);
+        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10004L, 16);
+        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10005L, 16);
 
         {
             Config.enable_query_queue_v2 = false;
@@ -104,8 +95,8 @@ public class WarehouseQueryQueueOptionsTest {
             QueryQueueOptions.V2 v2 = opts.v2();
             assertThat(v2.getNumWorkers()).isEqualTo(3);
             assertThat(v2.getNumRowsPerSlot()).isEqualTo(Config.query_queue_v2_num_rows_per_slot);
-            assertThat(QueryQueueOptions.correctSlotNum(v2.getTotalSlots())).isEqualTo(3);
-            assertThat(v2.getTotalSmallSlots()).isEqualTo(1);
+            assertThat(QueryQueueOptions.correctSlotNum(v2.getTotalSlots())).isEqualTo(48);
+            assertThat(v2.getTotalSmallSlots()).isEqualTo(16);
             assertThat(v2.getCpuCostsPerSlot()).isEqualTo(Config.query_queue_v2_cpu_costs_per_slot);
         }
     }

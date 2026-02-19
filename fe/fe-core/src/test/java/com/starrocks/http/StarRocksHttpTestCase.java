@@ -45,7 +45,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -69,6 +68,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -193,12 +193,11 @@ public abstract class StarRocksHttpTestCase {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 3);
-        partitionInfo.setIsInMemory(testPartitionId, false);
         OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
         table.addPartition(partition);
         table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setBaseIndexId(testIndexId);
+        table.setBaseIndexMetaId(testIndexId);
         return table;
     }
 
@@ -251,13 +250,12 @@ public abstract class StarRocksHttpTestCase {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 3);
-        partitionInfo.setIsInMemory(testPartitionId, false);
         OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
         table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setBaseIndexId(testIndexId);
+        table.setBaseIndexMetaId(testIndexId);
         return table;
     }
 
@@ -430,26 +428,8 @@ public abstract class StarRocksHttpTestCase {
 
     @BeforeAll
     public static void initHttpServer() throws IllegalArgException, InterruptedException {
-        ServerSocket socket = null;
         try {
-            socket = new ServerSocket(0);
-            socket.setReuseAddress(true);
-            HTTP_PORT = socket.getLocalPort();
-            BASE_URL = "http://localhost:" + HTTP_PORT;
-            URI = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/" + TABLE_NAME;
-        } catch (Exception e) {
-            throw new IllegalStateException("Could not find a free TCP/IP port to start HTTP Server on");
-        } finally {
-            if (socket != null) {
-                try {
-                    socket.close();
-                } catch (Exception e) {
-                }
-            }
-        }
-
-        try {
-            httpServer = new HttpServer(HTTP_PORT);
+            httpServer = new HttpServer(0);
         } catch (Exception e) {
             System.err.println("Failed to initialize HttpServer: " + e.getMessage());
             e.printStackTrace();
@@ -458,9 +438,20 @@ public abstract class StarRocksHttpTestCase {
         httpServer.setup();
         httpServer.start();
         // must ensure the http server started before any unit test
+        int retry = 0;
         while (!httpServer.isStarted()) {
             Thread.sleep(500);
+            retry++;
+            if (retry > 60) {
+                throw new RuntimeException("HttpServer failed to start within 30 seconds");
+            }
         }
+        HTTP_PORT = httpServer.getPort();
+        if (HTTP_PORT == 0) {
+            throw new IllegalStateException("HttpServer port is not assigned");
+        }
+        BASE_URL = "http://localhost:" + HTTP_PORT;
+        URI = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/" + TABLE_NAME;
     }
 
     @BeforeEach

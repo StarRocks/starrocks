@@ -47,6 +47,7 @@
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -191,7 +192,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
         }
         DCHECK(ptr != nullptr);
         if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant() && (dummy_chunk.get() == nullptr)) {
-            ptr->resize(chunk->num_rows());
+            ptr->as_mutable_raw_ptr()->resize(chunk->num_rows());
         }
         return ptr;
     } catch (std::runtime_error& e) {
@@ -216,7 +217,7 @@ bool ExprContext::error_if_overflow() const {
 }
 
 Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
-    if (_runtime_state == nullptr || !_runtime_state->is_jit_enabled()) {
+    if (_runtime_state == nullptr || !RuntimeStateHelper::is_jit_enabled(_runtime_state)) {
         return Status::OK();
     }
 #ifdef STARROCKS_JIT_ENABLE

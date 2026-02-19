@@ -14,8 +14,9 @@
 
 #pragma once
 
+#include "base/brpc/recoverable_closure.h"
+#include "base/status.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/recoverable_closure.h"
 
 namespace starrocks {
 
@@ -90,6 +91,9 @@ public:
     void fetch_datacache(::google::protobuf::RpcController* controller,
                          const ::starrocks::PFetchDataCacheRequest* request,
                          ::starrocks::PFetchDataCacheResponse* response, ::google::protobuf::Closure* done);
+
+    void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
+                google::protobuf::Closure* done) override;
 
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;

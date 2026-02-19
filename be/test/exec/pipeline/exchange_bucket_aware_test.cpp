@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 
-#include "column/datum.h"
+#include "base/testutil/assert.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -24,7 +24,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
+#include "types/datum.h"
 
 namespace starrocks::pipeline {
 
@@ -163,7 +163,7 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
 
     int row_num = 0;
 
-    std::unique_ptr<Chunk> received_chunk = nullptr;
+    ChunkUniquePtr received_chunk = nullptr;
     do {
         std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, 0);
         if (received_chunk != nullptr) {

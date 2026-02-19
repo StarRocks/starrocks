@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
@@ -52,6 +53,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -71,6 +73,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
@@ -207,6 +210,7 @@ public class ConnectContext {
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
     protected boolean isLastStmt = true;
+    protected boolean isSingleStmt = false;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -576,6 +580,26 @@ public class ConnectContext {
         return true;
     }
 
+    /**
+     * Whether {@link SessionVariable#QUERY_TIMEOUT} is explicitly overridden in the current session.
+     * <p>
+     * This is used to decide whether table-level timeout should take effect when the user didn't set
+     * the session query_timeout
+     */
+    public boolean isSessionQueryTimeoutOverridden() {
+        if (modifiedSessionVariables.containsKey(SessionVariable.QUERY_TIMEOUT)) {
+            return true;
+        }
+
+        try {
+            int defaultTimeout = globalStateMgr.getVariableMgr().getDefaultSessionVariable().getQueryTimeoutS();
+            return sessionVariable.getQueryTimeoutS() != defaultTimeout;
+        } catch (Exception e) {
+            LOG.warn("Failed to judge session query timeout override.", e);
+            return false;
+        }
+    }
+
     public void modifyUserVariable(UserVariable userVariable) {
         if (userVariables.size() > 1024 && !userVariables.containsKey(userVariable.getVariable())) {
             throw new SemanticException("User variable exceeds the maximum limit of 1024");
@@ -739,7 +763,7 @@ public class ConnectContext {
         return endTime;
     }
 
-    public void updateReturnRows(int returnRows) {
+    public void updateReturnRows(long returnRows) {
         this.returnRows += returnRows;
     }
 
@@ -801,6 +825,10 @@ public class ConnectContext {
 
     public void setState(QueryState state) {
         this.state = state;
+    }
+
+    public boolean isArrowFlightSql() {
+        return this instanceof ArrowFlightSqlConnectContext;
     }
 
     public String getNormalizedErrorCode() {
@@ -904,6 +932,10 @@ public class ConnectContext {
         return sessionVariable != null ? sessionVariable.getCustomQueryId() : "";
     }
 
+    public String getCustomSessionName() {
+        return sessionVariable != null ? sessionVariable.getCustomSessionName() : "";
+    }
+
     public boolean isProfileEnabled() {
         if (sessionVariable == null) {
             return false;
@@ -978,10 +1010,16 @@ public class ConnectContext {
     }
 
     public void setCurrentCatalog(String currentCatalog) {
-        this.sessionVariable.setCatalog(currentCatalog);
+        SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(currentCatalog));
+        try {
+            globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
+            modifiedSessionVariables.put(variable.getVariable(), variable);
+        } catch (DdlException e) {
+            LOG.warn("failed to set catalog {}", currentCatalog, e);
+        }
     }
 
-    public long getCurrentWarehouseId() {
+    public Long getCurrentWarehouseIdAllowNull() {
         String warehouseName = this.sessionVariable.getWarehouseName();
         if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
             return WarehouseManager.DEFAULT_WAREHOUSE_ID;
@@ -989,9 +1027,17 @@ public class ConnectContext {
 
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouseAllowNull(warehouseName);
         if (warehouse == null) {
-            throw new SemanticException("Warehouse " + warehouseName + " not exist");
+            return null;
         }
         return warehouse.getId();
+    }
+
+    public long getCurrentWarehouseId() {
+        Long warehouseId = getCurrentWarehouseIdAllowNull();
+        if (warehouseId == null) {
+            throw new SemanticException("Warehouse " + this.sessionVariable.getWarehouseName() + " not exist");
+        }
+        return warehouseId;
     }
 
     public String getCurrentWarehouseName() {
@@ -999,14 +1045,47 @@ public class ConnectContext {
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
-        this.sessionVariable.setWarehouseName(currentWarehouse);
+        final SessionVariable old = this.sessionVariable;
+        try {
+            final VariableMgr variableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
+            this.sessionVariable = variableMgr.newSessionVariable();
+            applyWarehouseSessionVariable(currentWarehouse, this.sessionVariable);
+        } catch (Exception e) {
+            this.sessionVariable = old;
+            throw e;
+        }
+    }
+
+    public void applyWarehouseSessionVariable(String warehouse, SessionVariable sv) {
+        final VariableMgr variableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
+        sv.setWarehouseName(warehouse);
+        variableMgr.applyWarehouseVariable(sv);
+        // apply user property variable
+        try {
+            String user = getQualifiedUser();
+            final AuthenticationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (user != null) {
+                final UserProperty userProperty = authMgr.getUserProperty(getQualifiedUser());
+                if (!userProperty.getSessionVariables().isEmpty()) {
+                    variableMgr.applySessionVariable(userProperty.getSessionVariables(), sv);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to apply user property session variable", e);
+        }
+
+        // apply modified session variable
+        try {
+            variableMgr.applyModifiedVariable(modifiedSessionVariables, sv);
+        } catch (Exception e) {
+            LOG.warn("failed to apply user session variable", e);
+        }
         this.resetComputeResource();
     }
 
     public void setCurrentWarehouseId(long warehouseId) {
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
-        this.sessionVariable.setWarehouseName(warehouse.getName());
-        this.resetComputeResource();
+        this.setCurrentWarehouse(warehouse.getName());
     }
 
     public void setCurrentComputeResource(ComputeResource computeResource) {
@@ -1060,8 +1139,9 @@ public class ConnectContext {
                 } else {
                     // throw exception if the current compute resource is not available.
                     // and reset compute resource, so that we can acquire a new one next time.
-                    String errMsg = String.format("Current connection's compute resource(%s) is not available:%s, please " +
-                            "try again.", this.getCurrentWarehouseName(), computeResource);
+                    String errMsg =
+                            String.format("Current connection's compute resource(%s) is not available:%s, please " +
+                                    "try again.", this.getCurrentWarehouseName(), computeResource);
                     this.resetComputeResource();
                     throw new RuntimeException(errMsg);
                 }
@@ -1265,7 +1345,7 @@ public class ConnectContext {
         return pendingTimeSecond + getExecTimeoutWithoutPendingTime();
     }
 
-    private int getExecTimeoutWithoutPendingTime() {
+    public int getExecTimeoutWithoutPendingTime() {
         return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
     }
 
@@ -1335,9 +1415,19 @@ public class ConnectContext {
                 // Only kill
                 killFlag = true;
 
-                String suggestedMsg = String.format("please increase the '%s' session variable, pending time:%s",
-                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
-                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, suggestedMsg);
+                String msg;
+
+                if (!isSessionQueryTimeoutOverridden() && executor != null && executor.getTableQueryTimeoutInfo() != null) {
+                    Pair<String, Integer> tableTimeoutInfo = executor.getTableQueryTimeoutInfo();
+                    String tableName = tableTimeoutInfo.first;
+                    int tableTimeout = tableTimeoutInfo.second;
+                    msg = String.format("the table %s table_query_timeout is %ds, pending time:%s",
+                            tableName, tableTimeout, pendingTime);
+                } else {
+                    msg = String.format("please increase the '%s' session variable, pending time:%s",
+                            isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                }
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }
         }
         if (killFlag) {
@@ -1438,7 +1528,8 @@ public class ConnectContext {
             try {
                 Authorizer.checkAnyActionOnCatalog(this, newCatalogName);
             } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(),
+                        this.getCurrentRoleIds(),
                         PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
             }
         }
@@ -1525,13 +1616,13 @@ public class ConnectContext {
     // to execute SQL.
     public void updateByUserProperty(UserProperty userProperty) {
         try {
-            // set session variables
-            Map<String, String> sessionVariables = userProperty.getSessionVariables();
-            for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-                SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
-                globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
+            final VariableMgr variableMgr = globalStateMgr.getVariableMgr();
+            final Map<String, String> userPropertySvs = userProperty.getSessionVariables();
+            if (userPropertySvs.containsKey(SessionVariable.WAREHOUSE_NAME)) {
+                setCurrentWarehouse(userPropertySvs.get(SessionVariable.WAREHOUSE_NAME));
+            } else {
+                variableMgr.applySessionVariable(userPropertySvs, sessionVariable);
             }
-
             // set catalog and database
             String catalog = userProperty.getCatalog();
             String database = userProperty.getDatabase();
@@ -1705,6 +1796,10 @@ public class ConnectContext {
         this.listeners.add(listener);
     }
 
+    public List<Listener> getListeners() {
+        return listeners;
+    }
+
     public void onQueryFinished() {
         for (Listener listener : listeners) {
             try {
@@ -1720,5 +1815,16 @@ public class ConnectContext {
         } catch (Exception e) {
             LOG.warn("set cn group name failed", e);
         }
+
+        // after current query finished, remove all current listeners
+        listeners.clear();
+    }
+
+    public boolean isSingleStmt() {
+        return isSingleStmt;
+    }
+
+    public void setSingleStmt(boolean singleStmt) {
+        isSingleStmt = singleStmt;
     }
 }

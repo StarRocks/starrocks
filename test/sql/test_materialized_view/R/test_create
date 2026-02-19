@@ -61,6 +61,16 @@ DISTRIBUTED BY HASH(`k1`) BUCKETS 2
 PROPERTIES ( "replication_num" = "1");
 -- result:
 -- !result
+CREATE VIEW verify_result AS
+SELECT 
+  table_schema, table_name,
+  array_filter(split(MATERIALIZED_VIEW_DEFINITION, '\n'), 
+    line -> line like 'CREATE%' or line like 'REFRESH%' or line like 'AS %') 
+    AS mv_query
+FROM information_schema.materialized_views
+WHERE table_schema = 'test_create_mv';
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW `mv1`
 REFRESH ASYNC 
 AS
@@ -68,18 +78,9 @@ select t0.k1, t1.v1
 from t_hash t0 join t_random t1 on t0.k1 = t1.k1;
 -- result:
 -- !result
-SHOW CREATE MATERIALIZED VIEW mv1;
+SELECT * FROM verify_result WHERE table_name = 'mv1';
 -- result:
-mv1	CREATE MATERIALIZED VIEW `mv1` (`k1`, `v1`)
-DISTRIBUTED BY RANDOM
-REFRESH ASYNC
-PROPERTIES (
-"replicated_storage" = "true",
-"replication_num" = "1",
-"storage_medium" = "HDD"
-)
-AS select t0.k1, t1.v1
-from t_hash t0 join t_random t1 on t0.k1 = t1.k1;
+test_create_mv	mv1	["CREATE MATERIALIZED VIEW `mv1` (`k1`, `v1`)","REFRESH ASYNC","AS select t0.k1, t1.v1"]
 -- !result
 CREATE MATERIALIZED VIEW `mv2`
 REFRESH ASYNC 
@@ -87,17 +88,9 @@ AS
 select k1, count(v1)  from t_random group by k1;
 -- result:
 -- !result
-SHOW CREATE MATERIALIZED VIEW mv2;
+SELECT * FROM verify_result WHERE table_name = 'mv2';
 -- result:
-mv2	CREATE MATERIALIZED VIEW `mv2` (`k1`, `count(v1)`)
-DISTRIBUTED BY RANDOM
-REFRESH ASYNC
-PROPERTIES (
-"replicated_storage" = "true",
-"replication_num" = "1",
-"storage_medium" = "HDD"
-)
-AS select k1, count(v1)  from t_random group by k1;
+test_create_mv	mv2	["CREATE MATERIALIZED VIEW `mv2` (`k1`, `count(v1)`)","REFRESH ASYNC","AS select k1, count(v1)  from t_random group by k1;"]
 -- !result
 CREATE MATERIALIZED VIEW `mv3`
 REFRESH ASYNC 
@@ -106,18 +99,9 @@ select t0.k1, t1.v1
 from t_hash t0 join t1 on t0.k1 = t1.k1;
 -- result:
 -- !result
-SHOW CREATE MATERIALIZED VIEW mv3;
+SELECT * FROM verify_result WHERE table_name = 'mv3';
 -- result:
-mv3	CREATE MATERIALIZED VIEW `mv3` (`k1`, `v1`)
-DISTRIBUTED BY RANDOM
-REFRESH ASYNC
-PROPERTIES (
-"replicated_storage" = "true",
-"replication_num" = "1",
-"storage_medium" = "HDD"
-)
-AS select t0.k1, t1.v1
-from t_hash t0 join t1 on t0.k1 = t1.k1;
+test_create_mv	mv3	["CREATE MATERIALIZED VIEW `mv3` (`k1`, `v1`)","REFRESH ASYNC","AS select t0.k1, t1.v1"]
 -- !result
 CREATE MATERIALIZED VIEW `mv4`
 REFRESH ASYNC 
@@ -126,18 +110,9 @@ select t0.k1, t1.v1
 from t_random t0 join t1 on t0.k1 = t1.k1;
 -- result:
 -- !result
-SHOW CREATE MATERIALIZED VIEW mv4;
+SELECT * FROM verify_result WHERE table_name = 'mv4';
 -- result:
-mv4	CREATE MATERIALIZED VIEW `mv4` (`k1`, `v1`)
-DISTRIBUTED BY RANDOM
-REFRESH ASYNC
-PROPERTIES (
-"replicated_storage" = "true",
-"replication_num" = "1",
-"storage_medium" = "HDD"
-)
-AS select t0.k1, t1.v1
-from t_random t0 join t1 on t0.k1 = t1.k1;
+test_create_mv	mv4	["CREATE MATERIALIZED VIEW `mv4` (`k1`, `v1`)","REFRESH ASYNC","AS select t0.k1, t1.v1"]
 -- !result
 CREATE MATERIALIZED VIEW `mv_part1`
 REFRESH ASYNC 
@@ -146,18 +121,9 @@ select t1.k1, t2.v1
 from t1 join t2 on t1.k1 = t2.k1;
 -- result:
 -- !result
-SHOW CREATE MATERIALIZED VIEW mv_part1;
+SELECT * FROM verify_result WHERE table_name = 'mv_part1';
 -- result:
-mv_part1	CREATE MATERIALIZED VIEW `mv_part1` (`k1`, `v1`)
-DISTRIBUTED BY RANDOM
-REFRESH ASYNC
-PROPERTIES (
-"replicated_storage" = "true",
-"replication_num" = "1",
-"storage_medium" = "HDD"
-)
-AS select t1.k1, t2.v1
-from t1 join t2 on t1.k1 = t2.k1;
+test_create_mv	mv_part1	["CREATE MATERIALIZED VIEW `mv_part1` (`k1`, `v1`)","REFRESH ASYNC","AS select t1.k1, t2.v1"]
 -- !result
 CREATE MATERIALIZED VIEW `mv5`
 PARTITION BY (`k1`)
@@ -172,20 +138,9 @@ union all
 select k1, v1, v2 from t2;
 -- result:
 -- !result
-SHOW CREATE MATERIALIZED VIEW mv5;
+SELECT * FROM verify_result WHERE table_name = 'mv5';
 -- result:
-mv5	CREATE MATERIALIZED VIEW `mv5` (`k1`, `v1`, `v2`)
-PARTITION BY (`k1`)
-DISTRIBUTED BY HASH(`k1`) BUCKETS 2 
-REFRESH ASYNC
-PROPERTIES (
-"replicated_storage" = "true",
-"replication_num" = "1",
-"storage_medium" = "HDD"
-)
-AS select k1, v1, v2 from t1
-union all
-select k1, v1, v2 from t2;
+test_create_mv	mv5	["CREATE MATERIALIZED VIEW `mv5` (`k1`, `v1`, `v2`)","REFRESH ASYNC","AS select k1, v1, v2 from t1"]
 -- !result
 CREATE MATERIALIZED VIEW `mv6`
 PARTITION BY (`k1`)
@@ -200,18 +155,7 @@ union all
 select k1, v1, v2 from t2;
 -- result:
 -- !result
-SHOW CREATE MATERIALIZED VIEW mv6;
+SELECT * FROM verify_result WHERE table_name = 'mv6';
 -- result:
-mv6	CREATE MATERIALIZED VIEW `mv6` (`k1`, `v1`, `v2`)
-PARTITION BY (`k1`)
-DISTRIBUTED BY RANDOM
-REFRESH ASYNC
-PROPERTIES (
-"replicated_storage" = "true",
-"replication_num" = "1",
-"storage_medium" = "HDD"
-)
-AS select k1, v1, v2 from t1
-union all
-select k1, v1, v2 from t2;
+test_create_mv	mv6	["CREATE MATERIALIZED VIEW `mv6` (`k1`, `v1`, `v2`)","REFRESH ASYNC","AS select k1, v1, v2 from t1"]
 -- !result

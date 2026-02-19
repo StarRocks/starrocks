@@ -20,7 +20,6 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-
 namespace starrocks {
 
 /// If an ArrayColumn is nullable, it will be nested as follows:
@@ -44,16 +43,9 @@ public:
 
     ArrayColumn(MutableColumnPtr&& elements, MutableColumnPtr&& offsets);
 
-    ArrayColumn(const ArrayColumn& rhs)
-            : _elements(rhs._elements->clone()), _offsets(OffsetColumn::static_pointer_cast(rhs._offsets->clone())) {}
+    DISALLOW_COPY(ArrayColumn);
 
     ArrayColumn(ArrayColumn&& rhs) noexcept : _elements(std::move(rhs._elements)), _offsets(std::move(rhs._offsets)) {}
-
-    ArrayColumn& operator=(const ArrayColumn& rhs) {
-        ArrayColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     ArrayColumn& operator=(ArrayColumn&& rhs) noexcept {
         ArrayColumn tmp(std::move(rhs));
@@ -64,7 +56,6 @@ public:
     static Ptr create(const ColumnPtr& elements, const ColumnPtr& offsets) {
         return ArrayColumn::create(elements->as_mutable_ptr(), offsets->as_mutable_ptr());
     }
-    static Ptr create(const ArrayColumn& rhs) { return Base::create(rhs); }
 
     template <typename... Args>
     requires(IsMutableColumns<Args...>::value) static MutablePtr create(Args&&... args) {
@@ -140,18 +131,18 @@ public:
 
     MutableColumnPtr clone_empty() const override;
 
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
+
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
     void compare_column(const Column& rhs, std::vector<int8_t>* output) const;
 
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
-
-    void crc32_hash_at(uint32_t* seed, uint32_t idx) const override;
-    void fnv_hash_at(uint32_t* seed, uint32_t idx) const override;
-    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
@@ -181,11 +172,19 @@ public:
 
     const Column& elements() const { return *_elements; }
     Column& elements() { return *_elements; }
+
+    const Column* elements_column_raw_ptr() const { return _elements.get(); }
+    Column* elements_column_raw_ptr() { return _elements.get(); }
+
     ColumnPtr& elements_column() { return _elements; }
     const ColumnPtr& elements_column() const { return _elements; }
 
     OffsetColumn& offsets() { return *_offsets; }
     const OffsetColumn& offsets() const { return *_offsets; }
+
+    const OffsetColumn* offsets_column_raw_ptr() const { return _offsets.get(); }
+    OffsetColumn* offsets_column_raw_ptr() { return _offsets.get(); }
+
     const OffsetColumnPtr& offsets_column() const { return _offsets; }
     OffsetColumnPtr& offsets_column() { return _offsets; }
 
@@ -200,9 +199,9 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _elements->has_large_column(); }
 
@@ -231,12 +230,12 @@ private:
                                              const NullColumnPtr& null_data);
 
     // Elements must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _elements;
+    Column::WrappedPtr _elements;
     // Offsets column will store the start position of every array element.
     // Offsets store more one data to indicate the end position.
     // For example, [1, 2, 3], [4, 5, 6].
     // The two element array has three offsets(0, 3, 6)
-    UInt32Column::Ptr _offsets;
+    UInt32Column::WrappedPtr _offsets;
 };
 
 extern template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2,

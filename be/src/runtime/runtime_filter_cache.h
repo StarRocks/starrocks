@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/uid_util.h"
 #include "exprs/runtime_filter.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 

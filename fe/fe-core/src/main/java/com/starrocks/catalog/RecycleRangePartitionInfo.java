@@ -16,7 +16,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -40,21 +39,15 @@ public class RecycleRangePartitionInfo extends RecyclePartitionInfoV2 implements
     private byte[] serializedRange;
 
     public RecycleRangePartitionInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
-                                     DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                     DataProperty dataProperty, short replicationNum,
                                      DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum,
-                isInMemory, dataCacheInfo);
+        super(dbId, tableId, partition, dataProperty, replicationNum, dataCacheInfo);
         this.range = range;
     }
 
     @Override
     public Range<PartitionKey> getRange() {
         return range;
-    }
-
-    @Override
-    void recover(OlapTable table) throws DdlException {
-        RecyclePartitionInfo.recoverRangePartition(table, this);
     }
 
     private byte[] serializeRange(Range<PartitionKey> range) throws IOException {

@@ -18,6 +18,8 @@
 
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -25,7 +27,6 @@
 #include "exec/stream/stream_operators_test.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
-#include "testutil/assert.h"
 #include "testutil/desc_tbl_helper.h"
 
 namespace starrocks::stream {
@@ -108,8 +109,10 @@ Status StreamPipelineTest::prepare() {
 
 Status StreamPipelineTest::execute() {
     VLOG_ROW << "ExecutePipeline";
-    _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
+    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
+        CHECK_OK(driver->prepare(state));
+        CHECK_OK(driver->prepare_local_state(state));
+    });
 
     // CHECK_OK(_fragment_ctx->submit_active_drivers(_exec_env->wg_driver_executor()));
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {

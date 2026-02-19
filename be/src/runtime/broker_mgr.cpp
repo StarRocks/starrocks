@@ -37,14 +37,15 @@
 #include <sstream>
 
 #include "common/config.h"
+#include "common/system/backend_options.h"
+#include "common/thread/thread.h"
+#include "common/util/misc.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
-#include "util/misc.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

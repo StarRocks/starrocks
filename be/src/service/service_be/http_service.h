@@ -36,8 +36,8 @@
 
 #include <memory>
 
+#include "base/concurrency/concurrent_limiter.h"
 #include "common/status.h"
-#include "util/concurrent_limiter.h"
 
 namespace starrocks {
 

@@ -359,6 +359,19 @@ public class SelectAnalyzer {
         return outputExpressions;
     }
 
+    private List<OrderByElement> expandOrderByAll(OrderByElement orderByElement,
+                                                  List<Expr> outputExpressions) {
+        List<OrderByElement> newOrderByElements = new ArrayList<>();
+        for (Expr expr : outputExpressions) {
+            OrderByElement newElement = new OrderByElement(expr.clone(),
+                    orderByElement.getIsAsc(),
+                    orderByElement.getNullsFirstParam(),
+                    orderByElement.getPos());
+            newOrderByElements.add(newElement);
+        }
+        return newOrderByElements;
+    }
+
     private List<OrderByElement> analyzeOrderBy(List<OrderByElement> orderByElements, AnalyzeState analyzeState,
                                                 Scope orderByScope,
                                                 List<Expr> outputExpressions,
@@ -366,6 +379,20 @@ public class SelectAnalyzer {
         if (orderByElements == null) {
             analyzeState.setOrderBy(Collections.emptyList());
             return Collections.emptyList();
+        }
+
+
+        // Expand ORDER BY ALL to individual columns
+        if (orderByElements.size() == 1 && orderByElements.get(0).isOrderByAll()) {
+            orderByElements = expandOrderByAll(orderByElements.get(0), outputExpressions);
+        }
+        if (orderByElements.size() > 1 && orderByElements.stream().anyMatch(OrderByElement::isOrderByAll)) {
+            throw new SemanticException("ORDER BY ALL cannot be used with other ORDER BY elements",
+                    orderByElements.stream()
+                            .filter(OrderByElement::isOrderByAll)
+                            .findFirst()
+                            .get()
+                            .getPos());
         }
 
         for (OrderByElement orderByElement : orderByElements) {
@@ -692,7 +719,29 @@ public class SelectAnalyzer {
 
             Optional<ResolvedField> resolvedField = outputScope.tryResolveField(slotRef);
             if (resolvedField.isPresent()) {
-                return outputExprs.get(resolvedField.get().getRelationFieldIndex());
+                Expr outputExpr = outputExprs.get(resolvedField.get().getRelationFieldIndex());
+                // If the alias matches the source column name and the output expression is an aggregation/analytic function,
+                // use the source column directly instead of the aggregation/analytic expression to avoid nested aggregation/analytic.
+                // For example: sum(input_count) as input_count, then sum(case when ... then input_count else 0 end)
+                // should use the source column input_count, not sum(input_count)
+                // Similarly: sum(input_count) over() as input_count, then sum(case when ... then input_count else 0 end) over()
+                // should use the source column input_count, not sum(input_count) over()
+                if (sourceScope.tryResolveField(slotRef).isPresent()) {
+                    // Check if output expression is an AnalyticExpr
+                    if (outputExpr instanceof AnalyticExpr) {
+                        return slotRef;
+                    }
+                    // Check if output expression is a FunctionCallExpr that is aggregate or analytic
+                    if (outputExpr instanceof FunctionCallExpr) {
+                        FunctionCallExpr funcCall = (FunctionCallExpr) outputExpr;
+                        // Check if it's an aggregate or analytic function (fn must be set and analyzed)
+                        if (funcCall.getFn() != null &&
+                                (funcCall.isAggregateFunction() || funcCall.isAnalyticFnCall())) {
+                            return slotRef;
+                        }
+                    }
+                }
+                return outputExpr;
             }
             return slotRef;
         }

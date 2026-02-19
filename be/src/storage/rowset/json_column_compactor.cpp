@@ -40,7 +40,7 @@ Status FlatJsonColumnCompactor::append(const Column& column) {
     return Status::OK();
 }
 
-Status FlatJsonColumnCompactor::_compact_columns(Columns& json_datas) {
+Status FlatJsonColumnCompactor::_compact_columns(MutableColumns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
     std::vector<const Column*> vc;
@@ -79,7 +79,7 @@ bool check_is_same_schema(const JsonColumn* one, const JsonColumn* two) {
     return false;
 }
 
-Status FlatJsonColumnCompactor::_merge_columns(Columns& json_datas) {
+Status FlatJsonColumnCompactor::_merge_columns(MutableColumns& json_datas) {
     VLOG(2) << "FlatJsonColumnCompactor merge_columns, json_datas: " << json_datas.size();
     _is_flat = false;
     _json_meta->mutable_json_meta()->set_has_remain(false);
@@ -92,7 +92,7 @@ Status FlatJsonColumnCompactor::_merge_columns(Columns& json_datas) {
         NullColumnPtr null_col;
         if (col->is_nullable()) {
             auto nullable_column = down_cast<const NullableColumn*>(col.get());
-            json_col = down_cast<const JsonColumn*>(nullable_column->data_column().get());
+            json_col = down_cast<const JsonColumn*>(nullable_column->data_column_raw_ptr());
             null_col = nullable_column->null_column();
         } else {
             json_col = down_cast<const JsonColumn*>(col.get());
@@ -108,10 +108,11 @@ Status FlatJsonColumnCompactor::_merge_columns(Columns& json_datas) {
                                                       json_col->has_remain());
                 pre_col = json_col;
             }
-            auto j = merger->merge(json_col->get_flat_fields_ptrs());
+            auto j = merger->merge(json_col->get_flat_fields());
 
             if (col->is_nullable()) {
-                auto n = NullableColumn::create(j, null_col);
+                auto n_ptr = NullableColumn::create(j, null_col)->as_mutable_raw_ptr();
+                auto* n = down_cast<NullableColumn*>(n_ptr);
                 n->set_has_null(col->has_null());
                 RETURN_IF_ERROR(_json_writer->append(*n));
             } else {
@@ -123,7 +124,7 @@ Status FlatJsonColumnCompactor::_merge_columns(Columns& json_datas) {
     return Status::OK();
 }
 
-Status FlatJsonColumnCompactor::_flatten_columns(Columns& json_datas) {
+Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
     VLOG(2) << "FlatJsonColumnCompactor flatten_columns, json_datas: " << json_datas.size();
     _is_flat = true;
 
@@ -137,7 +138,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(Columns& json_datas) {
         JsonColumn* json_col;
         if (col->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(col.get());
-            json_col = down_cast<JsonColumn*>(nullable_column->data_column().get());
+            json_col = down_cast<JsonColumn*>(nullable_column->data_column_raw_ptr());
         } else {
             json_col = down_cast<JsonColumn*>(col.get());
         }
@@ -153,7 +154,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(Columns& json_datas) {
                 pre_col = json_col;
             }
             VLOG(2) << "FlatJsonColumnCompactor flatten_columns hyper-transformer: " << json_col->debug_flat_paths();
-            RETURN_IF_ERROR(transformer.trans(json_col->get_flat_fields_ptrs()));
+            RETURN_IF_ERROR(transformer.trans(json_col->get_flat_fields()));
             _flat_columns = transformer.mutable_result();
         }
 
@@ -166,7 +167,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(Columns& json_datas) {
                 nulls->append_value_multiple_times(&IS_NULL, col->size());
             } else if (col->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(col.get());
-                auto* nl = down_cast<NullColumn*>(nullable_column->null_column().get());
+                const auto* nl = down_cast<const NullColumn*>(nullable_column->null_column_raw_ptr());
                 nulls->append(*nl, 0, nl->size());
             } else {
                 nulls->append_value_multiple_times(&NOT_NULL, col->size());
@@ -210,7 +211,7 @@ Status JsonColumnCompactor::append(const Column& column) {
     if (column.is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(&column);
         nulls = nullable_column->null_column();
-        json_col = down_cast<const JsonColumn*>(nullable_column->data_column().get());
+        json_col = down_cast<const JsonColumn*>(nullable_column->data_column_raw_ptr());
     } else {
         json_col = down_cast<const JsonColumn*>(&column);
     }
@@ -220,7 +221,7 @@ Status JsonColumnCompactor::append(const Column& column) {
     }
 
     JsonMerger merger(json_col->flat_column_paths(), json_col->flat_column_types(), json_col->has_remain());
-    auto p = merger.merge(json_col->get_flat_fields_ptrs());
+    auto p = merger.merge(json_col->get_flat_fields());
 
     if (column.is_nullable()) {
         auto n = NullableColumn::create(p, nulls);

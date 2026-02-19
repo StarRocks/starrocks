@@ -19,6 +19,54 @@ import org.junit.jupiter.api.Test;
 
 public class JoinPredicateExprReuseTest extends PlanTestBase {
     @Test
+    public void testInnerJoinWithExprReuse() throws Exception {
+        {
+            String sql = "select * from t0 join t1 on t0.v1 = t1.v4 where " +
+                    "abs(t0.v1 + t1.v4) = abs(t0.v2 + t1.v5) and abs(t0.v1 + t1.v4) > 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                    "  |  other predicates: 8: abs = abs(2: v2 + 5: v5), 8: abs > 5\n" +
+                    "  |    common sub expr:\n" +
+                    "  |    <slot 7> : 1: v1 + 4: v4\n" +
+                    "  |    <slot 8> : abs(7: add)");
+        }
+
+        {
+            String sql = "select * from t0 join t1 on t0.v1 = t1.v4 where " +
+                    "bit_shift_left(t0.v1 + t1.v4, 1) = 10 or bit_shift_left(t0.v1 + t1.v4, 1) = 20";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                    "  |  other predicates: (8: bit_shift_left = 10) OR (8: bit_shift_left = 20), " +
+                    "8: bit_shift_left IN (10, 20)\n" +
+                    "  |    common sub expr:\n" +
+                    "  |    <slot 7> : 1: v1 + 4: v4\n" +
+                    "  |    <slot 8> : 7: add BITSHIFTLEFT 1");
+        }
+        {
+            String sql = "select * from t0 join t1 on t0.v1 = t1.v4 where " +
+                    "abs(t0.v1 + t1.v4) = abs(t0.v2 + t1.v5) and abs(t0.v1 + t1.v4) > 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                    "  |  other predicates: 8: abs = abs(2: v2 + 5: v5), 8: abs > 5\n" +
+                    "  |    common sub expr:\n" +
+                    "  |    <slot 7> : 1: v1 + 4: v4\n" +
+                    "  |    <slot 8> : abs(7: add)");
+        }
+
+        {
+            String sql = "select * from t0 join t1 on t0.v1 = t1.v4 where " +
+                    "bit_shift_left(t0.v1 + t1.v4, 1) = 10 or bit_shift_left(t0.v1 + t1.v4, 1) = 20";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                    "  |  other predicates: (8: bit_shift_left = 10) OR (8: bit_shift_left = 20), " +
+                    "8: bit_shift_left IN (10, 20)\n" +
+                    "  |    common sub expr:\n" +
+                    "  |    <slot 7> : 1: v1 + 4: v4\n" +
+                    "  |    <slot 8> : 7: add BITSHIFTLEFT 1");
+        }
+    }
+
+    @Test
     public void testHashJoin() throws Exception {
         {
             String sql = "select * from t0 left join t1 on t0.v1 = t1.v4 where " +
@@ -68,6 +116,16 @@ public class JoinPredicateExprReuseTest extends PlanTestBase {
 
     @Test
     public void testNestLoopJoin() throws Exception {
+        {
+            String sql = "select * from t0 inner join t1 on t0.v1 > t1.v4 where " +
+                    "abs(t0.v1 + t1.v4) = abs(t0.v2 + t1.v5) and abs(t0.v1 + t1.v4) > 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "|  other predicates: 1: v1 > 4: v4, 8: abs = abs(2: v2 + 5: v5), 8: abs > 5\n" +
+                    "  |    common sub expr:\n" +
+                    "  |    <slot 7> : 1: v1 + 4: v4\n" +
+                    "  |    <slot 8> : abs(7: add)");
+        }
+
         {
             String sql = "select * from t0 left join t1 on t0.v1 > t1.v4 where " +
                     "abs(t0.v1 + t1.v4) = abs(t0.v2 + t1.v5) and abs(t0.v1 + t1.v4) > 5";
@@ -126,5 +184,4 @@ public class JoinPredicateExprReuseTest extends PlanTestBase {
                     "  |    <slot 8> : abs(7: add)");
         }
     }
-
 }

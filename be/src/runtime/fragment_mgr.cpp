@@ -42,7 +42,16 @@
 #include <sstream>
 
 #include "agent/master_info.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/network/network_util.h"
+#include "base/uid_util.h"
+#include "base/url_coding.h"
 #include "common/object_pool.h"
+#include "common/system/backend_options.h"
+#include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
+#include "common/util/misc.h"
+#include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
@@ -51,24 +60,17 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
-#include "service/backend_options.h"
-#include "util/misc.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
-#include "util/thread.h"
-#include "util/threadpool.h"
+#include "runtime/runtime_state_helper.h"
+#include "runtime/starrocks_metrics.h"
+#include "types/datetime_value.h"
+#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_util.h"
-#include "util/uid_util.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -186,7 +188,7 @@ Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     int func_version = params.__isset.func_version ? params.func_version
                                                    : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     _runtime_state->set_func_version(func_version);
-    _runtime_state->init_mem_trackers(_query_id);
+    _runtime_state->init_mem_trackers(_query_id, _exec_env->query_pool_mem_tracker());
     _executor.set_runtime_state(_runtime_state.get());
 
     if (params.__isset.query_options) {
@@ -251,11 +253,11 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     DCHECK(runtime_state != nullptr);
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
-        runtime_state->update_report_load_status(&params);
+        RuntimeStateHelper::update_report_load_status(runtime_state, &params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            runtime_state->update_report_load_status(&params);
+            RuntimeStateHelper::update_report_load_status(runtime_state, &params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
         profile->to_thrift(&params.profile);
@@ -639,7 +641,7 @@ void FragmentMgr::report_fragments_with_same_host(
                 RuntimeState* runtime_state = executor->runtime_state();
                 DCHECK(runtime_state != nullptr);
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                    runtime_state->update_report_load_status(&params);
+                    RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                     params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
@@ -704,7 +706,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             RuntimeState* runtime_state = executor->runtime_state();
             DCHECK(runtime_state != nullptr);
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                runtime_state->update_report_load_status(&params);
+                RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                 params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 

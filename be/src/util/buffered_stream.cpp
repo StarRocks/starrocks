@@ -14,10 +14,10 @@
 
 #include "util/buffered_stream.h"
 
+#include "base/bit/bit_util.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "gutil/strings/fastmem.h"
-#include "util/bit_util.h"
 
 namespace starrocks {
 

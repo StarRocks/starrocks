@@ -109,7 +109,7 @@ array_filter(lambda_function, arr1,arr2...)
 
 - Examples using lambda functions
 
-  ```Plain
+  ```sql
     -- Return the elements in x that are less than the elements in y.
     select array_filter((x,y) -> x < y, [1,2,null], [4,5,6]);
     +--------------------------------------------------------+
@@ -117,4 +117,14 @@ array_filter(lambda_function, arr1,arr2...)
     +--------------------------------------------------------+
     | [1,2]                                                  |
     +--------------------------------------------------------+
+  ```
+
+  ```sql
+  -- Return the elements in x that are greater than or equal to 3.
+  SELECT array_filter(x->x>=3, [2,3,4]);
+  +--------------------------------------+
+  | array_filter(x -> x >= 3, [2, 3, 4]) |
+  +--------------------------------------+
+  | [3,4]                                |
+  +--------------------------------------+
   ```

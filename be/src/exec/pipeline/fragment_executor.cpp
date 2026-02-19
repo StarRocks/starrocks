@@ -18,7 +18,11 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
@@ -42,15 +46,12 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
-#include "util/failpoint/fail_point.h"
-#include "util/runtime_profile.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -259,6 +260,10 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
+    const int arrow_flight_sql_version = request.common().__isset.arrow_flight_sql_version
+                                                 ? request.common().arrow_flight_sql_version
+                                                 : TArrowFlightSQLVersion::type::V0;
+    runtime_state->set_arrow_flight_sql_version(arrow_flight_sql_version);
 
     // RuntimeFilterWorker::open_query is idempotent
     const TRuntimeFilterParams* runtime_filter_params = nullptr;
@@ -831,6 +836,36 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     return Status::OK();
 }
 
+Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request) {
+    bool prepare_success = false;
+
+    UnifiedExecPlanFragmentParams request(common_request, common_request);
+    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+
+    // make sure query context can be released
+    // if _prepare_query_ctx return error, query context doesn't exist
+    // so it's safe to put this DeferOp below _prepare_query_ctx
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
+        if (!prepare_success) {
+            query_ctx->count_down_fragments();
+        }
+    });
+
+    // Set up desc tbl
+    DescriptorTbl* desc_tbl = nullptr;
+    const auto& t_desc_tbl = request.common().desc_tbl;
+
+    DCHECK(t_desc_tbl.__isset.is_cached && !t_desc_tbl.is_cached);
+    // only data lake table need runtime state, and we baned the plan with dla using single node parallel prepare
+    // so it's safe to pass nullptr here
+    RETURN_IF_ERROR(DescriptorTbl::create(nullptr, _query_ctx->object_pool(), t_desc_tbl, &desc_tbl,
+                                          config::vector_chunk_size));
+    _query_ctx->set_desc_tbl(desc_tbl);
+
+    prepare_success = true;
+    return Status::OK();
+}
+
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                                  const TExecPlanFragmentParams& unique_request) {
     DCHECK(common_request.__isset.desc_tbl);
@@ -930,6 +965,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     _query_ctx->mark_prepared();
+
     prepare_success = true;
 
     return Status::OK();
@@ -942,7 +978,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
             _fail_cleanup(true);
         }
     });
-
     auto* profile = _fragment_ctx->runtime_state()->runtime_profile();
     auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
     auto* prepare_driver_timer =

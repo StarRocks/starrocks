@@ -15,11 +15,12 @@
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
 
 #include "agent/master_info.h"
+#include "base/metrics.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/starrocks_metrics.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -71,7 +72,7 @@ Status SchemaBeMetricsScanner::start(RuntimeState* state) {
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
     SchemaCoreMetricsVisitor visitor(_infos);
-    StarRocksMetrics::instance()->metrics()->collect(&visitor);
+    GlobalMetricsRegistry::instance()->metrics()->collect(&visitor);
     _cur_idx = 0;
     return Status::OK();
 }
@@ -85,28 +86,28 @@ Status SchemaBeMetricsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 14) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // name
                 Slice v(info.name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 3: {
                 // labels
                 Slice v(info.labels);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 4: {
                 // value
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.value);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.value);
                 break;
             }
             default:

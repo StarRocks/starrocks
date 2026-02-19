@@ -347,8 +347,8 @@ class TimestampColumnReader : public ColumnReader {
 private:
     std::unique_ptr<orc::RleDecoder> secondsRle;
     std::unique_ptr<orc::RleDecoder> nanoRle;
-    const Timezone& writerTimezone;
-    const Timezone& readerTimezone;
+    const Timezone* writerTimezone;
+    const Timezone* readerTimezone;
     const int64_t epochOffset;
     const bool sameTimezone;
 
@@ -365,10 +365,10 @@ public:
 
 TimestampColumnReader::TimestampColumnReader(const Type& type, StripeStreams& stripe, bool isInstantType)
         : ColumnReader(type, stripe),
-          writerTimezone(isInstantType ? getTimezoneByName("GMT") : stripe.getWriterTimezone()),
-          readerTimezone(isInstantType ? getTimezoneByName("GMT") : stripe.getReaderTimezone()),
-          epochOffset(writerTimezone.getEpoch()),
-          sameTimezone(stripe.getUseWriterTimezone() || (&writerTimezone == &readerTimezone)) {
+          writerTimezone(isInstantType ? &getTimezoneByName("GMT") : &stripe.getWriterTimezone()),
+          readerTimezone(isInstantType ? &getTimezoneByName("GMT") : &stripe.getReaderTimezone()),
+          epochOffset(writerTimezone->getEpoch()),
+          sameTimezone(stripe.getUseWriterTimezone() || (writerTimezone == readerTimezone)) {
     RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) throw ParseError("DATA stream not found in Timestamp column");
@@ -412,13 +412,13 @@ void TimestampColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues
             if (!sameTimezone) {
                 // adjust timestamp value to same wall clock time if writer and reader
                 // time zones have different rules, which is required for Apache Orc.
-                const auto& wv = writerTimezone.getVariant(writerTime);
-                const auto& rv = readerTimezone.getVariant(writerTime);
+                const auto& wv = writerTimezone->getVariant(writerTime);
+                const auto& rv = readerTimezone->getVariant(writerTime);
                 if (!wv.hasSameTzRule(rv)) {
                     // If the timezone adjustment moves the millis across a DST boundary,
                     // we need to reevaluate the offsets.
                     int64_t adjustedTime = writerTime + wv.gmtOffset - rv.gmtOffset;
-                    const auto& adjustedReader = readerTimezone.getVariant(adjustedTime);
+                    const auto& adjustedReader = readerTimezone->getVariant(adjustedTime);
                     writerTime = writerTime + wv.gmtOffset - adjustedReader.gmtOffset;
                 }
             }

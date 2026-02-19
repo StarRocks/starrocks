@@ -49,6 +49,10 @@ a {
     var(--ifm-transition-timing-default);
 }
 
+.navbar__logo img {
+  height: 100% !important;
+}
+
 .header-slack-link::before {
   content: '';
   width: 24px;

@@ -33,9 +33,11 @@ import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.utframe.MockJournal;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 
 import java.io.File;
@@ -46,10 +48,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class PseudoFrontend {
+    private static final Logger LOG = LogManager.getLogger(PseudoFrontend.class);
+
     public static final String FE_PROCESS = "fe";
 
     // the running dir of this mocked frontend.
@@ -60,6 +66,8 @@ public class PseudoFrontend {
 
     // the min set of fe.conf.
     private static final Map<String, String> MIN_FE_CONF;
+
+    private final CompletableFuture<Integer> queryPortFuture = new CompletableFuture<>();
 
     private FrontendServiceImpl service = new FrontendServiceImpl(ExecuteEnv.getInstance());
 
@@ -158,8 +166,10 @@ public class PseudoFrontend {
     }
 
     private static class FERunnable implements Runnable {
+        private static final int MAX_QUERY_PORT_RETRY_ATTEMPTS = 3;
         private final PseudoFrontend frontend;
         private final String[] args;
+        private QeService qeService;
 
         public FERunnable(PseudoFrontend frontend, String[] args) {
             this.frontend = frontend;
@@ -206,17 +216,44 @@ public class PseudoFrontend {
 
                 GlobalStateMgr.getCurrentState().waitForReady();
 
-                QeService qeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
-                qeService.start();
+                qeService = autoDetectQueryPortAndStart(MAX_QUERY_PORT_RETRY_ATTEMPTS);
 
                 ThreadPoolManager.registerAllThreadPoolMetric();
 
                 while (true) {
-                    Thread.sleep(2000);
+                    Thread.sleep(500);
                 }
             } catch (Throwable e) {
+                if (!frontend.queryPortFuture.isDone()) {
+                    frontend.queryPortFuture.completeExceptionally(e);
+                }
                 e.printStackTrace();
             }
+        }
+
+        private QeService autoDetectQueryPortAndStart(int maxAttempts) throws Exception {
+            for (int i = 1; i <= maxAttempts; ++i) {
+                // use the current port in config
+                QeService localQeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
+                boolean started = localQeService.tryStart();
+                if (!started) {
+                    LOG.error("QE service start failed on port {}, try another port, attempts={}",
+                            Config.query_port, i);
+                    // A short sleep before next attempt
+                    Thread.sleep(100);
+                    // choose a different query port if current port is occupied
+                    Config.query_port = UtFrameUtils.findValidPort();
+                } else {
+                    LOG.info("QE service started on port {}", Config.query_port);
+                    frontend.queryPortFuture.complete(Config.query_port);
+                    return localQeService;
+                }
+            }
+            // still fails after all attempts, throw exception
+            String errMsg = String.format("QE service start failed after %d attempts", maxAttempts);
+            Exception exception = new IOException(errMsg);
+            LOG.fatal(errMsg, exception);
+            throw exception;
         }
     }
 
@@ -232,6 +269,10 @@ public class PseudoFrontend {
         feThread.start();
         waitForCatalogReady();
         System.out.println("Fe process is started");
+    }
+
+    public int getQueryPort() throws ExecutionException, InterruptedException {
+        return queryPortFuture.get();
     }
 
     private void waitForCatalogReady() throws FeStartException {

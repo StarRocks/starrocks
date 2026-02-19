@@ -43,7 +43,7 @@ protected:
                 return Status::EndOfFile("eof");
             }
             size_t n = std::min(10LU, _numbers.size() - _idx);
-            ColumnPtr c = chunk->get_column_by_index(0);
+            auto* c = chunk->get_column_raw_ptr_by_index(0);
             (void)c->append_numbers(_numbers.data() + _idx, n * sizeof(int32_t));
             _idx += n;
             return Status::OK();
@@ -55,7 +55,7 @@ protected:
                 return Status::EndOfFile("eof");
             }
             size_t n = std::min(10LU, _numbers.size() - _idx);
-            ColumnPtr c = chunk->get_column_by_index(0);
+            auto* c = chunk->get_column_raw_ptr_by_index(0);
             (void)c->append_numbers(_numbers.data() + _idx, n * sizeof(int32_t));
             _idx += n;
             for (size_t i = 0; i < n; i++) {
@@ -89,7 +89,7 @@ TEST_F(UnionIteratorTest, union_two) {
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
         auto c = FixedLengthColumn<int32_t>::dynamic_pointer_cast(chunk->get_column_by_index(0));
-        return c->get_data()[row];
+        return c->immutable_data()[row];
     };
 
     ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
@@ -139,7 +139,7 @@ TEST_F(UnionIteratorTest, union_one) {
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
         auto c = FixedLengthColumn<int32_t>::dynamic_pointer_cast(chunk->get_column_by_index(0));
-        return c->get_data()[row];
+        return c->immutable_data()[row];
     };
 
     ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);

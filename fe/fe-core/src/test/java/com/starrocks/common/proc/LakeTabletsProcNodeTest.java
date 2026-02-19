@@ -15,12 +15,10 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -36,6 +34,8 @@ import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
@@ -106,7 +106,7 @@ public class LakeTabletsProcNodeTest {
 
         // Lake table
         LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -122,11 +122,13 @@ public class LakeTabletsProcNodeTest {
             Assertions.assertEquals((long) result.get(0).get(0), tablet1Id);
             String backendIds = (String) result.get(0).get(1);
             Assertions.assertTrue(backendIds.contains("10000") && backendIds.contains("10001"));
+            Assertions.assertEquals("null", result.get(0).get(5));
         }
         {
             Assertions.assertEquals((long) result.get(1).get(0), tablet2Id);
             String backendIds = (String) result.get(1).get(1);
             Assertions.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
+            Assertions.assertEquals("null", result.get(1).get(5));
         }
 
         { // check show single tablet with tablet id
@@ -139,6 +141,7 @@ public class LakeTabletsProcNodeTest {
             Assertions.assertEquals(new Gson().toJson(tablet1.getBackendIds()), row.get(1));
             Assertions.assertEquals(new ByteSizeValue(tablet1.getDataSize(true)).toString(), row.get(2));
             Assertions.assertEquals(String.valueOf(tablet1.getRowCount(0L)), row.get(3));
+            Assertions.assertEquals("null", row.get(5));
         }
 
         { // error case

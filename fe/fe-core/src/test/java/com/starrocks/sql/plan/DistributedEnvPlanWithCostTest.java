@@ -82,7 +82,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 " WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
                 "THEN l_shipdate ELSE NULL END, 3))), 2) ELSE NULL END) from lineitem";
         String plan = getCostExplain(sql);
-        assertContains(plan, "concat-->[-Infinity, Infinity, 0.0, 3.0, 412.0] ESTIMATE");
+        assertContains(plan, "CONCAT-->[-Infinity, Infinity, 0.0, 3.0, 412.0] ESTIMATE");
     }
 
     @Test
@@ -780,7 +780,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
         assertContains(plan, "* month-->[1.0, 12.0, 0.0, 1.0, 12.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT day(P_PARTKEY) AS day FROM part GROUP BY day ORDER BY day DESC LIMIT 5";
         plan = getCostExplain(sql);
@@ -1503,7 +1503,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "39:Project\n" +
                 "  |  <slot 2> : 2: N_NAME\n" +
                 "  |  <slot 64> : if(CAST(42: C_NATIONKEY AS DOUBLE) > 44: C_ACCTBAL, 31: O_ORDERPRIORITY, " +
-                "CAST(33: O_SHIPPRIORITY AS VARCHAR(15)))\n" +
+                "CAST(33: O_SHIPPRIORITY AS VARCHAR))\n" +
                 "  |  \n" +
                 "  38:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +

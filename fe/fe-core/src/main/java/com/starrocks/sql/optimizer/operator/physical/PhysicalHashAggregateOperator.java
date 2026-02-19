@@ -27,14 +27,15 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
-import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.skew.DataSkewInfo;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -65,6 +66,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
     // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
     private boolean topNLocalAgg;
+    // Only set when partial topN is pushed above local aggregation.
+    private LogicalTopNOperator.TopNSortInfo topNSortInfo;
 
     private boolean useSortAgg = false;
 
@@ -77,6 +80,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private boolean forcePreAggregation = false;
 
     private boolean withLocalShuffle = false;
+
+    private long localLimit = DEFAULT_LIMIT;
 
     private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic = Lists.newArrayList();
 
@@ -110,12 +115,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                 aggregateOperator.getProjection());
         this.mergedLocalAgg = aggregateOperator.mergedLocalAgg;
         this.topNLocalAgg = aggregateOperator.topNLocalAgg;
+        this.topNSortInfo = aggregateOperator.topNSortInfo;
         this.useSortAgg = aggregateOperator.useSortAgg;
         this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
         this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
         this.withLocalShuffle = aggregateOperator.withLocalShuffle;
+        this.localLimit = aggregateOperator.localLimit;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -158,6 +165,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setTopNLocalAgg(boolean topNLocalAgg) {
         this.topNLocalAgg = topNLocalAgg;
+    }
+
+    public LogicalTopNOperator.TopNSortInfo getTopNSortInfo() {
+        return topNSortInfo;
+    }
+
+    public void setTopNSortInfo(LogicalTopNOperator.TopNSortInfo topNSortInfo) {
+        this.topNSortInfo = topNSortInfo;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
@@ -211,8 +226,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return withoutColocateRequirement;
     }
 
+    public long getLocalLimit() {
+        return localLimit;
+    }
+
     public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
         this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
     }
 
     public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {

@@ -14,8 +14,10 @@
 
 #include "exec/olap_scan_prepare.h"
 
+#include <boost/variant/static_visitor.hpp>
 #include <variant>
 
+#include "base/orlp/pdqsort.h"
 #include "column/type_traits.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
@@ -34,10 +36,9 @@
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/runtime_range_pruner.hpp"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 
@@ -125,9 +126,9 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     // check column type, as not all exprs return a const column.
     ColumnPtr data = column_ptr;
     if (column_ptr->is_nullable()) {
-        data = down_cast<NullableColumn*>(column_ptr.get())->data_column();
+        data = down_cast<const NullableColumn*>(column_ptr.get())->data_column();
     } else if (column_ptr->is_constant()) {
-        data = down_cast<ConstColumn*>(column_ptr.get())->data_column();
+        data = down_cast<const ConstColumn*>(column_ptr.get())->data_column();
     } else { // defensive check.
         DCHECK(false) << "unreachable path: unknown column type of expr evaluate result";
         return false;
@@ -141,7 +142,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
 
     if constexpr (std::is_same_v<ValueType, DateValue>) {
         if (data->is_timestamp()) {
-            TimestampValue ts = down_cast<TimestampColumn*>(data.get())->get(0).get_timestamp();
+            TimestampValue ts = down_cast<const TimestampColumn*>(data.get())->get(0).get_timestamp();
             *value = implicit_cast<DateValue>(ts);
             if (implicit_cast<TimestampValue>(*value) != ts) {
                 // |ts| has nonzero time, rewrite predicate.
@@ -169,7 +170,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
             }
         } else {
             DCHECK(data->is_date());
-            *value = down_cast<DateColumn*>(data.get())->get(0).get_date();
+            *value = down_cast<const DateColumn*>(data.get())->get(0).get_date();
         }
     } else if constexpr (std::is_same_v<ValueType, Slice>) {
         // |column_ptr| will be released after this method return, have to ensure that
@@ -384,7 +385,7 @@ template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateCompoundNode<Type>& tree_root,
                                                                    PredicateParser* parser,
                                                                    ColumnPredicatePtrs& col_preds_owner) {
-    if (_opts.runtime_filters == nullptr) {
+    if (!_is_root_builder || _opts.runtime_filters == nullptr) {
         return Status::OK();
     }
 

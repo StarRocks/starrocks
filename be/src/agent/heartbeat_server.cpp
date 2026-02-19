@@ -44,15 +44,16 @@
 
 #include "agent/master_info.h"
 #include "agent/task_worker_pool.h"
+#include "base/network/network_util.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/system/cpu_info.h"
+#include "common/util/debug_util.h"
+#include "common/util/thrift_server.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "runtime/heartbeat_flags.h"
-#include "service/backend_options.h"
 #include "storage/storage_engine.h"
-#include "util/debug_util.h"
-#include "util/network_util.h"
-#include "util/thrift_server.h"
 
 using std::fstream;
 using std::nothrow;
@@ -88,7 +89,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
     StatusOr<CmpResult> res;
     // reject master's heartbeat when exit
-    if (process_exit_in_progress()) {
+    if (process_exit_in_progress() || is_process_crashing()) {
         res = Status::Shutdown("BE is shutting down");
     } else {
         res = compare_master_info(master_info);

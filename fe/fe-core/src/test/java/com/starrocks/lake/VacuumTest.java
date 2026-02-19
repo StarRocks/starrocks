@@ -293,7 +293,7 @@ public class VacuumTest {
                 OlapTable olapTbl = (OlapTable) tbl;
                 for (PhysicalPartition part : olapTbl.getPhysicalPartitions()) {
                     part.setLastFullVacuumTime(1L);
-                    for (MaterializedIndex index : part.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (MaterializedIndex index : part.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         allTabletIds.addAll(index.getTablets().stream().map(Tablet::getId).toList());
                     }
                 }
@@ -387,6 +387,7 @@ public class VacuumTest {
             }
         };
 
+        Config.lake_enable_fullvacuum = true;
         FeConstants.runningUnitTest = false;
         int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
@@ -396,6 +397,7 @@ public class VacuumTest {
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
+        Config.lake_enable_fullvacuum = false;
     }
 
     @Test

@@ -19,13 +19,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
 #include "fs/fs_starlet.h"
 #include "service/staros_worker.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 extern std::shared_ptr<StarOSWorker> g_worker;

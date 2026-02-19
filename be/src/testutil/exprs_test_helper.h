@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/object_pool.h"
@@ -29,7 +30,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -109,11 +109,10 @@ public:
         slot_desc.slotType = type;
         slot_desc.columnPos = -1;
         slot_desc.byteOffset = 4;
-        slot_desc.nullIndicatorByte = 0;
-        slot_desc.nullIndicatorBit = 1;
         slot_desc.colName = col_name;
         slot_desc.slotIdx = 1;
         slot_desc.isMaterialized = true;
+        slot_desc.__set_isNullable(true);
         return slot_desc;
     }
 

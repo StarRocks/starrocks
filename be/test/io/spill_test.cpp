@@ -24,6 +24,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -34,6 +37,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sorting/merge.h"
@@ -54,11 +58,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
-#include "util/uid_util.h"
 
 namespace starrocks::vectorized {
 class TExprBuilder {
@@ -107,8 +107,8 @@ public:
     }
 
     Status do_visit(NullableColumn* column) {
-        RETURN_IF_ERROR(fill(column->null_column().get()));
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        RETURN_IF_ERROR(fill(column->null_column_raw_ptr()));
+        RETURN_IF_ERROR(column->data_column_raw_ptr()->accept_mutable(this));
         return Status::OK();
     }
 
@@ -696,9 +696,10 @@ TEST_F(SpillTest, partition_yield_with_failed) {
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
-
-        PredoSyncExecutor::predo = [&]() { spiller.reset(); };
-        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+        auto dummy = std::make_shared<int>();
+        PredoSyncExecutor::predo = [&]() { dummy.reset(); };
+        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st,
+                                                    spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr(dummy))));
     }
 }
 

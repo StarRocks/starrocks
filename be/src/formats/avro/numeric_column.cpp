@@ -14,10 +14,10 @@
 
 #include "numeric_column.h"
 
+#include "base/string/string_parser.hpp"
+#include "base/types/numeric_types.h"
 #include "column/fixed_length_column.h"
 #include "gutil/strings/substitute.h"
-#include "util/numeric_types.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -213,6 +213,12 @@ template Status add_numeric_column<int8_t>(Column* column, const TypeDescriptor&
                                            const avro_value_t& value);
 template Status add_numeric_column<uint8_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                             const avro_value_t& value);
+template Status add_numeric_column<uint16_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                             const avro_value_t& value);
+template Status add_numeric_column<uint32_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                             const avro_value_t& value);
+template Status add_numeric_column<uint64_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                             const avro_value_t& value);
 template Status add_numeric_column<double>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                            const avro_value_t& value);
 template Status add_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, const std::string& name,

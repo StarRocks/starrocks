@@ -15,10 +15,12 @@
 #pragma once
 #include <thread>
 
+#include "base/uid_util.h"
+#include "common/thread/thread.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
-#include "util/thread.h"
+#include "util/hash_util.hpp"
 
 namespace starrocks {
 

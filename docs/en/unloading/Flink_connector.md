@@ -30,12 +30,12 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 ## Version requirements
 
-| Connector | Flink                    | StarRocks     | Java | Scala     |
-|-----------|--------------------------|---------------| ---- |-----------|
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Prerequisites
 
@@ -349,6 +349,12 @@ When you read data by using Flink SQL, take note of the following points:
 
        }
    ```
+
+## FAQ
+
+#### I got an error "Failed to get next from be" while exporting data with Flink Connector. What should I do?
+
+You can set the BE configuration `scan_context_gc_interval_min` (Default: 5, Unit: Minutes) to a larger value to increase the time interval at which the Scan Context is cleaned.
 
 ## What's next
 

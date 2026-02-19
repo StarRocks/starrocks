@@ -1,4 +1,4 @@
--- name: test_execute_in_fe
+-- name: test_execute_in_fe @no_arrow_flight_sql
 -- execute in fe
 set enable_constant_execute_in_fe = true;
 select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), cast(10 as bigint), cast(100 as largeint),

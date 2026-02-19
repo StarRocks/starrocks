@@ -98,7 +98,7 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
             }
 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
-            collectStatisticSync(sql, context);
+            collectStatisticSync(sql, context, analyzeStatus);
 
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);

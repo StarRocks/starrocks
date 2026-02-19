@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -64,7 +65,7 @@ public class View extends Table {
 
     // The original SQL-string given as view definition. Set during analysis.
     // Corresponds to Hive's viewOriginalText.
-    @Deprecated
+    @SerializedName(value = "o")
     private String originalViewDef = "";
 
     // Query statement (as SQL string) that defines the View for view substitution.
@@ -135,9 +136,27 @@ public class View extends Table {
         return inlineViewDef;
     }
 
+    public void setOriginalViewDef(String originalViewDef) {
+        // Ensure that credentials are redacted before storing the original view definition to
+        // avoid persisting sensitive information
+        this.originalViewDef = SqlCredentialRedactor.redact(originalViewDef);
+    }
+
+    public String getDDLViewDef() {
+        if (originalViewDef != null && !originalViewDef.isEmpty()) {
+            return originalViewDef;
+        } else {
+            return inlineViewDef;
+        }
+    }
+
     // show create view that from files() need remove the credential
     public String getInlineViewDefWithoutCredential() {
-        return AstToSQLBuilder.toSQL(getQueryStatement());
+        if (originalViewDef != null && !originalViewDef.isEmpty()) {
+            return originalViewDef;
+        } else {
+            return AstToSQLBuilder.toSQL(getQueryStatement());
+        }
     }
 
     public long getSqlMode() {
@@ -153,12 +172,12 @@ public class View extends Table {
     }
 
     /**
-     * Initializes the originalViewDef, inlineViewDef, and queryStmt members
+     * Check the inlineViewDef, and queryStmt members
      * by parsing the expanded view definition SQL-string.
-     * Throws a TableLoadingException if there was any error parsing the
+     * Throws a StarRocksException if there was any error parsing the
      * SQL or if the view definition did not parse into a QueryStmt.
      */
-    public synchronized QueryStatement init() throws StarRocksException {
+    public void checkInlineViewDef(String inlineViewDef, long sqlMode) throws StarRocksException {
         Preconditions.checkNotNull(inlineViewDef);
         // Parse the expanded view definition SQL-string into a QueryStmt and
         // populate a view definition.
@@ -177,7 +196,6 @@ public class View extends Table {
             throw new StarRocksException(String.format("View %s without query statement. Its definition is:%n%s",
                     name, inlineViewDef));
         }
-        return (QueryStatement) node;
     }
 
     public synchronized List<TableName> getTableRefs() {

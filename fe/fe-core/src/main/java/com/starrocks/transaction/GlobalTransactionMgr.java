@@ -140,6 +140,30 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         explicitTxnStateMap.put(txnId, explicitTxnState);
     }
 
+    /**
+     * Check if a label is already used in any database's transaction.
+     * This method is used to validate label uniqueness before starting an explicit transaction.
+     *
+     * @param label the label to check
+     * @throws LabelAlreadyUsedException if the label is already used by another non-aborted transaction
+     */
+    public void checkLabelUsedInAnyDatabase(String label) throws LabelAlreadyUsedException {
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            TransactionState txnState = dbTransactionMgr.getLabelTransactionState(label);
+            if (txnState != null && txnState.getTransactionStatus() != TransactionStatus.ABORTED) {
+                throw new LabelAlreadyUsedException(label, txnState.getTransactionStatus());
+            }
+        }
+        // Also check explicit transaction states
+        for (ExplicitTxnState explicitTxnState : explicitTxnStateMap.values()) {
+            TransactionState txnState = explicitTxnState.getTransactionState();
+            if (txnState != null && label.equals(txnState.getLabel())
+                    && txnState.getTransactionStatus() != TransactionStatus.ABORTED) {
+                throw new LabelAlreadyUsedException(label, txnState.getTransactionStatus());
+            }
+        }
+    }
+
     public ExplicitTxnState getExplicitTxnState(long txnId) {
         return explicitTxnStateMap.get(txnId);
     }
@@ -923,19 +947,11 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> txnSamples = new ArrayList<>();
-        for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
-            List<Object> samples = mgr.getSamplesForMemoryTracker();
-            if (samples.size() > 0) {
-                txnSamples.addAll(samples);
-                break;
-            }
+    public long estimateSize() {
+        long size = 0;
+        for (DatabaseTransactionMgr dbTxnMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            size += dbTxnMgr.estimateSize();
         }
-
-        List<Object> callbackSamples = callbackFactory.getSamplesForMemoryTracker();
-
-        return Lists.newArrayList(Pair.create(txnSamples, (long) getTransactionNum()),
-                Pair.create(callbackSamples, callbackFactory.getCallBackCnt()));
+        return size;
     }
 }

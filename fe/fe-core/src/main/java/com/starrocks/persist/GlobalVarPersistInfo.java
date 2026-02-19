@@ -34,12 +34,8 @@
 
 package com.starrocks.persist;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.qe.GlobalVariable;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -47,16 +43,13 @@ import org.json.JSONObject;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.util.List;
 
 // for persist global variables
 public class GlobalVarPersistInfo implements Writable {
     private static final Logger LOG = LogManager.getLogger(GlobalVarPersistInfo.class);
-    // current default session variable when writing the edit log
-    private SessionVariable defaultSessionVariable;
-    // variable names which are modified
-    private List<String> varNames;
+    private String varName;
+
+    private Object val;
 
     // the modified variable info will be saved as a json string
     private String persistJsonString;
@@ -65,9 +58,9 @@ public class GlobalVarPersistInfo implements Writable {
         // for persist
     }
 
-    public GlobalVarPersistInfo(SessionVariable defaultSessionVariable, List<String> varNames) {
-        this.defaultSessionVariable = defaultSessionVariable;
-        this.varNames = varNames;
+    public GlobalVarPersistInfo(String varName, Object val) {
+        this.varName = varName;
+        this.val = val;
     }
 
     public void setPersistJsonString(String persistJsonString) {
@@ -82,70 +75,7 @@ public class GlobalVarPersistInfo implements Writable {
     public void write(DataOutput out) throws IOException {
         try {
             JSONObject root = new JSONObject();
-            for (String varName : varNames) {
-                // find attr in defaultSessionVariable or GlobalVariables
-                Object varInstance = null;
-                Field theField = null;
-                boolean found = false;
-                // 1. first find in defaultSessionVariable
-                for (Field field : SessionVariable.class.getDeclaredFields()) {
-                    VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
-                    if (attr == null) {
-                        continue;
-                    }
-                    if (attr.name().equalsIgnoreCase(varName)) {
-                        varInstance = this.defaultSessionVariable;
-                        theField = field;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    // find in GlobalVariables
-                    for (Field field : GlobalVariable.class.getDeclaredFields()) {
-                        VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
-                        if (attr == null) {
-                            continue;
-                        }
-
-                        if (attr.name().equalsIgnoreCase(varName)) {
-                            found = true;
-                            varInstance = null;
-                            theField = field;
-                            break;
-                        }
-                    }
-                }
-                Preconditions.checkState(found, varName);
-
-                theField.setAccessible(true);
-                String fieldName = theField.getAnnotation(VariableMgr.VarAttr.class).name();
-                switch (theField.getType().getSimpleName()) {
-                    case "boolean":
-                        root.put(fieldName, (Boolean) theField.get(varInstance));
-                        break;
-                    case "int":
-                        root.put(fieldName, (Integer) theField.get(varInstance));
-                        break;
-                    case "long":
-                        root.put(fieldName, (Long) theField.get(varInstance));
-                        break;
-                    case "float":
-                        root.put(fieldName, (Float) theField.get(varInstance));
-                        break;
-                    case "double":
-                        root.put(fieldName, (Double) theField.get(varInstance));
-                        break;
-                    case "String":
-                        root.put(fieldName, (String) theField.get(varInstance));
-                        break;
-                    default:
-                        // Unsupported type variable.
-                        throw new IOException("invalid type: " + theField.getType().getSimpleName());
-                }
-            } // end for all variables
-
+            root.put(varName, val);
             Text.writeString(out, root.toString());
         } catch (Exception e) {
             throw new IOException("failed to write session variable: " + e.getMessage());

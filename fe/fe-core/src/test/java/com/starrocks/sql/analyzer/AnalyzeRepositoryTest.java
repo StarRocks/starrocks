@@ -172,7 +172,7 @@ public class AnalyzeRepositoryTest {
         BlobStorage storage = new BlobStorage("broker", Maps.newHashMap());
         Repository repo = new Repository(10000, "repo", false, "bos://backup-cmy", storage);
         repo.initRepository();
-        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
+        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo);
 
         analyzeSuccess("DROP REPOSITORY `repo`;");
         analyzeFail("DROP REPOSITORY ``;");

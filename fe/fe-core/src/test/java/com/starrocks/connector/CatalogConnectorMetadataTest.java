@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -239,5 +240,30 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.getPartitions(null, null);
         catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1,
                 TvrTableSnapshot.empty());
+    }
+
+    @Test
+    void testGetCatalogPropertiesDelegatesToNormal(@Mocked ConnectorMetadata connectorMetadata) {
+        Map<String, String> expectedProperties = Map.of(
+                "uri", "http://rest-catalog:8181",
+                "credential", "test-credential"
+        );
+
+        new Expectations() {
+            {
+                connectorMetadata.getCatalogProperties();
+                result = expectedProperties;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        Map<String, String> actualProperties = catalogConnectorMetadata.getCatalogProperties();
+        assertEquals(expectedProperties, actualProperties);
     }
 }

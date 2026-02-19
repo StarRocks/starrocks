@@ -19,8 +19,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/utility/guard.h"
 #include "gen_cpp/RuntimeFilter_types.h"
-#include "util/guard.h"
 
 namespace starrocks {
 class RuntimeFilterLayout {

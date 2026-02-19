@@ -42,9 +42,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -70,10 +68,10 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
-import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
@@ -236,6 +234,15 @@ public class Load {
         return shadowColumnDescs;
     }
 
+    public static ConnectContext createLoadConnectContext(String dbName) {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setDatabase(dbName);
+        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        return connectContext;
+    }
+
     public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(Table tbl, String dbName, boolean analyze) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
@@ -245,10 +252,7 @@ public class Load {
 
             TableName tableName = new TableName(dbName, tbl.getName());
 
-            ConnectContext connectContext = new ConnectContext();
-            connectContext.setDatabase(dbName);
-            connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+            ConnectContext connectContext = createLoadConnectContext(dbName);
 
             // If fe restart and execute the streamload, this re-analyze is needed.
             Expr expr = column.getGeneratedColumnExpr(tbl.getIdToColumn());
@@ -265,12 +269,6 @@ public class Load {
             shadowColumnDescs.add(importColumnDesc);
         }
         return shadowColumnDescs;
-    }
-
-    public static boolean checDictQueryExpr(Expr checkExpr) {
-        List<DictQueryExpr> result = Lists.newArrayList();
-        checkExpr.collect(DictQueryExpr.class, result);
-        return result.size() != 0;
     }
 
     public static boolean tableSupportOpColumn(Table tbl) {
@@ -596,20 +594,7 @@ public class Load {
         }
 
         if (dbName != null && !dbName.isEmpty()) {
-            for (Entry<String, Expr> entry : exprsByName.entrySet()) {
-                if (entry.getValue() != null && checDictQueryExpr(entry.getValue())) {
-                    if (ConnectContext.get() == null) {
-                        ConnectContext context = new ConnectContext();
-                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                        context.setCurrentUserIdentity(UserIdentity.ROOT);
-                        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-                        context.setQualifiedUser(UserIdentity.ROOT.getUser());
-                        context.setThreadLocalInfo();
-                    }
-                    ConnectContext.get().setDatabase(dbName);
-                    break;
-                }
-            }
+            ConnectContext.get().setDatabase(dbName);
         }
 
         LOG.debug("slotDescByName: {}, exprsByName: {}, mvDefineExpr: {}", slotDescByName, exprsByName, mvDefineExpr);
@@ -965,7 +950,7 @@ public class Load {
         // To compatible with older load version
         if (originExpr instanceof FunctionCallExpr) {
             FunctionCallExpr funcExpr = (FunctionCallExpr) originExpr;
-            String funcName = funcExpr.getFnName().getFunction();
+            String funcName = funcExpr.getFunctionName();
 
             if (funcName.equalsIgnoreCase(FunctionSet.REPLACE_VALUE)) {
                 List<Expr> exprs = Lists.newArrayList();
@@ -1043,23 +1028,20 @@ public class Load {
                 return newFn;
             } else if (funcName.equalsIgnoreCase(FunctionSet.STRFTIME)) {
                 // FROM_UNIXTIME(val)
-                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
                 FunctionCallExpr fromUnixFunc = new FunctionCallExpr(
-                        fromUnixName, new FunctionParams(false, fromUnixArgs));
+                        FunctionSet.FROM_UNIXTIME, new FunctionParams(false, fromUnixArgs));
 
                 return fromUnixFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.TIME_FORMAT)) {
                 // DATE_FORMAT(STR_TO_DATE(dt_str, dt_fmt))
-                FunctionName strToDateName = new FunctionName(FunctionSet.STR_TO_DATE);
                 List<Expr> strToDateExprs = Lists.newArrayList(funcExpr.getChild(2), funcExpr.getChild(1));
                 FunctionCallExpr strToDateFuncExpr = new FunctionCallExpr(
-                        strToDateName, new FunctionParams(false, strToDateExprs));
+                        FunctionSet.STR_TO_DATE, new FunctionParams(false, strToDateExprs));
 
-                FunctionName dateFormatName = new FunctionName(FunctionSet.DATE_FORMAT);
                 List<Expr> dateFormatArgs = Lists.newArrayList(strToDateFuncExpr, funcExpr.getChild(0));
                 FunctionCallExpr dateFormatFunc = new FunctionCallExpr(
-                        dateFormatName, new FunctionParams(false, dateFormatArgs));
+                        FunctionSet.DATE_FORMAT, new FunctionParams(false, dateFormatArgs));
 
                 return dateFormatFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.ALIGNMENT_TIMESTAMP)) {
@@ -1069,10 +1051,9 @@ public class Load {
                  *
                  */
                 // FROM_UNIXTIME
-                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
                 FunctionCallExpr fromUnixFunc = new FunctionCallExpr(
-                        fromUnixName, new FunctionParams(false, fromUnixArgs));
+                        FunctionSet.FROM_UNIXTIME, new FunctionParams(false, fromUnixArgs));
 
                 // DATE_FORMAT
                 StringLiteral precision = (StringLiteral) funcExpr.getChild(0);
@@ -1088,34 +1069,30 @@ public class Load {
                 } else {
                     throw new StarRocksException("Unknown precision(" + precision.getStringValue() + ")");
                 }
-                FunctionName dateFormatName = new FunctionName(FunctionSet.DATE_FORMAT);
                 List<Expr> dateFormatArgs = Lists.newArrayList(fromUnixFunc, format);
                 FunctionCallExpr dateFormatFunc = new FunctionCallExpr(
-                        dateFormatName, new FunctionParams(false, dateFormatArgs));
+                        FunctionSet.DATE_FORMAT, new FunctionParams(false, dateFormatArgs));
 
                 // UNIX_TIMESTAMP
-                FunctionName unixTimeName = new FunctionName(FunctionSet.UNIX_TIMESTAMP);
                 List<Expr> unixTimeArgs = Lists.newArrayList();
                 unixTimeArgs.add(dateFormatFunc);
                 FunctionCallExpr unixTimeFunc = new FunctionCallExpr(
-                        unixTimeName, new FunctionParams(false, unixTimeArgs));
+                        FunctionSet.UNIX_TIMESTAMP, new FunctionParams(false, unixTimeArgs));
 
                 return unixTimeFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.DEFAULT_VALUE)) {
                 return funcExpr.getChild(0);
             } else if (funcName.equalsIgnoreCase(FunctionSet.NOW)) {
-                FunctionName nowFunctionName = new FunctionName(FunctionSet.NOW);
-                FunctionCallExpr newFunc = new FunctionCallExpr(nowFunctionName, funcExpr.getParams());
+                FunctionCallExpr newFunc = new FunctionCallExpr(FunctionSet.NOW, funcExpr.getParams());
                 return newFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);
             } else if (funcName.equalsIgnoreCase(FunctionSet.GET_JSON_INT) ||
                     funcName.equalsIgnoreCase(FunctionSet.GET_JSON_STRING) ||
                     funcName.equalsIgnoreCase(FunctionSet.GET_JSON_DOUBLE)) {
-                FunctionName jsonFunctionName = new FunctionName(funcName.toLowerCase());
                 List<Expr> getJsonArgs = Lists.newArrayList(funcExpr.getChild(0), funcExpr.getChild(1));
                 return new FunctionCallExpr(
-                        jsonFunctionName, new FunctionParams(false, getJsonArgs));
+                        funcName.toLowerCase(), new FunctionParams(false, getJsonArgs));
             }
         }
         return originExpr;

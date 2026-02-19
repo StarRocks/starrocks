@@ -49,7 +49,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
@@ -69,6 +68,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
@@ -351,11 +351,11 @@ public class RestoreJobTest {
                 physicalPartInfo.id = physicalPartition.getId();
                 partInfo.subPartitions.put(physicalPartInfo.id, physicalPartInfo);
 
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     BackupIndexInfo idxInfo = new BackupIndexInfo();
                     idxInfo.id = index.getId();
-                    idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                    idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                    idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getMetaId());
+                    idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                     physicalPartInfo.indexes.put(idxInfo.name, idxInfo);
 
                     for (Tablet tablet : index.getTablets()) {
@@ -452,7 +452,11 @@ public class RestoreJobTest {
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.incrementAndGet();
+                result = new Delegate<Long>() {
+                    public Long getNextId() {
+                        return id.incrementAndGet();
+                    }
+                };
 
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
@@ -531,11 +535,11 @@ public class RestoreJobTest {
             tblInfo.partitions.put(partInfo.name, partInfo);
 
             for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    .getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getMetaId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {
@@ -577,13 +581,13 @@ public class RestoreJobTest {
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(12, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(24, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -591,7 +595,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assertions.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(24, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -624,7 +628,11 @@ public class RestoreJobTest {
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.incrementAndGet();
+                result = new Delegate<Long>() {
+                    public Long getNextId() {
+                        return id.incrementAndGet();
+                    }
+                };
 
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
@@ -703,11 +711,11 @@ public class RestoreJobTest {
             tblInfo.partitions.put(partInfo.name, partInfo);
 
             for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    .getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getMetaId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {
@@ -749,13 +757,13 @@ public class RestoreJobTest {
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(3, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(6, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -763,7 +771,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assertions.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(6, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -846,7 +854,11 @@ public class RestoreJobTest {
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.incrementAndGet();
+                result = new Delegate<Long>() {
+                    public Long getNextId() {
+                        return id.incrementAndGet();
+                    }
+                };
 
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
@@ -1137,10 +1149,6 @@ public class RestoreJobTest {
                 return Maps.newHashMap();
             }
             
-            @Mock
-            public Map<String, Long> getPhysicalPartitionNameToPartitionId() {
-                return Maps.newHashMap();
-            }
         };
         
         // Create the MaterializedView instance after MockUp is set up

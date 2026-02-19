@@ -17,8 +17,10 @@
 #include <memory>
 #include <queue>
 
+#include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
 #include "gutil/stl_util.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
@@ -28,8 +30,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet.h"
 #include "storage/union_iterator.h"
-#include "util/pretty_printer.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -50,7 +50,7 @@ struct MergeEntry {
     const T* pk_last = nullptr;
     const T* pk_start = nullptr;
     uint32_t rowset_seg_id = 0;
-    ColumnPtr chunk_pk_column;
+    MutableColumnPtr chunk_pk_column;
     ChunkPtr chunk;
     ChunkIteratorPtr segment_itr;
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
@@ -120,7 +120,8 @@ struct MergeEntry {
                                                                    chunk_pk_column.get()));
             } else {
                 // just use chunk's first column
-                chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
+                chunk_pk_column =
+                        chunk->get_column_raw_ptr_by_index(chunk->schema()->sort_key_idxes()[0])->as_mutable_ptr();
             }
             DCHECK(chunk_pk_column->size() > 0);
             DCHECK(chunk_pk_column->size() == chunk->num_rows());
@@ -354,8 +355,8 @@ private:
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
             entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-            auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                      stats, nullptr, _chunk_size);
+            auto res = rowset->get_segment_iterators2(schema, tablet_schema, MetaLoadMode::ALL, version, stats,
+                                                      _chunk_size);
             if (!res.ok()) {
                 return res.status();
             }
@@ -534,8 +535,8 @@ private:
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-                auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                          &non_key_stats, nullptr, _chunk_size);
+                auto res = rowset->get_segment_iterators2(schema, tablet_schema, MetaLoadMode::ALL, version,
+                                                          &non_key_stats, _chunk_size);
                 if (!res.ok()) {
                     return res.status();
                 }

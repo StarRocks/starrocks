@@ -33,7 +33,14 @@ public:
 
     FixedLengthColumn(const size_t n, const ValueType x) : SuperClass(n, x) {}
 
-    FixedLengthColumn(const FixedLengthColumn& src) : SuperClass((const FixedLengthColumnBase<T>&)(src)) {}
+    DISALLOW_COPY_TEMPLATE(FixedLengthColumn, FixedLengthColumn<T>);
+
     MutableColumnPtr clone_empty() const override { return this->create(); }
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, this->size());
+        return p;
+    }
 };
 } // namespace starrocks

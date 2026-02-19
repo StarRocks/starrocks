@@ -37,6 +37,8 @@
 #include <memory>
 #include <utility>
 
+#include "base/string/parse_util.h"
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/data_sink.h"
@@ -56,8 +58,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/parse_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

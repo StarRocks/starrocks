@@ -1,89 +1,206 @@
--- name: test_arrow_flight_3
-arrow: CREATE DATABASE arrow_flight_${uuid0};
+-- name: test_arrow_flight_3 @arrow_flight_sql
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
 -- result:
 0
 -- !result
-arrow: USE arrow_flight_${uuid0};
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
 -- result:
 0
 -- !result
-arrow: CREATE TABLE arrow_flight_${uuid0}.__row_util_base ( k1 bigint NULL ) DISTRIBUTED BY HASH(`k1`) BUCKETS 64 PROPERTIES ( "replication_num" = "1" );
+insert into __row_util_base select * from __row_util_base;
 -- result:
 0
 -- !result
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base;
 -- result:
 0
 -- !result
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select * from arrow_flight_${uuid0}.__row_util_base;
+insert into __row_util_base select * from __row_util_base;
 -- result:
 0
 -- !result
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select * from arrow_flight_${uuid0}.__row_util_base;
+insert into __row_util_base select * from __row_util_base;
 -- result:
 0
 -- !result
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select * from arrow_flight_${uuid0}.__row_util_base;
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
 -- result:
 0
 -- !result
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select * from arrow_flight_${uuid0}.__row_util_base;
+insert into __row_util select row_number() over() as idx from __row_util_base;
 -- result:
 0
 -- !result
-arrow: CREATE TABLE arrow_flight_${uuid0}.__row_util ( idx bigint NULL ) DISTRIBUTED BY HASH(`idx`) BUCKETS 64 PROPERTIES ( "replication_num" = "1" );
+CREATE TABLE t1 (
+    k1 bigint NULL,
+    c_boolean boolean NULL,
+    c_tinyint tinyint NULL,
+    c_smallint smallint NULL,
+    c_int int NULL,
+    c_bigint bigint NULL,
+    c_largeint largeint NULL,
+    c_float float NULL,
+    c_double double NULL,
+    c_decimalv2 DECIMAL NULL,
+    c_decimal32 DECIMAL(9, 1) NULL,
+    c_decimal64 DECIMAL(18, 1) NULL,
+    c_decimal128 DECIMAL(38, 1) NULL,
+    c_decimal256 DECIMAL(76, 1) NULL,
+    c_date date NULL,
+    c_datetime datetime NULL,
+    c_varchar string NULL,
+    c_char char(64) NULL,
+    c_json JSON NULL,
+    c_array_json ARRAY<JSON> NULL,
+    c_array_int ARRAY<INT> NULL,
+    c_array_largeint ARRAY<LARGEINT> NULL,
+    c_map MAP<INT, STRING> NULL,
+    c_struct STRUCT<k1 INT, k2 STRING> NULL
+) DISTRIBUTED BY HASH(`k1`) BUCKETS 64 PROPERTIES ("replication_num" = "1");
 -- result:
 0
 -- !result
-arrow: insert into arrow_flight_${uuid0}.__row_util select row_number() over() as idx from arrow_flight_${uuid0}.__row_util_base;
+insert into t1 SELECT 
+    idx, idx % 2 = 0, cast(idx % 128 as tinyint), cast(idx % 32768 as smallint), cast(idx as int), cast(idx as bigint), cast(idx * 1000000000000 as largeint), 
+    cast(idx as float), cast(idx as double), 
+    cast(idx + 0.1 as DECIMAL), cast(idx + 0.1 as DECIMAL(9, 1)), cast(idx + 0.1 as DECIMAL(18, 1)), cast(idx + 0.1 as DECIMAL(38, 1)), cast(idx + 0.1 as DECIMAL(76, 1)), 
+    date_add('2020-01-01', interval idx day), date_add('2020-01-01 00:00:00', interval idx hour), 
+    cast(concat('varchar_', idx) as string), cast(concat('char_', idx) as char(64)), 
+    json_object('k1', idx, 'k2', concat('str_', idx)), [json_object('k1', idx, 'k2', concat('str_', idx))],
+    [idx, idx + 1, idx + 2], [idx, idx + 1, idx + 2], 
+    map{0: concat('str_', idx), 1: concat('str_', idx + 1)}, struct(idx, concat('str_', idx)) FROM __row_util;
 -- result:
 0
 -- !result
-arrow: CREATE TABLE arrow_flight_${uuid0}.t1 ( k1 bigint NULL, c_boolean boolean NULL, c_tinyint tinyint NULL, c_smallint smallint NULL, c_int int NULL, c_bigint bigint NULL, c_largeint largeint NULL, c_float float NULL, c_double double NULL, c_decimalv2 DECIMAL NULL, c_decimal32 DECIMAL(9, 1) NULL, c_decimal64 DECIMAL(18, 1) NULL, c_decimal128 DECIMAL(38, 1) NULL, c_date date NULL, c_datetime datetime NULL, c_varchar string NULL, c_char char(64) NULL, c_json JSON NULL, c_array_int ARRAY<INT> NULL, c_map MAP<INT, STRING> NULL, c_struct STRUCT<k1 INT, k2 STRING> NULL ) DISTRIBUTED BY HASH(`k1`) BUCKETS 64 PROPERTIES ( "replication_num" = "1" );
+insert into t1(k1) select idx + 1600000 from __row_util where idx <= 10000;
 -- result:
 0
 -- !result
-arrow: insert into arrow_flight_${uuid0}.t1 SELECT idx, idx % 2 = 0, cast(idx % 128 as tinyint), cast(idx % 32768 as smallint), cast(idx as int), cast(idx as bigint), cast(idx * 1000000000000 as largeint), cast(idx as float), cast(idx as double), cast(idx + 0.1 as DECIMAL), cast(idx + 0.1 as DECIMAL(9, 1)), cast(idx + 0.1 as DECIMAL(18, 1)), cast(idx + 0.1 as DECIMAL(38, 1)), date_add('2020-01-01', interval idx day), date_add('2020-01-01 00:00:00', interval idx hour), cast(concat('varchar_', idx) as string), cast(concat('char_', idx) as char(64)), json_object('k1', idx, 'k2', concat('str_', idx)), [idx, idx + 1, idx + 2], map{0: concat('str_', idx), 1: concat('str_', idx + 1)}, struct(idx, concat('str_', idx)) FROM arrow_flight_${uuid0}.__row_util;
+select * from t1 order by k1 limit 10;
 -- result:
-0
+1	0	1	1	1	1	1000000000000	1.0	1.0	1	1.1	1.1	1.1	1.1	2020-01-02	2020-01-01 01:00:00	varchar_1	char_1	{"k1": 1, "k2": "str_1"}	["{\"k1\": 1, \"k2\": \"str_1\"}"]	[1,2,3]	[1,2,3]	{0:"str_1",1:"str_2"}	{"k1":1,"k2":"str_1"}
+2	1	2	2	2	2	2000000000000	2.0	2.0	2	2.1	2.1	2.1	2.1	2020-01-03	2020-01-01 02:00:00	varchar_2	char_2	{"k1": 2, "k2": "str_2"}	["{\"k1\": 2, \"k2\": \"str_2\"}"]	[2,3,4]	[2,3,4]	{0:"str_2",1:"str_3"}	{"k1":2,"k2":"str_2"}
+3	0	3	3	3	3	3000000000000	3.0	3.0	3	3.1	3.1	3.1	3.1	2020-01-04	2020-01-01 03:00:00	varchar_3	char_3	{"k1": 3, "k2": "str_3"}	["{\"k1\": 3, \"k2\": \"str_3\"}"]	[3,4,5]	[3,4,5]	{0:"str_3",1:"str_4"}	{"k1":3,"k2":"str_3"}
+4	1	4	4	4	4	4000000000000	4.0	4.0	4	4.1	4.1	4.1	4.1	2020-01-05	2020-01-01 04:00:00	varchar_4	char_4	{"k1": 4, "k2": "str_4"}	["{\"k1\": 4, \"k2\": \"str_4\"}"]	[4,5,6]	[4,5,6]	{0:"str_4",1:"str_5"}	{"k1":4,"k2":"str_4"}
+5	0	5	5	5	5	5000000000000	5.0	5.0	5	5.1	5.1	5.1	5.1	2020-01-06	2020-01-01 05:00:00	varchar_5	char_5	{"k1": 5, "k2": "str_5"}	["{\"k1\": 5, \"k2\": \"str_5\"}"]	[5,6,7]	[5,6,7]	{0:"str_5",1:"str_6"}	{"k1":5,"k2":"str_5"}
+6	1	6	6	6	6	6000000000000	6.0	6.0	6	6.1	6.1	6.1	6.1	2020-01-07	2020-01-01 06:00:00	varchar_6	char_6	{"k1": 6, "k2": "str_6"}	["{\"k1\": 6, \"k2\": \"str_6\"}"]	[6,7,8]	[6,7,8]	{0:"str_6",1:"str_7"}	{"k1":6,"k2":"str_6"}
+7	0	7	7	7	7	7000000000000	7.0	7.0	7	7.1	7.1	7.1	7.1	2020-01-08	2020-01-01 07:00:00	varchar_7	char_7	{"k1": 7, "k2": "str_7"}	["{\"k1\": 7, \"k2\": \"str_7\"}"]	[7,8,9]	[7,8,9]	{0:"str_7",1:"str_8"}	{"k1":7,"k2":"str_7"}
+8	1	8	8	8	8	8000000000000	8.0	8.0	8	8.1	8.1	8.1	8.1	2020-01-09	2020-01-01 08:00:00	varchar_8	char_8	{"k1": 8, "k2": "str_8"}	["{\"k1\": 8, \"k2\": \"str_8\"}"]	[8,9,10]	[8,9,10]	{0:"str_8",1:"str_9"}	{"k1":8,"k2":"str_8"}
+9	0	9	9	9	9	9000000000000	9.0	9.0	9	9.1	9.1	9.1	9.1	2020-01-10	2020-01-01 09:00:00	varchar_9	char_9	{"k1": 9, "k2": "str_9"}	["{\"k1\": 9, \"k2\": \"str_9\"}"]	[9,10,11]	[9,10,11]	{0:"str_9",1:"str_10"}	{"k1":9,"k2":"str_9"}
+10	1	10	10	10	10	10000000000000	10.0	10.0	10	10.1	10.1	10.1	10.1	2020-01-11	2020-01-01 10:00:00	varchar_10	char_10	{"k1": 10, "k2": "str_10"}	["{\"k1\": 10, \"k2\": \"str_10\"}"]	[10,11,12]	[10,11,12]	{0:"str_10",1:"str_11"}	{"k1":10,"k2":"str_10"}
 -- !result
-arrow: insert into arrow_flight_${uuid0}.t1(k1) select idx + 1600000 from arrow_flight_${uuid0}.__row_util where idx <= 10000;
+select * from t1 order by k1 DESC limit 10;
 -- result:
-0
+1610000	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609999	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609998	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609997	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609996	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609995	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609994	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609993	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609992	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+1609991	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
 -- !result
-arrow: select * from arrow_flight_${uuid0}.t1 order by k1 limit 10;
+select * from t1 where c_boolean is not null order by k1 DESC limit 10;
 -- result:
-1	False	1	1	1	1	1000000000000	1.0	1.0	1	1.1	1.1	1.1	2020-01-02	2020-01-01 01:00:00	varchar_1	char_1	{"k1": 1, "k2": "str_1"}	[1, 2, 3]	[(0, 'str_1'), (1, 'str_2')]	{'k1': 1, 'k2': 'str_1'}
-2	True	2	2	2	2	2000000000000	2.0	2.0	2	2.1	2.1	2.1	2020-01-03	2020-01-01 02:00:00	varchar_2	char_2	{"k1": 2, "k2": "str_2"}	[2, 3, 4]	[(0, 'str_2'), (1, 'str_3')]	{'k1': 2, 'k2': 'str_2'}
-3	False	3	3	3	3	3000000000000	3.0	3.0	3	3.1	3.1	3.1	2020-01-04	2020-01-01 03:00:00	varchar_3	char_3	{"k1": 3, "k2": "str_3"}	[3, 4, 5]	[(0, 'str_3'), (1, 'str_4')]	{'k1': 3, 'k2': 'str_3'}
-4	True	4	4	4	4	4000000000000	4.0	4.0	4	4.1	4.1	4.1	2020-01-05	2020-01-01 04:00:00	varchar_4	char_4	{"k1": 4, "k2": "str_4"}	[4, 5, 6]	[(0, 'str_4'), (1, 'str_5')]	{'k1': 4, 'k2': 'str_4'}
-5	False	5	5	5	5	5000000000000	5.0	5.0	5	5.1	5.1	5.1	2020-01-06	2020-01-01 05:00:00	varchar_5	char_5	{"k1": 5, "k2": "str_5"}	[5, 6, 7]	[(0, 'str_5'), (1, 'str_6')]	{'k1': 5, 'k2': 'str_5'}
-6	True	6	6	6	6	6000000000000	6.0	6.0	6	6.1	6.1	6.1	2020-01-07	2020-01-01 06:00:00	varchar_6	char_6	{"k1": 6, "k2": "str_6"}	[6, 7, 8]	[(0, 'str_6'), (1, 'str_7')]	{'k1': 6, 'k2': 'str_6'}
-7	False	7	7	7	7	7000000000000	7.0	7.0	7	7.1	7.1	7.1	2020-01-08	2020-01-01 07:00:00	varchar_7	char_7	{"k1": 7, "k2": "str_7"}	[7, 8, 9]	[(0, 'str_7'), (1, 'str_8')]	{'k1': 7, 'k2': 'str_7'}
-8	True	8	8	8	8	8000000000000	8.0	8.0	8	8.1	8.1	8.1	2020-01-09	2020-01-01 08:00:00	varchar_8	char_8	{"k1": 8, "k2": "str_8"}	[8, 9, 10]	[(0, 'str_8'), (1, 'str_9')]	{'k1': 8, 'k2': 'str_8'}
-9	False	9	9	9	9	9000000000000	9.0	9.0	9	9.1	9.1	9.1	2020-01-10	2020-01-01 09:00:00	varchar_9	char_9	{"k1": 9, "k2": "str_9"}	[9, 10, 11]	[(0, 'str_9'), (1, 'str_10')]	{'k1': 9, 'k2': 'str_9'}
-10	True	10	10	10	10	10000000000000	10.0	10.0	10	10.1	10.1	10.1	2020-01-11	2020-01-01 10:00:00	varchar_10	char_10	{"k1": 10, "k2": "str_10"}	[10, 11, 12]	[(0, 'str_10'), (1, 'str_11')]	{'k1': 10, 'k2': 'str_10'}
+160000	1	0	28928	160000	160000	160000000000000000	160000.0	160000.0	160000	160000.1	160000.1	160000.1	160000.1	2458-01-24	2038-04-02 16:00:00	varchar_160000	char_160000	{"k1": 160000, "k2": "str_160000"}	["{\"k1\": 160000, \"k2\": \"str_160000\"}"]	[160000,160001,160002]	[160000,160001,160002]	{0:"str_160000",1:"str_160001"}	{"k1":160000,"k2":"str_160000"}
+159999	0	127	28927	159999	159999	159999000000000000	159999.0	159999.0	159999	159999.1	159999.1	159999.1	159999.1	2458-01-23	2038-04-02 15:00:00	varchar_159999	char_159999	{"k1": 159999, "k2": "str_159999"}	["{\"k1\": 159999, \"k2\": \"str_159999\"}"]	[159999,160000,160001]	[159999,160000,160001]	{0:"str_159999",1:"str_160000"}	{"k1":159999,"k2":"str_159999"}
+159998	1	126	28926	159998	159998	159998000000000000	159998.0	159998.0	159998	159998.1	159998.1	159998.1	159998.1	2458-01-22	2038-04-02 14:00:00	varchar_159998	char_159998	{"k1": 159998, "k2": "str_159998"}	["{\"k1\": 159998, \"k2\": \"str_159998\"}"]	[159998,159999,160000]	[159998,159999,160000]	{0:"str_159998",1:"str_159999"}	{"k1":159998,"k2":"str_159998"}
+159997	0	125	28925	159997	159997	159997000000000000	159997.0	159997.0	159997	159997.1	159997.1	159997.1	159997.1	2458-01-21	2038-04-02 13:00:00	varchar_159997	char_159997	{"k1": 159997, "k2": "str_159997"}	["{\"k1\": 159997, \"k2\": \"str_159997\"}"]	[159997,159998,159999]	[159997,159998,159999]	{0:"str_159997",1:"str_159998"}	{"k1":159997,"k2":"str_159997"}
+159996	1	124	28924	159996	159996	159996000000000000	159996.0	159996.0	159996	159996.1	159996.1	159996.1	159996.1	2458-01-20	2038-04-02 12:00:00	varchar_159996	char_159996	{"k1": 159996, "k2": "str_159996"}	["{\"k1\": 159996, \"k2\": \"str_159996\"}"]	[159996,159997,159998]	[159996,159997,159998]	{0:"str_159996",1:"str_159997"}	{"k1":159996,"k2":"str_159996"}
+159995	0	123	28923	159995	159995	159995000000000000	159995.0	159995.0	159995	159995.1	159995.1	159995.1	159995.1	2458-01-19	2038-04-02 11:00:00	varchar_159995	char_159995	{"k1": 159995, "k2": "str_159995"}	["{\"k1\": 159995, \"k2\": \"str_159995\"}"]	[159995,159996,159997]	[159995,159996,159997]	{0:"str_159995",1:"str_159996"}	{"k1":159995,"k2":"str_159995"}
+159994	1	122	28922	159994	159994	159994000000000000	159994.0	159994.0	159994	159994.1	159994.1	159994.1	159994.1	2458-01-18	2038-04-02 10:00:00	varchar_159994	char_159994	{"k1": 159994, "k2": "str_159994"}	["{\"k1\": 159994, \"k2\": \"str_159994\"}"]	[159994,159995,159996]	[159994,159995,159996]	{0:"str_159994",1:"str_159995"}	{"k1":159994,"k2":"str_159994"}
+159993	0	121	28921	159993	159993	159993000000000000	159993.0	159993.0	159993	159993.1	159993.1	159993.1	159993.1	2458-01-17	2038-04-02 09:00:00	varchar_159993	char_159993	{"k1": 159993, "k2": "str_159993"}	["{\"k1\": 159993, \"k2\": \"str_159993\"}"]	[159993,159994,159995]	[159993,159994,159995]	{0:"str_159993",1:"str_159994"}	{"k1":159993,"k2":"str_159993"}
+159992	1	120	28920	159992	159992	159992000000000000	159992.0	159992.0	159992	159992.1	159992.1	159992.1	159992.1	2458-01-16	2038-04-02 08:00:00	varchar_159992	char_159992	{"k1": 159992, "k2": "str_159992"}	["{\"k1\": 159992, \"k2\": \"str_159992\"}"]	[159992,159993,159994]	[159992,159993,159994]	{0:"str_159992",1:"str_159993"}	{"k1":159992,"k2":"str_159992"}
+159991	0	119	28919	159991	159991	159991000000000000	159991.0	159991.0	159991	159991.1	159991.1	159991.1	159991.1	2458-01-15	2038-04-02 07:00:00	varchar_159991	char_159991	{"k1": 159991, "k2": "str_159991"}	["{\"k1\": 159991, \"k2\": \"str_159991\"}"]	[159991,159992,159993]	[159991,159992,159993]	{0:"str_159991",1:"str_159992"}	{"k1":159991,"k2":"str_159991"}
 -- !result
-arrow: select * from arrow_flight_${uuid0}.t1 where false;
+select cast(c_varchar as VARBINARY) from t1 order by k1 limit 10;
+-- result:
+varchar_1
+varchar_2
+varchar_3
+varchar_4
+varchar_5
+varchar_6
+varchar_7
+varchar_8
+varchar_9
+varchar_10
+-- !result
+select hll_hash(k1) from t1 where k1 is not null order by k1 limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select PERCENTILE_HASH(c_double) from t1 where c_double is not null order by k1 limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select BITMAP_HASH(c_bigint) from t1 where c_bigint is not null order by k1 limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select * from t1 where false;
 -- result:
 -- !result
-arrow: select * from arrow_flight_${uuid0}.t1 where k1 < 0;
+select * from t1 where k1 < 0;
 -- result:
 -- !result
-arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 order by k1 limit 10;
+select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from t1 order by k1 limit 10;
 -- result:
-1	False	1	1	1	1	1000000000000	1.0	1.0	1	1.1	1.1	1.1	2020-01-02	2020-01-01 01:00:00	varchar_1	char_1
-2	True	2	2	2	2	2000000000000	2.0	2.0	2	2.1	2.1	2.1	2020-01-03	2020-01-01 02:00:00	varchar_2	char_2
-3	False	3	3	3	3	3000000000000	3.0	3.0	3	3.1	3.1	3.1	2020-01-04	2020-01-01 03:00:00	varchar_3	char_3
-4	True	4	4	4	4	4000000000000	4.0	4.0	4	4.1	4.1	4.1	2020-01-05	2020-01-01 04:00:00	varchar_4	char_4
-5	False	5	5	5	5	5000000000000	5.0	5.0	5	5.1	5.1	5.1	2020-01-06	2020-01-01 05:00:00	varchar_5	char_5
-6	True	6	6	6	6	6000000000000	6.0	6.0	6	6.1	6.1	6.1	2020-01-07	2020-01-01 06:00:00	varchar_6	char_6
-7	False	7	7	7	7	7000000000000	7.0	7.0	7	7.1	7.1	7.1	2020-01-08	2020-01-01 07:00:00	varchar_7	char_7
-8	True	8	8	8	8	8000000000000	8.0	8.0	8	8.1	8.1	8.1	2020-01-09	2020-01-01 08:00:00	varchar_8	char_8
-9	False	9	9	9	9	9000000000000	9.0	9.0	9	9.1	9.1	9.1	2020-01-10	2020-01-01 09:00:00	varchar_9	char_9
-10	True	10	10	10	10	10000000000000	10.0	10.0	10	10.1	10.1	10.1	2020-01-11	2020-01-01 10:00:00	varchar_10	char_10
+1	0	1	1	1	1	1000000000000	1.0	1.0	1	1.1	1.1	1.1	2020-01-02	2020-01-01 01:00:00	varchar_1	char_1
+2	1	2	2	2	2	2000000000000	2.0	2.0	2	2.1	2.1	2.1	2020-01-03	2020-01-01 02:00:00	varchar_2	char_2
+3	0	3	3	3	3	3000000000000	3.0	3.0	3	3.1	3.1	3.1	2020-01-04	2020-01-01 03:00:00	varchar_3	char_3
+4	1	4	4	4	4	4000000000000	4.0	4.0	4	4.1	4.1	4.1	2020-01-05	2020-01-01 04:00:00	varchar_4	char_4
+5	0	5	5	5	5	5000000000000	5.0	5.0	5	5.1	5.1	5.1	2020-01-06	2020-01-01 05:00:00	varchar_5	char_5
+6	1	6	6	6	6	6000000000000	6.0	6.0	6	6.1	6.1	6.1	2020-01-07	2020-01-01 06:00:00	varchar_6	char_6
+7	0	7	7	7	7	7000000000000	7.0	7.0	7	7.1	7.1	7.1	2020-01-08	2020-01-01 07:00:00	varchar_7	char_7
+8	1	8	8	8	8	8000000000000	8.0	8.0	8	8.1	8.1	8.1	2020-01-09	2020-01-01 08:00:00	varchar_8	char_8
+9	0	9	9	9	9	9000000000000	9.0	9.0	9	9.1	9.1	9.1	2020-01-10	2020-01-01 09:00:00	varchar_9	char_9
+10	1	10	10	10	10	10000000000000	10.0	10.0	10	10.1	10.1	10.1	2020-01-11	2020-01-01 10:00:00	varchar_10	char_10
 -- !result
-arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 order by k1 DESC limit 10;
+select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from t1 order by k1 DESC limit 10;
 -- result:
 1610000	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
 1609999	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
@@ -96,17 +213,21 @@ arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_
 1609992	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
 1609991	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
 -- !result
-arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 where false order by k1 limit 10;
+select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from t1 where false order by k1 limit 10;
 -- result:
 -- !result
-arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 where k1 < 0 order by k1 limit 10;
+select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from t1 where k1 < 0 order by k1 limit 10;
 -- result:
 -- !result
-arrow: select 1;
+select 1;
 -- result:
 1
 -- !result
-arrow: drop database arrow_flight_${uuid0} force;
+select map{null:1};
 -- result:
-0
+[REGEX].*Can't convert data to arrow because the map key can be null, but arrow does not allow null key.*
+-- !result
+select map{1:null};
+-- result:
+{1:null}
 -- !result

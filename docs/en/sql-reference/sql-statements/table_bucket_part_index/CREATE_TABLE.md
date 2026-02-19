@@ -212,8 +212,82 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 **DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
-- **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
-- **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
+- **DEFAULT (\<expr\>)**: Use the result returned by a given expression or function as the default value. The following expressions are supported:
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md): Generate unique identifiers.
+  - ARRAY literal expressions (e.g., `[1, 2, 3]`): For ARRAY type columns.
+  - MAP expressions (e.g., `map{key: value}`): For MAP type columns.
+  - row() function (e.g., `row(val1, val2)`): For STRUCT type columns.
+- **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. StarRocks supports specifying default values for different types:
+  
+  **Basic types**: Use string literals to specify default values.
+  
+  ```sql
+  -- Numeric types
+  age INT DEFAULT '18'
+  price DECIMAL(10,2) DEFAULT '99.99'
+  
+  -- String types
+  name VARCHAR(50) DEFAULT 'Anonymous'
+  
+  -- Date/time types
+  created_at DATETIME DEFAULT '2024-01-01 00:00:00'
+  
+  -- Boolean type
+  is_active BOOLEAN DEFAULT 'true'  -- Supports 'true'/'false'/'1'/'0'
+  ```
+  
+  **JSON type**: Use JSON-formatted strings to specify default values.
+  
+  ```sql
+  metadata JSON DEFAULT '{"status": "active"}'
+  tags JSON DEFAULT '[1, 2, 3]'
+  ```
+  
+  **VARBINARY type**: Only empty string is supported as default value.
+  
+  ```sql
+  binary_data VARBINARY DEFAULT ''
+  ```
+  
+  **BITMAP and HLL types**: Only empty string is supported as default value, only for AGGREGATE KEY tables.
+  
+  ```sql
+  -- In AGGREGATE KEY tables
+  bm BITMAP BITMAP_UNION DEFAULT ''
+  h HLL HLL_UNION DEFAULT ''
+  ```
+  
+  **Complex types (ARRAY/MAP/STRUCT)**: Use expression syntax to specify default values, only supported for OLAP tables.
+  
+  :::note
+  Default values for complex types are **only supported when `fast_schema_evolution = true`**. If the table's `fast_schema_evolution` property is explicitly set to `false`, adding default values for complex types will result in an error.
+  :::
+  
+  ```sql
+  -- ARRAY type
+  tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
+  scores ARRAY<INT> DEFAULT [90, 85, 92]
+  
+  -- MAP type
+  attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
+  
+  -- STRUCT type
+  person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
+  
+  -- Complex nesting: STRUCT with nested STRUCT, ARRAY, and MAP
+  user_profile STRUCT<
+    id INT, 
+    name VARCHAR(50), 
+    contact STRUCT<email VARCHAR(100), phone VARCHAR(20)>,
+    tags ARRAY<VARCHAR(20)>,
+    attributes MAP<VARCHAR(20), VARCHAR(50)>
+  > DEFAULT row(1, 'Alice', row('alice@example.com', '123-456-7890'), ['admin', 'user'], map{'level': 'premium', 'status': 'active'})
+  ```
+
+  **Limitations**:
+  
+  - TIME and VARIANT types do not support default values yet.
+  - Default values for complex types (ARRAY/MAP/STRUCT) are only supported for OLAP tables and require the `fast_schema_evolution` property to be enabled.
 
 **AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
 

@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "exec/scan_node.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
@@ -27,7 +28,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 Status ShortCircuitHybridScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
@@ -95,7 +95,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
         for (auto slot_desc : _tuple_desc->slots()) {
             auto field = tablet_schema_without_rowstore->get_field_by_name(slot_desc->col_name());
             if (field->is_key()) {
-                result_chunk->get_column_by_slot_id(slot_desc->id())
+                result_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id())
                         ->append(*(_key_chunk->get_column_by_name(field->name().data()).get()));
             }
         }
@@ -103,7 +103,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
         for (auto slot_desc : _tuple_desc->slots()) {
             auto field = tablet_schema_without_rowstore->get_field_by_name(slot_desc->col_name());
             if (!field->is_key()) {
-                result_chunk->get_column_by_slot_id(slot_desc->id())
+                result_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id())
                         ->append(*(_value_chunk->get_column_by_name(field->name().data()).get()));
             }
         }
@@ -159,7 +159,7 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             }
             // add const column to chunk
             auto const_column = ColumnHelper::get_data_column(value.get());
-            _key_chunk->get_column_by_index(j)->append(*const_column);
+            _key_chunk->get_column_raw_ptr_by_index(j)->append(*const_column);
         }
     }
 

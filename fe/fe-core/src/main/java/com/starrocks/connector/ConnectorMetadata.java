@@ -295,6 +295,11 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra,
+                            ConnectContext context) {
+        finishSink(dbName, table, commitInfos, branch, extra);
+    }
+
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
@@ -360,6 +365,10 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
     }
 
+    default Map<String, String> getCatalogProperties() {
+        return Map.of();
+    }
+
     default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
                                            ScalarOperator predicate, FileContent fileContent) {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");
@@ -370,5 +379,30 @@ public interface ConnectorMetadata {
     }
 
     default void shutdown() {
+    }
+
+    /**
+     * Check if the delete can be performed using metadata operations only.
+     * This is connector-specific optimization that allows deleting data by
+     * dropping entire files or partitions without generating position delete files.
+     *
+     * @param table     The table to delete from
+     * @param predicate The delete predicate in ScalarOperator form
+     * @return true if metadata-level delete can be used, false otherwise
+     */
+    default boolean canDeleteUsingMetadata(Table table, ScalarOperator predicate) {
+        return false;
+    }
+
+    /**
+     * Execute metadata-level delete for the given table and predicate.
+     * This method should only be called when canDeleteUsingMetadata returns true.
+     *
+     * @param table     The table to delete from
+     * @param predicate The delete predicate in ScalarOperator form
+     * @param context   The connect context for audit info
+     */
+    default void executeMetadataDelete(Table table, ScalarOperator predicate, ConnectContext context) {
+        throw new UnsupportedOperationException("Metadata delete is not supported by this connector");
     }
 }

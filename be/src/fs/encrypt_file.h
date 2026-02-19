@@ -16,7 +16,7 @@
 
 #include "fs/fs.h"
 #include "fs/writable_file_wrapper.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 
 namespace starrocks {
 

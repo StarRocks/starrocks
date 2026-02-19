@@ -32,10 +32,15 @@ log_error() {
 # ============================================================================
 export STARROCKS_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export STARROCKS_BE_HOME="$STARROCKS_HOME/be"
-export STARROCKS_THIRDPARTY="$STARROCKS_HOME/thirdparty"
 export STARROCKS_BUILD_MAC="$STARROCKS_HOME/build-mac"
 
+# Respect a pre-set STARROCKS_THIRDPARTY so callers can point to a shared deps dir
+if [[ -z "${STARROCKS_THIRDPARTY:-}" ]]; then
+    export STARROCKS_THIRDPARTY="$STARROCKS_HOME/thirdparty"
+fi
+
 log_info "StarRocks home: $STARROCKS_HOME"
+log_info "StarRocks third-party libraries: $STARROCKS_THIRDPARTY"
 
 # ============================================================================
 # SYSTEM VALIDATION
@@ -129,6 +134,7 @@ export LDFLAGS="-L${HOMEBREW_PREFIX}/lib ${LDFLAGS:-}"
 export CCACHE_DIR="$HOME/.ccache"
 export CCACHE_MAXSIZE="50G"
 export USE_CCACHE=1
+export CCACHE_SLOPPINESS="pch_defines,time_macros"
 
 # Parallel builds
 export PARALLEL="$(sysctl -n hw.ncpu)"
@@ -202,7 +208,7 @@ export CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}"
 # ============================================================================
 export ASAN_OPTIONS="halt_on_error=1:abort_on_error=1:replace_str=0:replace_intrin=0:detect_odr_violation=0:fast_unwind_on_malloc=0:intercept_strlen=0:intercept_strchr=0:intercept_strndup=0"
 export MallocNanoZone=0
-export STARROCKS_HOME_RUNTIME="$STARROCKS_BE_HOME/output"
+export STARROCKS_HOME_RUNTIME="$STARROCKS_HOME/output/be"
 export PID_DIR="$STARROCKS_HOME_RUNTIME/bin"
 export UDF_RUNTIME_DIR="$STARROCKS_HOME_RUNTIME/lib"
 

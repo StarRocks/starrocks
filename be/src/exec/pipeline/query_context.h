@@ -20,6 +20,10 @@
 #include <optional>
 #include <unordered_map>
 
+#include "base/concurrency/spinlock.h"
+#include "base/hash/hash.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -31,10 +35,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
-#include "util/hash.h"
 #include "util/hash_util.hpp"
-#include "util/spinlock.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -48,6 +49,7 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 struct ConnectorScanOperatorMemShareArbitrator;
+class GlobalLateMaterilizationContextMgr;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -175,6 +177,7 @@ public:
                           std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
                           RuntimeState* state = nullptr, int connector_scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
+    const std::shared_ptr<MemTracker>& mem_tracker() const { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
     Status init_spill_manager(const TQueryOptions& query_options);
@@ -300,6 +303,10 @@ public:
         return _connector_scan_operator_mem_share_arbitrator;
     }
 
+    GlobalLateMaterilizationContextMgr* global_late_materialization_ctx_mgr() const {
+        return _global_late_materialization_ctx_mgr;
+    }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -307,6 +314,7 @@ private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
+    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
     size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
@@ -388,10 +396,10 @@ private:
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 
-    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
-
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
+
+    GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
 };
 
 // TODO: use brpc::TimerThread refactor QueryContext

@@ -30,7 +30,7 @@ This error occurs because the web services port of the BE is occupied. Try to mo
 
 ## What do I do when the error occurs: ERROR 1064 (HY000): Could not initialize class com.starrocks.rpc.BackendServiceProxy?
 
-This error occurs when you run programs in Java Runtime Environment (JRE). To solve this problem, replace JRE with Java Development Kit (JDK). We recommend that you use Oracle's JDK 1.8 or later.
+This error occurs when you run programs in Java Runtime Environment (JRE). To solve this problem, replace JRE with Java Development Kit (JDK). We recommend that you use Oracle's JDK 17 or later.
 
 <!-- ## Why does the error "Failed to Distribute files to node" occur when I deploy StarRocks of Enterprise Edition and configure nodes?
 
@@ -132,3 +132,43 @@ If you do not add the `--helper` option for this FE when starting your cluster f
 ## Why Alive is `false` when an FE is running and prints log `transfer: follower`?
 
 This issue occurs when more than half of memory of Java Virtual Machine (JVM) is used and no checkpoint is marked. In general, a checkpoint will be marked after the system accumulates 50,000 pieces of log. We recommend that you modify the JVM's parameters of each FE and restarting these FEs when they are not heavily loaded.
+
+## Query error: “could not initialize class com.starrocks.rpc.BackendServiceProxy”. How do I resolve this?
+
+- Verify that the environment variable `$JAVA_HOME` points to the correct JDK path.
+- Ensure all nodes use the same JDK version. All nodes must use the identical JDK version.
+
+## What are the MySQL version requirements for installing StarRocks?
+
+MySQL 5.7 or later is recommended to connect to StarRocks.
+
+## If FE and BE are deployed on the same machine, how can I separate them?
+
+It is recommended to scale out a BE node first. After the cluster finishes balancing, you can then scale in the original BE node.
+
+## What should I do when FE fails to start with the error “Replica exceeds max permissible delta:5000ms”?
+
+The clocks between FE nodes are not synchronized. The time difference between FE nodes must be less than 5 seconds.
+
+## If I have five physical machines in a production environment, what is the recommended StarRocks deployment?
+
+A recommended deployment is 3 FE nodes and 5 BE nodes.
+
+## Should I use the root user to install StarRocks?
+
+It is not recommended to use the root user because it has excessive privileges. Create a dedicated user for installing StarRocks.
+
+## Can I install the MySQL client on any machine?
+
+Yes. It is simply a client tool and does not need to run on the same machine as StarRocks. Make sure the MySQL client can access the cluster.
+
+## Is there a limit to the number of tablets on a BE node? For example, for a server with 64 GB RAM and 16 cores, what is the reasonable range of tablet count?
+There is no strict limit for the tablet number. However, for the tablet size, it is recommended to keep each tablet around 1 GB. Proper partitioning and bucketing strategies will help improve query performance. Tablet size planning is important.
+
+## When starting BE, I see the error “error while loading shared libraries: libjvm.so: cannot open shared object file: No such file or directory”. And after manually creating the directory `lib/starrocks_be`, I get a permission denied error. What should I do?
+
+There is an issue with the JDK installation. Please reinstall and properly configure your JDK environment.
+
+## Does StarRocks support running on AMD AVX2? Will mixing Intel and AMD servers cause problems?
+
+StarRocks can run on AMD. Mixing Intel and AMD servers is not recommended because hardware heterogeneity may cause issues. It is suggested to fully test StarRocks on AMD before migrating.

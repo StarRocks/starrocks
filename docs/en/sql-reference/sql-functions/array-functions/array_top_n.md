@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # array_top_n
 
-Returns an array of the top n elements from a given array, sorted according to its natural descending order. If n is larger than the size of the given array, the returned list will be the same size as the input instead of n.
+Sorts the elements of a given array in their natural descending order, and returns the top-n elements in an array. If n is larger than the length of the input array, the length of the returned array will be the same as the input instead of n.
 
 ## Syntax
 
@@ -14,27 +14,25 @@ array_top_n(array, count)
 
 ## Parameters
 
-- `array`: The array from which to extract the top elements. The array can contain elements of any comparable data type supported by StarRocks.
+- `array`: The array from which to extract the top-n elements. The array can contain elements of any comparable data type supported by StarRocks.
 
-- `count`: The number of top elements to return, of type INT. Must be a non-negative integer.
+- `count`: The number of top elements to return. It must be a non-negative integer.
 
 ## Return value
 
-Returns an array containing the top n elements from the input array, sorted in descending order. The data type of the return value is the same ARRAY type as the input array.
+Returns an array containing the top-n elements from the input array, sorted in descending order. The data type of the return value is the same ARRAY type as the input array.
 
 ## Usage notes
 
 - Elements are sorted in descending order according to their natural ordering.
-- If `count` is 0, an empty array is returned.
-- If `count` is negative, an empty array is returned.
-- If `count` is larger than the array size, the entire array is returned sorted in descending order.
-- When the array parameter is NULL, the result is NULL.
-- When the count parameter is NULL, the result is NULL.
+- If `count` is 0 or negative, an empty array is returned.
+- If `count` is larger than the array size, the entire array, sorted in descending order, is returned.
+- If the input `array` or `count` is NULL, the result is NULL.
 - NULL elements within the array are considered smaller than any non-NULL value and will appear at the end if included in the result.
 
 ## Examples
 
-Example 1: Get top 3 elements from an integer array
+Example 1: Get the top 3 elements from an integer array.
 
 ```sql
 mysql> SELECT array_top_n([1, 100, 2, 5, 3], 3);
@@ -45,7 +43,7 @@ mysql> SELECT array_top_n([1, 100, 2, 5, 3], 3);
 +-----------------------------------+
 ```
 
-Example 2: Count larger than array size
+Example 2: Get the top 5 elements from an array of two integers (`count` is larger than the array length).
 
 ```sql
 mysql> SELECT array_top_n([1, 100], 5);
@@ -56,7 +54,7 @@ mysql> SELECT array_top_n([1, 100], 5);
 +--------------------------+
 ```
 
-Example 3: String array
+Example 3: Get the top 3 elements from a string array.
 
 ```sql
 mysql> SELECT array_top_n(['a', 'zzz', 'zz', 'b', 'g', 'f'], 3);
@@ -67,7 +65,7 @@ mysql> SELECT array_top_n(['a', 'zzz', 'zz', 'b', 'g', 'f'], 3);
 +----------------------------------------------------+
 ```
 
-Example 4: Count is 0
+Example 4: Call the function when `count` is 0.
 
 ```sql
 mysql> SELECT array_top_n([1, 2, 3], 0);
@@ -78,7 +76,7 @@ mysql> SELECT array_top_n([1, 2, 3], 0);
 +--------------------------+
 ```
 
-Example 5: NULL handling
+Example 5: Get the top 3 elements from an integer array where NULL is one of the elements.
 
 ```sql
 mysql> SELECT array_top_n([1, NULL, 3, 2], 3);
@@ -89,7 +87,7 @@ mysql> SELECT array_top_n([1, NULL, 3, 2], 3);
 +---------------------------------+
 ```
 
-Example 6: With table data
+Example 6: Call the function with table data.
 
 ```sql
 mysql> CREATE TABLE IF NOT EXISTS test (id INT, arr ARRAY<INT>) PROPERTIES ("replication_num"="1");

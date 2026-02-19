@@ -205,6 +205,41 @@ StarRocks がサポートするさまざまなジョインは、指定された�
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
+#### USING 句による Join
+
+v4.0.2 以降、StarRocks では `ON` 句に加え、`USING` 句による Join 条件の指定をサポートしています。これにより、同名の列を用いた等値結合を簡略化できます。例：`SELECT * FROM t1 JOIN t2 USING (id)`。
+
+**バージョン間の差異:**
+
+- **v4.0.2 以前のバージョン**
+  
+  `USING` は構文上の簡略化として扱われ、内部的には `ON` 条件に変換されます。結果には左テーブルと右テーブルの両方の USING 列が個別の列として含まれ、USING 列を参照する際にはテーブルエイリアス修飾子（例: `t1.id`）の使用が許可されます。
+
+  例:
+
+  ```SQL
+  SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- 2 つの独立した id 列を返す
+  ```
+
+- **v4.0.2 以降のバージョン**
+  
+  StarRocks は SQL 標準の `USING` セマンティクスを実装しています。主な機能は以下の通りです：
+  
+  - `FULL OUTER JOIN` を含むすべての Join タイプがサポートされています。
+  - USING 列は結果において単一の結合列として表示されます。FULL OUTER JOIN の場合、`COALESCE(left.col, right.col)` のセマンティクスが使用されます。
+  - USING 列に対してテーブルエイリアス修飾子（例: `t1.id`）はサポートされなくなりました。修飾なしの列名（例: `id`）を使用する必要があります。
+  - `SELECT *`の結果では、列の順序は `[USING 列、左テーブルの非 USING 列、右テーブルの非 USING 列]` となります。
+
+  例:
+
+  ```SQL
+  SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ エラー: 列 'id' が曖昧
+  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ 正しい: 単一の統合された id 列を返す
+  SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ FULL OUTER JOIN がサポートされる
+  ```
+
+これらの変更により、StarRocks の動作は SQL 標準準拠データベースと一致するようになりました。
+
 ## ASOF Join
 
 ASOF Join は、時系列分析でよく利用される時間型または範囲型の結合方式です。これは、特定のキーに対する等値条件と、時間やシーケンスフィールドに対する非等値条件（例: `t1.time >= t2.time`）を組み合わせてテーブルを結合します。実行時には、左側テーブルの各行に対して、右側テーブルから「直近でかつ指定時間を超えない」行を選択します。v4.0 以降でサポートされています。

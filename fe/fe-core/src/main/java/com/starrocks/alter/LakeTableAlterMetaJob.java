@@ -67,6 +67,15 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = compactionStrategy;
     }
 
+    protected LakeTableAlterMetaJob(LakeTableAlterMetaJob job) {
+        super(job);
+        this.metaType = job.metaType;
+        this.metaValue = job.metaValue;
+        this.persistentIndexType = job.persistentIndexType;
+        this.enableFileBundling = job.enableFileBundling;
+        this.compactionStrategy = job.compactionStrategy;
+    }
+
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
             MaterializedIndex index, long nodeId, Set<Long> tablets) {
@@ -96,7 +105,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-    protected void updateCatalog(Database db, LakeTable table) {
+    protected void updateCatalog(Database db, LakeTable table, boolean isReplay) {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             // re-use ENABLE_PERSISTENT_INDEX for both enable index and index's type.
             table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
@@ -126,6 +135,8 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = other.compactionStrategy;
     }
 
-
-
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new LakeTableAlterMetaJob(this);
+    }
 }

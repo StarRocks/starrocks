@@ -15,8 +15,19 @@ displayed_sidebar: docs
 ```sql
 CREATE TABLE intDemo (
     pk INT COMMENT "range [-2147483648, 2147483647]"
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(pk)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk);
+DISTRIBUTED BY HASH(pk) BUCKETS 1;
+
+INSERT INTO intDemo VALUES (2147483647), (-2147483648);
+```
+
+```Plaintext
+MySQL > SELECT * FROM intDemo;
++-------------+
+| pk          |
++-------------+
+| -2147483648 |
+|  2147483647 |
++-------------+
 ```

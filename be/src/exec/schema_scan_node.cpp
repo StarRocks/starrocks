@@ -17,11 +17,12 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/scan/schema_scan_context.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/schema_scanner/schema_helper.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -246,7 +247,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
             int j = _index_map[i];
             ColumnPtr& src_column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
-            ColumnPtr& dst_column = chunk_dst->get_column_by_slot_id(dest_slot_descs[i]->id());
+            auto* dst_column = chunk_dst->get_column_raw_ptr_by_slot_id(dest_slot_descs[i]->id());
             dst_column->append(*src_column);
         }
 

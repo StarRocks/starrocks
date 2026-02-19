@@ -23,13 +23,13 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
 #include "util/byte_buffer.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -204,7 +204,12 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
 }
 
 Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
-    RETURN_IF_ERROR(_init_parquet_reader());
+    auto st = _init_parquet_reader();
+    // Initializing a reader on empty Parquet files (with 0 row groups) returns EOF,
+    // but the file schema is still available
+    if (!st.ok() && !(st.is_end_of_file() && _file_metadata != nullptr)) {
+        return st;
+    }
 
     const auto& file_schema = _file_metadata->schema();
 

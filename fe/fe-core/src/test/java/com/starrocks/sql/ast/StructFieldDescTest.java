@@ -16,7 +16,8 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.StructFieldDescAnalyzer;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StructField;
@@ -52,33 +53,33 @@ public class StructFieldDescTest {
         StructFieldDesc dropFieldDesc1 = new StructFieldDesc("v2", Lists.newArrayList("v1"), null, null);
 
         // base column not exist;
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(null, true));
-    
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(dropFieldDesc1, null, true));
+
         // base column is not struct column
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(intCol1, true));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(dropFieldDesc1, intCol1, true));
 
         // nested field is not struct
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(structCol1, true));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(dropFieldDesc1, structCol1, true));
 
         // drop field is not exist
         StructFieldDesc dropFieldDesc2 = new StructFieldDesc("v1", Lists.newArrayList("v6"), null, null);
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc2.analyze(structCol1, true));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(dropFieldDesc2, structCol1, true));
 
         // normal drop field
         StructFieldDesc dropFieldDesc3 = new StructFieldDesc("v2", Lists.newArrayList("v4"), null, null);
-        Assertions.assertDoesNotThrow(() -> dropFieldDesc3.analyze(structCol1, true));        
+        Assertions.assertDoesNotThrow(() -> StructFieldDescAnalyzer.analyze(dropFieldDesc3, structCol1, true));
 
         // add exist field
         StructFieldDesc addFieldDesc1 = new StructFieldDesc("v2", Lists.newArrayList("v4"), addTypeDef, null);
-        Assertions.assertThrows(AnalysisException.class, () -> addFieldDesc1.analyze(structCol1, false));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(addFieldDesc1, structCol1, false));
 
         // type not exist
         StructFieldDesc addFieldDesc2 = new StructFieldDesc("v5", Lists.newArrayList("v6"), null, null);
-        Assertions.assertThrows(AnalysisException.class, () -> addFieldDesc2.analyze(structCol1, false));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(addFieldDesc2, structCol1, false));
 
         // normal add field
         StructFieldDesc addFieldDesc3 = new StructFieldDesc("v5", Lists.newArrayList("v4"), addTypeDef, null);
-        Assertions.assertDoesNotThrow(() -> addFieldDesc3.analyze(structCol1, false));
+        Assertions.assertDoesNotThrow(() -> StructFieldDescAnalyzer.analyze(addFieldDesc3, structCol1, false));
 
     }
 }

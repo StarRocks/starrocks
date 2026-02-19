@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
@@ -33,6 +32,8 @@ import com.starrocks.sql.analyzer.ViewAnalyzer;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -136,7 +137,9 @@ public class IcebergHiveCatalogTest {
             }
         };
 
-        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
         metadata.createView(connectContext, stmt);
@@ -196,7 +199,9 @@ public class IcebergHiveCatalogTest {
             }
         };
 
-        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null,
                 NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
@@ -242,15 +247,11 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
-    public void testCreateViewPropertiesNotIcebergCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+    public void testCreateViewPropertiesNotIcebergCatalog(@Mocked CatalogMgr mockCatalogMgr) {
         final String catalogName = "catalog";
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = mockGsm;
-                minTimes = 0;
-
-                mockGsm.getCatalogMgr();
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = mockCatalogMgr;
                 minTimes = 0;
 
@@ -265,7 +266,7 @@ public class IcebergHiveCatalogTest {
         };
 
         CreateViewStmt stmt = new CreateViewStmt(false, false,
-                new TableName(catalogName, "db", "table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList(catalogName, "db", "table")), null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
                 "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
 
@@ -275,15 +276,11 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
-    public void testCreateViewPropertiesInternalCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+    public void testCreateViewPropertiesInternalCatalog(@Mocked CatalogMgr mockCatalogMgr) {
         final String catalogName = "default_catalog";
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = mockGsm;
-                minTimes = 0;
-
-                mockGsm.getCatalogMgr();
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = mockCatalogMgr;
                 minTimes = 0;
 
@@ -298,7 +295,7 @@ public class IcebergHiveCatalogTest {
         };
 
         CreateViewStmt stmt = new CreateViewStmt(false, false,
-                new TableName(catalogName, "db", "table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList(catalogName, "db", "table")), null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
                 "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
 
@@ -308,15 +305,11 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
-    public void testCreateViewPropertiesUnknownCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+    public void testCreateViewPropertiesUnknownCatalog(@Mocked CatalogMgr mockCatalogMgr) {
         final String catalogName = "xxx";
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = mockGsm;
-                minTimes = 0;
-
-                mockGsm.getCatalogMgr();
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = mockCatalogMgr;
                 minTimes = 0;
 
@@ -327,7 +320,7 @@ public class IcebergHiveCatalogTest {
         };
 
         CreateViewStmt stmt = new CreateViewStmt(false, false,
-                new TableName(catalogName, "db", "table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList(catalogName, "db", "table")), null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
                 "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
 
@@ -361,7 +354,9 @@ public class IcebergHiveCatalogTest {
             }
         };
 
-        AlterViewStmt alterViewStmt = new AlterViewStmt(new TableName("catalog", "db", "view"), false,
+        AlterViewStmt alterViewStmt = new AlterViewStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "view")),
+                        null, NodePosition.ZERO), false,
                 AlterViewStmt.AlterDialectType.NONE, Map.of("comment", "no comment"), null, NodePosition.ZERO);
         metadata.alterView(connectContext, alterViewStmt);
 

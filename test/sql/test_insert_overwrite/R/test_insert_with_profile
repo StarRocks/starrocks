@@ -1,4 +1,4 @@
--- name: test_insert_with_profile
+-- name: test_insert_with_profile @sequential
 create table t1(k int) 
 distributed by hash(k) buckets 96;
 -- result:
@@ -54,6 +54,6 @@ select count(*) from t2;
 -- result:
 7
 -- !result
-admin enable failpoint 'report_exec_state_failed_status';
+admin disable failpoint 'report_exec_state_failed_status';
 -- result:
 -- !result

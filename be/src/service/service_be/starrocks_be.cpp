@@ -21,20 +21,20 @@
 
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
+#include "base/brpc/brpc.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config.h"
-#include "common/daemon.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "fs/s3/poco_common.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
-#include "service/backend_options.h"
-#include "service/brpc.h"
+#include "service/daemon.h"
 #include "service/service.h"
 #include "service/service_be/arrow_flight_sql_service.h"
 #include "service/service_be/http_service.h"
@@ -43,12 +43,13 @@
 #include "service/service_be/lake_service.h"
 #include "storage/lake/tablet_manager.h"
 #endif
+#include "cache/datacache_metrics.h"
+#include "common/system/mem_info.h"
+#include "common/util/thrift_server.h"
 #include "service/staros_worker.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_server.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
@@ -135,12 +136,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(storage_engine->start_bg_threads());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
+    [[maybe_unused]] bool use_same_datacache_instance = false;
 #ifdef USE_STAROS
 #ifndef __APPLE__
     auto* local_cache = cache_env->local_disk_cache();
     if (config::datacache_unified_instance_enable && local_cache && local_cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
         init_staros_worker(starcache->starcache_instance());
+        use_same_datacache_instance = true;
     } else {
         init_staros_worker(nullptr);
     }
@@ -149,6 +152,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     init_staros_worker(nullptr);
 #endif
     LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
+#endif
+#ifndef __APPLE__
+    // Register datacache metrics
+    register_datacache_metrics(use_same_datacache_instance);
 #endif
 
     // set up thrift client before providing any service to the external

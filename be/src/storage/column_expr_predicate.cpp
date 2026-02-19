@@ -80,7 +80,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     Chunk chunk;
     // `column` is owned by storage layer
     // we don't have ownership
-    ColumnPtr bits = const_cast<Column*>(column)->as_mutable_ptr();
+    ColumnPtr bits = column->get_ptr();
     chunk.append_column(bits, _slot_desc->id());
 
     // theoretically there will be a chain of expr contexts.
@@ -109,8 +109,8 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     // deal with nullable.
     if (bits->is_nullable()) {
         auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(bits);
-        uint8_t* null_value = null_column->null_column_data().data();
-        uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(null_column->data_column());
+        const uint8_t* null_value = null_column->null_column_data().data();
+        const uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(null_column->data_column());
         for (uint16_t i = from; i < to; i++) {
             selection[i] = (!null_value[i]) & (data_value[i]);
         }
@@ -118,7 +118,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     }
 
     // deal with non-nullable.
-    uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(bits);
+    const uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(bits);
     memcpy(selection + from, data_value, (to - from));
     return Status::OK();
 }
@@ -337,7 +337,7 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
-    bool has_wildcard = str_v.find('*') != std::string::npos || str_v.find('%') != std::string::npos;
+    bool has_wildcard = str_v.find('%') != std::string::npos;
 
     // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
     if (valid_match && expr->op() == TExprOpcode::MATCH_ANY) {

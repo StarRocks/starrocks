@@ -18,12 +18,12 @@
 #include <vector>
 
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "column/datum_convert.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
+#include "types/datum.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -211,7 +211,7 @@ private:
     void next_row(Chunk* chunk) {
         for (size_t i = 0; i < _schema.num_fields(); i++) {
             const Datum& v = _columns[i][_next_row];
-            chunk->get_column_by_index(i)->append_datum(v);
+            chunk->get_column_raw_ptr_by_index(i)->append_datum(v);
         }
         _next_row++;
     }

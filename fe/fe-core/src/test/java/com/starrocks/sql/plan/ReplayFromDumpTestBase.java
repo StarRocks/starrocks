@@ -60,6 +60,7 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
         Config.show_execution_groups = false;
+        Config.enable_virtual_columns = false;
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
@@ -187,6 +188,19 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
+        queryDumpInfo.getSessionVariable().setEnableInnerJoinToSemi(false);
+        return new Pair<>(queryDumpInfo,
+                UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
+                        getExplainString(level));
+    }
+
+    protected Pair<QueryDumpInfo, String> getPlanFragmentWithAggPushdown(String dumpJsonStr, SessionVariable sessionVariable,
+                                                          TExplainLevel level) throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
+        if (sessionVariable != null) {
+            queryDumpInfo.setSessionVariable(sessionVariable);
+        }
+        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         queryDumpInfo.getSessionVariable().setEnableInnerJoinToSemi(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.

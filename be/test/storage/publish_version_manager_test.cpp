@@ -19,7 +19,8 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
-#include "butil/file_util.h"
+#include "base/path/file_util.h"
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
@@ -39,7 +40,6 @@
 #include "storage/txn_manager.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -119,7 +119,7 @@ public:
         }
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
                 cols[0]->append_datum(Datum(key));

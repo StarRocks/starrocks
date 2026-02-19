@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "util/runtime_profile.h"
+#include "common/runtime_profile.h"
 
 #define ENABLE_DEBUG_COUNTERS 1
 

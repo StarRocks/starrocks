@@ -25,6 +25,7 @@
 #include <mutex>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -40,6 +41,7 @@
 #include "serde/column_array_serde.h"
 
 namespace starrocks::spill {
+DEFINE_FAIL_POINT(spill_restore_sleep);
 
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
     DCHECK(profile != nullptr);
@@ -112,8 +114,8 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 
     skew_mem_table_count = ADD_CHILD_COUNTER(profile, "SkewMemTableCount", TUnit::UNIT, parent);
     skew_mem_table_skew_ratio = profile->AddLowWaterMarkCounter(
-            "SkewMemTableSkewRatio", TUnit::DOUBLE_VALUE,
-            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG), parent);
+            "SkewMemTableSkewRatio", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+            parent);
     skew_mem_table_merge_timer = ADD_CHILD_TIMER(profile, "SkewMemTableMergeTime", parent);
     skew_mem_table_input_bytes = ADD_CHILD_COUNTER(profile, "SkewMemTableInputBytes", TUnit::BYTES, parent);
     skew_mem_table_output_bytes = ADD_CHILD_COUNTER(profile, "SkewMemTableOutputBytes", TUnit::BYTES, parent);

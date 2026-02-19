@@ -21,6 +21,8 @@ import com.starrocks.sql.formatter.ExprExplainVisitor;
 import com.starrocks.sql.formatter.ExprVerboseVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 
+import java.util.List;
+
 public class ExprToSql {
     /**
      * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
@@ -119,5 +121,20 @@ public class ExprToSql {
 
         sb.append(boundary.getBoundaryType().toString());
         return sb.toString();
+    }
+
+    public static String getNamedArgStr(List<String> exprNames, List<Expr> exprs) {
+        Preconditions.checkNotNull(exprNames);
+        Preconditions.checkNotNull(exprs);
+        Preconditions.checkState(exprs.size() == exprNames.size());
+
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < exprs.size(); i++) {
+            if (i != 0) {
+                builder.append(",");
+            }
+            builder.append(exprNames.get(i)).append("=>").append(ExprToSql.toSql(exprs.get(i)));
+        }
+        return builder.toString();
     }
 }

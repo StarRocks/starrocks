@@ -16,13 +16,13 @@
 
 #include <future>
 
+#include "base/url_coding.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-#include "util/url_coding.h"
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -46,6 +46,9 @@ void HiveChunkSink::callback_on_commit(const CommitResult& result) {
         TSinkCommitInfo commit_info;
         commit_info.__set_hive_file_info(hive_file_info);
         _state->add_sink_commit_info(commit_info);
+        COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
     }
 }
 

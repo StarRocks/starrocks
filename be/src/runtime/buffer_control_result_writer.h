@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "runtime/result_writer.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class BufferControlBlock;

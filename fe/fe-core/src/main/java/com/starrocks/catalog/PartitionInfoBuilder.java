@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -244,8 +245,6 @@ public class PartitionInfoBuilder {
                                                long partitionId,
                                                boolean isTemp) {
         listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
-        listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
-        listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
         listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
         listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
         listPartitionInfo.setDataCacheInfo(partitionId, desc.getDataCacheInfo());

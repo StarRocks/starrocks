@@ -32,32 +32,32 @@ insert into test_cc values('c','a', '2022-04-18 03:45:00', 1, 200.3,  [2, 2, 3],
 insert into test_cc values('c','a', '2022-04-18 03:25:00', 2, 300.3,  null, row(2, 'a'));
 insert into test_cc values('c','a', '2022-04-18 03:27:00', 3, 400.3,  [3, 1, 3], null);
 
-select v2, count(1), count(distinct v1) from test_cc group by v2;
-select v2, bitmap_union_count(to_bitmap(v4)), count(distinct v1) from test_cc group by v2;
-select v2, hll_union_agg(hll_hash(v4)), count(distinct v1) from test_cc group by v2;
+select v2, count(1), count(distinct v1) from test_cc group by v2 order by v2;
+select v2, bitmap_union_count(to_bitmap(v4)), count(distinct v1) from test_cc group by v2 order by v2;
+select v2, hll_union_agg(hll_hash(v4)), count(distinct v1) from test_cc group by v2 order by v2;
 
 select count(distinct 1, 2, 3, 4) from test_cc;
 select /*+ new_planner_agg_stage = 3 */ count(distinct 1, 2, 3, 4) from test_cc group by v2;
 select count(distinct 1, v2) from test_cc;
 select /*+ new_planner_agg_stage = 2 */ count(distinct 1, v2) from test_cc;
 select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), group_concat(distinct 1, 2 order by 1), array_agg(distinct 1.3 order by null) from test_cc;
-select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), group_concat(distinct 1, 2 order by 1), array_agg(distinct 1.3 order by null) from test_cc group by v2;
+select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), group_concat(distinct 1, 2 order by 1), array_agg(distinct 1.3 order by null) from test_cc group by v2 order by v2;
 
 
-select v2, count(distinct v1), sum(distinct v1), avg(distinct v1), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null)  from test_cc group by v2;
-select v2, count(distinct v4), sum(distinct v4), avg(distinct v4), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null) from test_cc group by v2;
-select v2, count(distinct v5), sum(distinct v5), avg(distinct v5), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null) from test_cc group by v2;
-select v2, count(distinct v6), array_agg(distinct v6 order by 1), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null) from test_cc group by v2;
-select v2, count(distinct v7), array_agg(distinct v7 order by 1), group_concat(distinct 1, 2 order by 1), array_agg(distinct 1.3 order by null) from test_cc group by v2;
+select v2, count(distinct v1), sum(distinct v1), avg(distinct v1), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null)  from test_cc group by v2 order by v2;
+select v2, count(distinct v4), sum(distinct v4), avg(distinct v4), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null) from test_cc group by v2 order by v2;
+select v2, count(distinct v5), sum(distinct v5), avg(distinct v5), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null) from test_cc group by v2 order by v2;
+select v2, count(distinct v6), array_agg(distinct v6 order by 1), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null) from test_cc group by v2 order by v2;
+select v2, count(distinct v7), array_agg(distinct v7 order by 1), group_concat(distinct 1, 2 order by 1), array_agg(distinct 1.3 order by null) from test_cc group by v2 order by v2;
 
-select v2, count(distinct v1, v3, v6), sum(distinct v1), avg(distinct v1), array_agg(v5 order by 1), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null)  from test_cc group by v2;
+select v2, count(distinct v1, v3, v6), sum(distinct v1), avg(distinct v1), array_agg(v5 order by 1), group_concat(distinct 1, 2), array_agg(distinct 1.3 order by null)  from test_cc group by v2 order by v2;
 select count(distinct v4, v5), sum(distinct v4), avg(distinct v4), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct 1.456 order by 1) from test_cc;
-select v2, count(distinct v4, v5), sum(distinct v5), avg(distinct v5), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct 1.456 order by 1) from test_cc group by v2;
-select v2, count(distinct v3, v5), sum(distinct v4), avg(distinct v5), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct 1.456 order by 1) from test_cc group by v2, v3;
+select v2, count(distinct v4, v5), sum(distinct v5), avg(distinct v5), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct 1.456 order by 1) from test_cc group by v2 order by v2;
+select v2, count(distinct v3, v5), sum(distinct v4), avg(distinct v5), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct 1.456 order by 1) from test_cc group by v2, v3 order by v2, v3;
 
 select count(distinct v4, v5), sum(distinct v4), avg(distinct v4), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct v4 order by 1) from test_cc;
-select v2, count(distinct v4, v5), sum(distinct v5), avg(distinct v5), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct v5 order by 1) from test_cc group by v2;
-select v2, count(distinct v3, v5), sum(distinct v4), avg(distinct v5), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct v5 order by 1) from test_cc group by v2, v3;
+select v2, count(distinct v4, v5), sum(distinct v5), avg(distinct v5), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct v5 order by 1) from test_cc group by v2 order by v2;
+select v2, count(distinct v3, v5), sum(distinct v4), avg(distinct v5), group_concat(distinct v4, v5, 2 order by 1,2), array_agg(distinct v5 order by 1) from test_cc group by v2, v3 order by v2, v3;
 
 
 

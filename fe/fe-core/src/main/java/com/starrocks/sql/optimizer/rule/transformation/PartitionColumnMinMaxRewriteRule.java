@@ -16,17 +16,16 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -34,7 +33,6 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -382,10 +380,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         List<Ordering> ordering = Lists.newArrayList(new Ordering(columnRefOperator, asc, false));
         LogicalTopNOperator topn = new LogicalTopNOperator(ordering, limit, offset);
 
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
-        columnRefMap.put(entries.get(0).getKey(), columnRefOperator);
-        LogicalProjectOperator project = new LogicalProjectOperator(columnRefMap);
-
-        return OptExpression.create(project, OptExpression.create(topn, optExpression.getInputs().get(0).getInputs()));
+        return OptExpression.create(aggregation,
+                OptExpression.create(topn, optExpression.getInputs().get(0).getInputs()));
     }
 }

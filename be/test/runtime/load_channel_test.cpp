@@ -16,11 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/uid_util.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "common/util/thrift_util.h"
 #include "fs/fs_util.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
@@ -38,10 +42,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/thrift_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -81,6 +81,7 @@ public:
         auto index = _open_request.mutable_schema()->add_indexes();
         index->set_id(kIndexId);
         index->set_schema_hash(0);
+        index->set_schema_id(_schema_id);
         for (int i = 0, sz = metadata->schema().column_size(); i < sz; i++) {
             auto slot = _open_request.mutable_schema()->add_slot_descs();
             slot->set_id(i);
@@ -202,7 +203,7 @@ protected:
         _tablet_manager->prune_metacache();
     }
 
-    std::shared_ptr<Chunk> read_segment(int64_t tablet_id, const std::string& filename) {
+    ChunkUniquePtr read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
         auto path = _location_provider->segment_location(tablet_id, filename);

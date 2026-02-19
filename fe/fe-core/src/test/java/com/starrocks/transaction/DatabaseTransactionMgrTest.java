@@ -56,6 +56,7 @@ import com.starrocks.common.util.StringUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
@@ -325,6 +326,47 @@ public class DatabaseTransactionMgrTest {
         Assertions.assertEquals(2, globalCompactionActiveTxnMap.size());
         Assertions.assertTrue(globalCompactionActiveTxnMap.containsKey(committedCompactionTransactionId));
         Assertions.assertTrue(globalCompactionActiveTxnMap.containsKey(preparedCompactionTransactionId));
+    }
+
+    @Test
+    public void testLakeCompactionTxnRemovesStartupMapOnVisible() throws StarRocksException {
+        // Use the real GlobalStateMgr in tests so that GlobalStateMgr.getCurrentState() works as expected.
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        CompactionMgr compactionMgr = masterGlobalStateMgr.getCompactionMgr();
+        @SuppressWarnings("unchecked")
+        Map<Long, Long> startupActiveMap =
+                Deencapsulation.getField(compactionMgr, "remainedActiveCompactionTxnWhenStart");
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        TransactionState.TxnCoordinator feTransactionSource =
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe1");
+        long tableId = GlobalStateMgrTestUtil.testTableId1;
+        long txnId = 123456L;
+        TransactionState txnState = new TransactionState(
+                GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(tableId),
+                txnId,
+                "test_lake_compaction_txn_single",
+                null,
+                TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                feTransactionSource,
+                -1L,
+                Config.lake_compaction_default_timeout_second * 1000L);
+
+        // Register txn as running in db transaction manager.
+        Deencapsulation.invoke(masterDbTransMgr, "unprotectUpsertTransactionState", txnState);
+
+        // Simulate that this txn was active when FE restarted.
+        startupActiveMap.put(txnId, tableId);
+        Assertions.assertTrue(startupActiveMap.containsKey(txnId));
+
+        // Simulate the txn becoming VISIBLE and being replayed/applied.
+        txnState.setTransactionStatus(TransactionStatus.VISIBLE);
+        Deencapsulation.invoke(masterDbTransMgr, "unprotectUpsertTransactionState", txnState);
+
+        // The startup active compaction map should be cleaned for this lake compaction txn.
+        Assertions.assertFalse(startupActiveMap.containsKey(txnId));
     }
 
     @Test
@@ -665,6 +707,122 @@ public class DatabaseTransactionMgrTest {
         assertEquals(2, masterDbTransMgr.getCommittedTxnList().size());
         assertEquals(1, stateBatchesList.size());
         assertEquals(1, stateBatchesList.get(0).size());
+    }
+
+    @Test
+    public void testGetReadyToPublishTxnListBatchWithDeleteTxn() throws StarRocksException {
+        // Test case: DELETE transactions should not be batched with normal transactions.
+        // Setup: Create transactions in order: normal -> DELETE -> normal -> normal
+        // Expected batches:
+        // Batch 1: [txn_normal_0] (cut off before DELETE)
+        // Batch 2: [txn_delete] (separate due to DELETE source type)
+        // Batch 3: [txn_normal_1, txn_normal_2] (can be batched together)
+
+        // First, finish the existing committed transactions to start fresh
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        TransactionState transactionState6 = masterDbTransMgr.getTransactionState(txnId6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        TransactionState transactionState7 = masterDbTransMgr.getTransactionState(txnId7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        TransactionState transactionState8 = masterDbTransMgr.getTransactionState(txnId8);
+        List<TransactionState> states = new ArrayList<>();
+        states.add(transactionState6);
+        states.add(transactionState7);
+        states.add(transactionState8);
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        TransactionStateBatch stateBatch = new TransactionStateBatch(states);
+        masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
+
+        // Create a new transaction graph for the test
+        TransactionGraph newTransactionGraph = new TransactionGraph();
+        Deencapsulation.setField(masterDbTransMgr, "transactionGraph", newTransactionGraph);
+
+        // Begin and commit a normal transaction
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
+        long normalTxn1 = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        "testDeleteBatch_normal1",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, normalTxn1, transTablets,
+                Lists.newArrayList(), null);
+        newTransactionGraph.add(normalTxn1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
+
+        // Begin and commit a DELETE transaction
+        long deleteTxn = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        "testDeleteBatch_delete",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.DELETE, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, deleteTxn, transTablets,
+                Lists.newArrayList(), null);
+        newTransactionGraph.add(deleteTxn, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
+
+        // Begin and commit two more normal transactions
+        long normalTxn2 = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        "testDeleteBatch_normal2",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, normalTxn2, transTablets,
+                Lists.newArrayList(), null);
+        newTransactionGraph.add(normalTxn2, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
+
+        long normalTxn3 = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        "testDeleteBatch_normal3",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, normalTxn3, transTablets,
+                Lists.newArrayList(), null);
+        newTransactionGraph.add(normalTxn3, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
+
+        // Verify committed transactions
+        assertEquals(4, masterDbTransMgr.getCommittedTxnList().size());
+
+        // Get batches and verify DELETE transaction is not batched with normal transactions
+        List<TransactionStateBatch> stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+
+        // First batch should be the first normal transaction only (cut off before DELETE)
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(1, stateBatchesList.get(0).size());
+        assertEquals(normalTxn1, stateBatchesList.get(0).getTransactionStates().get(0).getTransactionId());
+
+        // Finish the first batch
+        masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatchesList.get(0), null);
+
+        // Get next batches - should be DELETE transaction alone
+        stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(1, stateBatchesList.get(0).size());
+        assertEquals(deleteTxn, stateBatchesList.get(0).getTransactionStates().get(0).getTransactionId());
+        assertEquals(TransactionState.LoadJobSourceType.DELETE,
+                stateBatchesList.get(0).getTransactionStates().get(0).getSourceType());
+
+        // Finish the DELETE batch
+        masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatchesList.get(0), null);
+
+        // Get next batches - should be the remaining normal transactions batched together
+        stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        // The two remaining normal transactions should be batched together
+        assertEquals(2, stateBatchesList.get(0).size());
+        assertEquals(normalTxn2, stateBatchesList.get(0).getTransactionStates().get(0).getTransactionId());
+        assertEquals(normalTxn3, stateBatchesList.get(0).getTransactionStates().get(1).getTransactionId());
     }
 
     @Test

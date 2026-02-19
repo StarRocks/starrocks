@@ -36,9 +36,9 @@
 
 #include <mutex>
 
+#include "base/concurrency/spinlock.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/data.pb.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 

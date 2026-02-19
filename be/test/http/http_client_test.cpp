@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "boost/algorithm/string.hpp"
 #include "common/config.h"
 #include "common/logging.h"
@@ -117,7 +118,7 @@ public:
         s_server->register_handler(POST, "/simple_post", &s_simple_post_handler);
         s_server->register_handler(GET, "/header_test", &s_header_handler);
         s_server->register_handler(GET, "/multi_header_test", &s_multi_header_handler);
-        s_server->start();
+        ASSERT_OK(s_server->start());
         real_port = s_server->get_real_port();
         ASSERT_NE(0, real_port);
         hostname = "http://127.0.0.1:" + std::to_string(real_port);

@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <optional>
+#include <unordered_set>
+
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
@@ -21,6 +24,7 @@
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/seek_range.h"
 
 namespace starrocks::lake {
 
@@ -120,7 +124,8 @@ public:
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments);
+                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
+                                       const std::unordered_set<int>* skip_segment_idxs = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 
@@ -133,6 +138,8 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
+    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
     const RowsetMetadataPB* _metadata;

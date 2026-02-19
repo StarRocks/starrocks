@@ -26,7 +26,7 @@ public:
                                          std::shared_ptr<MultiCastLocalExchanger> exchanger)
             : SourceOperator(factory, id, "multi_cast_local_exchange_source", plan_node_id, true, driver_sequence),
               _mcast_consumer_index(mcast_consumer_index),
-              _exchanger(std::move(std::move(exchanger))) {}
+              _exchanger(std::move(exchanger)) {}
 
     Status prepare(RuntimeState* state) override;
 
@@ -52,7 +52,7 @@ public:
                                                 std::shared_ptr<MultiCastLocalExchanger> exchanger)
             : SourceOperatorFactory(id, "multi_cast_local_exchange_source", plan_node_id),
               _mcast_consumer_index(mcast_consumer_index),
-              _exchanger(std::move(std::move(exchanger))) {}
+              _exchanger(std::move(exchanger)) {}
     ~MultiCastLocalExchangeSourceOperatorFactory() override = default;
     bool support_event_scheduler() const override { return _exchanger->support_event_scheduler(); }
 

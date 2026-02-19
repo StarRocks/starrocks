@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
 #include "common/logging.h"
@@ -25,6 +26,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
@@ -32,8 +34,6 @@
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type_infra.h"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -200,17 +200,17 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
         // instead of the column name.
         for (int i = 0; i < _slot_descs->size(); ++i) {
             const ColumnPtr& src = chunk.get_column_by_slot_id((*_slot_descs)[i]->id());
-            ColumnPtr& dest = _chunk->get_column_by_index(i);
+            auto* dest = _chunk->get_column_raw_ptr_by_index(i);
             dest->append_selective(*src, indexes, from, size);
         }
         if (is_column_with_row) {
-            ColumnPtr& dest = _chunk->get_column_by_name(Schema::FULL_ROW_COLUMN);
+            auto dest = _chunk->get_column_raw_ptr_by_name(Schema::FULL_ROW_COLUMN);
             dest->append(*full_row_col.get());
         }
     } else {
         for (int i = 0; i < _vectorized_schema->num_fields(); i++) {
             const ColumnPtr& src = chunk.get_column_by_index(i);
-            ColumnPtr& dest = _chunk->get_column_by_index(i);
+            auto* dest = _chunk->get_column_raw_ptr_by_index(i);
             dest->append_selective(*src, indexes, from, size);
             if (is_column_with_row && i == _vectorized_schema->num_fields() - 1) {
                 dest->append(*full_row_col.get());
@@ -227,7 +227,11 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     // if memtable is full, push it to the flush executor,
     // and create a new memtable for incoming data
     bool suggest_flush = false;
-    if (is_full()) {
+    // When parallel memtable finalize is enabled, skip the early merge optimization here.
+    // The merge will be done during finalize() in the flush thread instead.
+    // This avoids redundant merge operations and allows the write thread to return
+    // earlier, improving overall throughput by parallelizing write and finalize operations.
+    if (is_full() && !config::enable_parallel_memtable_finalize) {
         size_t orig_bytes = write_buffer_size();
         RETURN_IF_ERROR(_merge());
         size_t new_bytes = write_buffer_size();
@@ -318,6 +322,11 @@ Status MemTable::finalize() {
             RETURN_IF_ERROR(_sort(true));
         }
     }
+    // Release the input chunk after finalize to free memory earlier.
+    // The finalized data is now in _result_chunk which will be used for flush.
+    // This is especially important when parallel finalize is enabled, as it allows
+    // the memory to be reclaimed before the flush I/O completes.
+    _chunk.reset();
 
     ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
     StarRocksMetrics::instance()->memtable_finalize_task_total.increment(1);
@@ -325,7 +334,10 @@ Status MemTable::finalize() {
     return Status::OK();
 }
 
-Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) {
+// Flush the memtable data through the configured sink
+// @param slot_idx: slot index from flush token, passed through to the sink to maintain
+//                  flush order when parallel flush is enabled
+Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, int64_t slot_idx) {
     FAIL_POINT_TRIGGER_EXECUTE(load_memtable_flush, MEMTABLE_FLUSH_FP_ACTION(_sink->txn_id(), _sink->tablet_id()));
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
@@ -338,10 +350,12 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) 
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
+        // Pass slot_idx to sink for ordering in parallel flush scenarios
         if (_deletes) {
-            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size,
+                                                            slot_idx));
         } else {
-            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         }
     }
     auto io_stat = scope.current_scoped_tls_io();

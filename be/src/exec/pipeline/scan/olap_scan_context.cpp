@@ -15,8 +15,10 @@
 #include "exec/pipeline/scan/olap_scan_context.h"
 
 #include "exec/olap_scan_node.h"
+#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/runtime_filter_bank.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/tablet.h"
 
 namespace starrocks::pipeline {
@@ -48,17 +50,17 @@ const std::vector<ColumnAccessPathPtr>* OlapScanContext::column_access_paths() c
     return &_scan_node->column_access_paths();
 }
 
+size_t OlapScanContext::next_unique_id() const {
+    return starrocks::next_uniq_id(_scan_node->thrift_olap_scan_node());
+}
+
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
-    VLOG_ROW << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,
-                            _active_inputs.size());
     _num_active_inputs += _active_inputs.emplace(key).second;
 }
 
 void OlapScanContext::detach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
-    VLOG_ROW << fmt::format("detach_shared_input ({}, {}), remain {}", operator_seq, source_index,
-                            _active_inputs.size());
     int erased = _active_inputs.erase(key);
     if (erased && _num_active_inputs.fetch_sub(1) == 1) {
         _active_inputs_empty = true;
@@ -156,9 +158,10 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     cm.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
 
     // rewrite after push down scan predicate, scan predicate should rewrite by local-dict
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_not_push_down_conjuncts));
 
-    WARN_IF_ERROR(_jit_rewriter.rewrite(_not_push_down_conjuncts, &_obj_pool, state->is_jit_enabled()), "");
+    WARN_IF_ERROR(
+            _jit_rewriter.rewrite(_not_push_down_conjuncts, &_obj_pool, RuntimeStateHelper::is_jit_enabled(state)), "");
 
     return Status::OK();
 }

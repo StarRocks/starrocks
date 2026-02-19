@@ -17,6 +17,7 @@
 #include <memory>
 #include <type_traits>
 
+#include "base/simd/simd.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
@@ -32,7 +33,6 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "runtime/current_thread.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

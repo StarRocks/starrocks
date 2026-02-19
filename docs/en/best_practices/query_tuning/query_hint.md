@@ -45,6 +45,25 @@ REFRESH ASYNC
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 ```
 
+Specify system variables in a nested query:
+
+```SQL
+-- To specify hints in the main query
+WITH t AS (SELECT region, sales_amount FROM sales_orders)  
+SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming', new_planner_agg_stage = '2') */  
+       SUM(sales_amount) AS total_sales_amount  
+FROM t;
+
+-- To specify hints in the subquery
+WITH t AS (  
+  SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */  
+         region, sales_amount  
+  FROM sales_orders  
+)  
+SELECT SUM(sales_amount) AS total_sales_amount  
+FROM t;
+```
+
 ## User-defined variable hint
 
 You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../../sql-reference/user_defined_variables.md) in the SELECT statements or INSERT statements. If other statements contain a SELECT clause, you can also use the `SET_USER_VARIABLE` hint in that SELECT clause. Other statements can be SELECT statements and INSERT statements, but cannot be CREATE MATERIALIZED VIEW AS SELECT statements and CREATE VIEW AS SELECT statements. Note that if the `SET_USER_VARIABLE` hint is used in the SELECT clause of CTE, the `SET_USER_VARIABLE` hint does not take effect even if the statement is executed successfully. Since v3.2.4, StarRocks supports the user-defined variable hint.
