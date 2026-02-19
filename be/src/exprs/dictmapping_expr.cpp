@@ -27,7 +27,7 @@ Status DictMappingExpr::open(RuntimeState* state, ExprContext* context, Function
         return Status::OK();
     }
 
-    return state->mutable_dict_optimize_parser()->rewrite_expr(context, this, _output_id);
+    return state->mutable_dict_optimize_parser()->rewrite_expr(state, context, this, _output_id);
 }
 
 StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {

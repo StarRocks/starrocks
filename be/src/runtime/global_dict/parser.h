@@ -52,22 +52,20 @@ class DictOptimizeParser {
 public:
     DictOptimizeParser() = default;
     ~DictOptimizeParser() = default;
-    void set_mutable_dict_maps(RuntimeState* state, GlobalDictMaps* dict_maps) {
-        _runtime_state = state;
-        _mutable_dict_maps = dict_maps;
-    }
+    void set_mutable_dict_maps(GlobalDictMaps* dict_maps) { _mutable_dict_maps = dict_maps; }
 
-    Status init_dict_exprs(const std::map<int, TExpr>& exprs);
+    Status init_dict_exprs(RuntimeState* runtime_state, const std::map<int, TExpr>& exprs);
 
-    Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
+    Status rewrite_expr(RuntimeState* runtime_state, ExprContext* ctx, Expr* expr, SlotId slot_id);
 
-    Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs);
+    Status rewrite_conjuncts(RuntimeState* runtime_state, std::vector<ExprContext*>* conjuncts_ctxs);
 
-    Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
+    Status eval_expression(RuntimeState* runtime_state, ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx,
+                           int32_t targetSlotId);
 
-    Status eval_dict_expr(SlotId id);
+    Status eval_dict_expr(RuntimeState* runtime_state, SlotId id);
 
-    void close() noexcept;
+    void close(RuntimeState* runtime_state) noexcept;
 
     void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
@@ -86,10 +84,11 @@ private:
     void _check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
-    Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, const std::vector<SlotId>& slot_ids);
-    Status _eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
+    Status _rewrite_expr_ctxs(RuntimeState* runtime_state, std::vector<ExprContext*>* expr_ctxs,
+                              const std::vector<SlotId>& slot_ids);
+    Status _eval_and_rewrite(RuntimeState* runtime_state, ExprContext* ctx, Expr* expr,
+                             DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
 
-    RuntimeState* _runtime_state = nullptr;
     GlobalDictMaps* _mutable_dict_maps = nullptr;
     ObjectPool _free_pool;
     std::unordered_map<SlotId, ExprContext*> _dict_exprs;
