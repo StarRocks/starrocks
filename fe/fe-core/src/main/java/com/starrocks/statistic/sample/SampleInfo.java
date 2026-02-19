@@ -39,7 +39,7 @@ public class SampleInfo {
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
     }
 
-    private static final String CTE_TEMPLATE = "SELECT $columnName FROM $fullyQualifiedName $tabletsHint " +
+    private static final String CTE_TEMPLATE = "SELECT $columnNames FROM $fullyQualifiedName $tabletsHint " +
             "$laterals $whereAndLimit";
 
     private final double tabletSampleRatio;
@@ -169,32 +169,60 @@ public class SampleInfo {
         StringBuilder builder = new StringBuilder();
         builder.append(prefix).append(columnNames).append(" ");
 
+        // Separate columns into those with lateral joins (need separate CTEs) and regular columns (can share a CTE) so
+        // that we scan the table only once for regular columns.
+        final var regularStats = primitiveTypeStats.stream()
+                .filter(stat -> stat.getLateralJoin().isEmpty())
+                .toList();
+        final var lateralJoinStats = primitiveTypeStats.stream()
+                .filter(stat -> !stat.getLateralJoin().isEmpty())
+                .toList();
+
         // CTEs
         builder.append("WITH ");
-        for (int i = 0; i < primitiveTypeStats.size(); i++) {
-            if (i > 0) {
+        // Create a single shared CTE for all regular stats (if any)
+        if (!regularStats.isEmpty()) {
+            builder.append("cte_shared as (");
+            String queryDataSql = generateQueryDataSqlForMultipleColumns(tableName, dbName, regularStats, manager);
+            builder.append(queryDataSql).append(")");
+        }
+
+        // Create separate CTEs for each stat with lateral join (if any)
+        for (int i = 0; i < lateralJoinStats.size(); i++) {
+            if (i > 0 || !regularStats.isEmpty()) {
                 builder.append(", ");
             }
-            builder.append("cte_").append(i).append(" as (");
-            String queryDataSql = generateQueryDataSql(tableName, dbName, primitiveTypeStats.get(i), manager);
+            builder.append("cte_lateral_").append(i).append(" as (");
+            String queryDataSql = generateQueryDataSql(tableName, dbName, lateralJoinStats.get(i), manager);
             builder.append(queryDataSql).append(")");
         }
         builder.append(" ");
 
-        // Generate SELECT statements for each column referencing its own CTE
-        for (int i = 0; i < primitiveTypeStats.size(); i++) {
+        // SELECT statements for regular columns referencing the shared CTE.
+        for (int i = 0; i < regularStats.size(); i++) {
             if (i > 0) {
                 builder.append(" UNION ALL ");
             }
-            builder.append(generateQueryColumnSql(tableId, dbId, tableName, dbName, primitiveTypeStats.get(i), "cte_" + i));
+            builder.append(generateQueryColumnSql(tableId, dbId, tableName, dbName, regularStats.get(i),
+                    "cte_shared", "col_" + i));
+        }
+
+        // SELECT statements for lateral join columns referencing their own CTEs.
+        for (int i = 0; i < lateralJoinStats.size(); i++) {
+            if (i > 0 || !regularStats.isEmpty()) {
+                builder.append(" UNION ALL ");
+            }
+            String cteName = "cte_lateral_" + i;
+            builder.append(generateQueryColumnSql(tableId, dbId, tableName, dbName, lateralJoinStats.get(i),
+                    cteName, "col_0"));
         }
         return builder.toString();
     }
 
-    private static String getSampleCte(String columnName, String fullyQualifiedName, String tabletsHint, String laterals,
+    private static String getSampleCte(String columnNames, String fullyQualifiedName, String tabletsHint, String laterals,
                                        String whereAndLimit) {
         final var velocityContext = new VelocityContext();
-        velocityContext.put("columnName", columnName);
+        velocityContext.put("columnNames", columnNames);
         velocityContext.put("fullyQualifiedName", fullyQualifiedName);
         velocityContext.put("tabletsHint", tabletsHint);
         velocityContext.put("laterals", laterals);
@@ -209,17 +237,34 @@ public class SampleInfo {
     private String generateQueryDataSql(String tableName, String dbName,
                                         ColumnStats columnStat,
                                         TabletSampleManager manager) {
-        StringBuilder sql = new StringBuilder();
-        String fullQualifiedName = "`" + dbName + "`.`" + tableName + "`";
-        String columnName = columnStat.getQuotedColumnName() + " as col";
-        String lateral = columnStat.getLateralJoin();
+        return generateQueryDataSqlForMultipleColumns(tableName, dbName, List.of(columnStat), manager);
+    }
 
+    private String generateQueryDataSqlForMultipleColumns(String tableName, String dbName,
+                                                          List<ColumnStats> columnStats,
+                                                          TabletSampleManager manager) {
+        final var columnJoiner = new StringJoiner(", ");
+        for (int i = 0; i < columnStats.size(); i++) {
+            columnJoiner.add(columnStats.get(i).getQuotedColumnName() + " as col_" + i);
+        }
+        String columnNames = columnJoiner.toString();
+        String lateral = "";
+        if (columnStats.size() == 1) {
+            lateral = columnStats.get(0).getLateralJoin();
+        } else if (columnStats.size() > 1) {
+            if (columnStats.stream().anyMatch(stat -> !stat.getLateralJoin().isEmpty())) {
+                throw new IllegalArgumentException("Multiple columns with lateral joins cannot be in the same CTE");
+            }
+        }
+
+        final var sql = new StringBuilder();
+        String fullQualifiedName = "`" + dbName + "`.`" + tableName + "`";
         if (!highWeightTablets.isEmpty()) {
             final var tabletsHint = generateTabletHint(highWeightTablets, manager.getHighWeight().getTabletReadRatio());
             final var whereAndLimit = getWhereAndLimit(manager.getHighWeight().getTabletReadRatio(),
                     manager.getSampleRowsLimit());
             sql.append("SELECT * FROM (") //
-                    .append(getSampleCte(columnName, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
+                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
                     .append(") t_high");
         }
 
@@ -233,7 +278,7 @@ public class SampleInfo {
             final var whereAndLimit = getWhereAndLimit(manager.getMediumHighWeight().getTabletReadRatio(),
                     manager.getSampleRowsLimit());
             sql.append("SELECT * FROM (") //
-                    .append(getSampleCte(columnName, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
+                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
                     .append(") t_medium_high");
         }
 
@@ -246,7 +291,7 @@ public class SampleInfo {
             final var whereAndLimit = getWhereAndLimit(manager.getMediumLowWeight().getTabletReadRatio(),
                     manager.getSampleRowsLimit());
             sql.append("SELECT * FROM (") //
-                    .append(getSampleCte(columnName, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
+                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
                     .append(") t_medium_low");
         }
 
@@ -258,13 +303,13 @@ public class SampleInfo {
             final var whereAndLimit = getWhereAndLimit(manager.getLowWeight().getTabletReadRatio(),
                     manager.getSampleRowsLimit());
             sql.append("SELECT * FROM (") //
-                    .append(getSampleCte(columnName, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
+                    .append(getSampleCte(columnNames, fullQualifiedName, tabletsHint, lateral, whereAndLimit)) //
                     .append(") t_low");
         }
 
         if (sql.isEmpty()) {
             sql.append("SELECT * FROM ( ") //
-                    .append(getSampleCte(columnName, fullQualifiedName, "", lateral, "")) //
+                    .append(getSampleCte(columnNames, fullQualifiedName, "", lateral, "")) //
                     .append(") t_no_hint LIMIT ") //
                     .append(Config.statistic_sample_collect_rows);
         }
@@ -298,7 +343,7 @@ public class SampleInfo {
     }
 
     private String generateQueryColumnSql(long tableId, long dbId, String tableName, String dbName,
-                                          ColumnStats columnStats, String cteName) {
+                                          ColumnStats columnStats, String cteName, String columnName) {
         String sep = ", ";
         StringBuilder builder = new StringBuilder();
         builder.append("SELECT ");
@@ -316,7 +361,8 @@ public class SampleInfo {
         builder.append(columnStats.getMin()).append(sep);
         builder.append("NOW() FROM (");
         builder.append("SELECT t0.`column_key`, COUNT(1) as count FROM (SELECT ");
-        builder.append("col").append(" AS column_key FROM `").append(cteName).append("`) as t0 GROUP BY t0.column_key) AS t1");
+        builder.append(columnName).append(" AS column_key FROM `").append(cteName)
+                .append("`) as t0 GROUP BY t0.column_key) AS t1");
         return builder.toString();
     }
 

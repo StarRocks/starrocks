@@ -156,7 +156,7 @@ public class SampleInfoTest extends PlanTestBase {
 
         // THEN
         Assertions.assertTrue(sql.contains("unnest(`carr`)"));
-        Assertions.assertTrue(sql.contains("cte_0 as ("));
+        Assertions.assertTrue(sql.contains("cte_lateral_0 as ("));
         Assertions.assertNotNull(getFragmentPlan(sql));
     }
 
@@ -189,10 +189,10 @@ public class SampleInfoTest extends PlanTestBase {
         Assertions.assertTrue(sql.contains("carr"));
         Assertions.assertTrue(sql.contains("carr2"));
         Assertions.assertTrue(sql.contains("c3"));
-        // Separate CTEs
-        Assertions.assertTrue(sql.contains("cte_0 as ("));
-        Assertions.assertTrue(sql.contains("cte_1 as ("));
-        Assertions.assertTrue(sql.contains("cte_2 as ("));
+        // Shared CTE for regular columns, separate CTEs for lateral join columns
+        Assertions.assertTrue(sql.contains("cte_shared as ("));
+        Assertions.assertTrue(sql.contains("cte_lateral_0 as ("));
+        Assertions.assertTrue(sql.contains("cte_lateral_1 as ("));
 
         Assertions.assertNotNull(getFragmentPlan(sql));
     }
@@ -220,9 +220,9 @@ public class SampleInfoTest extends PlanTestBase {
 
         // THEN
         Assertions.assertTrue(sql.contains("unnest(`carr`)"));
-        Assertions.assertTrue(sql.contains("cte_0 as ("));
+        Assertions.assertTrue(sql.contains("cte_lateral_0 as ("));
         Assertions.assertTrue(sql.contains("unnest(`carr2`)"));
-        Assertions.assertTrue(sql.contains("cte_1 as ("));
+        Assertions.assertTrue(sql.contains("cte_lateral_1 as ("));
         Assertions.assertNotNull(getFragmentPlan(sql));
     }
 
