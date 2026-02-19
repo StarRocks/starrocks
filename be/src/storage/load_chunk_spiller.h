@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "common/runtime_profile.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
