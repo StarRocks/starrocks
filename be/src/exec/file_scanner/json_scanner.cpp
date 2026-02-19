@@ -36,6 +36,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -455,8 +456,8 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             if (_state->enable_log_rejected_record()) {
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
-                _state->append_rejected_record_to_file(std::string(sv.data(), sv.size()), st.to_string(),
-                                                       _file->filename());
+                RuntimeStateHelper::append_rejected_record_to_file(_state, std::string(sv.data(), sv.size()),
+                                                                   st.to_string(), _file->filename());
             }
             // Before continuing to process other rows, we need to first clean the fail parsed row.
             chunk->set_num_rows(chunk_row_num);
@@ -819,10 +820,10 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
 
 void JsonReader::_append_error_msg(const std::string& row, const std::string& error_msg) {
     if (_file_stream_buffer == nullptr || _file_stream_buffer->meta()->type() == ByteBufferMetaType::NONE) {
-        _state->append_error_msg_to_file(row, error_msg);
+        RuntimeStateHelper::append_error_msg_to_file(_state, row, error_msg);
     } else {
         std::string row_with_meta = fmt::format("{} [meta: {}]", row, _file_stream_buffer->meta()->to_string());
-        _state->append_error_msg_to_file(row_with_meta, error_msg);
+        RuntimeStateHelper::append_error_msg_to_file(_state, row_with_meta, error_msg);
     }
 }
 

@@ -31,6 +31,7 @@
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "util/compression/stream_decompressor.h"
 
@@ -235,7 +236,8 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                         error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                                   << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                         // TODO(meegoo): support other file format
-                        _state->append_rejected_record_to_file(src->rebuild_csv_row(i, ","), error_msg.str(), "");
+                        RuntimeStateHelper::append_rejected_record_to_file(_state, src->rebuild_csv_row(i, ","),
+                                                                           error_msg.str(), "");
                     }
 
                     // avoid print too many debug log
@@ -245,7 +247,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                     std::stringstream error_msg;
                     error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    _state->append_error_msg_to_file(src->debug_row(i), error_msg.str());
+                    RuntimeStateHelper::append_error_msg_to_file(_state, src->debug_row(i), error_msg.str());
                 }
             }
         }

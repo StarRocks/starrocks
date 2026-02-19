@@ -26,7 +26,7 @@
 #include "formats/avro/cpp/avro_schema_builder.h"
 #include "formats/avro/cpp/utils.h"
 #include "fs/fs.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -202,7 +202,7 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
                 if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                     std::string json_str;
                     (void)AvroUtils::datum_to_json(*_datum, &json_str);
-                    _state->append_error_msg_to_file(json_str, std::string(st.message()));
+                    RuntimeStateHelper::append_error_msg_to_file(_state, json_str, std::string(st.message()));
                     LOG(WARNING) << "Failed to read row. error: " << st;
                 }
 

@@ -33,6 +33,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_state_helper.h"
 #include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -591,7 +592,7 @@ void QueryContextManager::report_fragments_with_same_host(
                 params.__set_done(false);
 
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                    runtime_state->update_report_load_status(&params);
+                    RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                     params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
@@ -692,7 +693,7 @@ void QueryContextManager::report_fragments(
             params.__set_done(false);
 
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                runtime_state->update_report_load_status(&params);
+                RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                 params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 

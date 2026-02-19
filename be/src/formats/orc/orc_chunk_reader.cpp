@@ -36,6 +36,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "orc_schema_builder.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
 #include "util/stack_util.h"
 
@@ -1308,7 +1309,7 @@ void OrcChunkReader::report_error_message(const std::string& error_msg) {
     if (_state == nullptr) return;
     if (_error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     _error_message_counter += 1;
-    _state->append_error_msg_to_file("", error_msg);
+    RuntimeStateHelper::append_error_msg_to_file(_state, "", error_msg);
 }
 
 const orc::Type* OrcChunkReader::get_orc_type_by_slot_id(const SlotId& slot_id) const {

@@ -40,6 +40,10 @@
 
 namespace starrocks {
 
+namespace {
+constexpr int64_t kMaxErrorNum = 50;
+}
+
 void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
     state->_runtime_filter_port = state->_obj_pool->add(new RuntimeFilterPort(state));
 }
@@ -81,6 +85,84 @@ Status RuntimeStateHelper::create_rejected_record_file(RuntimeState* state) {
     LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
     state->_rejected_record_file_path = rejected_record_absolute_path;
     return Status::OK();
+}
+
+void RuntimeStateHelper::append_error_msg_to_file(RuntimeState* state, const std::string& line,
+                                                  const std::string& error_msg, bool is_summary) {
+    std::lock_guard<std::mutex> l(state->_error_log_lock);
+    if (state->_query_options.query_type != TQueryType::LOAD) {
+        return;
+    }
+    // If file havn't been opened, open it here
+    if (state->_error_log_file == nullptr) {
+        Status status = RuntimeStateHelper::create_error_log_file(state);
+        if (!status.ok()) {
+            LOG(WARNING) << "Create error file log failed. because: " << status.message();
+            if (state->_error_log_file != nullptr) {
+                state->_error_log_file->close();
+                delete state->_error_log_file;
+                state->_error_log_file = nullptr;
+            }
+            return;
+        }
+    }
+
+    // if num of printed error row exceeds the limit, and this is not a summary message,
+    // return
+    if (state->_num_print_error_rows.fetch_add(1, std::memory_order_relaxed) > kMaxErrorNum && !is_summary) {
+        return;
+    }
+
+    std::stringstream out;
+    if (is_summary) {
+        out << "Error: ";
+        out << error_msg;
+    } else {
+        // Note: export reason first in case src line too long and be truncated.
+        out << "Error: " << error_msg << ". Row: " << line;
+    }
+
+    if (!out.str().empty()) {
+        (*state->_error_log_file) << out.str() << std::endl;
+    }
+}
+
+void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, const std::string& record,
+                                                        const std::string& error_msg, const std::string& source) {
+    std::lock_guard<std::mutex> l(state->_rejected_record_lock);
+    // Only load job need to write rejected record
+    if (state->_query_options.query_type != TQueryType::LOAD) {
+        return;
+    }
+
+    // If file havn't been opened, open it here
+    if (state->_rejected_record_file == nullptr) {
+        Status status = RuntimeStateHelper::create_rejected_record_file(state);
+        if (!status.ok()) {
+            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
+            if (state->_rejected_record_file != nullptr) {
+                state->_rejected_record_file->close();
+                state->_rejected_record_file.reset();
+            }
+            return;
+        }
+    }
+    state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
+
+    // TODO(meegoo): custom delimiter
+    (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+}
+
+void RuntimeStateHelper::update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params) {
+    load_params->__set_loaded_rows(state->num_rows_load_sink());
+    load_params->__set_sink_load_bytes(state->num_bytes_load_sink());
+    load_params->__set_source_load_rows(state->num_rows_load_from_source());
+    load_params->__set_source_load_bytes(state->num_bytes_load_from_source());
+    load_params->__set_filtered_rows(state->num_rows_load_filtered());
+    load_params->__set_unselected_rows(state->num_rows_load_unselected());
+    load_params->__set_source_scan_bytes(state->num_bytes_scan_from_source());
+    // Update datacache load metrics
+    RuntimeStateHelper::update_load_datacache_metrics(state, load_params);
 }
 
 std::shared_ptr<QueryStatisticsRecvr> RuntimeStateHelper::query_recv(RuntimeState* state) {

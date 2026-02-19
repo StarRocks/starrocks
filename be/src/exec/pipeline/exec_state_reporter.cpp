@@ -25,6 +25,7 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -68,7 +69,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
 
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
-        runtime_state->update_report_load_status(&params);
+        RuntimeStateHelper::update_report_load_status(runtime_state, &params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
 
         if (query_ctx->enable_profile()) {
@@ -80,7 +81,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         }
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            runtime_state->update_report_load_status(&params);
+            RuntimeStateHelper::update_report_load_status(runtime_state, &params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
         if (query_ctx->enable_profile()) {

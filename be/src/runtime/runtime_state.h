@@ -60,7 +60,6 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state_helper.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -80,6 +79,7 @@ class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
 class GlobalDictContext;
+class RuntimeStateHelper;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
@@ -240,18 +240,12 @@ public:
 
     const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
 
-    // is_summary is true, means we are going to write the summary line
-    void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
-
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
-
-    void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
-                                        const std::string& source);
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -280,18 +274,6 @@ public:
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
 
     void update_num_bytes_scan_from_source(int64_t scan_bytes) { _num_bytes_scan_from_source.fetch_add(scan_bytes); }
-
-    void update_report_load_status(TReportExecStatusParams* load_params) {
-        load_params->__set_loaded_rows(num_rows_load_sink());
-        load_params->__set_sink_load_bytes(num_bytes_load_sink());
-        load_params->__set_source_load_rows(num_rows_load_from_source());
-        load_params->__set_source_load_bytes(num_bytes_load_from_source());
-        load_params->__set_filtered_rows(num_rows_load_filtered());
-        load_params->__set_unselected_rows(num_rows_load_unselected());
-        load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
-        // Update datacache load metrics
-        RuntimeStateHelper::update_load_datacache_metrics(this, load_params);
-    }
 
     void update_num_datacache_read_bytes(const int64_t read_bytes) {
         _num_datacache_read_bytes.fetch_add(read_bytes, std::memory_order_relaxed);
