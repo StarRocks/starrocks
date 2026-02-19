@@ -14,6 +14,7 @@
 
 #include "storage/lake/transactions.h"
 
+#include "base/container/lru_cache.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
@@ -27,7 +28,6 @@
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
-#include "util/lru_cache.h"
 
 namespace {
 

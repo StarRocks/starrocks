@@ -26,11 +26,11 @@
 #include <mutex>
 #include <string>
 
+#include "base/container/lru_cache.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
-#include "util/lru_cache.h"
 
 namespace starrocks {
 

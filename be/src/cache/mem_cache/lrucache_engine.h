@@ -16,8 +16,8 @@
 
 #include <atomic>
 
+#include "base/container/lru_cache.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
-#include "util/lru_cache.h"
 
 namespace starrocks {
 class LRUCacheEngine final : public LocalMemCacheEngine {

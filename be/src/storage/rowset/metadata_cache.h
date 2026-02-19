@@ -19,8 +19,8 @@
 #include <string_view>
 #include <variant>
 
+#include "base/container/lru_cache.h"
 #include "gutil/macros.h"
-#include "util/lru_cache.h"
 
 namespace starrocks {
 class CacheKey;

@@ -19,6 +19,7 @@ ADD_BE_LIB(Base
   concurrency/await.cpp
   concurrency/core_local.cpp
   concurrency/spinlock.cpp
+  container/lru_cache.cpp
   crypto/aes_util.cpp
   crypto/md5.cpp
   crypto/sha.cpp

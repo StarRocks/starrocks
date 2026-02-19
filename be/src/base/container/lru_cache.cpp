@@ -2,19 +2,13 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "util/lru_cache.h"
+#include "base/container/lru_cache.h"
 
 #include <rapidjson/document.h>
 
-#include <cstdio>
 #include <cstdlib>
-#include <sstream>
-#include <string>
 
-#include "storage/olap_common.h"
-
-using std::string;
-using std::stringstream;
+#include "base/logging.h"
 
 namespace starrocks {
 

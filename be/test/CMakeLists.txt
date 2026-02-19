@@ -334,7 +334,6 @@ set(EXEC_FILES
         ./base/types/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp

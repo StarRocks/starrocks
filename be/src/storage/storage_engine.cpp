@@ -47,6 +47,7 @@
 
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
@@ -83,7 +84,6 @@
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
 #include "util/global_metrics_registry.h"
-#include "util/lru_cache.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

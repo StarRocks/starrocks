@@ -37,6 +37,7 @@ set(BASE_TEST_FILES
     concurrency/shared_mutex_test.cpp
     concurrency/core_local_test.cpp
     container/heap_test.cpp
+    lru_cache_test.cpp
     container/priority_queue_test.cpp
     coding_test.cpp
     core_local_counter_test.cpp
