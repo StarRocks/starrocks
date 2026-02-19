@@ -45,7 +45,6 @@
 #include "common/constexpr.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "runtime/exec_env.h"
 #include "runtime/global_dict/context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_helper.h"
@@ -210,10 +209,6 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     RuntimeProfile::Counter* mem_tracker_counter =
             ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(mem_tracker_counter, bytes_limit);
-
-    if (parent == nullptr) {
-        parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
-    }
 
     _query_mem_tracker =
             std::make_shared<MemTracker>(MemTrackerType::QUERY, bytes_limit, runtime_profile()->name(), parent);

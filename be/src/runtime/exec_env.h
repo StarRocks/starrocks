@@ -322,6 +322,7 @@ public:
     ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
+    MemTracker* query_pool_mem_tracker() { return GlobalEnv::GetInstance()->query_pool_mem_tracker(); }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
