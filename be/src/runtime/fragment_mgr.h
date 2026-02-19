@@ -41,6 +41,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/uid_util.h"
 #include "common/status.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/StarrocksExternalService_types.h"

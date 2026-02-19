@@ -256,8 +256,27 @@ public class StatisticSQLBuilder {
         return "DELETE FROM " + tableName + " WHERE TABLE_ID = " + tableId;
     }
 
+    public static String buildDropStatisticsSQL(List<Long> tableIds, StatsConstants.AnalyzeType analyzeType) {
+        Preconditions.checkState(tableIds != null && !tableIds.isEmpty());
+        String tableName;
+        if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
+            tableName = SAMPLE_STATISTICS_TABLE_NAME;
+        } else {
+            tableName = FULL_STATISTICS_TABLE_NAME;
+        }
+
+        String tids = tableIds.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        return "DELETE FROM " + tableName + " WHERE TABLE_ID IN (" + tids + ")";
+    }
+
     public static String buildDropMultipleStatisticsSQL(Long tableId) {
         return "DELETE FROM " + MULTI_COLUMN_STATISTICS_TABLE_NAME + " WHERE TABLE_ID = " + tableId;
+    }
+
+    public static String buildDropMultipleStatisticsSQL(List<Long> tableIds) {
+        Preconditions.checkState(tableIds != null && !tableIds.isEmpty());
+        String tids = tableIds.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        return "DELETE FROM " + MULTI_COLUMN_STATISTICS_TABLE_NAME + " WHERE TABLE_ID IN (" + tids + ")";
     }
 
     public static String buildDropExternalStatSQL(String tableUUID) {
@@ -326,6 +345,12 @@ public class StatisticSQLBuilder {
         return "delete from " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME + " where table_id = "
                 + tableId + " and column_name in (" + Joiner.on(", ")
                 .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+    }
+
+    public static String buildDropHistogramSQL(List<Long> tableIds) {
+        Preconditions.checkState(tableIds != null && !tableIds.isEmpty());
+        String tids = tableIds.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        return "delete from " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME + " where table_id in (" + tids + ")";
     }
 
     public static String buildDropExternalHistogramSQL(String tableUUID, List<String> columnNames) {

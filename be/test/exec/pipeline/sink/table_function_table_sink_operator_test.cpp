@@ -14,9 +14,9 @@
 
 #include "exec/pipeline/sink/table_function_table_sink_operator.h"
 
+#include "base/testutil/assert.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
 class TableFunctionTableSinkOperatorTest : public testing::Test {

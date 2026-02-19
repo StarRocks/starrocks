@@ -15,7 +15,6 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -38,7 +37,6 @@ import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -58,6 +56,9 @@ public class IcebergConnector implements Connector {
     private final IcebergCatalogProperties icebergCatalogProperties;
     private final ConnectorProperties connectorProperties;
     private final IcebergProcedureRegistry procedureRegistry;
+    // Global commit queue manager for this catalog - shared across all queries
+    // to serialize commits to the same table from different queries
+    private final IcebergCommitQueueManager commitQueueManager;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -67,6 +68,21 @@ public class IcebergConnector implements Connector {
         this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
         this.connectorProperties = new ConnectorProperties(ConnectorType.ICEBERG, properties);
         this.procedureRegistry = new IcebergProcedureRegistry();
+
+        // Initialize commit queue manager with a supplier that reads the latest FE configuration
+        // This is a singleton per catalog, shared across all queries
+        this.commitQueueManager = new IcebergCommitQueueManager(() -> {
+            IcebergCommitQueueManager.Config queueConfig = new IcebergCommitQueueManager.Config(
+                    Config.enable_iceberg_commit_queue,
+                    Config.iceberg_commit_queue_timeout_seconds,
+                    Config.iceberg_commit_queue_max_size
+            );
+            return queueConfig;
+        });
+        LOG.info("IcebergCommitQueueManager initialized for catalog {}: enabled={}, timeoutSeconds={}, maxSize={}",
+                catalogName, Config.enable_iceberg_commit_queue,
+                Config.iceberg_commit_queue_timeout_seconds, Config.iceberg_commit_queue_max_size);
+
         if (!isResourceMappingCatalog(this.catalogName)) {
             registerProcedures();
         }
@@ -79,7 +95,8 @@ public class IcebergConnector implements Connector {
         if (Config.enable_iceberg_custom_worker_thread) {
             LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
             Properties props = System.getProperties();
-            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
+            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP,
+                    String.valueOf(Config.iceberg_worker_num_threads));
         }
 
         switch (nativeCatalogType) {
@@ -94,7 +111,8 @@ public class IcebergConnector implements Connector {
             case JDBC_CATALOG:
                 return new IcebergJdbcCatalog(catalogName, conf, properties);
             default:
-                throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
+                throw new StarRocksConnectorException("Property %s is missing or not supported now.",
+                        ICEBERG_CATALOG_TYPE);
         }
     }
 
@@ -102,7 +120,7 @@ public class IcebergConnector implements Connector {
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
                 buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties,
-                connectorProperties, procedureRegistry);
+                connectorProperties, procedureRegistry, commitQueueManager);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -150,12 +168,17 @@ public class IcebergConnector implements Connector {
 
     @Override
     public void shutdown() {
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCachingIcebergCatalog(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                .unRegisterCachingIcebergCatalog(catalogName);
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
         }
         if (refreshOtherFeExecutor != null) {
             refreshOtherFeExecutor.shutdown();
+        }
+        if (commitQueueManager != null) {
+            commitQueueManager.shutdownAll();
+            LOG.info("IcebergCommitQueueManager shutdown for catalog {}", catalogName);
         }
     }
 
@@ -170,7 +193,7 @@ public class IcebergConnector implements Connector {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return icebergNativeCatalog.getSamples();
+    public long estimateSize() {
+        return icebergNativeCatalog.estimateSize();
     }
 }

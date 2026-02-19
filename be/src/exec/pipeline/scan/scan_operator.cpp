@@ -14,9 +14,11 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
-#include <util/time.h>
-
+#include "base/concurrency/race_detect.h"
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/olap_scan_node.h"
@@ -29,9 +31,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
-#include "util/failpoint/fail_point.h"
-#include "util/race_detect.h"
-#include "util/runtime_profile.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -454,7 +453,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
 
-            auto& chunk_source = _chunk_sources[chunk_source_index];
+            auto chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
 
             [[maybe_unused]] std::string category;

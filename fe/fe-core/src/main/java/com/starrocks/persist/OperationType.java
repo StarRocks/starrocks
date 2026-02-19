@@ -100,8 +100,8 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
 
-    // light schema change for add and drop columns
-    public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
+    // fast schema evolution for alter columns
+    public static final short OP_FAST_ALTER_TABLE_COLUMNS = 107;
 
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_ROUTINE_LOAD_JOB = 111;
@@ -195,6 +195,16 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_FLAT_JSON_CONFIG = 10020;
+
+    // statistic meta batch remove 10032 ~ 10034
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_BASIC_STATS_META_BATCH = 10032;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_HISTOGRAM_STATS_META_BATCH = 10033;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH = 10034;
 
 
     // workgroup 10021 ~ 10030
@@ -617,6 +627,11 @@ public class OperationType {
     public static final short OP_ADD_SQL_QUERY_BLACK_LIST = 13520;
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_SQL_DIGEST_BLACK_LIST = 13522;
+    @IgnorableOnReplayFailed
+    public static final short OP_DELETE_SQL_DIGEST_BLACK_LIST = 13523;
 
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_GROUP_PROVIDER = 13530;

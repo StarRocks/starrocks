@@ -24,12 +24,12 @@
 #include <unistd.h>
 #endif
 
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "fmt/format.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
-#include "util/defer_op.h"
-#include "util/uid_util.h"
 
 #define SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, check)                             \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker); \
@@ -124,13 +124,13 @@ private:
             return true;
         }
 
-        bool try_mem_consume_with_limited_tracker(int64_t size) {
+        bool try_mem_consume_with_limited_tracker(int64_t size, size_t shared_reserve_bytes) {
             MemTracker* cur_tracker = CurrentThread::mem_tracker();
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
             if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size);
+                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size, shared_reserve_bytes);
                 if (LIKELY(limit_tracker == nullptr)) {
                     _cache_size = 0;
                     return true;
@@ -146,14 +146,22 @@ private:
             return true;
         }
 
-        bool try_mem_reserve(int64_t reserve_bytes) {
+        bool try_mem_reserve(int64_t reserve_bytes, size_t shared_reserve_bytes) {
             DCHECK(_reserved_bytes == 0);
             DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes)) {
+            if (try_mem_consume_with_limited_tracker(reserve_bytes, shared_reserve_bytes)) {
                 _reserved_bytes = reserve_bytes;
                 return true;
             }
             return false;
+        }
+
+        bool has_enough_reserved_memory(size_t shared_reserve_bytes) const {
+            MemTracker* cur_tracker = CurrentThread::mem_tracker();
+            if (cur_tracker != nullptr) {
+                return cur_tracker->has_enough_reserved_memory(shared_reserve_bytes);
+            }
+            return true;
         }
 
         void release_reserved() {
@@ -239,6 +247,9 @@ private:
     }
 
 public:
+    using IsEnvInitializedFn = bool (*)();
+    using ProcessMemTrackerFn = starrocks::MemTracker* (*)();
+
     CurrentThread() : _lwp_id(get_thread_id()) { tls_is_thread_status_init = true; }
     ~CurrentThread();
 
@@ -279,6 +290,7 @@ public:
 
     bool check_mem_limit() { return _check; }
 
+    static void set_mem_tracker_source(IsEnvInitializedFn is_env_initialized, ProcessMemTrackerFn process_mem_tracker);
     static starrocks::MemTracker* mem_tracker();
     static starrocks::MemTracker* singleton_check_mem_tracker();
 
@@ -307,12 +319,16 @@ public:
         return false;
     }
 
-    bool try_mem_reserve(int64_t size) {
-        if (_mem_cache_manager.try_mem_reserve(size)) {
+    bool try_mem_reserve(int64_t size, size_t shared_reserve_bytes) {
+        if (_mem_cache_manager.try_mem_reserve(size, shared_reserve_bytes)) {
             _reserve_mod = true;
             return true;
         }
         return false;
+    }
+
+    bool has_enough_reserved_memory(size_t shared_reserve_bytes) {
+        return _mem_cache_manager.has_enough_reserved_memory(shared_reserve_bytes);
     }
 
     void release_reserved() {

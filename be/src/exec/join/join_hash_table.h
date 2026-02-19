@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "exec/join/join_hash_map.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -44,7 +44,7 @@ public:
     void create(const HashTableParam& param);
     void close();
 
-    Status build(RuntimeState* state);
+    Status build(RuntimeState* state, bool allow_build_empty_table = true);
     void reset_probe_state(RuntimeState* state);
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);

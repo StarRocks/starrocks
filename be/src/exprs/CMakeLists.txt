@@ -100,6 +100,7 @@ set(EXPR_FILES
   java_function_call_expr.cpp
   lambda_function.cpp
   array_map_expr.cpp
+  array_sort_lambda_expr.cpp
   subfield_expr.cpp
   map_apply_expr.cpp
   map_expr.cpp

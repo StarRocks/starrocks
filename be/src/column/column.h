@@ -18,16 +18,18 @@
 #include <string>
 #include <type_traits>
 
+#include "base/string/slice.h"
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
 #include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/cow.h"
+#include "common/delete_condition.h" // for DelCondSatisfied
+#include "common/memory/column_allocator.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
-#include "runtime/memory/column_allocator.h"
-#include "storage/delete_condition.h" // for DelCondSatisfied
-#include "util/slice.h"
+#include "gutil/macros.h"
 
 namespace starrocks {
 
@@ -142,14 +144,14 @@ public:
     // Return null, if the column is not overflow.
     // Return the new larger column, if upgrade success
     // Current, only support upgrade BinaryColumn to LargeBinaryColumn
-    virtual StatusOr<Ptr> upgrade_if_overflow() = 0;
+    virtual StatusOr<MutablePtr> upgrade_if_overflow() = 0;
 
     // Downgrade the column from large column to normal column.
     // Return internal error if downgrade failed.
     // Return null, if the column is already normal column, no need to downgrade.
     // Return the new normal column, if downgrade success
     // Current, only support downgrade LargeBinaryColumn to BinaryColumn
-    virtual StatusOr<Ptr> downgrade() = 0;
+    virtual StatusOr<MutablePtr> downgrade() = 0;
 
     // Check if the column contains large column.
     // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
@@ -177,7 +179,7 @@ public:
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
     // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
-    virtual StatusOr<Ptr> replicate(const Buffer<uint32_t>& offsets) {
+    virtual StatusOr<MutablePtr> replicate(const Buffer<uint32_t>& offsets) {
         auto dest = this->clone_empty();
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
@@ -217,6 +219,10 @@ public:
         static_assert(std::is_same<T, uint32_t>::value, "The type of indexes must be uint32_t");
         return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
+
+    // Append rows from this source column to destination column by selection.
+    // This is specialized for view-like source columns. Non-view columns should not override this.
+    virtual void append_selective_to(Column& dest, const uint32_t* indexes, uint32_t from, uint32_t size) const;
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
     // Currently only `ObjectColumn<BitmapValue>` support shallow copy
@@ -346,6 +352,8 @@ public:
 
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.
+    // If input filter[i] == 0, the i-th element will be removed.
+    // If input filter[i] == 1, the i-th element will be kept.
     inline size_t filter(const Filter& filter) {
         DCHECK_EQ(size(), filter.size());
         return filter_range(filter, 0, filter.size());
@@ -397,6 +405,10 @@ public:
     // we use the following formula as iceberg unique bucket id.
     // bucket_id = c1_bucket_id * 60 * 10 + c2_bucket_id * 10 + c3_bucket_id
     virtual void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const;
+
+    virtual void xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const;
+    virtual void xxh3_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const;
+    virtual void xxh3_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const;
 
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
@@ -463,9 +475,13 @@ public:
 
     // mutate the column to mutable column, but doesn't reset the column
     MutablePtr mutate() const&& {
-        MutablePtr res = try_mutate();
-        res->mutate_each_subcolumn();
-        return res;
+        if (config::enable_cow_optimization) {
+            MutablePtr res = try_mutate();
+            res->mutate_each_subcolumn();
+            return res;
+        } else {
+            return clone();
+        }
     }
 
     // mutate the column to mutable column, and reset the column to nullptr
@@ -477,8 +493,16 @@ public:
     }
 
 protected:
-    static StatusOr<Ptr> downgrade_helper_func(Ptr* col);
-    static StatusOr<Ptr> upgrade_helper_func(Ptr* col);
+    // Helper functions for downgrade and upgrade,
+    // if downgrade failed, return the error status.
+    // if upgrade success, always return nullptr.
+    // if downgrade's result is not nullptr, it will replace the input col with the new column.
+    static StatusOr<MutablePtr> downgrade_helper_func(Column* col);
+    // Helper functions for upgrade and downgrade,
+    // if upgrade failed, return the error status.
+    // if upgrade success, always return nullptr.
+    // if upgrade's result is not nullptr, it will replace the input col with the new column.
+    static StatusOr<MutablePtr> upgrade_helper_func(Column* col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };

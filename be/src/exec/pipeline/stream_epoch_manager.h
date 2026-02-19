@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include "base/uid_util.h"
 #include "column/stream_chunk.h"
 #include "runtime/runtime_state.h"
+#include "util/hash_util.hpp"
 
 namespace starrocks {
 class ExecEnv;

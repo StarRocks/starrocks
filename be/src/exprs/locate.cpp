@@ -14,13 +14,13 @@
 
 #include <algorithm>
 
+#include "base/string/utf8.h"
+#include "base/string/volnitsky.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/string_functions.h"
-#include "runtime/Volnitsky.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -41,15 +41,16 @@ struct LocateCaseSensitiveUTF8 {
 // locate haystack is a vector and needle is a constant
 ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const ColumnPtr& needle_ptr,
                                            const ColumnPtr& start_pos_ptr) {
-    BinaryColumn* haystack = nullptr;
-    FixedLengthColumn<int32_t>* start_pos = nullptr;
+    const BinaryColumn* haystack = nullptr;
+    const FixedLengthColumn<int32_t>* start_pos = nullptr;
     NullColumnPtr res_null = nullptr;
     ColumnPtr start_pos_expansion = nullptr;
     if (start_pos_ptr->is_constant()) {
         // expand vector in start_pos_ptr to specfied size
-        start_pos_expansion = RunTimeColumnType<TYPE_INT>::create();
+        auto start_pos_mut = RunTimeColumnType<TYPE_INT>::create();
         int32_t value = ColumnHelper::get_const_value<TYPE_INT>(start_pos_ptr);
-        start_pos_expansion->append_value_multiple_times(&value, haystack_ptr->size());
+        start_pos_mut->append_value_multiple_times(&value, haystack_ptr->size());
+        start_pos_expansion = std::move(start_pos_mut);
     } else {
         start_pos_expansion = start_pos_ptr;
     }
@@ -110,7 +111,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
 
     const char* begin = haystack->get_slice(0).data;
     const char* pos = begin;
-    const char* end = pos + haystack->get_bytes().size();
+    const char* end = pos + haystack->get_immutable_bytes().size();
 
     /// Current index in the array of strings.
     size_t i = 0;

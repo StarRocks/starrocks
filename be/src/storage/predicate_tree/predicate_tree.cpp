@@ -14,8 +14,8 @@
 
 #include "storage/predicate_tree/predicate_tree.hpp"
 
+#include "base/simd/simd.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -470,6 +470,11 @@ static size_t is_empty(const PredicateCompoundNode<Type>& node) {
 
 bool PredicateTree::empty() const {
     return is_empty(_root);
+}
+
+bool PredicateTree::has_or_predicate() const {
+    // if only has AND predicates, there is only one compound And predicate node
+    return _compound_node_contexts.size() > 1;
 }
 
 PredicateAndNode PredicateTree::release_root() {

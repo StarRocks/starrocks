@@ -426,6 +426,10 @@ public class ExprUtils {
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 
+    public static boolean isAggregateFunction(String name) {
+        return GlobalStateMgr.getCurrentState().isAggregateFunction(name);
+    }
+
     public static boolean requiresTimestampDiffCast(String funcName) {
         if (funcName == null) {
             return false;

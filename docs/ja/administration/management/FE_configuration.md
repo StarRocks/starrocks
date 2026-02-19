@@ -66,6 +66,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 監査ログファイルを保存するディレクトリ。
 - 導入バージョン: -
 
+##### audit_log_enable_compress
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: No
+- 説明: true の場合、生成される Log4j2 設定はローテートされた監査ログファイル名（fe.audit.log.*）に ".gz" の後置を付加し、Log4j2 がロールオーバー時に圧縮済み（.gz）アーカイブ監査ログファイルを出力するようにします。この設定は FE 起動時に Log4jConfig.initLogging で読み込まれ、監査ログ用の RollingFile appender に適用されます。アクティブな監査ログには影響せず、ローテート／アーカイブされたファイルのみが対象です。値は起動時に初期化されるため、変更を反映させるには FE の再起動が必要です。audit_log_dir、audit_log_roll_interval、audit_roll_maxsize、audit_log_roll_num と併せて使用してください。
+- 導入バージョン: 3.2.12
+
+##### audit_log_json_format
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: Yes
+- 説明: true の場合、FE の監査イベントはデフォルトのパイプ区切りの "key=value" 文字列の代わりに構造化された JSON（Jackson ObjectMapper が注釈付き AuditEvent フィールドの Map をシリアライズしたもの）として出力されます。この設定は AuditLogBuilder が処理するすべての組み込み監査 sink に影響します：接続監査、クエリ監査、big-query 監査（イベントが該当する場合に big-query のしきい値フィールドが JSON に追加されます）、および slow-audit 出力。big-query のしきい値用に注釈されたフィールドや "features" フィールドは特別扱いされ（通常の監査エントリからは除外され、該当する場合に big-query または feature ログに含まれる）、ログ収集器や SIEM による機械可読化を目的にこれを有効にできます。フォーマットが変更されるため、従来のパイプ区切りフォーマットを想定した既存のパーサを更新する必要がある点に注意してください。
+- 導入バージョン: 3.2.7
+
 ##### audit_log_modules
 
 - デフォルト: slow_query, query
@@ -178,6 +196,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: true の場合、Frontend の監査サブシステムは ConnectProcessor によって処理される FE の監査ログ (fe.audit.log) にステートメントの SQL テキストを記録します。格納されるステートメントは他の制御を尊重します：暗号化されたステートメントは (AuditEncryptionChecker により) マスキングされ、認証情報は enable_sql_desensitize_in_log が設定されていると赤字化または脱感作される可能性があり、ダイジェストの記録は enable_sql_digest で制御されます。false の場合、ConnectProcessor は監査イベント内のステートメントテキストを "?" に置き換えます — 他の監査フィールド（user、host、duration、status、qe_slow_log_ms によるスロークエリ検出、メトリクス）は引き続き記録されます。SQL 監査を有効にするとフォレンジックやトラブルシューティングの可視性は向上しますが、機密性の高い SQL 内容が露出したりログの量および I/O が増加したりする可能性があります。無効にすると監査ログでの完全なステートメントの可視性を失う代わりにプライバシーが向上します。このオプションはランタイムで変更できません。
 - 導入バージョン: -
 
+##### enable_qe_slow_log
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: Yes
+- 説明: 有効にすると、FE の組み込み監査プラグイン（AuditLogBuilder）は、実行時間（"Time" フィールド）が qe_slow_log_ms で設定された閾値を超えたクエリイベントをスローンクエリ監査ログ（AuditLog.getSlowAudit）に書き込みます。無効にした場合、それらのスローンクエリエントリは抑制されます（通常のクエリおよび接続監査ログには影響しません）。スローン監査エントリはグローバルな audit_log_json_format 設定（JSON とプレーン文字列のいずれか）に従います。qe_slow_log_ms が低いか、ワークロードが多数の長時間実行クエリを生成する場合にログI/Oを削減するため、このフラグで通常の監査ログとは独立してスローンクエリ監査の出力量を制御できます。
+- 導入バージョン: 3.2.11
+
+##### enable_sql_desensitize_in_log
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: この項目を `true` に設定すると、システムはログやクエリ詳細レコードに書き込む前に機密性の高いSQL内容を置換または隠蔽します。この設定を参照するコード経路には ConnectProcessor.formatStmt（監査ログ）、StmtExecutor.addRunningQueryDetail（クエリ詳細）、および SimpleExecutor.formatSQL（内部実行ログ）が含まれます。有効にすると、無効なSQLは固定のマスク済みメッセージに置換されることがあり、認証情報（user/password）は隠蔽され、SQLフォーマッタはサニタイズされた表現を生成する必要があります（digest-style 出力を有効にすることも可能です）。これにより監査/内部ログでの機密リテラルや認証情報の漏えいが減りますが、ログやクエリ詳細に元の完全なSQLテキストが含まれなくなるため（再生やデバッグに影響する可能性があります）、注意が必要です。
+- 導入バージョン: -
+
 ##### internal_log_delete_age
 
 - デフォルト: 7d
@@ -185,6 +221,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: No
 - 説明: FE の内部ログファイル（`internal_log_dir` に書き込まれる）の保持期間を指定します。値は期間文字列で、サフィックスとして `d`（日）、`h`（時間）、`m`（分）、`s`（秒）をサポートします。例: `7d`（7日）、`10h`（10時間）、`60m`（60分）、`120s`（120秒）。この項目は log4j 設定内の `<IfLastModified age="..."/>` 述語（RollingFile Delete ポリシーで使用）に代入されます。最終更新時刻がこの期間より前のファイルはロールオーバー時に削除されます。内部のマテリアライズドビューや統計ログを長く保持したい場合は値を小さくするのではなく、逆に保持期間を延長してください。ディスク容量を早く確保したい場合はこの値を短くしてください。
+- 導入バージョン: v3.2.4
+
+##### internal_log_dir
+
+- デフォルト: `Config.STARROCKS_HOME_DIR + "/log"`
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: FE のログサブシステムが内部ログ（`fe.internal.log`）を格納するために使用するディレクトリです。この設定は Log4j の設定に置換され、InternalFile appender が内部／マテリアライズドビュー／統計ログを書き込む場所、および `internal.<module>` の下にあるモジュール別ロガーがファイルを配置する場所を決定します。ディレクトリが存在し、書き込み可能で、十分なディスク容量があることを確認してください。このディレクトリ内のファイルのログローテーションと保持は `log_roll_size_mb`、`internal_log_roll_num`、`internal_log_delete_age`、および `internal_log_roll_interval` によって制御されます。`sys_log_to_console` が有効な場合、内部ログはこのディレクトリではなくコンソールに書き出されることがあります。
 - 導入バージョン: v3.2.4
 
 ##### internal_log_modules
@@ -196,6 +241,87 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 専用の内部ログを受け取るモジュール識別子のリスト。各エントリ X に対して、Log4j はレベル INFO かつ additivity="false" のロガー `internal.<X>` を作成します。これらのロガーは internal appender（`fe.internal.log` に書き込まれる）または `sys_log_to_console` が有効な場合はコンソールにルーティングされます。必要に応じて短い名前やパッケージの断片を使用してください — 正確なロガー名は `internal.` + 設定した文字列になります。内部ログファイルのローテーションと保持は `internal_log_dir`、`internal_log_roll_num`、`internal_log_delete_age`、`internal_log_roll_interval`、`log_roll_size_mb` に従います。モジュールを追加すると、そのランタイムメッセージが内部ロガーストリームに分離され、デバッグや監査が容易になります。
 - 導入バージョン: v3.2.4
 
+##### internal_log_roll_interval
+
+- デフォルト: DAY
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: FE の internal log appender の時間ベースのロール間隔を制御します。許容される値（大文字小文字は無視）は `HOUR` と `DAY` です。`HOUR` は時間単位のファイルパターン（`"%d{yyyyMMddHH}"`）を、`DAY` は日単位のファイルパターン（`"%d{yyyyMMdd}"`）を生成し、RollingFile の TimeBasedTriggeringPolicy によって回転された `fe.internal.log` ファイルの命名に使用されます。無効な値を設定すると初期化に失敗します（アクティブな Log4j 構成を構築する際に IOException がスローされます）。ロールの動作は `internal_log_dir`、`internal_roll_maxsize`、`internal_log_roll_num`、`internal_log_delete_age` といった関連設定にも依存します。
+- 導入バージョン: v3.2.4
+
+##### internal_log_roll_num
+
+- デフォルト: 90
+- タイプ: Int
+- 単位: -
+- 変更可能: No
+- 説明: internal appender（`fe.internal.log`）のために保持するロールされた内部 FE ログファイルの最大数です。この値は Log4j の DefaultRolloverStrategy の `max` 属性として使用されます。ロールオーバーが発生すると、StarRocks は最大 `internal_log_roll_num` 個のアーカイブファイルを保持し、それより古いものを削除します（`internal_log_delete_age` にも従います）。値を小さくするとディスク使用量は減りますがログ履歴は短くなり、値を大きくするとより多くの内部ログ履歴が保持されます。本項目は `internal_log_dir`、`internal_log_roll_interval`、および `internal_roll_maxsize` と連携して動作します。
+- 導入バージョン: v3.2.4
+
+##### log_cleaner_audit_log_min_retention_days
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: 日
+- 変更可能: はい
+- 説明: 監査ログファイルの最小保持日数。ディスク使用率が高くても、この値より新しい監査ログファイルは削除されません。これにより、コンプライアンスとトラブルシューティングの目的で監査ログが保持されます。
+- 導入バージョン: -
+
+##### log_cleaner_check_interval_second
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: ディスク使用率をチェックしてログをクリーンアップする間隔（秒）。クリーンアップは、各ログディレクトリのディスク使用率を定期的にチェックし、必要に応じてクリーンアップをトリガーします。デフォルト値は 300 秒（5 分）です。
+- 導入バージョン: -
+
+##### log_cleaner_disk_usage_target
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: パーセンテージ
+- 変更可能: はい
+- 説明: ログクリーンアップ後の目標ディスク使用率（パーセンテージ）。ログクリーンアップは、ディスク使用率がこのしきい値を下回るまで継続されます。クリーンアップは、目標値に達するまで最も古いログファイルを1つずつ削除します。
+- 導入バージョン: -
+
+##### log_cleaner_disk_usage_threshold
+
+- デフォルト: 80
+- タイプ: Int
+- 単位: パーセンテージ
+- 変更可能: はい
+- 説明: ログクリーンアップをトリガーするディスク使用率のしきい値（パーセンテージ）。ログディレクトリのディスク使用率がこのしきい値を超えると、ログクリーンアップが開始されます。クリーンアップは、設定された各ログディレクトリを個別にチェックし、このしきい値を超えるディレクトリを処理します。
+- 導入バージョン: -
+
+##### log_cleaner_disk_util_based_enable
+
+- デフォルト: false 
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ディスク使用率に基づく自動ログクリーンアップを有効にします。有効にすると、ログディレクトリのディスク使用率がしきい値を超えた場合、ログファイルが自動的にクリーンアップされます。ログクリーンアップは FE ノードでバックグラウンドデーモンとして実行され、ログファイルの蓄積によるディスク容量の枯渇を防ぐのに役立ちます。
+- 導入バージョン: -
+
+##### log_plan_cancelled_by_crash_be
+
+- デフォルト: true
+- タイプ: boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: クエリが BE のクラッシュや RPC 例外によってキャンセルされたときに、クエリ実行プランのログ出力を有効にするかどうか。 この機能が有効な場合、StarRocks はクエリが BE のクラッシュや `RpcException` によってキャンセルされた際に、クエリ実行プラン（`TExplainLevel.COSTS`）を WARN エントリとしてログに記録します。ログには QueryId、SQL、および COSTS プランが含まれ、ExecuteExceptionHandler のパスでは例外のスタックトレースも記録されます。`enable_collect_query_detail_info` が有効な場合はログ出力はスキップされます（その場合プランはクエリ詳細に保存されます）— コード経路ではクエリ詳細が null であるかを確認することでこのチェックが行われます。ExecuteExceptionHandler では、プランは最初のリトライ時 (`retryTime == 0`) のみログに記録される点に注意してください。完全な COSTS プランは大きくなり得るため、有効化するとログ量が増加する可能性があります。
+- 導入バージョン: v3.2.0
+
+##### log_register_and_unregister_query_id
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: FE が QeProcessorImpl からのクエリ登録・登録解除メッセージ（例: `"register query id = {}"` および `"deregister query id = {}"`）をログに記録することを許可するかどうか。このログは、クエリに非 null の ConnectContext があり、かつコマンドが `COM_STMT_EXECUTE` でないかセッション変数 `isAuditExecuteStmt()` が true の場合にのみ出力されます。これらのメッセージはクエリのライフサイクルの各イベントに対して書き込まれるため、この機能を有効にするとログ量が非常に多くなり、高並列環境ではスループットのボトルネックになる可能性があります。デバッグや監査のために有効化し、ログオーバーヘッドを減らしてパフォーマンスを向上させたい場合は無効にしてください。
+- 導入バージョン: v3.3.0, v3.4.0, v3.5.0
+
 ##### log_roll_size_mb
 
 - デフォルト: 1024
@@ -204,6 +330,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: システムログファイルまたは監査ログファイルの最大サイズ。
 - 導入バージョン: -
+
+##### proc_profile_file_retained_days
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: Days
+- 変更可能: Yes
+- 説明: `sys_log_dir/proc_profile` に生成されるプロセスプロファイリングファイル（CPU およびメモリ）を保持する日数。ProcProfileCollector は現在時刻から `proc_profile_file_retained_days` 日を差し引いてカットオフ（yyyyMMdd-HHmmss 形式）を算出し、タイムスタンプ部分がそのカットオフより辞書順で前であるプロファイルファイル（つまり timePart.compareTo(timeToDelete) &lt; 0）を削除します。ファイル削除は `proc_profile_file_retained_size_bytes` によるサイズベースのカットオフも尊重します。プロファイルファイルは `cpu-profile-` および `mem-profile-` のプレフィックスを使用し、収集後に圧縮されます。
+- 導入バージョン: v3.2.12
+
+##### profile_log_dir
+
+- デフォルト: `Config.STARROCKS_HOME_DIR + "/log"`
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: FE の profile ログが書き込まれるディレクトリです。Log4jConfig はこの値を用いてプロファイル関連のアペンダ（このディレクトリ配下に `fe.profile.log` や `fe.features.log` のようなファイルを作成）を配置します。これらのファイルのローテーションと保持は `profile_log_roll_size_mb`、`profile_log_roll_num`、`profile_log_delete_age` によって制御され、タイムスタンプのサフィックス形式は `profile_log_roll_interval`（DAY または HOUR をサポート）で制御されます。デフォルトのディレクトリは `STARROCKS_HOME_DIR` の下にあるため、FE プロセスがこのディレクトリに対して書き込みおよびローテーション/削除権限を持っていることを確認してください。
+- 導入バージョン: v3.2.5
 
 ##### profile_log_roll_size_mb
 
@@ -340,51 +484,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: いいえ
 - 説明: StarRocks がシステムログを生成するモジュール。このパラメータが `org.apache.starrocks.catalog` に設定されている場合、StarRocks は catalog モジュールのシステムログのみを生成します。モジュール名はカンマ (,) とスペースで区切ります。
-- 導入バージョン: -
-
-##### log_cleaner_disk_util_based_enable
-
-- デフォルト: false 
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: ディスク使用率に基づく自動ログクリーンアップを有効にします。有効にすると、ログディレクトリのディスク使用率がしきい値を超えた場合、ログファイルが自動的にクリーンアップされます。ログクリーンアップは FE ノードでバックグラウンドデーモンとして実行され、ログファイルの蓄積によるディスク容量の枯渇を防ぐのに役立ちます。
-- 導入バージョン: -
-
-##### log_cleaner_disk_usage_threshold
-
-- デフォルト: 80
-- タイプ: Int
-- 単位: パーセンテージ
-- 変更可能: はい
-- 説明: ログクリーンアップをトリガーするディスク使用率のしきい値（パーセンテージ）。ログディレクトリのディスク使用率がこのしきい値を超えると、ログクリーンアップが開始されます。クリーンアップは、設定された各ログディレクトリを個別にチェックし、このしきい値を超えるディレクトリを処理します。
-- 導入バージョン: -
-
-##### log_cleaner_disk_usage_target
-
-- デフォルト: 60
-- タイプ: Int
-- 単位: パーセンテージ
-- 変更可能: はい
-- 説明: ログクリーンアップ後の目標ディスク使用率（パーセンテージ）。ログクリーンアップは、ディスク使用率がこのしきい値を下回るまで継続されます。クリーンアップは、目標値に達するまで最も古いログファイルを1つずつ削除します。
-- 導入バージョン: -
-
-##### log_cleaner_audit_log_min_retention_days
-
-- デフォルト: 3
-- タイプ: Int
-- 単位: 日
-- 変更可能: はい
-- 説明: 監査ログファイルの最小保持日数。ディスク使用率が高くても、この値より新しい監査ログファイルは削除されません。これにより、コンプライアンスとトラブルシューティングの目的で監査ログが保持されます。
-- 導入バージョン: -
-
-##### log_cleaner_check_interval_second
-
-- デフォルト: 300
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: ディスク使用率をチェックしてログをクリーンアップする間隔（秒）。クリーンアップは、各ログディレクトリのディスク使用率を定期的にチェックし、必要に応じてクリーンアップをトリガーします。デフォルト値は 300 秒（5 分）です。
 - 導入バージョン: -
 
 ##### sys_log_warn_modules
@@ -534,6 +633,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: いいえ
 - 説明: FE ノード内の MySQL サーバーが I/O イベントを処理するために実行できる最大スレッド数。
+- 導入バージョン: -
+
+##### mysql_service_kill_after_disconnect
+
+- デフォルト: true
+- タイプ: boolean
+- 単位: -
+- 変更可能: No
+- 説明: MySQL の TCP 接続がクローズ（read 時の EOF）と検出されたときに、そのセッションをサーバがどのように扱うかを制御します。`mysql_service_kill_after_disconnect` が true の場合、サーバは当該接続で実行中のクエリを直ちに終了させ（ctx.kill を呼ぶ）、即時クリーンアップを行います。false の場合は、切断時に実行中のクエリを殺さず、保留中のリクエストタスクがなくなったときにのみクリーンアップを行うため、クライアント切断後も長時間実行されるクエリを継続させることができます。注意: 短いコメントに TCP keep‑alive を示唆する記述がある場合がありますが、このフラグは切断後のクエリ終了動作を明確に制御するものであり、孤立したクエリを終了させたいか（信頼できない／ロードバランスされたクライアント環境では推奨）完了させたいかに応じて設定してください。
 - 導入バージョン: -
 
 ##### mysql_service_nio_enable_keep_alive
@@ -937,6 +1045,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 非リーダー FEs がリーダー FE からのメタデータギャップを無視するかどうか。値が TRUE の場合、非リーダー FEs はリーダー FE からのメタデータギャップを無視し、データ読み取りサービスの提供を続けます。このパラメータは、リーダー FE を長時間停止している場合でも、継続的なデータ読み取りサービスを保証します。値が FALSE の場合、非リーダー FEs はリーダー FE からのメタデータギャップを無視せず、データ読み取りサービスの提供を停止します。
 - 導入バージョン: -
 
+##### ignore_task_run_history_replay_error
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: StarRocks が information_schema.task_runs 用の task run history 行をデシリアライズする際、壊れているか無効な JSON 行は通常デシリアライズで警告をログに残し RuntimeException をスローします。`ignore_task_run_history_replay_error` を true に設定すると、TaskRunStatus.fromResultBatch はデシリアライズエラーをキャッチして不正なレコードをスキップし、クエリを失敗させる代わりに残りの行の処理を続行します。これを有効にすると、_statistics_.task_run_history テーブル内の不正なエントリに対して information_schema.task_runs のクエリを許容性のあるものにできますが、有効化すると壊れた履歴レコードが黙って破棄され（潜在的なデータ損失）明示的なエラーとして表出しなくなる点に注意してください。
+- 導入バージョン: v3.3.3, v3.4.0, v3.5.0
+
+##### lock_checker_interval_second
+
+- デフォルト: 30
+- タイプ: long
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: LockChecker フロントエンドデーモン（名前は "deadlock-checker"）の実行間隔（秒）。デーモンはデッドロック検出とスロー・ロックのスキャンを行い、設定値はミリ秒単位のタイマーを設定するために 1000 倍されます。この値を小さくすると検出レイテンシは短縮されますが、スケジューリングと CPU オーバーヘッドが増加します。逆に大きくするとオーバーヘッドは減りますが、検出とスロー・ロックの報告が遅延します。デーモンは各実行ごとに間隔をリセットするため、変更はランタイムで即時に反映されます。この設定は `lock_checker_enable_deadlock_check`（デッドロック検査を有効にする）および `slow_lock_threshold_ms`（スロー・ロックと見なす閾値を定義）と連動します。
+- 導入バージョン: v3.2.0
+
 ##### master_sync_policy
 
 - デフォルト: SYNC
@@ -1018,6 +1144,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - `WRITE_NO_SYNC`: トランザクションがコミットされると、ログエントリが同時に生成されますが、ディスクにフラッシュされません。
 - 導入バージョン: -
 
+##### table_keeper_interval_second
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: TableKeeper デーモンの実行間隔（秒）。TableKeeperDaemon はこの値（1000 倍）を内部タイマーに設定し、定期的に履歴テーブルの存在確認、テーブルプロパティ（レプリケーション数）の修正、パーティション TTL の更新などの keeper タスクを実行します。デーモンはリーダーノードでのみ作業を行い、`table_keeper_interval_second` が変更されると setInterval を通じてランタイムの間隔を更新します。スケジューリング頻度と負荷を下げたい場合は増加、欠落または古い履歴テーブルに速やかに対応したい場合は減少させてください。
+- 導入バージョン: v3.3.1, v3.4.0, v3.5.0
+
 ##### task_ttl_second
 
 - デフォルト: 24 * 3600
@@ -1025,6 +1160,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: Seconds
 - 変更可能: Yes
 - 説明: タスクの存続時間（TTL）を秒単位で指定します。スケジュールが設定されていない手動タスクの場合、TaskBuilder はこの値を用いてタスクの expireTime を算出します（expireTime = now + task_ttl_second * 1000L）。TaskRun もランの実行タイムアウトを計算する際の上限としてこの値を参照します — 実効的な実行タイムアウトは min(`task_runs_timeout_second`, `task_runs_ttl_second`, `task_ttl_second`) です。この値を調整すると、手動で作成されたタスクが有効でいられる期間が変わり、間接的にタスクランの最大実行時間の上限を制限することになります。
+- 導入バージョン: v3.2.0
+
+##### thrift_rpc_retry_times
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: Thrift RPC 呼び出しが行う総試行回数を制御します。この値は `ThriftRPCRequestExecutor`（および `NodeMgr` や `VariableMgr` などの呼び出し側）でリトライのループ回数として使用されます。例えば値が 3 の場合、最初の試行を含め最大 3 回の試行が許可されます。`TTransportException` が発生した場合、executor は接続を再オープンしてこの回数までリトライしますが、原因が `SocketTimeoutException` の場合や再オープンに失敗した場合はリトライしません。各試行は `thrift_rpc_timeout_ms` で設定された試行ごとのタイムアウトの対象となります。この値を増やすと一時的な接続障害に対する耐性は向上しますが、全体の RPC レイテンシやリソース使用量が増加する可能性があります。
+- 導入バージョン: v3.2.0
+
+##### thrift_rpc_timeout_ms
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: Yes
+- 説明: Thrift RPC 呼び出しのデフォルトのネットワーク/ソケットタイムアウトとして使用されるタイムアウト（ミリ秒単位）。`ThriftConnectionPool`（フロントエンドとバックエンドのプールで使用）で Thrift クライアントを作成する際に TSocket に渡されます。また、`ConfigBase`、`LeaderOpExecutor`、`GlobalStateMgr`、`NodeMgr`、`VariableMgr`、`CheckpointWorker` のような箇所で RPC 呼び出しのタイムアウトを計算する際に、操作の実行タイムアウトに加算されます（例：ExecTimeout*1000 + `thrift_rpc_timeout_ms`）。この値を大きくするとネットワークやリモート処理の遅延をより長く許容し、小さくすると遅いネットワーク上でより速やかなフェイルオーバーが発生します。この値を変更すると、Thrift RPC を行う FE のコードパス全体での接続作成とリクエストのデッドラインに影響します。
 - 導入バージョン: v3.2.0
 
 ##### txn_latency_metric_report_groups
@@ -1256,6 +1409,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: マテリアライズドビューの作成を有効にするかどうか。
 - 導入バージョン: -
 
+##### enable_materialized_view_external_table_precise_refresh
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: ベーステーブルが外部（非クラウドネイティブ）テーブルである場合の materialized view (MV) リフレッシュに対する内部最適化を有効にします。有効にすると、MV リフレッシュプロセッサ（BaseMVRefreshProcessor）は候補パーティションを PCT メソッド（getPCTMVToRefreshedPartitions や getPCTRefTableRefreshPartitions など）で計算し、すべてのパーティションではなく影響を受けるベーステーブルのパーティションのみをリフレッシュするため、IO とリフレッシュコストを削減します。このフラグはプロセッサの構築時に読み込まれ、syncAndCheckPCTPartitions が辿るパスを制御します。候補パーティション計算がベーステーブルの欠如で失敗した場合、コードは一部のエラーを握りつぶしてフル同期パスにフォールバックすることがあります。外部テーブルの全パーティションリフレッシュを強制するには false に設定してください。
+- 導入バージョン: v3.2.9
+
 ##### enable_materialized_view_metrics_collect
 
 - デフォルト: true
@@ -1300,6 +1462,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 述語カラムの収集を有効にするかどうか。無効にすると、クエリ最適化中に述語カラムは記録されません。
 - 導入バージョン: -
+
+##### enable_query_queue_v2
+
+- デフォルト: true
+- タイプ: boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: true の場合、FE のスロットベースのクエリスケジューラを Query Queue V2 に切り替えます。フラグはスロットマネージャとトラッカー（例: `BaseSlotManager.isEnableQueryQueueV2` や `SlotTracker#createSlotSelectionStrategy`）で参照され、従来の戦略の代わりに `SlotSelectionStrategyV2` を選択します。`query_queue_v2_xxx` の設定オプションおよび `QueryQueueOptions` はこのフラグが有効な場合にのみ有効になります。v4.1 以降、デフォルト値が `false` から `true` に変更されました。
+- 導入バージョン: v3.3.4, v3.4.0, v3.5.0
 
 ##### enable_sql_blacklist
 
@@ -1352,6 +1523,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   :::
 
 - 導入バージョン: v3.1
+
+##### enable_statistic_collect_on_update
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: UPDATE ステートメントが自動統計収集をトリガーできるかどうかを制御します。有効にすると、テーブルデータを変更する UPDATE 操作は、`enable_statistic_collect_on_first_load` によって制御されるインジェスションベースの統計フレームワークを通じて統計収集をスケジュールする場合があります。この設定を無効にすると、ロードによってトリガーされる統計収集の動作はそのままに、UPDATE ステートメントの統計収集がスキップされます。
+- 導入バージョン: v3.5.11, v4.0.4
 
 ##### enable_udf
 
@@ -1415,6 +1595,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: HTTP リクエストの応答時間がこのパラメータで指定された値を超える場合、このリクエストを追跡するためのログが生成されます。
 - 導入バージョン: v2.5.15, v3.1.5
+
+##### lock_checker_enable_deadlock_check
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 有効にすると、LockChecker スレッドは ThreadMXBean.findDeadlockedThreads() を使用して JVM レベルのデッドロック検出を行い、問題を引き起こしているスレッドのスタックトレースをログに出力します。チェックは LockChecker デーモン内で実行され（頻度は `lock_checker_interval_second` で制御）、詳細なスタック情報をログに書き出しますが、これは CPU および I/O に負荷をかける可能性があります。ライブで発生しているか再現可能なデッドロックのトラブルシューティング時のみこのオプションを有効にしてください。通常運用で有効にしたままにするとオーバーヘッドとログ量が増加します。
+- 導入バージョン: v3.2.0
 
 ##### low_cardinality_threshold
 
@@ -1524,6 +1713,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: リリース検証タスクが発行される時間間隔。
 - 導入バージョン: -
 
+##### query_queue_v2_concurrency_level
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: システムの総クエリスロットを計算する際に使用する論理的な同時実行「レイヤー」の数を制御します。shared-nothing モードでは total slots = `query_queue_v2_concurrency_level` * number_of_BEs * cores_per_BE（BackendResourceStat から派生）となります。multi-warehouse モードでは、有効な同時実行は max(1, `query_queue_v2_concurrency_level` / 4) にスケールダウンされます。設定値が非正の場合は `4` と見なされます。この値を変更すると totalSlots（したがって同時クエリ容量）が増減し、スロットあたりのリソースにも影響します: memBytesPerSlot はワーカーごとのメモリを (cores_per_worker * concurrency) で割って導出され、CPU アカウンティングは `query_queue_v2_cpu_costs_per_slot` を使用します。クラスタ規模に比例して設定してください。非常に大きな値はスロットあたりのメモリを減らし、リソースの断片化を引き起こす可能性があります。
+- 導入バージョン: v3.3.4, v3.4.0, v3.5.0
+
 ##### query_queue_v2_cpu_costs_per_slot
 
 - デフォルト: 1000000000
@@ -1532,6 +1730,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: Yes
 - 説明: プランナーの CPU コストからクエリが必要とするスロット数を推定するために使用される、スロットあたりの CPU コスト閾値です。スケジューラはスロット数を integer(plan_cpu_costs / `query_queue_v2_cpu_costs_per_slot`) として計算し、その結果を [1, totalSlots] の範囲にクランプします（totalSlots はクエリキュー V2 の `V2` パラメータから導出されます）。V2 のコードは非正の設定を 1 に正規化します（Math.max(1, value)）ので、非正の値は実質的に `1` になります。この値を増やすとクエリあたりに割り当てられるスロット数が減り（少数の大きなスロットを持つクエリが有利になります）、逆に減らすとクエリあたりのスロット数が増えます。並列度とリソース粒度を制御するために、`query_queue_v2_num_rows_per_slot` や同時実行設定と併せてチューニングしてください。
 - 導入バージョン: v3.3.4, v3.4.0, v3.5.0
+
+##### query_queue_v2_schedule_strategy
+
+- デフォルト: SWRR
+- タイプ: String
+- 単位: -
+- 変更可能: Yes
+- 説明: Query Queue V2 が保留中のクエリを順序付けるために使用するスケジューリングポリシーを選択します。サポートされる値（大文字小文字を区別しません）は `SWRR` (Smooth Weighted Round Robin) — デフォルトで、公平な重み付き共有が必要な混合/ハイブリッドワークロードに適しています — と `SJF` (Short Job First + Aging) — 短いジョブを優先し、エージングにより飢餓を回避します。値は大文字小文字を区別しない列挙型検索で解析され、認識されない値はエラーとしてログに記録され、デフォルトのポリシーが使用されます。この設定は Query Queue V2 が有効な場合にのみ挙動に影響し、`query_queue_v2_concurrency_level` のような V2 のサイズ設定と連動します。
+- 導入バージョン: v3.3.12, v3.4.2, v3.5.0
 
 ##### semi_sync_collect_statistic_await_seconds
 
@@ -1648,6 +1855,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: 秒
 - 変更可能: はい
 - 説明: 統計情報のキャッシュが更新される間隔。
+- 導入バージョン: -
+
+##### task_min_schedule_interval_s
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: SQL レイヤーで検査されるタスクスケジュールに対する許容される最小スケジュール間隔（秒単位）。タスクが提出されると、TaskAnalyzer はスケジュール期間を秒に変換し、その期間が `task_min_schedule_interval_s` より小さい場合は ERR_INVALID_PARAMETER で提出を拒否します。これにより実行頻度が高すぎるタスクの作成を防ぎ、スケジューラを高頻度タスクから保護します。スケジュールに明示的な開始時刻がない場合、TaskAnalyzer は開始時刻を現在のエポック秒に設定します。
+- 導入バージョン: v3.3.0, v3.4.0, v3.5.0
+
+##### task_runs_timeout_second
+
+- デフォルト: 4 * 3600
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: TaskRun のデフォルト実行タイムアウト（秒）。`task_runs_timeout_second` は TaskRun.getExecuteTimeoutS() により基準タイムアウトとして使われます。タスク実行のプロパティに正の整数値のセッション変数 `query_timeout` または `insert_timeout` が含まれる場合、ランタイムはそのセッションタイムアウトと `task_runs_timeout_second` の大きい方を使用します。実際のタイムアウトはさらに設定された `task_runs_ttl_second` と `task_ttl_second` を超えないように制限されます。タスク実行がどれくらい長く実行できるかを制限するために設定してください。非常に大きな値は task/task-run の TTL 設定により切り詰められる可能性があります。
 - 導入バージョン: -
 
 ### ロードとアンロード
@@ -2109,6 +2334,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入バージョン: -
 
 ### 統計レポート
+
+##### proc_profile_collect_time_s
+
+- デフォルト: 120
+- タイプ: Long
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: ProcProfileCollector によって実行される単一のプロセスプロファイル収集の継続時間（秒）。`proc_profile_cpu_enable` または `proc_profile_mem_enable` が true のときに AsyncProfiler が起動され、コレクタスレッドは `proc_profile_collect_time_s * 1000L` だけスリープし、その後プロファイラを停止してプロファイルを書き出します（`proc_profile_jstack_depth` の使用によりスタックのキャプチャ深度が影響を受けます）。値を大きくするとサンプルのカバレッジとファイルサイズは増加しますが、プロファイラの実行時間が延びて次の収集が遅延します。値を小さくするとオーバーヘッドは減少しますがサンプル不足になる可能性があります。`proc_profile_file_retained_days` や `proc_profile_file_retained_size_bytes` といった保持設定と整合するようこの値を設定してください。
+- 導入バージョン: v3.2.12
 
 ### ストレージ
 
@@ -2744,6 +2978,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: Compute Engine にバインドされている Service Account を使用するかどうか。
 - 導入バージョン: v3.5.1
 
+##### hdfs_file_system_expire_seconds
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: HdfsFsManager が管理する未使用のキャッシュされた HDFS/ObejctStore FileSystem の TTL（秒）を設定します。FileSystemExpirationChecker（60 秒ごとに実行）はこの値を使って各 HdfsFs.isExpired(...) を呼び出し、期限切れと判定された FileSystem は基になる FileSystem を閉じてキャッシュから削除されます。アクセサーメソッド（例: `HdfsFs.getDFSFileSystem`, `getUserName`, `getConfiguration`）は最終アクセス時刻を更新するため、期限切れ判定は非アクティブ状態に基づきます。値を小さくするとアイドルリソースの保持が短くなりますが再オープンのオーバーヘッドが増え、値を大きくするとハンドルを長く保持してより多くのリソースを消費する可能性があります。
+- 導入バージョン: v3.2.0
+
 ##### lake_autovacuum_grace_period_minutes
 
 - デフォルト: 30
@@ -2934,6 +3177,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### データレイク
 
+##### hdfs_write_buffer_size_kb
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: Kilobytes
+- 変更可能: Yes
+- 説明: ブローカーを使用しない直接の HDFS またはオブジェクトストア書き込み時に使用される HDFS 書き込みバッファサイズ（KB 単位）を設定します。FE はこの値をバイトに変換（`<< 10`）して HdfsFsManager のローカル書き込みバッファを初期化し、Thrift リクエスト（例: TUploadReq、TExportSink、sink オプション）に伝播させるため、バックエンド／エージェントも同じバッファサイズを使用します。大きな連続書き込みではこの値を増やすとスループットが向上しますが、ライターごとにより多くのメモリを消費します。逆に値を小さくするとストリームごとのメモリ使用量が減り、小さな書き込みのレイテンシが低下する場合があります。`hdfs_read_buffer_size_kb` と合わせてチューニングし、利用可能メモリと同時実行ライター数を考慮してください。
+- 導入バージョン: v3.2.0
+
 ##### lake_batch_publish_min_version_num
 
 - デフォルト: 1
@@ -2951,6 +3203,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: Yes
 - 説明: 有効にすると、Lake テーブルは関連するトランザクションで combined transaction log パスを使用することを許可します。このフラグはクラスタが shared-data モード（RunMode.isSharedDataMode()）で動作している場合にのみ考慮されます。`lake_use_combined_txn_log = true` のとき、BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING、BATCH_LOAD_JOB タイプのロードトランザクションは combined txn log を使用する対象になります（詳細は LakeTableHelper.supportCombinedTxnLog を参照）。compaction を含むコードパスは isTransactionSupportCombinedTxnLog を通じて combined-log のサポートを確認します。無効化されているか shared-data モードでない場合は、combined transaction log の動作は使用されません。
 - 導入バージョン: v3.3.7, v3.4.0, v3.5.0
+
+##### enable_iceberg_commit_queue
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Iceberg テーブルで同時実行コミット競合を回避するためにコミットキューを有効にするかどうか。Iceberg はメタデータコミットに楽観的同時実行制御（OCC）を使用します。複数のスレッドが同じテーブルに同時にコミットすると、"Cannot commit: Base metadata location is not same as the current table metadata location" のようなエラーが発生する可能性があります。有効にすると、各 Iceberg テーブルはコミット操作のための独自のシングルスレッド実行エグゼキューターを持ち、同じテーブルへのコミットが直列化され、OCC 競合を防止します。異なるテーブルは同時にコミットでき、全体的なスループットを維持します。これは信頼性を向上させるためのシステムレベルの最適化であり、デフォルトで有効にする必要があります。無効にすると、楽観的ロック競合により同時コミットが失敗する可能性があります。
+- 導入バージョン: v4.1.0
+
+##### iceberg_commit_queue_timeout_seconds
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: Iceberg コミット操作が完了するまで待機するタイムアウト時間（秒）。コミットキュー（`enable_iceberg_commit_queue=true`）を使用する場合、各コミット操作はこのタイムアウト时间内に完了する必要があります。コミットがこのタイムアウト時間よりも長くかかる場合、キャンセルされ、エラーが発生します。コミット時間に影響を与える要素には以下があります：コミットされるデータファイルの数、テーブルのメタデータサイズ、 underlying ストレージのパフォーマンス（S3、HDFS など）。
+- 導入バージョン: v4.1.0
+
+##### iceberg_commit_queue_max_size
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: 個
+- 変更可能: いいえ
+- 説明: 各 Iceberg テーブルの最大保留コミット操作数。コミットキュー（`enable_iceberg_commit_queue=true`）を使用する場合、これは単一のテーブルにキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元スレッドで実行されます（容量が利用可能になるまでブロック）。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエグゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルに対して多数の同時コミットを予想する場合、この値を増やします。この値が低すぎると、高同時実行時にコミットが呼び出し元スレッドでブロックされる可能性があります。
+- 導入バージョン: v4.1.0
 
 ### その他
 
@@ -3080,6 +3359,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: メトリクスを定期的に収集するための機能を有効にするかどうかを指定します。有効な値: `TRUE` および `FALSE`。`TRUE` はこの機能を有効にすることを指定し、`FALSE` はこの機能を無効にすることを指定します。
 - 導入バージョン: -
 
+##### enable_table_metrics_collect
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: FE でテーブルレベルのメトリクスをエクスポートするかどうか。無効にすると、表スキャン/ロードのカウンターや表サイズなどのテーブルメトリクスのエクスポートをスキップしますが、カウンターの記録自体はメモリ上で継続されます。
+- 導入バージョン: -
+
 ##### enable_mv_post_image_reload_cache
 
 - デフォルト: false
@@ -3169,6 +3457,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: JDBC catalog にアクセスするための接続がタイムアウトするまでの最大時間。タイムアウトした接続はアイドルと見なされます。
 - 導入バージョン: -
+
+##### jdbc_connection_timeout_ms
+
+- デフォルト: 10000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: HikariCP コネクションプールが接続を取得するためのタイムアウト時間（ミリ秒）。この時間内にプールから接続を取得できない場合、操作は失敗します。
+- 導入バージョン: v3.5.13
+
+##### jdbc_query_timeout_ms
+
+- デフォルト: 30000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: JDBC Statement クエリ実行のタイムアウト時間（ミリ秒）。このタイムアウトは、JDBC catalog を通じて実行されるすべての SQL クエリ（パーティションメタデータクエリなど）に適用されます。この値は JDBC ドライバーに渡されるときに秒に変換されます。
+- 導入バージョン: v3.5.13
+
+##### jdbc_network_timeout_ms
+
+- デフォルト: 30000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: JDBC ネットワーク操作（ソケット読み取り）のタイムアウト時間（ミリ秒）。このタイムアウトはデータベースメタデータ呼び出し（getSchemas()、getTables()、getColumns() など）に適用され、外部データベースが応答しない場合の無期限ブロックを防止します。
+- 導入バージョン: v3.5.13
 
 ##### jdbc_connection_pool_size
 

@@ -27,13 +27,7 @@ from alembic.operations.ops import AlterColumnOp
 from alembic.util.sqla_compat import compiles
 from sqlalchemy import (
     Column,
-    Connection,
-    Delete,
-    Row,
-    Select,
     Table,
-    TableClause,
-    Update,
     exc,
     log,
     schema as sa_schema,
@@ -41,6 +35,7 @@ from sqlalchemy import (
     types as sqltypes,
     util,
 )
+from sqlalchemy.engine import Connection
 from sqlalchemy.dialects.mysql.base import (
     MySQLCompiler,
     MySQLDDLCompiler,
@@ -51,8 +46,10 @@ from sqlalchemy.dialects.mysql.base import (
 )
 from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
 from sqlalchemy.engine import reflection
-from sqlalchemy.engine.interfaces import ReflectedTableComment
-from sqlalchemy.sql import bindparam
+#from sqlalchemy.engine.interfaces import ReflectedTableComment
+from sqlalchemy.engine.row import Row
+from sqlalchemy.sql import sqltypes, bindparam
+from sqlalchemy.sql.expression import Delete, Select, Update, TableClause
 
 from starrocks.common import utils
 from starrocks.common.defaults import ReflectionMVDefaults, ReflectionTableDefaults, ReflectionViewDefaults
@@ -1285,9 +1282,9 @@ class StarRocksDialect(MySQLDialect_pymysql):
         # some test parameters
         # self.test_replication_num: Optional[int] = None
 
-    def create_connect_args(self, url):
+    def create_connect_args(self, url, _translate_args: Optional[Dict[str, Any]] = None):
         # Allow the superclass to create the base connect arguments
-        connect_args = super(StarRocksDialect, self).create_connect_args(url)[1]
+        _, connect_args = super(StarRocksDialect, self).create_connect_args(url, _translate_args)
         logger.debug("connect_args: %s", connect_args)
 
         # Handle the test-specific replication_num parameter
@@ -1428,8 +1425,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def _setup_parser(
-        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> ReflectedState:
+        self, connection, table_name, schema = None, **kwargs
+    ):
         """
         Override to return different ReflectedState subclasses based on object type.
 
@@ -1478,7 +1475,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         return TableKind.TABLE  # Default fallback
 
     @reflection.cache
-    def get_table_kind(self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any) -> str:
+    def get_table_kind(self, connection, table_name, schema = None, **kwargs):
         """
         Get the object's table_kind (from cache).
         Reuse _setup_parser's cache via _parsed_state_or_create.
@@ -1489,8 +1486,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def _setup_table_parser(
-        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> ReflectedState:
+        self, connection, table_name, schema = None, **kwargs
+    ):
         charset: Optional[str] = self._connection_charset
         parser: _reflection.StarRocksTableDefinitionParser = self._tabledef_parser
         # logger.debug("setup table parser for table: %s, schema: %s", table_name, schema)
@@ -1512,14 +1509,21 @@ class StarRocksDialect(MySQLDialect_pymysql):
                 f"Multiple tables found with name {table_name} in schema {schema}"
             )
         # logger.debug("reflected table row for table: %s, info: %s", table_name, dict(table_rows[0]))
-
-        table_config_rows: List[_DecodingRow] = self._read_from_information_schema(
-            connection=connection,
-            inf_sch_table="tables_config",
-            charset=charset,
-            table_schema=schema,
-            table_name=table_name,
-        )
+        try:
+            table_config_rows: List[_DecodingRow] = self._read_from_information_schema(
+                connection=connection,
+                inf_sch_table="tables_config",
+                charset=charset,
+                table_schema=schema,
+                table_name=table_name,
+            )
+        except Exception as e:
+            if 'Unknown table \'information_schema.tables_config\'' in str(e):
+                table_config_rows = [{
+                    'TABLE_ENGINE': table_rows[0].get('ENGINE'),
+                }]
+            else:
+                raise
         if table_config_rows:
             if len(table_config_rows) > 1:
                 raise exc.InvalidRequestError(
@@ -1668,11 +1672,11 @@ class StarRocksDialect(MySQLDialect_pymysql):
     @reflection.cache
     def get_table_comment(
             self,
-            connection: Connection,
-            table_name: str,
-            schema: Optional[str] = None,
-            **kw: Any,
-    ) -> ReflectedTableComment:
+            connection,
+            table_name,
+            schema = None,
+            **kw,
+    ):
         """Get the table comment from the parsed state.
         Overrides the mysql's implementation, which will use 'mysql_comment' as the key,
         here the `comment` supports lower case only.
@@ -1686,8 +1690,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def get_indexes(
-        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> List[Dict[str, Any]]:
+        self, connection, table_name, schema = None, **kwargs
+    ):
 
         parsed_state: Any = self._parsed_state_or_create(
             connection, table_name, schema, **kwargs
@@ -1744,12 +1748,14 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def has_table(
-        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> bool:
+        self, connection, table_name, schema = None, **kwargs
+    ):
         try:
             return super().has_table(connection, table_name, schema, **kwargs)
         except exc.DBAPIError as e:
             if self._extract_error_code(e.orig) in (5501, 5502):
+                return False
+            if 'not exists' in str(e.orig).lower():
                 return False
             raise
 
@@ -1769,8 +1775,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def _setup_view_parser(
-        self, connection: Connection, view_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> ReflectedViewState:
+        self, connection, view_name, schema = None, **kwargs
+    ):
         """
         Fetches raw data for a view and passes it to the parser.
         """
@@ -1861,8 +1867,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def _setup_mv_parser(
-        self, connection: Connection, view_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> ReflectedMVState:
+        self, connection, view_name, schema = None, **kwargs
+    ):
         """
         Fetches all raw data for a Materialized View and passes it to the parser.
         """

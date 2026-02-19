@@ -15,7 +15,11 @@
 import logging
 
 import pytest
-from sqlalchemy import BigInteger, Column, Date, DateTime, Double, Integer, MetaData, String, Table
+from sqlalchemy import BigInteger, Column, Date, DateTime, Integer, MetaData, String, Table
+try:
+    from sqlalchemy import Double
+except ImportError:
+    from sqlalchemy import Float as Double
 from sqlalchemy.dialects import registry
 from sqlalchemy.schema import CreateTable
 

@@ -15,6 +15,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -26,8 +27,11 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
@@ -53,7 +57,7 @@ public class StatisticsMetaMgrTest extends PlanTestBase  {
 
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
         CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName,
+                createTableRef(tableName),
                 ImmutableList.of(
                         new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
                         new ColumnDef("partition_id", new TypeDef(IntegerType.BIGINT)),
@@ -73,5 +77,15 @@ public class StatisticsMetaMgrTest extends PlanTestBase  {
         m.alterFullStatisticsTable(connectContext, table);
         Assertions.assertTrue(m.checkTableCompatible(tblName));
         Assertions.assertTrue(m.alterTable(FULL_STATISTICS_TABLE_NAME));
+    }
+
+    private TableRef createTableRef(TableName tableName) {
+        java.util.List<String> parts = Lists.newArrayList();
+        if (tableName.getCatalog() != null) {
+            parts.add(tableName.getCatalog());
+        }
+        parts.add(tableName.getDb());
+        parts.add(tableName.getTbl());
+        return new TableRef(QualifiedName.of(parts), null, NodePosition.ZERO);
     }
 }

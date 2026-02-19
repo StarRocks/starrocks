@@ -18,18 +18,18 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
 #include "runtime/current_thread.h"
-#include "service/backend_options.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/runtime_profile.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -146,6 +146,8 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = _runtime_state->use_page_cache();
+    _params.enable_predicate_col_late_materialize =
+            _runtime_state->query_options().enable_predicate_col_late_materialize;
     auto parser = _pool.add(new OlapPredicateParser(_tablet_schema));
 
     ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
@@ -368,9 +370,17 @@ void TabletScanner::update_counter() {
 
     COUNTER_UPDATE(_parent->_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_parent->_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
-    COUNTER_UPDATE(_parent->_gin_filtered_counter, _reader->stats().rows_gin_filtered);
-    COUNTER_UPDATE(_parent->_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_parent->_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
+    COUNTER_UPDATE(_parent->_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_parent->_gin_prefix_filter_timer, _reader->stats().gin_prefix_filter_ns);
+    COUNTER_UPDATE(_parent->_gin_ngram_dict_filter_timer, _reader->stats().gin_ngram_filter_dict_ns);
+    COUNTER_UPDATE(_parent->_gin_predicate_dict_filter_timer, _reader->stats().gin_predicate_filter_dict_ns);
+    COUNTER_UPDATE(_parent->_gin_dict_counter, _reader->stats().gin_dict_count);
+    COUNTER_UPDATE(_parent->_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
+    COUNTER_UPDATE(_parent->_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
+    COUNTER_UPDATE(_parent->_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
 
     COUNTER_UPDATE(_parent->_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_parent->_segments_read_count, _reader->stats().segments_read_count);

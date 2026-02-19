@@ -206,38 +206,40 @@ The various joins supported by StarRocks can be classified as equi-joins and non
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
-#### JOIN USING Clause
+#### Join with the USING clause
 
-In addition to specifying join conditions using `ON`, StarRocks also supports using the `USING` clause to simplify equi-joins with columns of the same name. For example: `SELECT * FROM t1 JOIN t2 USING (id)`.
+From v4.0.2 onwards, StarRocks supports specifying join conditions via the `USING` clause in addition to `ON`. It helps to simplify equi-joins with columns of the same name. For example: `SELECT * FROM t1 JOIN t2 USING (id)`.
 
-**Version Differences:**
+**Differences between versions:**
 
-- **Versions before 4.0.2**
+- **Versions before v4.0.2**
   
-  `USING` was treated as syntactic sugar and internally converted to an `ON` condition. The result would include USING columns from both the left and right tables as separate columns, and table alias qualifiers (e.g., `t1.id`) were allowed when referencing USING columns.
-  
+  `USING` is treated as syntactic sugar and internally converted to an `ON` condition. The result would include USING columns from both the left and right tables as separate columns, and table alias qualifiers (for example, `t1.id`) were allowed when referencing USING columns.
+
+  Example:
+
   ```SQL
-  -- Supported in versions before 4.0.2
   SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- Returns two separate id columns
   ```
 
-- **Versions 4.0.2 and later**
+- **v4.0.2 and later**
   
-  StarRocks implements SQL-standard `USING` semantics. Key changes include:
+  StarRocks implements SQL-standard `USING` semantics. Key features include:
   
-  - Supports all join types, including `FULL OUTER JOIN`
-  - USING columns appear as a single coalesced column in results (for FULL OUTER JOIN, using `COALESCE(left.col, right.col)` semantics)
-  - Table alias qualifiers (e.g., `t1.id`) are no longer supported for USING columns; unqualified column names (e.g., `id`) must be used
-  - In `SELECT *`, column order is: `[USING columns, left non-USING columns, right non-USING columns]`
-  
+  - All join types are supported, including `FULL OUTER JOIN`.
+  - USING columns appear as a single coalesced column in results. For FULL OUTER JOIN, the `COALESCE(left.col, right.col)` semantics is used.
+  - Table alias qualifiers (for example, `t1.id`) are no longer supported for USING columns. You must use unqualified column names (for example, `id`).
+  - For the result of `SELECT *`, the column order is `[USING columns, left non-USING columns, right non-USING columns]`.
+
+  Example:
+
   ```SQL
-  -- Versions 4.0.2 and later
-  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ Correct: Returns a single coalesced id column
   SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ Error: Column 'id' is ambiguous
+  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ Correct: Returns a single coalesced 'id' column
   SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ FULL OUTER JOIN is supported
   ```
 
-This change aligns StarRocks's behavior with SQL-standard compliant databases such as PostgreSQL, Oracle, and Trino.
+These changes align StarRocks' behavior with SQL-standard compliant databases.
 
 ## ASOF Join
 

@@ -51,6 +51,7 @@
 #include <string>
 #include <vector>
 
+#include "base/types/int128.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "storage/olap_common.h"

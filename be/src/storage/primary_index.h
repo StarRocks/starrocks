@@ -27,6 +27,7 @@ namespace starrocks {
 
 class Tablet;
 class HashIndex;
+class ParallelPublishContext;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -73,6 +74,10 @@ public:
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
+
+    // support parallel upsert with thread pool
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, IOStat* stat = nullptr,
+                  ParallelPublishContext* ctx = nullptr);
 
     // replace old values and insert when key not exist.
     // Used in compaction apply & publish.
@@ -188,6 +193,9 @@ private:
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
                                          uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
+
+    Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
+                                         uint32_t idx_end, IOStat* stat, ParallelPublishContext* ctx);
 
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 

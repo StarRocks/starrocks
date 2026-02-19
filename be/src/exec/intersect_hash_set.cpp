@@ -14,9 +14,9 @@
 
 #include "exec/intersect_hash_set.h"
 
+#include "base/phmap/phmap_dump.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/exec_node.h"
-#include "util/phmap/phmap_dump.h"
 
 namespace starrocks {
 template <typename HashSet>
@@ -83,7 +83,8 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
 }
 
 template <typename HashSet>
-void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size) {
+void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, MutableColumns& key_columns,
+                                                       size_t chunk_size) {
     for (auto& key_column : key_columns) {
         // Because the serialized key is always nullable,
         // drop the null byte of the key if the dest column is non-nullable.

@@ -573,6 +573,7 @@ public class DecimalV3FunctionAnalyzer {
         switch (fn.functionName()) {
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_SORT:
+            case FunctionSet.ARRAY_SORT_LAMBDA:
             case FunctionSet.REVERSE:
             case FunctionSet.ARRAY_INTERSECT:
             case FunctionSet.ARRAY_CONCAT: {

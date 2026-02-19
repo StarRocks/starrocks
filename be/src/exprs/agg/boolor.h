@@ -17,12 +17,12 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -52,8 +52,7 @@ public:
     void empty_result(FunctionContext* ctx, Column* to) const {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->data_column_raw_ptr());
             output->append(false);
             nullable->null_column_data().push_back(1);
         } else {
@@ -167,8 +166,7 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->data_column_raw_ptr());
             output->append(this->data(state).result);
             nullable->null_column_data().push_back(0);
         } else {
@@ -178,15 +176,14 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->data_column_raw_ptr());
             output->append(this->data(state).result);
             nullable->null_column_data().push_back(0);
         } else {
@@ -202,8 +199,7 @@ public:
         for (size_t i = start; i < end; ++i) {
             if (dst->is_nullable()) {
                 auto* nullable = down_cast<NullableColumn*>(dst);
-                auto& data_column = nullable->data_column();
-                auto* output = down_cast<BooleanColumn*>(data_column.get());
+                auto* output = down_cast<BooleanColumn*>(nullable->data_column_raw_ptr());
                 output->get_data()[i] = this->data(state).result;
             } else {
                 auto* output = down_cast<BooleanColumn*>(dst);

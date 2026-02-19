@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/uuid/uuid_generator.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
-#include "testutil/assert.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 

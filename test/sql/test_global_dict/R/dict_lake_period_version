@@ -1,4 +1,4 @@
--- name: test_dict_lake_period_version
+-- name: test_dict_lake_period_version @no_arrow_flight_sql
 set low_cardinality_optimize_on_lake = true;
 -- result:
 -- !result

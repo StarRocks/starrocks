@@ -42,7 +42,8 @@ from unittest.mock import Mock
 from alembic.autogenerate import comparators
 from alembic.operations.ops import ModifyTableOps, UpgradeOps
 import pytest
-from sqlalchemy import Column, Engine, Integer, MetaData, String, Table
+from sqlalchemy import Column, Integer, MetaData, String, Table
+from sqlalchemy.engine import Engine
 
 from starrocks.alembic.compare import compare_starrocks_table
 from starrocks.common.params import AlterTableEnablement, TableInfoKeyWithPrefix

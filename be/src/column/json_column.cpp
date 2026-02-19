@@ -18,7 +18,8 @@
 
 #include <sstream>
 
-#include "column/column_view/column_view.h"
+#include "base/hash/hash_util.hpp"
+#include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
@@ -26,8 +27,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/hash_util.hpp"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 
@@ -166,7 +165,7 @@ LogicalType JsonColumn::get_flat_field_type(const std::string& path) const {
 }
 
 void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
-                                  const Columns& flat_columns) {
+                                  MutableColumns&& flat_columns) {
     DCHECK_EQ(paths.size(), types.size());
     DCHECK(paths.size() == flat_columns.size() || paths.size() + 1 == flat_columns.size()); // may remain column
 
@@ -187,14 +186,18 @@ void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const s
         } else {
             // change column ptr to wrapper ptr
             _flat_columns.reserve(flat_columns.size());
-            _flat_columns.assign(flat_columns.begin(), flat_columns.end());
+            for (auto& col : flat_columns) {
+                _flat_columns.emplace_back(Column::WrappedPtr(std::move(col)));
+            }
         }
     } else {
         _flat_column_paths = paths;
         _flat_column_types = types;
         // change column ptr to wrapper ptr
         _flat_columns.reserve(flat_columns.size());
-        _flat_columns.assign(flat_columns.begin(), flat_columns.end());
+        for (auto& col : flat_columns) {
+            _flat_columns.emplace_back(Column::WrappedPtr(std::move(col)));
+        }
 
         for (size_t i = 0; i < _flat_column_paths.size(); i++) {
             _path_to_index[_flat_column_paths[i]] = i;
@@ -253,19 +256,19 @@ void JsonColumn::append_default() {
 
 void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_json_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     const auto* other_json = down_cast<const JsonColumn*>(&src);
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        Columns copy;
+        MutableColumns copy;
         copy.reserve(other_json->_flat_columns.size());
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
         }
-        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), copy);
+        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), std::move(copy));
     }
 
     if (is_flat_json()) {
@@ -342,11 +345,11 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        Columns copy;
+        MutableColumns copy;
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
         }
-        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), copy);
+        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), std::move(copy));
     }
 
     if (is_flat_json()) {

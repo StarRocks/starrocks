@@ -18,10 +18,13 @@
 #include <vector>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/glm_manager.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
@@ -30,8 +33,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
-#include "util/defer_op.h"
-#include "util/thread.h"
+#include "runtime/runtime_state_helper.h"
+#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
@@ -167,6 +170,9 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         }
         _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
                 new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
+        if (runtime_state != nullptr && runtime_state->enable_global_late_materialization()) {
+            _global_late_materialization_ctx_mgr = _object_pool.add(new GlobalLateMaterilizationContextMgr());
+        }
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
@@ -187,7 +193,8 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
 Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
-        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
+        auto* g_spill_manager = ExecEnv::GetInstance()->global_spill_manager();
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager);
         st = _spill_manager->init_block_manager(query_options);
     });
     return st;
@@ -331,7 +338,7 @@ QueryContextManager::QueryContextManager(size_t log2_num_slots)
 
 Status QueryContextManager::init() {
     // regist query context metrics
-    auto metrics = StarRocksMetrics::instance()->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
     _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
     metrics->register_metric(_metric_name, _query_ctx_cnt.get());
     metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
@@ -378,7 +385,7 @@ size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
 
 QueryContextManager::~QueryContextManager() {
     // unregist metrics
-    auto metrics = StarRocksMetrics::instance()->metrics();
+    auto metrics = GlobalMetricsRegistry::instance()->metrics();
     metrics->deregister_hook(_metric_name);
     _query_ctx_cnt.reset();
 
@@ -585,7 +592,7 @@ void QueryContextManager::report_fragments_with_same_host(
                 params.__set_done(false);
 
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                    runtime_state->update_report_load_status(&params);
+                    RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                     params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
@@ -629,8 +636,8 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
 
 void QueryContextManager::report_fragments(
         const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
-    std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
     std::vector<std::shared_ptr<QueryContext>> need_report_query_ctx;
+    std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
 
     std::vector<PipeLineReportTaskKey> fragment_context_non_exist;
 
@@ -686,7 +693,7 @@ void QueryContextManager::report_fragments(
             params.__set_done(false);
 
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                runtime_state->update_report_load_status(&params);
+                RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                 params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 

@@ -47,6 +47,8 @@ public class MVRefreshPartitionSelectorTest {
         Mockito.when(partition.getRowCount()).thenReturn(rows);
         Mockito.when(partition.getDataSize()).thenReturn(bytes);
         Mockito.when(table.getPartition(anyString())).thenReturn(partition);
+        Mockito.when(table.getType()).thenReturn(Table.TableType.OLAP);
+        Mockito.when(table.isNativeTableOrMaterializedView()).thenReturn(true);
 
         Map<Table, PCellSortedSet> map = new HashMap<>();
         PCellSortedSet set = PCellSortedSet.of();

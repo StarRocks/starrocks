@@ -14,6 +14,7 @@
 
 #include "connector/es_connector.h"
 
+#include "common/system/backend_options.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
 #include "exec/es/es_scan_reader.h"
@@ -21,7 +22,6 @@
 #include "exec/es/es_scroll_query.h"
 #include "exec/exec_node.h"
 #include "exprs/expr.h"
-#include "service/backend_options.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {

@@ -20,6 +20,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -27,7 +28,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-public class CreateViewTest {
+public class CreateViewTest extends StarRocksTestBase  {
     private static ConnectContext connectContext;
 
     @BeforeAll
@@ -37,6 +38,7 @@ public class CreateViewTest {
         be.setDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
+
         Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -44,12 +46,13 @@ public class CreateViewTest {
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+
+        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
     }
 
     @Test
     public void testCreateViewNullable() throws Exception {
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
         starRocksAssert.withTable("CREATE TABLE `site_access` (\n" +
                         "  `event_day` date NULL COMMENT \"\",\n" +
                         "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
@@ -84,8 +87,6 @@ public class CreateViewTest {
 
     @Test
     public void createReplace() throws Exception {
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
         starRocksAssert.withTable("CREATE TABLE `test_replace_site_access` (\n" +
                 "  `event_day` date NULL COMMENT \"\",\n" +
                 "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
@@ -120,8 +121,6 @@ public class CreateViewTest {
 
     @Test
     public void testCreateViewWithWindowFunctionIgnoreNulls() throws Exception {
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
         starRocksAssert.withTable("create table sample_data (\n" +
                         "    timestamp DATETIME not null,\n" +
                         "    username string,\n" +
@@ -145,5 +144,32 @@ public class CreateViewTest {
                 "lead(`test`.`sample_data`.`price` ignore nulls, 1, 0) OVER " +
                 "(PARTITION BY `test`.`sample_data`.`username` ) AS `leadValue`\n" +
                 "FROM `test`.`sample_data`");
+    }
+
+    @Test
+    public void createViewWithComment() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_table1 (\n" +
+                "  `event_day` date NULL COMMENT \"\" ,\n" +
+                "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                ") \n" +
+                "DUPLICATE KEY(`event_day`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`event_day`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ");");
+
+        // create non existed view
+        starRocksAssert.withView("create or replace view test_view1 as select \n" +
+                "`event_day` -- This is a comment from user\n" +
+                "from test_table1;");
+
+        List<List<String>> result = starRocksAssert.show("show create view test_view1;");
+        Assertions.assertEquals(1, result.size());
+        String createViewSql = result.get(0).get(1);
+        Assertions.assertTrue(createViewSql.contains("-- This is a comment from user"));
     }
 }

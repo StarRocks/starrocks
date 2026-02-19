@@ -14,10 +14,10 @@
 
 #include "formats/avro/cpp/numeric_column_reader.h"
 
+#include "base/string/string_parser.hpp"
+#include "base/types/numeric_types.h"
 #include "formats/avro/cpp/utils.h"
-#include "runtime/decimalv3.h"
-#include "util/numeric_types.h"
-#include "util/string_parser.hpp"
+#include "types/decimalv3.h"
 
 namespace starrocks::avrocpp {
 

@@ -16,6 +16,7 @@
 #include <span>
 
 #ifndef __APPLE__
+#include "common/status.h"
 #include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks {
@@ -119,6 +120,8 @@ private:
                                           std::span<const TxnInfoPB> txn_infos, const int64_t* log_versions,
                                           ::starrocks::PublishLogVersionResponse* response);
 
+    Status _cleanup_before_repair(const ::starrocks::RepairTabletMetadataRequest* request);
+
 private:
     static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L;  // 5 minutes
     static constexpr int64_t kDefaultTimeoutForPublishVersion = 1 * 60 * 1000L; // 1 minute
@@ -126,6 +129,11 @@ private:
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
 };
+
+// Get txn_ids string from PublishVersionRequest (compatible with both new and old FE versions)
+// New FE uses txn_infos field, old FE uses deprecated txn_ids field
+// This function is exposed for unit testing
+std::string get_txn_ids_string(const PublishVersionRequest* request);
 
 } // namespace starrocks
 #endif // __APPLE__

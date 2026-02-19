@@ -37,12 +37,12 @@
 #include <cmath>
 #include <functional>
 
+#include "base/string/slice.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

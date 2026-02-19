@@ -323,7 +323,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     @Override
     public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash,
-                                     ComputeResource computeResource) {
+                                     ComputeResource computeResource, List<Long> locations) {
         throw new SemanticException("not implemented");
     }
 

@@ -36,11 +36,12 @@
 
 #include <memory>
 
+#include "common/thread/thread.h"
+#include "common/util/misc.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
-#include "util/misc.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -123,8 +124,8 @@ Status ResultBufferMgr::fetch_arrow_data(const TUniqueId& query_id, std::shared_
     if (cb == nullptr) {
         return Status::InternalError("no result for this query");
     }
-    RETURN_IF_ERROR(cb->get_arrow_batch(result));
-    return Status::OK();
+
+    return cb->get_arrow_batch(result);
 }
 
 void ResultBufferMgr::set_arrow_schema(const TUniqueId& query_id, const std::shared_ptr<arrow::Schema>& arrow_schema) {

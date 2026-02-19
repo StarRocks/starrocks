@@ -18,19 +18,35 @@ import com.starrocks.common.Config;
 
 public class TabletReshardUtils {
 
-    public static boolean isPowerOfTwo(long n) {
-        return n > 1 && (n & (n - 1)) == 0;
+    public static boolean needSplit(long dataSize) {
+        return calcSplitCount(dataSize, Config.tablet_reshard_target_size) > 1;
     }
 
-    public static int calcSplitCount(long dataSize, long splitSize) {
-        int splitCount = 1;
-        for (long size = dataSize; size >= splitSize; size /= 2) {
-            int newSplitCount = splitCount * 2;
-            if (newSplitCount > Config.tablet_reshard_max_split_count) {
-                break;
+    /*
+     * Return value > 1 if need split
+     * Return value = 1 if not need split
+     * Return value <= 0 if exception occurs
+     */
+    public static int calcSplitCount(long dataSize, long targetSize) {
+        if (targetSize <= 0) {
+            // A value less than 0 indicates the specified split count,
+            // for internal testing.
+            long splitCount = -targetSize;
+            if (splitCount > Config.tablet_reshard_max_split_count) {
+                return 0;
             }
-            splitCount = newSplitCount;
+            return (int) splitCount;
         }
-        return splitCount;
+
+        if (dataSize < 2 * targetSize) {
+            return 1;
+        }
+
+        // Round of (dataSize / targetSize)
+        long splitCount = (dataSize + targetSize / 2) / targetSize;
+        if (splitCount < Config.tablet_reshard_max_split_count) {
+            return (int) splitCount;
+        }
+        return Config.tablet_reshard_max_split_count;
     }
 }

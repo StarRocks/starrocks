@@ -20,7 +20,6 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
@@ -46,6 +45,7 @@ import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
@@ -57,7 +57,9 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StreamLoadStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
@@ -76,6 +78,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
@@ -88,7 +91,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 
 public class StreamLoadTask extends AbstractStreamLoadTask {
     private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
@@ -193,6 +196,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     private Coordinator coord;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPAddress;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPPort;
+    @IgnoreMemoryTrack
     private OlapTable table;
     private long taskDeadlineMs;
     private boolean isCommitting;
@@ -905,9 +909,16 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     public void unprotectedExecute(HttpHeaders headers) throws StarRocksException {
+        try (var scope = context.bindScope()) {
+            doUnprotectedExecute(headers);
+        }
+    }
+
+    private void doUnprotectedExecute(HttpHeaders headers) throws StarRocksException {
         streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
         streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
-                loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams);
+                loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams, acquireContext);
         if (table == null) {
             getTable();
         }
@@ -917,7 +928,6 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
-        loadPlanner.setComputeResource(streamLoadInfo.getComputeResource());
         loadPlanner.plan();
 
         coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
@@ -970,7 +980,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 Status status = coord.getExecStatus();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
-                    throw new LoadException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
+                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
                 }
                 this.numRowsNormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
@@ -978,7 +988,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
+                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
                 }
 
                 if (coord.isEnableLoadProfile()) {
@@ -989,7 +999,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 if (!status.ok()) {
                     throw new LoadException(status.getErrorMsg());
                 }
-                txnStateItem.setDmlStmt(new StreamLoadStmt(new TableName(dbName, tableName), NodePosition.ZERO));
+                TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO);
+                txnStateItem.setDmlStmt(new StreamLoadStmt(tableRef, NodePosition.ZERO));
                 txnStateItem.setTabletCommitInfos(TabletCommitInfo.fromThrift(coord.getCommitInfos()));
                 txnStateItem.setTabletFailInfos(TabletFailInfo.fromThrift(coord.getFailInfos()));
                 txnStateItem.addLoadedRows(numRowsNormal);
@@ -1318,7 +1330,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             // sync stream load related query info should unregister here
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
     @Override
@@ -1356,7 +1368,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         } finally {
             writeUnlock();
         }
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
     @Override

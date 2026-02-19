@@ -28,9 +28,9 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/decimalv2_value.h"
-#include "runtime/decimalv3.h"
 #include "types/date_value.h"
+#include "types/decimalv2_value.h"
+#include "types/decimalv3.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {
@@ -88,7 +88,7 @@ public:
     }
 
     void test_hash_function_selective(const ColumnPtr& column, uint16_t* sel, uint16_t sel_size) {
-        std::vector<uint32_t> hashes(sel_size, 0);
+        std::vector<uint32_t> hashes(column->size(), 0);
         GetParam().hash_func_selective(*column, hashes.data(), sel, sel_size);
 
         // Verify hashes are computed for selected indices

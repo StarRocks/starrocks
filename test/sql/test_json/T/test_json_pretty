@@ -1,0 +1,49 @@
+-- name: test_json_pretty
+-- description: Comprehensive test cases for JSON_PRETTY function
+
+-- Preamble
+CREATE DATABASE IF NOT EXISTS test_json_pretty_db;
+USE test_json_pretty_db;
+
+-- 1. Simple Object
+SELECT json_pretty('{"a": 1, "b": 2}');
+
+-- 2. Simple Array
+SELECT json_pretty('[1, 2, 3]');
+
+-- 3. Mixed Types
+SELECT json_pretty('{"a": true, "b": null, "c": "string"}');
+
+-- 4. Nested Structure
+SELECT json_pretty('{"level1": {"level2": {"level3": "value"}}}');
+
+-- 5. Array of Objects
+SELECT json_pretty('[{"id": 1, "val": [10, 20]}, {"id": 2}]');
+
+-- 6. Special Characters
+SELECT json_pretty('{"message": "Hello { world }", "tags": "[tag1, tag2]"}');
+
+-- 7. Empty Structures
+SELECT json_pretty('{}');
+SELECT json_pretty('[]');
+
+-- 8. Numbers Formatting
+SELECT json_pretty('{"int": 123, "float": 12.34}');
+
+-- 9. Table Test
+CREATE TABLE json_pretty_test_table (
+    id INT,
+    data JSON
+) DUPLICATE KEY(id)
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO json_pretty_test_table VALUES
+(1, parse_json('{"name": "Alice", "details": {"age": 25}}')),
+(2, parse_json('[10, 20]')),
+(3, NULL);
+
+SELECT id, json_pretty(data) FROM json_pretty_test_table ORDER BY id;
+
+-- Cleanup
+DROP TABLE json_pretty_test_table;
+DROP DATABASE test_json_pretty_db;

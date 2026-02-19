@@ -16,15 +16,17 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "testutil/assert.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -33,6 +35,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _mem_tracker = std::make_shared<MemTracker>(-1, "connector scan");
         _exec_env = ExecEnv::GetInstance();
@@ -125,7 +128,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_cloud(si
 
         TScanRangeParams param;
         param.__set_scan_range(scan_range);
-        scan_ranges.push_back(param);
+        scan_ranges.emplace_back(param);
     }
 
     return scan_ranges;
@@ -202,7 +205,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_hive(siz
 
         TScanRangeParams param;
         param.__set_scan_range(scan_range);
-        scan_ranges.push_back(param);
+        scan_ranges.emplace_back(param);
     }
 
     return scan_ranges;
@@ -274,7 +277,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_stream_l
     params->src_tuple_id = 0;
     for (int i = 0; i < types.size(); i++) {
         params->expr_of_dest_slot[i] = TExpr();
-        params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
+        params->expr_of_dest_slot[i].nodes.emplace_back();
         params->expr_of_dest_slot[i].nodes[0].__set_type(types[i].to_thrift());
         params->expr_of_dest_slot[i].nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
         params->expr_of_dest_slot[i].nodes[0].__set_is_nullable(true);

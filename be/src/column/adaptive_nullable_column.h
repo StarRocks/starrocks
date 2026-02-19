@@ -16,10 +16,9 @@
 
 #include <fmt/format.h>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
-#include "simd/simd.h"
-
 namespace starrocks {
 
 // NullableColumn has two columns: data column and null column. Based on the data, we classify null column into four types:
@@ -84,15 +83,9 @@ public:
 
     State state() { return _state; }
 
-    AdaptiveNullableColumn(const AdaptiveNullableColumn& rhs) { CHECK(false) << "unimplemented"; }
+    DISALLOW_COPY(AdaptiveNullableColumn);
 
     AdaptiveNullableColumn(AdaptiveNullableColumn&& rhs) noexcept { CHECK(false) << "unimplemented"; }
-
-    AdaptiveNullableColumn& operator=(const AdaptiveNullableColumn& rhs) {
-        AdaptiveNullableColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     AdaptiveNullableColumn& operator=(AdaptiveNullableColumn&& rhs) noexcept {
         AdaptiveNullableColumn tmp(std::move(rhs));
@@ -268,16 +261,23 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override {
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override {
         materialized_nullable();
         RETURN_IF_ERROR(_null_column->capacity_limit_reached());
-
-        return upgrade_helper_func(&_data_column);
+        auto ret = upgrade_helper_func(_data_column->as_mutable_raw_ptr());
+        if (ret.ok() && ret.value() != nullptr) {
+            _data_column = std::move(ret.value());
+        }
+        return ret;
     }
 
-    StatusOr<ColumnPtr> downgrade() override {
+    StatusOr<MutableColumnPtr> downgrade() override {
         materialized_nullable();
-        return downgrade_helper_func(&_data_column);
+        auto ret = downgrade_helper_func(_data_column->as_mutable_raw_ptr());
+        if (ret.ok() && ret.value() != nullptr) {
+            _data_column = std::move(ret.value());
+        }
+        return ret;
     }
 
     bool has_large_column() const override {
@@ -356,6 +356,11 @@ public:
         return NullableColumn::create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
+    MutableColumnPtr clone() const override {
+        materialized_nullable();
+        return create(_data_column->clone(), _null_column->clone());
+    }
+
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,
                                        size_t start, size_t count) const override;
 
@@ -370,43 +375,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    ColumnPtr& begin_append_not_default_value() {
-        switch (_state) {
-        case State::kUninitialized: {
-            _state = State::kNotConstant;
-            break;
-        }
-        case State::kNotConstant:
-        case State::kMaterialized: {
-            break;
-        }
-        default: {
-            materialized_nullable();
-            break;
-        }
-        }
-        return _data_column;
-    }
-
-    const ColumnPtr& begin_append_not_default_value() const {
-        switch (_state) {
-        case State::kUninitialized: {
-            _state = State::kNotConstant;
-            break;
-        }
-        case State::kNotConstant:
-        case State::kMaterialized: {
-            break;
-        }
-        default: {
-            materialized_nullable();
-            break;
-        }
-        }
-        return _data_column;
-    }
-
-    Column* mutable_begin_append_not_default_value() {
+    Column* begin_append_not_default_value() {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
@@ -465,16 +434,16 @@ public:
         return _null_column->immutable_data();
     }
 
-    Column* mutable_data_column() {
+    Column* data_column_raw_ptr() {
         DCHECK(false);
         materialized_nullable();
-        return _data_column.get();
+        return _data_column->as_mutable_raw_ptr();
     }
 
-    NullColumn* mutable_null_column() {
+    NullColumn* null_column_raw_ptr() {
         DCHECK(false);
         materialized_nullable();
-        return _null_column.get();
+        return down_cast<NullColumn*>(_null_column->as_mutable_raw_ptr());
     }
 
     const Column& data_column_ref() const {
@@ -536,7 +505,7 @@ public:
         }
     }
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override {
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override {
         materialized_nullable();
         return NullableColumn::replicate(offsets);
     }
@@ -585,13 +554,13 @@ public:
         if (LIKELY(_size > 0)) {
             switch (_state) {
             case State::kNull: {
-                _data_column->as_mutable_ptr()->append_default(_size);
+                _data_column->as_mutable_raw_ptr()->append_default(_size);
                 null_column_data().insert(null_column_data().end(), _size, 1);
                 _has_null = true;
                 break;
             }
             case State::kConstant: {
-                _data_column->as_mutable_ptr()->append_default(_size);
+                _data_column->as_mutable_raw_ptr()->append_default(_size);
                 null_column_data().insert(null_column_data().end(), _size, 0);
                 break;
             }
@@ -610,8 +579,7 @@ public:
 
 private:
     NullData& null_column_data() const {
-        // TODO(COW): remove const_cast
-        auto* mutable_data_col = const_cast<NullColumn*>(_null_column.get());
+        auto* mutable_data_col = down_cast<NullColumn*>(_null_column->as_mutable_raw_ptr());
         return mutable_data_col->get_data();
     }
 

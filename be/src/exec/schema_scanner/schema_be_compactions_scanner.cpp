@@ -15,13 +15,13 @@
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
 
 #include "agent/master_info.h"
+#include "base/metrics.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -65,39 +65,39 @@ Status SchemaBeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 8) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.candidates_num);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.candidates_num);
                 break;
             }
             case 3: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.base_compaction_concurrency);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.base_compaction_concurrency);
                 break;
             }
             case 4: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.cumulative_compaction_concurrency);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.cumulative_compaction_concurrency);
                 break;
             }
             case 5: {
-                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.last_score);
+                fill_column_with_slot<TYPE_DOUBLE>(column, (void*)&info.last_score);
                 break;
             }
             case 6: {
-                fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.max_score);
+                fill_column_with_slot<TYPE_DOUBLE>(column, (void*)&info.max_score);
                 break;
             }
             case 7: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.manual_compaction_concurrency);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.manual_compaction_concurrency);
                 break;
             }
             case 8: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.manual_compaction_candidates_num);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.manual_compaction_candidates_num);
                 break;
             }
             default:

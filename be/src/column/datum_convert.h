@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "column/datum.h"
 #include "storage/types.h"
+#include "types/datum.h"
 
 namespace starrocks {
 

@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <base/testutil/assert.h>
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
 #include <gutil/strings/substitute.h>
-#include <testutil/assert.h>
 
+#include "base/random/random.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
-#include "util/random.h"
 
 namespace starrocks {
 
@@ -224,9 +224,9 @@ ColumnPtr COWBench::_gen_json_column() {
 }
 
 ColumnPtr COWBench::_gen_map_column() {
-    MapColumn::Ptr column = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                                              NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                                              UInt32Column::create());
+    auto column = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                    NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                    UInt32Column::create());
     for (int32_t i = 0; i < 10; i++) {
         column->append_datum(DatumMap{{i, i + 1}});
     }

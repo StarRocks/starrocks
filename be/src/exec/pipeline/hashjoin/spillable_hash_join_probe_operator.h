@@ -22,22 +22,23 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "exec/hash_join_components.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
 struct NoBlockCountDownLatch {
     void reset(int32_t total) { _count_down = total; }
 
-    void count_down() {
-        _count_down--;
-        DCHECK_GE(_count_down, 0);
+    // return true if this is the last count down
+    bool count_down() {
+        DCHECK_GT(_count_down, 0);
+        return _count_down.fetch_sub(1) == 1;
     }
 
     bool ready() const { return _count_down == 0; }
@@ -112,6 +113,8 @@ private:
 
     // some DCHECK for hash table/partition num_rows
     void _check_partitions();
+
+    void _reset_load_partitions();
 
 private:
     SpillableHashJoinProbeMetrics metrics;

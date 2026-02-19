@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "util/base85.h"
+#include "base/string/base85.h"
 
 namespace starrocks {
 

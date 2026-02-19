@@ -21,8 +21,8 @@
 #include "column/column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 
 namespace starrocks {
 
@@ -38,7 +38,7 @@ public:
 
     JsonColumn() = default;
     explicit JsonColumn(size_t size) : SuperClass(size) {}
-    JsonColumn(const JsonColumn& rhs) : SuperClass(rhs) {}
+    DISALLOW_COPY(JsonColumn);
 
     JsonColumn(JsonColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {
         _flat_columns = std::move(rhs._flat_columns);
@@ -114,11 +114,7 @@ public:
 
     LogicalType get_flat_field_type(const std::string& path) const;
 
-    Columns& get_flat_fields() { return _flat_columns; };
-
-    const Columns& get_flat_fields() const { return _flat_columns; };
-
-    Columns get_flat_fields_ptrs() const {
+    Columns get_flat_fields() const {
         Columns columns;
         columns.reserve(_flat_columns.size());
         columns.assign(_flat_columns.begin(), _flat_columns.end());
@@ -142,7 +138,7 @@ public:
     bool has_remain() const { return _flat_columns.size() == (_flat_column_paths.size() + 1); }
 
     void set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
-                          const Columns& flat_columns);
+                          MutableColumns&& flat_columns);
 
     bool is_equallity_schema(const Column* other) const;
 
@@ -156,7 +152,7 @@ public:
 
 private:
     // flat-columns[sub_columns, remain_column]
-    Columns _flat_columns;
+    std::vector<Column::WrappedPtr> _flat_columns;
 
     // flat-column paths, doesn't contains remain column
     std::vector<std::string> _flat_column_paths;

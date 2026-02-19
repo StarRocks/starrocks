@@ -40,6 +40,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exprs/runtime_filter_bank.h"
@@ -47,7 +48,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/query_statistics.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

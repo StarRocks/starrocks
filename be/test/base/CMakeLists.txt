@@ -1,0 +1,119 @@
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set(BASE_TEST_FILES
+    cxa_throw_wrap.cpp
+    bit/bit_mask_test.cpp
+    bit/bit_packing_simd_test.cpp
+    bit/bit_packing_test.cpp
+    bit/bitmap_test.cpp
+    bit/rle_encoding_test.cpp
+    bit/bit_stream_utils_test.cpp
+    bit/bit_util_test.cpp
+    bthreads/future_test.cpp
+    bthreads/promise_test.cpp
+    bthreads/semaphore_test.cpp
+    bthreads/shared_future_test.cpp
+    bthreads/single_flight_test.cpp
+    brpc/ref_count_closure_test.cpp
+    brpc/recoverable_closure_test.cpp
+    brpc/reusable_closure_test.cpp
+    concurrency/await_test.cpp
+    concurrency/blocking_queue_test.cpp
+    concurrency/concurrent_limiter_test.cpp
+    concurrency/limit_setter_test.cpp
+    concurrency/countdown_latch_test.cpp
+    concurrency/shared_mutex_test.cpp
+    concurrency/core_local_test.cpp
+    container/heap_test.cpp
+    lru_cache_test.cpp
+    container/priority_queue_test.cpp
+    coding_test.cpp
+    core_local_counter_test.cpp
+    decimal/decimal_types_test.cpp
+    types/decimal12_test.cpp
+    types/int128_test.cpp
+    int256_arithmetic_test.cpp
+    int256_test.cpp
+    types/int96_test.cpp
+    phmap_test.cpp
+    crypto/aes_util_test.cpp
+    crypto/md5_test.cpp
+    metrics_test.cpp
+    debug/trace_test.cpp
+    gc/gc_helper_test.cpp
+    hash/crc32c_test.cpp
+    hash/hash_util_test.cpp
+    json/easy_json-test.cpp
+    path/filesystem_util_test.cpp
+    path/file_util_test.cpp
+    path/path_builder_test.cpp
+    path/path_util_test.cpp
+    path/path_trie_test.cpp
+    process/lite_exec_test.cpp
+    random/random_test.cpp
+    simd/byte_stream_split_test.cpp
+    simd/batch_run_counter_test.cpp
+    simd/simd_expand_test.cpp
+    simd/simd_test.cpp
+    stats/ndv_estimator_test.cpp
+    string/base85_test.cpp
+    string/c_string_test.cpp
+    string/faststring_test.cpp
+    string/memcmp_test.cpp
+    string/parse_util_test.cpp
+    string/string_search_test.cpp
+    string/string_searcher_test.cpp
+    string/string_util_test.cpp
+    string/string_parser_test.cpp
+    string/slice_test.cpp
+    string/utf8_check_test.cpp
+    string/volnitsky_test.cpp
+    testutil/sync_point_test.cpp
+    time/ratelimit_test.cpp
+    time/monotime_test.cpp
+    time/timezone_utils_test.cpp
+    types/numeric_types_test.cpp
+    utility/integer_util_test.cpp
+    utility/pretty_printer_test.cpp
+    utility/scoped_cleanup_test.cpp
+    utility/template_util_test.cpp
+    uid_util_test.cpp
+    url_coding_test.cpp
+    uuid/uuid_generator_test.cpp
+    status_test.cpp
+)
+
+if (USE_AVX512)
+    list(APPEND BASE_TEST_FILES simd/delta_decode_test.cpp)
+endif()
+
+set(BASE_TEST_LINK_LIBS
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_library(starrocks_base_test_objs OBJECT ${BASE_TEST_FILES})
+target_link_libraries(starrocks_base_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_base_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(base_test $<TARGET_OBJECTS:starrocks_base_test_objs>)
+target_link_libraries(base_test ${BASE_TEST_LINK_LIBS} gtest_main)

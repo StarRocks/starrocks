@@ -15,10 +15,10 @@
 #pragma once
 
 #include "column/column.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -31,15 +31,9 @@ public:
     explicit ConstColumn(ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
 
-    ConstColumn(const ConstColumn& rhs) : _data(rhs._data->clone()), _size(rhs._size) {}
+    DISALLOW_COPY(ConstColumn);
 
     ConstColumn(ConstColumn&& rhs) noexcept : _data(std::move(rhs._data)), _size(rhs._size) {}
-
-    ConstColumn& operator=(const ConstColumn& rhs) {
-        ConstColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     ConstColumn& operator=(ConstColumn&& rhs) noexcept {
         ConstColumn tmp(std::move(rhs));
@@ -114,7 +108,7 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     bool append_nulls(size_t count) override {
         DCHECK_GT(count, 0);
@@ -203,6 +197,8 @@ public:
 
     MutableColumnPtr clone_empty() const override { return create(_data->clone_empty(), 0); }
 
+    MutableColumnPtr clone() const override { return create(_data->clone(), _size); }
+
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
@@ -217,11 +213,11 @@ public:
 
     std::string get_name() const override { return "const-" + _data->get_name(); }
 
-    Column* mutable_data_column() { return _data.get(); }
+    Column* data_column_raw_ptr() { return _data.get(); }
+    const Column* data_column_raw_ptr() const { return _data.get(); }
 
     ColumnPtr& data_column() { return _data; }
     const ColumnPtr& data_column() const { return _data; }
-    MutableColumnPtr data_column_ptr() { return _data->as_mutable_ptr(); }
 
     Datum get(size_t n __attribute__((unused))) const override { return _data->get(0); }
 
@@ -272,16 +268,16 @@ public:
 
     void check_or_die() const override;
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _data->has_large_column(); }
 
     void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }
 
 private:
-    ColumnPtr _data;
+    Column::WrappedPtr _data;
     uint64_t _size;
 };
 

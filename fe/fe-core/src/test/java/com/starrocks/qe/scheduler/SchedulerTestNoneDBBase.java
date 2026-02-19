@@ -49,6 +49,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
     protected static final long BACKEND1_ID = 10001L;
     protected static Backend backend2 = null;
     protected static Backend backend3 = null;
+    protected static boolean singleNodeTest = false;
 
     private static long prevStatisticCollectIntervalSec;
 
@@ -64,8 +65,10 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass(); // Added mockBackend(10001).
-        backend2 = UtFrameUtils.addMockBackend(10002, "127.0.0.2", 9060);
-        backend3 = UtFrameUtils.addMockBackend(10003, "127.0.0.3", 9060);
+        if (!singleNodeTest) {
+            backend2 = UtFrameUtils.addMockBackend(10002, "127.0.0.2", 9060);
+            backend3 = UtFrameUtils.addMockBackend(10003, "127.0.0.3", 9060);
+        }
 
         // Avoid statistic jobs disturb test cases, because some cases expect the queries are executed in a specific order.
         prevStatisticCollectIntervalSec = Config.statistic_collect_interval_sec;
@@ -79,11 +82,13 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
 
     @AfterAll
     public static void afterClass() {
-        try {
-            UtFrameUtils.dropMockBackend(10002);
-            UtFrameUtils.dropMockBackend(10003);
-        } catch (DdlException e) {
-            e.printStackTrace();
+        if (!singleNodeTest) {
+            try {
+                UtFrameUtils.dropMockBackend(10002);
+                UtFrameUtils.dropMockBackend(10003);
+            } catch (DdlException e) {
+                e.printStackTrace();
+            }
         }
 
         Config.statistic_collect_interval_sec = prevStatisticCollectIntervalSec;

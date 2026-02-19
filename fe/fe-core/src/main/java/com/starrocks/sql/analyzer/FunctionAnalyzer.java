@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.starrocks.catalog.AggregateFunction;
@@ -23,6 +24,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
@@ -32,6 +34,7 @@ import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -56,6 +59,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
@@ -73,6 +77,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -394,13 +399,17 @@ public class FunctionAnalyzer {
                     functionCallExpr.getPos());
         }
 
-        if ((fnName.equals(FunctionSet.MIN)
-                || fnName.equals(FunctionSet.MAX)
-                || fnName.equals(FunctionSet.NDV)
+        if ((fnName.equals(FunctionSet.MIN) || fnName.equals(FunctionSet.MAX))
+                && !arg.getType().canApplyToNumeric()) {
+            throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
+        }
+
+        // ndv and approx_count_distinct cannot be applied to non-numeric types
+        if ((fnName.equals(FunctionSet.NDV)
                 || fnName.equals(FunctionSet.APPROX_COUNT_DISTINCT)
                 || fnName.equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
                 || fnName.equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
-                && !arg.getType().canApplyToNumeric()) {
+                && !(arg.getType().canApplyToNumeric() || arg.getType().isBinaryType())) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
 
@@ -535,6 +544,22 @@ public class FunctionAnalyzer {
                     throw new SemanticException(
                             "The second parameter of DICT_MERGE must be a constant positive integer: " +
                                     ExprToSql.toSql(functionCallExpr), kExpr.getPos());
+                }
+            }
+        }
+
+        if (fnName.equals(FunctionSet.MIN_N) || fnName.equals(FunctionSet.MAX_N)) {
+            if (functionCallExpr.hasChild(1)) {
+                Expr nExpr = functionCallExpr.getChild(1);
+                Optional<Long> n = extractIntegerValue(nExpr);
+                if (!n.isPresent() || n.get() <= 0) {
+                    throw new SemanticException(
+                            "The second parameter of " + fnName + " must be a constant positive integer: " +
+                                    ExprToSql.toSql(functionCallExpr), nExpr.getPos());
+                }
+                if (n.get() > Config.minmax_n_max_size) {
+                    throw new SemanticException("The second parameter of " + fnName + 
+                            " cannot exceed " + Config.minmax_n_max_size + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
             }
         }
@@ -803,7 +828,39 @@ public class FunctionAnalyzer {
                 }
             }
         }
+
+        if (fn instanceof SqlFunction) {
+            fn = analyzeSqlFunction((SqlFunction) fn, node, session);
+        }
         return fn;
+    }
+
+    private static Function analyzeSqlFunction(SqlFunction fn, FunctionCallExpr node, ConnectContext context) {
+        Expr expr;
+        if (node.getChildren().size() != fn.getArgNames().length) {
+            throw new SemanticException("View function " + fn.getFunctionName() + " expected "
+                    + fn.getArgNames().length + " arguments, but got " + node.getChildren().size(), node.getPos());
+        }
+        try {
+            Map<String, Type> argsMap = Maps.newHashMap();
+            for (int i = 0; i < node.getChildren().size(); i++) {
+                argsMap.put(fn.getArgNames()[i], fn.getArgs()[i]);
+            }
+
+            expr = SqlParser.parseExpression(fn.getSql(), context.getSessionVariable());
+            ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {
+                if (!argsMap.containsKey(slotRef.getColName())) {
+                    throw new SemanticException("Cannot find argument %s in function args", slotRef.getColName());
+                }
+                slotRef.setType(argsMap.get(slotRef.getColName()));
+            });
+        } catch (Exception e) {
+            throw new SemanticException("Failed to parse view definition: " + fn.getSql());
+        }
+        SqlFunction v = (SqlFunction) fn.copy();
+        v.setAnalyzeExpr(expr);
+        v.setRetType(expr.getType());
+        return v;
     }
 
     /**
@@ -928,6 +985,9 @@ public class FunctionAnalyzer {
         } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
             fn = getArrayGenerateFunction(node);
             argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+        } else if (FunctionSet.REGEXP_POSITION.equals(fnName)) {
+            fn = getRegexpPositionFunction(node);
+            argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
         } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
             // bitmap_union is analyzed here rather than `getAnalyzedAggregateFunction` because
             // it's just a syntax sugar for bitmap_agg transformed from bitmap_union(to_bitmap())
@@ -1018,7 +1078,12 @@ public class FunctionAnalyzer {
             }
         } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
                 FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
-            Preconditions.checkState(argumentTypes.length == 2);
+            if (argumentTypes.length != 2) {
+                String functionName = fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, "");
+                throw new SemanticException(String.format(
+                        "Function '%s' requires exactly 2 arguments: column and number, but got %d argument(s)",
+                        functionName, argumentTypes.length));
+            }
             Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
             fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
             if (args[0].isDecimalV3()) {
@@ -1033,6 +1098,30 @@ public class FunctionAnalyzer {
         // add new argument types
         Arrays.stream(argumentTypes).forEach(newArgumentTypes::add);
         return fn;
+    }
+
+    private static Function getRegexpPositionFunction(FunctionCallExpr node) {
+        // add default argument types for position=1 and occurrence=1
+        int argCount = node.getChildren().size();
+
+        if (argCount < 2 || argCount > 4) {
+            throw new SemanticException(
+                "regexp_position requires 2, 3, or 4 arguments: " +
+                "regexp_position(str, pattern[, start_pos[, occurrence]])",
+                node.getPos());      
+        }
+
+        if (argCount == 2) {
+            node.addChild(new IntLiteral(1));
+            node.addChild(new IntLiteral(1));
+        } else if (argCount == 3) {
+            node.addChild(new IntLiteral(1));
+        }
+
+        Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+
+        return ExprUtils.getBuiltinFunction(FunctionSet.REGEXP_POSITION, argumentTypes,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     /**
@@ -1233,6 +1322,20 @@ public class FunctionAnalyzer {
             }
             // need to distinct output columns in finalize phase
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
+        } else if (FunctionSet.MIN_N.equalsIgnoreCase(fnName) || FunctionSet.MAX_N.equalsIgnoreCase(fnName)) {
+            // min_n/max_n(value, n) returns array<value_type>
+            // Normalize second argument to INT (handles TINYINT/SMALLINT from literals like '3')
+            if (argumentTypes.length > 1) {
+                argumentTypes[1] = IntegerType.INT;
+            }
+
+            // use IS_IDENTICAL to preserve exact value type (especially FLOAT to avoid promotion to DOUBLE)
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            if (fn != null) {
+                fn = fn.copy();
+                // Explicitly set return type to preserve element type (e.g. array<date> not array<int>)
+                fn.setRetType(new ArrayType(argumentTypes[0]));
+            }
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = FloatType.DOUBLE;
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);

@@ -17,7 +17,9 @@
 #include <cstring>
 #include <string>
 #include <type_traits>
+#include <typeindex>
 
+#include "base/hash/hash_util.hpp"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
@@ -29,8 +31,7 @@
 #include "column/object_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
-#include "runtime/time_types.h"
-#include "util/hash_util.hpp"
+#include "types/time_types.h"
 
 namespace starrocks {
 
@@ -233,8 +234,13 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& column) {
         const auto& offsets = column.get_offset();
-        const auto& bytes = column.get_bytes();
+        const auto& bytes = column.get_immutable_bytes();
+        const auto column_size = column.size();
         _selector.for_each([&](uint32_t idx) {
+            // Skip out-of-bounds indices (preserve hash seed)
+            if (idx >= column_size) {
+                return;
+            }
             uint32_t* slot_ptr = slot(idx);
             auto len = offsets[idx + 1] - offsets[idx];
             // For empty strings, don't modify the hash (hash with 0 bytes preserves the seed)

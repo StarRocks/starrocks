@@ -17,9 +17,11 @@
 #include <memory>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "column/column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/exchange/shuffler.h"
@@ -30,8 +32,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
-#include "util/raw_container.h"
-#include "util/runtime_profile.h"
 
 namespace butil {
 class IOBuf;
@@ -58,6 +58,8 @@ public:
     ~ExchangeSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+
+    Status prepare_local_state(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
@@ -153,6 +155,8 @@ private:
     const int32_t _sender_id;
     const PlanNodeId _dest_node_id;
     int32_t _encode_level = 0;
+    // Hash function version for exchange shuffle: 0=fnv_hash (default), 1=xxh3_hash
+    int32_t _exchange_hash_function_version = 0;
     // Will set in prepare
     int32_t _be_number = 0;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>, StdHash<int64_t>> _instance_id2channel;

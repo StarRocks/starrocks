@@ -156,7 +156,7 @@ public class ConnectScheduler {
             currentConnAtomic.incrementAndGet();
             connectionMap.put((long) ctx.getConnectionId(), ctx);
 
-            if (ctx instanceof ArrowFlightSqlConnectContext) {
+            if (ctx.isArrowFlightSql()) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
                 arrowFlightSqlConnectContextMap.put(context.getArrowFlightSqlToken(), context);
             }
@@ -237,7 +237,7 @@ public class ConnectScheduler {
                         ctx.getQualifiedUser(), conns != null ? Integer.toString(conns.get()) : "nil");
             }
 
-            if (ctx instanceof ArrowFlightSqlConnectContext) {
+            if (ctx.isArrowFlightSql()) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
                 arrowFlightSqlConnectContextMap.remove(context.getArrowFlightSqlToken());
             }

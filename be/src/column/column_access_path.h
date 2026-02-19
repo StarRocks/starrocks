@@ -21,8 +21,8 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -132,6 +132,21 @@ using ColumnAccessPathPtr = std::unique_ptr<ColumnAccessPath>;
 inline std::ostream& operator<<(std::ostream& out, const ColumnAccessPath& val) {
     out << val.to_string();
     return out;
+}
+
+// Use next_column_unique_id instead of num_columns to avoid unique_id conflicts.
+// num_columns() returns the current column count, but unique_ids may have gaps
+// after ADD/DROP COLUMN operations. Using num_columns() can cause extended columns
+// (flat JSON subfields) to get unique_ids that conflict with existing columns.
+
+// Returns the next unique ID. only used in flat json column access path.
+template <class ScanNodeType>
+size_t next_uniq_id(const ScanNodeType& tnode) {
+    if (tnode.__isset.next_uniq_id) {
+        return tnode.next_uniq_id;
+    }
+    // provide a large number to avoid conflict
+    return std::numeric_limits<int32_t>::max() - 1000000;
 }
 
 } // namespace starrocks

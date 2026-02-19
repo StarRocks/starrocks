@@ -268,7 +268,7 @@ public class StreamLoadManagerTest {
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
-        StreamLoadTask task = streamLoadManager.getTaskById(1001L);
+        AbstractStreamLoadTask task = streamLoadManager.getTaskById(1001L);
         Assertions.assertNotNull(task);
         Assertions.assertEquals("label1", task.getLabel());
         Assertions.assertEquals(1001L, task.getId());
@@ -292,7 +292,7 @@ public class StreamLoadManagerTest {
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
-        StreamLoadTask task = streamLoadManager.getTaskById(1002L);
+        AbstractStreamLoadTask task = streamLoadManager.getTaskById(1002L);
         Assertions.assertNull(task);
     }
 

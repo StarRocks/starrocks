@@ -20,13 +20,13 @@
 #include <set>
 #include <variant>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -213,8 +213,8 @@ struct HashTableProbeState {
     std::optional<ImmBuffer<uint8_t>> null_array;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
-    ColumnPtr build_index_column;
-    ColumnPtr probe_index_column;
+    MutableColumnPtr build_index_column;
+    MutableColumnPtr probe_index_column;
     Buffer<uint32_t>& build_index;
     Buffer<uint32_t>& probe_index;
 

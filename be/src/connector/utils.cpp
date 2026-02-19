@@ -15,15 +15,15 @@
 #include "connector/utils.h"
 
 #include "arrow/util/decimal.h"
+#include "base/url_coding.h"
+#include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
-#include "column/datum.h"
 #include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
-#include "util/integer_util.h"
-#include "util/url_coding.h"
+#include "types/datum.h"
 
 namespace starrocks::connector {
 

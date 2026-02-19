@@ -89,7 +89,7 @@ select to_tera_timestamp("1988/04/08 02 pm:3:4","yyyy/mm/dd hh pm:mi:ss");
 -- !result
 select to_tera_date(";198804:08",";YYYYmm:dd");
 -- result:
-[REGEX].*'The format parameter ;YYYYmm:dd is invalid .*'
+[REGEX].*The format parameter ;YYYYmm:dd is invalid .*
 -- !result
 select to_tera_date("1988/04/08","yy/mm/dd");
 -- result:
@@ -97,7 +97,7 @@ None
 -- !result
 select to_tera_date("1988/04/08","xyz/mm/dd");
 -- result:
-[REGEX].*'The format parameter xyz/mm/dd is invalid .*'
+[REGEX].*The format parameter xyz/mm/dd is invalid.*
 -- !result
 select to_tera_timestamp("1988/04/0800 02 pm:3:4","yyyy/mm/dd hh am:mi:ss");
 -- result:

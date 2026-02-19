@@ -16,14 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 

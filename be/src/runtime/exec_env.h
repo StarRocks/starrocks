@@ -39,14 +39,16 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "storage/options.h"
-#include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecessary includes will cause compilation very slow.
 // So please consider use forward declaration as much as possible.
@@ -61,6 +63,7 @@ class ExternalScanContextMgr;
 class FragmentMgr;
 class LoadPathMgr;
 class LoadStreamMgr;
+class LookUpDispatcherMgr;
 class StreamContextMgr;
 class TransactionMgr;
 class BatchWriteMgr;
@@ -78,7 +81,7 @@ class SmallFileMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
-class QuerySpillManager;
+class GlobalSpillManager;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -101,6 +104,7 @@ class LocationProvider;
 class TabletManager;
 class UpdateManager;
 class ReplicationTxnManager;
+class LakePersistentIndexParallelCompactMgr;
 } // namespace lake
 namespace spill {
 class DirManager;
@@ -267,6 +271,7 @@ public:
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     MetricRegistry* metrics() const { return _metrics; }
     DataStreamMgr* stream_mgr() { return _stream_mgr; }
+    LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
     ResultBufferMgr* result_mgr() { return _result_mgr; }
     ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
     ClientCache<BackendServiceClient>* client_cache() { return _backend_client_cache; }
@@ -317,6 +322,7 @@ public:
     ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
+    MemTracker* query_pool_mem_tracker() { return GlobalEnv::GetInstance()->query_pool_mem_tracker(); }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
@@ -349,9 +355,17 @@ public:
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
+    spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
+
     ThreadPool* delete_file_thread_pool();
 
     ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
+
+    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
+
+    ThreadPool* pk_index_execution_thread_pool() { return _pk_index_execution_thread_pool.get(); }
+
+    ThreadPool* pk_index_memtable_flush_thread_pool() { return _pk_index_memtable_flush_thread_pool.get(); }
 
     void try_release_resource_before_core_dump();
 
@@ -424,11 +438,16 @@ private:
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
     std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
+    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
+    std::unique_ptr<ThreadPool> _pk_index_execution_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+    std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
+    LookUpDispatcherMgr* _lookup_dispatcher_mgr;
 };
 
 template <>

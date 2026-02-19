@@ -840,7 +840,20 @@ struct TMasterOpRequest {
     37: optional i64 txn_id;
     38: optional bool isInternalStmt;
 
+    39: optional bool is_arrow_flight_sql;
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
+}
+
+struct TNotifyForwardDeploymentFinishedRequest {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId arrow_flight_sql_result_fragment_id;
+    3: optional i64 arrow_flight_sql_result_backend_id;
+    4: optional binary arrow_flight_sql_result_schema;
+}
+
+struct TNotifyForwardDeploymentFinishedRespone {
+    1: optional Status.TStatus status
 }
 
 struct TColumnDefinition {
@@ -872,6 +885,8 @@ struct TMasterOpResult {
     7: optional TAuditStatistics audit_statistics;
     8: optional string errorMsg;
     9: optional i64 txn_id;
+    // SQL digest computed by Leader after analyze
+    10:optional string sql_digest;
 }
 
 struct TIsMethodSupportedRequest {
@@ -1929,6 +1944,7 @@ struct TPartitionReplicationInfo {
     2: optional i64 src_version
     3: optional map<i64, TIndexReplicationInfo> index_replication_infos
     4: optional i64 src_version_epoch
+    5: optional i64 src_partition_id
 }
 
 struct TTableReplicationRequest {
@@ -1941,6 +1957,11 @@ struct TTableReplicationRequest {
     7: optional i64 src_table_data_size
     8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
     9: optional string job_id
+    10: optional Types.TRunMode src_cluster_run_mode
+    11: optional string src_storage_volume_name
+    12: optional string src_service_id
+    13: optional i64 src_database_id
+    14: optional i64 src_table_id
 }
 
 struct TTableReplicationResponse {
@@ -2229,7 +2250,7 @@ enum TTableSchemaRequestSource {
 }
 
 struct TGetTableSchemaRequest {
-    1: optional PlanNodes.TTableSchemaMeta schema_meta;
+    1: optional Descriptors.TTableSchemaKey schema_key;
     2: optional TTableSchemaRequestSource source;
     3: optional i64 tablet_id;
     // Valid if request_source is SCAN
@@ -2290,6 +2311,7 @@ service FrontendService {
 
     //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems
     TMasterOpResult forward(TMasterOpRequest params)
+    TNotifyForwardDeploymentFinishedRespone notifyForwardDeploymentFinished(TNotifyForwardDeploymentFinishedRequest request)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)

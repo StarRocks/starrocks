@@ -14,28 +14,31 @@
 
 #pragma once
 
-#include "butil/file_util.h"
+#include <butil/file_util.h>
+#include <butil/files/file_path.h>
+
+#include "base/path/file_util.h"
+#include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
 #include "column/column_helper.h"
 #include "common/config.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
+#include "types/time_types.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -115,11 +118,11 @@ int init_test_env(int argc, char** argv) {
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
-    CHECK(StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
+    CHECK(engine->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
     exec_env->wait_for_finish();
     // delete engine
-    StorageEngine::instance()->stop();
+    engine->stop();
     // destroy exec env
     tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
@@ -128,6 +131,7 @@ int init_test_env(int argc, char** argv) {
         exec_env->lake_tablet_manager()->stop();
     }
 #endif
+    delete engine;
     exec_env->destroy();
     cache_env->destroy();
     global_env->stop();

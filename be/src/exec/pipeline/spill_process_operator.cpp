@@ -23,14 +23,20 @@
 namespace starrocks::pipeline {
 
 bool SpillProcessOperator::has_output() const {
-    return _channel->has_output();
+    return !_is_finished && _channel->has_output();
 }
 
 bool SpillProcessOperator::is_finished() const {
-    return _channel->is_finished();
+    return _is_finished || _channel->is_finished();
+}
+
+Status SpillProcessOperator::set_finished(RuntimeState* state) {
+    _is_finished = true;
+    return Status::OK();
 }
 
 void SpillProcessOperator::close(RuntimeState* state) {
+    _channel->close();
     SourceOperator::close(state);
 }
 

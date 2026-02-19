@@ -39,7 +39,6 @@
 #include <memory>
 #include <utility>
 
-#include "column/datum.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
@@ -53,6 +52,7 @@
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
+#include "types/datum.h"
 #include "util/once.h"
 
 namespace starrocks {
@@ -143,6 +143,7 @@ public:
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     LogicalType column_type() const { return _column_type; }
+    int32_t column_length() const { return _column_length; }
     bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }
     bool all_dict_encoded() const { return _flags & kAllDictEncodedMask; }
 
@@ -188,7 +189,7 @@ public:
     Status load_ordinal_index(const IndexReadOptions& opts);
 
     Status new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedIndexIterator** iterator,
-                                       const SegmentReadOptions& opts);
+                                       const SegmentReadOptions& opts, const IndexReadOptions& index_opt);
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
@@ -241,7 +242,8 @@ private:
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages,
                             const Range<>* src_range);
 
-    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
+    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts,
+                                const IndexReadOptions& index_opt);
 
     NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
 
@@ -257,6 +259,7 @@ private:
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
     LogicalType _column_child_type = TYPE_UNKNOWN;
+    int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
     uint32 _column_unique_id = std::numeric_limits<uint32_t>::max();
@@ -269,6 +272,7 @@ private:
     std::unique_ptr<OrdinalIndexPB> _ordinal_index_meta;
     std::unique_ptr<BitmapIndexPB> _bitmap_index_meta;
     std::unique_ptr<BloomFilterIndexPB> _bloom_filter_index_meta;
+    std::unique_ptr<BuiltinInvertedIndexPB> _builtin_inverted_index_meta;
 
     std::unique_ptr<ZoneMapIndexReader> _zonemap_index;
     std::unique_ptr<OrdinalIndexReader> _ordinal_index;

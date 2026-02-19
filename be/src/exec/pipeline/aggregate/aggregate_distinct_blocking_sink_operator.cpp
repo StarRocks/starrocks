@@ -14,16 +14,21 @@
 
 #include "aggregate_distinct_blocking_sink_operator.h"
 
+#include "base/concurrency/race_detect.h"
 #include "runtime/current_thread.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
 Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
-    RETURN_IF_ERROR(_aggregator->open(state));
     _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
+}
+
+Status AggregateDistinctBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->open(state));
     return Status::OK();
 }
 

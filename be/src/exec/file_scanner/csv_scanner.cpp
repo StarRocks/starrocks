@@ -14,15 +14,16 @@
 
 #include "exec/file_scanner/csv_scanner.h"
 
+#include "base/string/slice.h"
+#include "base/string/string_parser.hpp"
+#include "base/string/utf8_check.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "util/slice.h"
-#include "util/string_parser.hpp"
-#include "util/utf8_check.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -132,6 +133,7 @@ char* CSVScanner::ScannerCSVReader::_find_line_delimiter(CSVBuffer& buffer, size
 CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                        ScannerCounter* counter, bool schema_only)
         : FileScanner(state, profile, scan_range.params, counter, schema_only), _scan_range(scan_range) {
+    _file_format_str = "csv";
     if (scan_range.params.__isset.multi_column_separator) {
         _parse_options.column_delimiter = scan_range.params.multi_column_separator;
     } else {
@@ -233,7 +235,7 @@ void CSVScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk
     chunk->materialized_nullable();
     for (int i = 0; i < chunk->num_columns(); i++) {
         AdaptiveNullableColumn* adaptive_column =
-                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
         chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
                                                              adaptive_column->materialized_raw_null_column()),
                                       i);
@@ -267,6 +269,9 @@ Status CSVScanner::_init_reader() {
             }
             CSVReader::Record dummy;
             RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+        } else {
+            // NOTE: if the file is split into multiple ranges, the first range is responsible to increase the counter.
+            ++_counter->num_files_read;
         }
 
         // only the first range needs to skip header
@@ -346,7 +351,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+        _column_raw_ptrs[i] = chunk->get_column_raw_ptr_by_index(i);
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
@@ -402,8 +407,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                 _report_error(record, "Invalid UTF-8 row");
             }
             if (_state->enable_log_rejected_record()) {
-                _state->append_rejected_record_to_file(record.to_string(), "Invalid UTF-8 row",
-                                                       _curr_reader->filename());
+                RuntimeStateHelper::append_rejected_record_to_file(_state, record.to_string(), "Invalid UTF-8 row",
+                                                                   _curr_reader->filename());
             }
             continue;
         }
@@ -467,7 +472,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+        _column_raw_ptrs[i] = chunk->get_column_raw_ptr_by_index(i);
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
@@ -583,14 +588,17 @@ ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
 }
 
 void CSVScanner::_report_error(const CSVReader::Record& record, const std::string& err_msg) {
-    _state->append_error_msg_to_file(record.to_string(), err_msg);
+    RuntimeStateHelper::append_error_msg_to_file(_state, record.to_string(), err_msg);
 }
 
 void CSVScanner::_report_rejected_record(const CSVReader::Record& record, const std::string& err_msg) {
-    _state->append_rejected_record_to_file(record.to_string(), err_msg, _curr_reader->filename());
+    RuntimeStateHelper::append_rejected_record_to_file(_state, record.to_string(), err_msg, _curr_reader->filename());
 }
 
-static TypeDescriptor get_type_desc(const Slice& field) {
+static TypeDescriptor get_type_desc(const Slice& field, const bool& sampleTypes) {
+    if (!sampleTypes) {
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
     StringParser::ParseResult result;
 
     StringParser::string_to_int<int64_t>(field.get_data(), field.get_size(), &result);
@@ -642,7 +650,8 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
         _curr_reader->split_record(record, &fields);
         for (size_t i = 0; i < fields.size(); i++) {
             // column name: $1, $2, $3...
-            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(fields[i]));
+            schema.emplace_back(i, fmt::format("${}", i + 1),
+                                get_type_desc(fields[i], _scan_range.params.schema_sample_types));
         }
         schemas.emplace_back(schema);
         i++;
@@ -679,7 +688,8 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
             const Slice field(basePtr + column.start_pos, column.length);
 
             // column name: $1, $2, $3...
-            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(field));
+            schema.emplace_back(i, fmt::format("${}", i + 1),
+                                get_type_desc(field, _scan_range.params.schema_sample_types));
         }
         schemas.emplace_back(schema);
         i++;

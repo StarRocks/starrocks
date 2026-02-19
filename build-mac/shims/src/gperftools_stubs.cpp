@@ -15,6 +15,8 @@
 // Stub implementations for gperftools/TCMalloc functions on macOS
 // We use jemalloc instead of TCMalloc on macOS
 
+#include <cstddef>
+
 extern "C" {
 
 // MallocExtension function (TCMalloc-specific)
@@ -33,6 +35,12 @@ int ProfilerStart(const char* fname) {
 
 void ProfilerStop() {
     // CPU profiling not supported on macOS build
+}
+
+// jemalloc mallctl stub - macOS system malloc doesn't have this
+int mallctl(const char* name, void* oldp, size_t* oldlenp, void* newp, size_t newlen) {
+    // Return error - jemalloc mallctl not available on macOS system malloc
+    return 1;
 }
 
 } // extern "C"

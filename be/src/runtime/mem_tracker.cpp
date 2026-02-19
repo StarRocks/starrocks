@@ -36,8 +36,7 @@
 
 #include <utility>
 
-#include "runtime/runtime_state.h"
-#include "service/backend_options.h"
+#include "common/system/backend_options.h"
 
 namespace starrocks {
 
@@ -199,6 +198,18 @@ MemTracker::~MemTracker() {
     if (parent()) {
         unregister_from_parent();
     }
+
+#ifdef DEBUG
+    {
+        std::unique_lock<std::mutex> lock(_child_trackers_lock);
+        for (const auto& child : _child_trackers) {
+            LOG(WARNING) << "MemTracker '" << _label << "' is being destroyed without releasing child tracker "
+                         << child->label();
+        }
+        DCHECK(_child_trackers.empty()) << err_msg("Child mem trackers have not been released, may cause corruption");
+    }
+#endif
+
     // When the mem_tracker is destroyed, manually setting _consumption to null can easily
     // trigger a use-after-free bug in MemTracker.
     _consumption = nullptr;
@@ -234,12 +245,12 @@ MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, Sim
     return item;
 }
 
-std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) const {
+std::string MemTracker::err_msg(const std::string& msg, std::string_view fragment_instance_id) const {
     std::stringstream str;
     str << "Memory of " << label() << " exceed limit. " << msg << " ";
     str << "Backend: " << BackendOptions::get_localhost() << ", ";
-    if (state != nullptr) {
-        str << "fragment: " << print_id(state->fragment_instance_id()) << " ";
+    if (!fragment_instance_id.empty()) {
+        str << "fragment: " << fragment_instance_id << " ";
     }
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
     switch (type()) {

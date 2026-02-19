@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "base/concurrency/race_detect.h"
+#include "base/concurrency/spinlock.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -22,8 +24,6 @@
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/race_detect.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 

@@ -23,7 +23,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
@@ -256,7 +256,7 @@ TEST_F(AiFunctionsTest, AiQueryWithNullValues) {
     ASSERT_EQ(result_column->size(), 2) << "Result should contain 2 entries";
 
     // Check if result column is nullable
-    auto* nullable_result = dynamic_cast<NullableColumn*>(result_column.get());
+    auto* nullable_result = dynamic_cast<const NullableColumn*>(result_column.get());
     if (nullable_result != nullptr) {
         // If result is nullable, verify null handling
         const auto& null_data = nullable_result->null_column_data();

@@ -196,7 +196,7 @@ TEST_F(OlapTablePartitionParamTest, NodesInfo) {
 }
 
 TEST_F(OlapTablePartitionParamTest, removePartition) {
-    Columns columns;
+    MutableColumns columns;
     for (size_t i = 0; i < 2; i++) {
         auto column = FixedLengthColumn<int32_t>::create();
         for (int j = 0; j < 5; j++) {

@@ -16,6 +16,8 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
@@ -24,17 +26,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+// @TODO getName maynot be the base column name
 public class LogicalMetaScanOperator extends LogicalScanOperator {
     private long selectedIndexId = -1;
-    private Map<Integer, String> aggColumnIdToNames = ImmutableMap.of();
+    // agg column id -> (agg_function_name, column)
+    private Map<Integer, Pair<String, Column>> aggColumnIdToColumns = ImmutableMap.of();
     private List<String> selectPartitionNames = Collections.emptyList();
+    private List<Long> hintsTabletIds = Collections.emptyList();
 
     private LogicalMetaScanOperator() {
         super(OperatorType.LOGICAL_META_SCAN);
     }
 
-    public Map<Integer, String> getAggColumnIdToNames() {
-        return aggColumnIdToNames;
+    public Map<Integer, Pair<String, Column>> getAggColumnIdToColumns() {
+        return aggColumnIdToColumns;
     }
 
     public List<String> getSelectPartitionNames() {
@@ -43,6 +48,10 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
     public long getSelectedIndexId() {
         return selectedIndexId;
+    }
+
+    public List<Long> getHintsTabletIds() {
+        return hintsTabletIds;
     }
 
     @Override
@@ -62,14 +71,15 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
             return false;
         }
         LogicalMetaScanOperator that = (LogicalMetaScanOperator) o;
-        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
+        return Objects.equals(aggColumnIdToColumns, that.aggColumnIdToColumns) &&
                 Objects.equals(selectPartitionNames, that.selectPartitionNames) &&
+                Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
                 selectedIndexId == that.selectedIndexId;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), aggColumnIdToNames);
+        return Objects.hash(super.hashCode(), aggColumnIdToColumns, selectPartitionNames, hintsTabletIds, selectedIndexId);
     }
 
     public static LogicalMetaScanOperator.Builder builder() {
@@ -87,14 +97,16 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         @Override
         public LogicalMetaScanOperator.Builder withOperator(LogicalMetaScanOperator operator) {
             super.withOperator(operator);
-            builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
+            builder.aggColumnIdToColumns = ImmutableMap.copyOf(operator.aggColumnIdToColumns);
             builder.selectPartitionNames = operator.selectPartitionNames;
+            builder.hintsTabletIds = operator.hintsTabletIds;
             builder.columnAccessPaths = ImmutableList.copyOf(operator.columnAccessPaths);
             return this;
         }
 
-        public LogicalMetaScanOperator.Builder setAggColumnIdToNames(Map<Integer, String> aggColumnIdToNames) {
-            builder.aggColumnIdToNames = aggColumnIdToNames;
+        public LogicalMetaScanOperator.Builder setAggColumnIdToColumns(
+                Map<Integer, Pair<String, Column>> aggColumnIdToColumns) {
+            builder.aggColumnIdToColumns = aggColumnIdToColumns;
             return this;
         }
 
@@ -105,6 +117,11 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
         public LogicalMetaScanOperator.Builder setSelectedIndexId(long selectedIndexId) {
             builder.selectedIndexId = selectedIndexId;
+            return this;
+        }
+
+        public LogicalMetaScanOperator.Builder setHintsTabletIds(List<Long> hintsTabletIds) {
+            builder.hintsTabletIds = hintsTabletIds != null ? hintsTabletIds : Collections.emptyList();
             return this;
         }
     }

@@ -34,7 +34,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfo;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -46,7 +45,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -91,9 +89,6 @@ public class LakeMaterializedView extends MaterializedView {
 
     @Override
     public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.setStorageInfo(new StorageInfo(pathInfo, dataCacheInfo.getCacheInfo()));
     }
 
@@ -131,17 +126,15 @@ public class LakeMaterializedView extends MaterializedView {
     @Override
     public Map<String, String> getProperties() {
         Map<String, String> properties = super.getProperties();
-        if (tableProperty != null) {
-            StorageInfo storageInfo = tableProperty.getStorageInfo();
-            if (storageInfo != null) {
-                // datacache.enable
-                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
-                        String.valueOf(storageInfo.isEnableDataCache()));
+        StorageInfo storageInfo = tableProperty.getStorageInfo();
+        if (storageInfo != null) {
+            // datacache.enable
+            properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                    String.valueOf(storageInfo.isEnableDataCache()));
 
-                // enable_async_write_back
-                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
-                        String.valueOf(storageInfo.isEnableAsyncWriteBack()));
-            }
+            // enable_async_write_back
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                    String.valueOf(storageInfo.isEnableAsyncWriteBack()));
         }
         return properties;
     }

@@ -19,6 +19,7 @@
 
 #include <cmath>
 
+#include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -26,7 +27,6 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -123,7 +123,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(1, j);
         }
     }
@@ -180,7 +180,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(result);
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(1, j);
         }
     }
@@ -244,7 +244,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
             }
         }
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(20, j);
         }
     }

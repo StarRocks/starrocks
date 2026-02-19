@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -171,9 +172,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowColumnStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowColumnStmt stmt = new ShowColumnStmt(tableName, "test_db", null, false);
-        stmt.init();
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(tableRef, null, false);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Field", metaData.getColumn(0).getName());
@@ -186,9 +187,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowColumnStmtVerbose() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowColumnStmt stmt = new ShowColumnStmt(tableName, "test_db", null, true);
-        stmt.init();
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(tableRef, null, true);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(9, metaData.getColumnCount());
         Assertions.assertEquals("Field", metaData.getColumn(0).getName());
@@ -301,8 +302,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -311,8 +313,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmtView() {
-        TableName tableName = new TableName("test_db", "test_view");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.VIEW);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_view")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.VIEW);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -321,8 +324,10 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmtMaterializedView() {
-        TableName tableName = new TableName("test_db", "test_mv");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_mv")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef,
+                ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -411,8 +416,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowIndexStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowIndexStmt stmt = new ShowIndexStmt("test_db", tableName);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowIndexStmt stmt = new ShowIndexStmt(tableRef);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(12, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -534,6 +540,18 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("Type", metaData.getColumn(3).getName());
         Assertions.assertEquals("IsMutable", metaData.getColumn(4).getName());
         Assertions.assertEquals("Comment", metaData.getColumn(5).getName());
+    }
+
+    @Test
+    public void testAdminShowAutomatedSnapshotStmt() {
+        AdminShowAutomatedSnapshotStmt stmt = new AdminShowAutomatedSnapshotStmt();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertEquals(5, metaData.getColumnCount());
+        Assertions.assertEquals("Enabled", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Interval", metaData.getColumn(1).getName());
+        Assertions.assertEquals("StorageVolume", metaData.getColumn(2).getName());
+        Assertions.assertEquals("LastSnapshotTime", metaData.getColumn(3).getName());
+        Assertions.assertEquals("NextSnapshotTime", metaData.getColumn(4).getName());
     }
 
     @Test
@@ -738,8 +756,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowPartitionsStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableName, null, null, null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableRef, null, null, null, false);
 
         // Test basic statement creation
         Assertions.assertNotNull(stmt);
@@ -798,13 +817,17 @@ public class ShowStmtMetaTest {
     public void testShowResourceGroupUsageStmt() {
         ShowResourceGroupUsageStmt stmt = new ShowResourceGroupUsageStmt("test_group", null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(6, metaData.getColumnCount());
+        Assertions.assertEquals(10, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Id", metaData.getColumn(1).getName());
         Assertions.assertEquals("Backend", metaData.getColumn(2).getName());
         Assertions.assertEquals("BEInUseCpuCores", metaData.getColumn(3).getName());
         Assertions.assertEquals("BEInUseMemBytes", metaData.getColumn(4).getName());
         Assertions.assertEquals("BERunningQueries", metaData.getColumn(5).getName());
+        Assertions.assertEquals("BEMemLimitBytes", metaData.getColumn(6).getName());
+        Assertions.assertEquals("BEMemPool", metaData.getColumn(7).getName());
+        Assertions.assertEquals("BEMemPoolInUseMemBytes", metaData.getColumn(8).getName());
+        Assertions.assertEquals("BEMemPoolMemLimitBytes", metaData.getColumn(9).getName());
     }
 
     @Test
@@ -998,11 +1021,11 @@ public class ShowStmtMetaTest {
     public void testShowResourceGroupStmt() {
         ShowResourceGroupStmt stmt = new ShowResourceGroupStmt("test_group", false, false, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(11, metaData.getColumnCount());
+        Assertions.assertEquals(12, metaData.getColumnCount());
         Assertions.assertEquals("name", metaData.getColumn(0).getName());
         Assertions.assertEquals("id", metaData.getColumn(1).getName());
-        Assertions.assertEquals("cpu_weight", metaData.getColumn(2).getName());
-        Assertions.assertEquals("exclusive_cpu_cores", metaData.getColumn(3).getName());
+        Assertions.assertEquals("cpu_weight_percent", metaData.getColumn(2).getName());
+        Assertions.assertEquals("exclusive_cpu_percent", metaData.getColumn(3).getName());
         Assertions.assertEquals("mem_limit", metaData.getColumn(4).getName());
         Assertions.assertEquals("big_query_cpu_second_limit", metaData.getColumn(5).getName());
         Assertions.assertEquals("big_query_scan_rows_limit", metaData.getColumn(6).getName());
@@ -1010,6 +1033,7 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("concurrency_limit", metaData.getColumn(8).getName());
         Assertions.assertEquals("spill_mem_limit_threshold", metaData.getColumn(9).getName());
         Assertions.assertEquals("classifiers", metaData.getColumn(10).getName());
+        Assertions.assertEquals("warehouses", metaData.getColumn(11).getName());
     }
 
     @Test
@@ -1234,8 +1258,9 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("DetailCmd", metaData.getColumn(9).getName());
 
         // Test with table name but no table set (should return empty list)
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowTabletStmt stmt2 = new ShowTabletStmt(tableName, 12345L, NodePosition.ZERO);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowTabletStmt stmt2 = new ShowTabletStmt(tableRef, 12345L, NodePosition.ZERO);
         ShowResultSetMetaData metaData2 = new ShowResultMetaFactory().getMetadata(stmt2);
         Assertions.assertEquals(0, metaData2.getColumnCount());
 

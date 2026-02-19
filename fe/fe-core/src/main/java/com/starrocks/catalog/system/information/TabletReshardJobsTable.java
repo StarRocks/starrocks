@@ -34,17 +34,17 @@ public class TabletReshardJobsTable {
                 builder()
                         .column("JOB_ID", IntegerType.BIGINT)
                         .column("DB_ID", IntegerType.BIGINT)
-                        .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DB_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("TABLE_ID", IntegerType.BIGINT)
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("JOB_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("JOB_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("JOB_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("JOB_STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("TRANSACTION_ID", IntegerType.BIGINT)
                         .column("PARALLEL_PARTITIONS", IntegerType.BIGINT)
                         .column("PARALLEL_TABLETS", IntegerType.BIGINT)
                         .column("CREATED_TIME", DateType.DATETIME)
                         .column("FINISHED_TIME", DateType.DATETIME)
-                        .column("ERROR_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ERROR_MESSAGE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_TABLET_RESHARD_JOBS);
     }
 }

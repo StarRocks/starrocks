@@ -142,7 +142,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         FINISHED, // task is finished
         CANCELLED, // task is failed
         TIMEOUT, // task is timeout
-        UNEXPECTED // other unexpected errors
+        UNEXPECTED, // other unexpected errors
+        EXPIRED // tablet will be erased soon
     }
 
     private Type type;
@@ -951,9 +952,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (physicalPartition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "physical partition " + physicalPartitionId + " does not exist");
             }
-            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+            MaterializedIndex index = physicalPartition.getIndex(indexId);
+            if (index == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "materialized index " + indexId + " does not exist");
+            }
+            long indexMetaId = index.getMetaId();
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
             if (indexMeta == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
+                throw new SchedException(Status.UNRECOVERABLE, "materialized index meta " + indexMetaId + " does not exist");
             }
             TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                     .setId(indexMeta.getSchemaId())
@@ -968,6 +974,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setIndexes(olapTable.getCopiedIndexes())
                     .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                     .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                    .setPrimaryKeyEncodingType(olapTable.getPrimaryKeyEncodingType())
                     .build().toTabletSchema();
 
             CreateReplicaTask task = CreateReplicaTask.newBuilder()
@@ -1081,9 +1088,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "index does not exist");
             }
 
-            if (schemaHash != olapTable.getSchemaHashByIndexId(indexId)) {
+            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(index.getMetaId())) {
                 throw new SchedException(Status.UNRECOVERABLE, "schema hash is not consistent. index's: "
-                        + olapTable.getSchemaHashByIndexId(indexId)
+                        + olapTable.getSchemaHashByIndexMetaId(index.getMetaId())
                         + ", task's: " + schemaHash);
             }
 

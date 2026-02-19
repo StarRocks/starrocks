@@ -14,7 +14,6 @@
 
 #include "storage/merge_iterator.h"
 
-#include <boost/heap/skew_heap.hpp>
 #include <memory>
 #include <queue>
 #include <vector>

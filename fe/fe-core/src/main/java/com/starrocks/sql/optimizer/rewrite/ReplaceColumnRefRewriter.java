@@ -15,12 +15,14 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 // Replace the corresponding ColumnRef with ScalarOperator
 public class ReplaceColumnRefRewriter {
@@ -65,6 +67,10 @@ public class ReplaceColumnRefRewriter {
     }
 
     private class Rewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
+        // Track keys that are temporarily excluded from replacement during recursive rewriting
+        // to prevent cycles when a replaced expression contains the original column reference
+        private final Set<ColumnRefOperator> excludedKeys = Sets.newHashSet();
+
         @Override
         public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
             List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
@@ -76,6 +82,10 @@ public class ReplaceColumnRefRewriter {
 
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator column, Void context) {
+            // If this column is excluded, don't replace it (prevents cycles)
+            if (excludedKeys.contains(column)) {
+                return column;
+            }
             if (!operatorMap.containsKey(column)) {
                 return column;
             }
@@ -98,8 +108,17 @@ public class ReplaceColumnRefRewriter {
                     mapperOperator = mapped;
                 }
                 mapperOperator = mapperOperator.clone();
-                for (int i = 0; i < mapperOperator.getChildren().size(); ++i) {
-                    mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
+                
+                // Temporarily exclude this key from replacement when recursively rewriting children
+                // to prevent cycles when the replacement contains the original column reference
+                excludedKeys.add(column);
+                try {
+                    for (int i = 0; i < mapperOperator.getChildren().size(); ++i) {
+                        mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
+                    }
+                } finally {
+                    // Restore the key after rewriting children
+                    excludedKeys.remove(column);
                 }
             }
             return mapperOperator;

@@ -20,7 +20,6 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-
 namespace starrocks {
 
 class MapColumn final : public CowFactory<ColumnFactory<Column, MapColumn>, MapColumn> {
@@ -32,19 +31,10 @@ public:
 
     MapColumn(MutableColumnPtr&& keys, MutableColumnPtr&& values, MutableColumnPtr&& offsets);
 
-    MapColumn(const MapColumn& rhs)
-            : _keys(rhs._keys->clone()),
-              _values(rhs._values->clone()),
-              _offsets(UInt32Column::static_pointer_cast(rhs._offsets->clone())) {}
+    DISALLOW_COPY(MapColumn);
 
     MapColumn(MapColumn&& rhs) noexcept
             : _keys(std::move(rhs._keys)), _values(std::move(rhs._values)), _offsets(std::move(rhs._offsets)) {}
-
-    MapColumn& operator=(const MapColumn& rhs) {
-        MapColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     MapColumn& operator=(MapColumn&& rhs) noexcept {
         MapColumn tmp(std::move(rhs));
@@ -55,8 +45,6 @@ public:
     static Ptr create(const ColumnPtr& keys, const ColumnPtr& values, const ColumnPtr& offsets) {
         return MapColumn::create(keys->as_mutable_ptr(), values->as_mutable_ptr(), offsets->as_mutable_ptr());
     }
-
-    static Ptr create(const MapColumn& rhs) { return Base::create(rhs); }
 
     static Ptr create(MapColumn&& rhs) { return Base::create(std::move(rhs)); }
 
@@ -130,6 +118,12 @@ public:
 
     MutableColumnPtr clone_empty() const override;
 
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
+
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
@@ -161,6 +155,11 @@ public:
     void reset_column() override;
 
     const UInt32Column& offsets() const { return *_offsets; }
+    UInt32Column& offsets() { return *_offsets; }
+
+    UInt32Column* offsets_column_raw_ptr() { return _offsets.get(); }
+    const UInt32Column* offsets_column_raw_ptr() const { return _offsets.get(); }
+
     const UInt32Column::Ptr& offsets_column() const { return _offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
 
@@ -176,19 +175,29 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _keys->has_large_column() || _values->has_large_column(); }
 
     void check_or_die() const override;
 
     const Column& keys() const { return *_keys; }
+    Column& keys() { return *_keys; }
+
+    Column* keys_column_raw_ptr() { return _keys.get(); }
+    const Column* keys_column_raw_ptr() const { return _keys.get(); }
+
     const ColumnPtr& keys_column() const { return _keys; }
     ColumnPtr& keys_column() { return _keys; }
 
     const Column& values() const { return *_values; }
+    Column& values() { return *_values; }
+
+    Column* values_column_raw_ptr() { return _values.get(); }
+    const Column* values_column_raw_ptr() const { return _values.get(); }
+
     const ColumnPtr& values_column() const { return _values; }
     ColumnPtr& values_column() { return _values; }
 
@@ -210,15 +219,15 @@ public:
 
 private:
     // Keys must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _keys;
+    Column::WrappedPtr _keys;
     // Values must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _values;
+    Column::WrappedPtr _values;
     // Offsets column will store the start position of every map element.
     // Offsets store more one data to indicate the end position.
     // For example, map Column: m1keys [k1, k2, k3], m2keys [k4, k5, k6]
     //                          m1vals [v1, v2, v3], m2vals [v4, v5, v6]
     // The two element array has three offsets(0, 3, 6)
-    UInt32Column::Ptr _offsets;
+    UInt32Column::WrappedPtr _offsets;
 };
 
 } // namespace starrocks

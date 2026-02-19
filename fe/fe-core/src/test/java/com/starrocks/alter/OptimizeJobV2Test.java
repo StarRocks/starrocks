@@ -329,7 +329,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
         List<Replica> replicas = baseTablet.getImmutableReplicas();
         Replica replica1 = replicas.get(0);

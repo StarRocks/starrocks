@@ -23,7 +23,6 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-
 namespace starrocks {
 
 class ArrayViewColumn final : public CowFactory<ColumnFactory<Column, ArrayViewColumn>, ArrayViewColumn> {
@@ -35,21 +34,13 @@ public:
     ArrayViewColumn(ColumnPtr elements, UInt32Column::Ptr offsets, UInt32Column::Ptr lengths)
             : _elements(std::move(elements)), _offsets(std::move(offsets)), _lengths(std::move(lengths)) {}
 
-    ArrayViewColumn(const ArrayViewColumn& rhs)
-            : _elements(rhs._elements),
-              _offsets(UInt32Column::static_pointer_cast(rhs._offsets->clone())),
-              _lengths(UInt32Column::static_pointer_cast(rhs._lengths->clone())) {}
+    DISALLOW_COPY(ArrayViewColumn);
 
     ArrayViewColumn(ArrayViewColumn&& rhs) noexcept
             : _elements(std::move(rhs._elements)),
               _offsets(std::move(rhs._offsets)),
               _lengths(std::move(rhs._lengths)) {}
 
-    ArrayViewColumn& operator=(const ArrayViewColumn& rhs) {
-        ArrayViewColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
     ArrayViewColumn& operator=(ArrayViewColumn&& rhs) noexcept {
         ArrayViewColumn tmp(std::move(rhs));
         this->swap_column(tmp);
@@ -143,6 +134,12 @@ public:
 
     MutableColumnPtr clone_empty() const override;
 
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
+
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
@@ -155,7 +152,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     std::string get_name() const override { return "array-view-" + _elements->get_name(); }
 
@@ -179,11 +176,18 @@ public:
     void reset_column() override;
 
     const Column& elements() const { return *_elements; }
-    const ColumnPtr elements_column() const { return _elements; }
+    Column& elements() { return *_elements; }
+    const ColumnPtr& elements_column() const { return _elements; }
+    ColumnPtr& elements_column() { return _elements; }
 
     const UInt32Column& offsets() const { return *_offsets; }
+    UInt32Column& offsets() { return *_offsets; }
+    const UInt32Column::Ptr& offsets_column() const { return _offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
+
     const UInt32Column& lengths() const { return *_lengths; }
+    UInt32Column& lengths() { return *_lengths; }
+    const UInt32Column::Ptr& lengths_column() const { return _lengths; }
     UInt32Column::Ptr& lengths_column() { return _lengths; }
 
     bool is_nullable() const override { return false; }
@@ -197,9 +201,9 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override { return nullptr; }
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override { return nullptr; }
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return _elements->has_large_column(); }
 
@@ -211,7 +215,7 @@ public:
 
     // build array_view column from array_column
     // if array_column is nullable, return Nullable(ArrayViewColumn), otherwise return ArrayViewColumn
-    static ColumnPtr from_array_column(const ColumnPtr& column);
+    static MutableColumnPtr from_array_column(const ColumnPtr& column);
     static ColumnPtr to_array_column(const ColumnPtr& column);
     ColumnPtr to_array_column() const;
 
@@ -225,8 +229,8 @@ public:
     }
 
 private:
-    ColumnPtr _elements;
-    UInt32Column::Ptr _offsets;
-    UInt32Column::Ptr _lengths;
+    Column::WrappedPtr _elements;
+    UInt32Column::WrappedPtr _offsets;
+    UInt32Column::WrappedPtr _lengths;
 };
 } // namespace starrocks

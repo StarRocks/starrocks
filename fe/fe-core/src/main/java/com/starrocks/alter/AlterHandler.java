@@ -123,16 +123,17 @@ public abstract class AlterHandler extends FrontendDaemon {
         return this.alterJobsV2;
     }
 
-    private void clearExpireFinishedOrCancelledAlterJobsV2() {
+    protected void clearExpireFinishedOrCancelledAlterJobsV2() {
         Iterator<Map.Entry<Long, AlterJobV2>> iterator = alterJobsV2.entrySet().iterator();
         while (iterator.hasNext()) {
             AlterJobV2 alterJobV2 = iterator.next().getValue();
             if (alterJobV2.isExpire() && GlobalStateMgr.getCurrentState()
                     .getClusterSnapshotMgr().isDeletionSafeToExecute(alterJobV2.getFinishedTimeMs())) {
-                iterator.remove();
                 RemoveAlterJobV2OperationLog log =
                         new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log, wal -> {
+                    iterator.remove();
+                });
                 LOG.info("remove expired {} job {}. finish at {}", alterJobV2.getType(),
                         alterJobV2.getJobId(), TimeUtils.longToTimeString(alterJobV2.getFinishedTimeMs()));
             }

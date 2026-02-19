@@ -30,6 +30,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -40,7 +41,6 @@
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "util/block_split_bloom_filter.h"
-#include "util/phmap/phmap.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -71,6 +71,20 @@ public:
     bool remain = false;
     OP op = OP_INCLUDE; // merge flat json use, to mark the path is need
     FlatJsonHashMap<std::string_view, std::unique_ptr<JsonFlatPath>> children;
+
+    // derived stats
+    // json compatible type
+    uint8_t json_type = 31; // JSON_NULL_TYPE_BITS
+    // column path hit count, some json may be null or none, so hit use to record the actual value
+    // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
+    uint32_t hits = 0;
+    // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
+    uint64_t max_uint = 0;
+    // same key may appear many times in json, so we need avoid duplicate compute hits
+    uint32_t last_row = -1;
+    uint32_t multi_times = 0;
+    uint32_t base_type_count = 0; // for count the base type, e.g: int, double, string
+    uint32_t object_count = 0;    // for count the object type
 
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;
@@ -104,7 +118,7 @@ public:
     static std::pair<std::string_view, std::string_view> split_path(const std::string_view& path);
 };
 
-// to deriver json flanttern path
+// to deriver json flatten path
 class JsonPathDeriver {
 public:
     JsonPathDeriver() = default;
@@ -113,7 +127,7 @@ public:
 
     ~JsonPathDeriver() = default;
 
-    // dervie paths
+    // derive paths
     void derived(const std::vector<const Column*>& json_datas);
 
     StatusOr<size_t> check_null_factor(const std::vector<const Column*>& json_datas);
@@ -149,22 +163,6 @@ private:
     void _clean_sparsity_path(const std::string_view& name, JsonFlatPath* root, size_t check_hits_min);
 
 private:
-    struct JsonFlatDesc {
-        // json compatible type
-        uint8_t type = 31; // JSON_NULL_TYPE_BITS
-        // column path hit count, some json may be null or none, so hit use to record the actual value
-        // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
-        uint32_t hits = 0;
-
-        // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
-        uint64_t max = 0;
-
-        // same key may appear many times in json, so we need avoid duplicate compute hits
-        uint32_t last_row = -1;
-        uint32_t multi_times = 0;
-        uint32_t base_type_count = 0; // for count the base type, e.g: int, double, string
-    };
-
     bool _has_remain = false;
     std::vector<std::string> _paths;
     std::vector<LogicalType> _types;
@@ -174,7 +172,6 @@ private:
     int _max_column = config::json_flat_column_max;
 
     size_t _total_rows;
-    FlatJsonHashMap<JsonFlatPath*, JsonFlatDesc> _derived_maps;
     std::shared_ptr<JsonFlatPath> _path_root;
 
     bool _generate_filter = false;
@@ -194,7 +191,7 @@ public:
     // flatten without flat json, input must not flat json
     void flatten(const Column* json_column);
 
-    Columns mutable_result();
+    MutableColumns mutable_result();
 
 private:
     template <bool HAS_REMAIN>
@@ -210,7 +207,7 @@ private:
     std::vector<std::string> _dst_paths;
     std::shared_ptr<JsonFlatPath> _dst_root;
 
-    Columns _flat_columns;
+    MutableColumns _flat_columns;
     JsonColumn* _remain;
 };
 
@@ -261,7 +258,7 @@ private:
     std::vector<std::string> _level_paths;
     bool _output_nullable = false;
 
-    ColumnPtr _result;
+    MutableColumnPtr _result;
     JsonColumn* _json_result;
     NullColumn* _null_result;
 };
@@ -295,9 +292,7 @@ public:
 
     Status trans(const Columns& columns);
 
-    Columns& result() { return _dst_columns; }
-
-    Columns mutable_result();
+    MutableColumns mutable_result();
 
     std::vector<std::string> cast_paths() const;
 
@@ -340,7 +335,7 @@ private:
     bool _dst_remain = false;
     std::vector<std::string> _dst_paths;
     std::vector<LogicalType> _dst_types;
-    Columns _dst_columns;
+    MutableColumns _dst_columns;
 
     std::vector<std::string> _src_paths;
     std::vector<LogicalType> _src_types;

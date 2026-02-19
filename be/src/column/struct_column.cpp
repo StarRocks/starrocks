@@ -15,45 +15,41 @@
 #include "column/struct_column.h"
 
 #include "column/column_helper.h"
-#include "column/column_view/column_view.h"
-#include "util/mysql_row_buffer.h"
+#include "column/mysql_row_buffer.h"
 
 namespace starrocks {
 
 StructColumn::StructColumn(MutableColumns&& fields) {
-    for (auto& f : fields) {
-        DCHECK(f->is_nullable());
-        DCHECK_EQ(f->size(), size());
+    DCHECK_GT(fields.size(), 0);
+    size_t size = fields[0]->size();
+    for (auto&& f : fields) {
+        DCHECK_EQ(f->size(), size) << "All fields must have the same size";
         f->check_or_die();
         _fields.emplace_back(std::move(f));
     }
+    DCHECK_EQ(_fields.size(), fields.size());
 }
 
 StructColumn::StructColumn(MutableColumns&& fields, std::vector<std::string> field_names)
         : _field_names(std::move(field_names)) {
     // Struct must have at least one field.
-    DCHECK(_field_names.size() > 0);
-    for (auto& f : fields) {
+    DCHECK_GT(_field_names.size(), 0);
+    for (auto&& f : fields) {
         _fields.emplace_back(std::move(f));
     }
-    DCHECK(_fields.size() > 0);
+    DCHECK_GT(_fields.size(), 0);
     // fields and field_names must have the same size.
     DCHECK(_fields.size() == _field_names.size());
 }
 
 StructColumn::Ptr StructColumn::create(const Columns& columns, std::vector<std::string> field_names) {
-    auto column = StructColumn::create(MutableColumns());
-    column->_fields.reserve(columns.size());
-    column->_fields.assign(columns.begin(), columns.end());
-    column->_field_names = std::move(field_names);
-    return column;
+    MutableColumns mutable_columns = ColumnHelper::to_mutable_columns(columns);
+    return StructColumn::create(std::move(mutable_columns), std::move(field_names));
 }
 
 StructColumn::Ptr StructColumn::create(const Columns& columns) {
-    auto column = StructColumn::create(MutableColumns());
-    column->_fields.reserve(columns.size());
-    column->_fields.assign(columns.begin(), columns.end());
-    return column;
+    MutableColumns mutable_columns = ColumnHelper::to_mutable_columns(columns);
+    return StructColumn::create(std::move(mutable_columns));
 }
 
 bool StructColumn::is_struct() const {
@@ -122,21 +118,27 @@ void StructColumn::resize(size_t n) {
     // Don't need to resize _field_names, because the number of struct subfield is fixed.
 }
 
-StatusOr<ColumnPtr> StructColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> StructColumn::upgrade_if_overflow() {
     for (auto& column : _fields) {
-        StatusOr<ColumnPtr> status = upgrade_helper_func(&column);
-        if (!status.ok()) {
-            return status;
+        auto ret = upgrade_helper_func(column->as_mutable_raw_ptr());
+        if (!ret.ok()) {
+            return ret;
+        }
+        if (ret.value() != nullptr) {
+            column = std::move(ret.value());
         }
     }
     return nullptr;
 }
 
-StatusOr<ColumnPtr> StructColumn::downgrade() {
+StatusOr<MutableColumnPtr> StructColumn::downgrade() {
     for (auto& column : _fields) {
-        StatusOr<ColumnPtr> status = downgrade_helper_func(&column);
+        StatusOr<MutableColumnPtr> status = downgrade_helper_func(column->as_mutable_raw_ptr());
         if (!status.ok()) {
             return status;
+        }
+        if (status.value() != nullptr) {
+            column = std::move(status.value());
         }
     }
     return nullptr;
@@ -199,7 +201,7 @@ void StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
 
 void StructColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_struct_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     DCHECK(src.is_struct());
@@ -468,7 +470,7 @@ size_t StructColumn::reference_memory_usage(size_t from, size_t size) const {
 void StructColumn::swap_column(Column& rhs) {
     auto& struct_column = down_cast<StructColumn&>(rhs);
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields[i]->swap_column(*struct_column.fields_column()[i]);
+        _fields[i]->swap_column(*struct_column._fields[i]);
     }
     // _field_names dont need swap
 }
@@ -489,7 +491,6 @@ void StructColumn::check_or_die() const {
     DCHECK(_fields.size() == _field_names.size());
 
     for (const auto& column : _fields) {
-        DCHECK(column->is_nullable());
         column->check_or_die();
     }
 }
@@ -501,24 +502,34 @@ void StructColumn::reset_column() {
     }
 }
 
-size_t StructColumn::_find_field_idx_by_name(const std::string& field_name) const {
+Columns StructColumn::fields() const {
+    Columns columns;
+    columns.reserve(_fields.size());
+    for (const auto& field : _fields) {
+        columns.emplace_back(field);
+    }
+    return columns;
+}
+
+StatusOr<size_t> StructColumn::_find_field_idx_by_name(const std::string& field_name) const {
     for (size_t i = 0; i < _field_names.size(); i++) {
         if (_field_names[i] == field_name) {
             return i;
         }
     }
-    DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
-    return -1;
+    return Status::InternalError("Struct subfield name: " + field_name + " not found!");
 }
 
-const ColumnPtr& StructColumn::field_column(const std::string& field_name) const {
-    size_t idx = _find_field_idx_by_name(field_name);
-    return _fields.at(idx);
+StatusOr<const ColumnPtr&> StructColumn::field_column(const std::string& field_name) const {
+    ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
+    const ColumnPtr& ref = _fields.at(idx);
+    return ref;
 }
 
-ColumnPtr& StructColumn::field_column(const std::string& field_name) {
-    size_t idx = _find_field_idx_by_name(field_name);
-    return _fields[idx];
+StatusOr<ColumnPtr&> StructColumn::field_column(const std::string& field_name) {
+    ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
+    ColumnPtr& ref = _fields.at(idx);
+    return ref;
 }
 
 Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {

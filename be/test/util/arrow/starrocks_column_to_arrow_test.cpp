@@ -19,6 +19,7 @@
 #include <set>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/map_column.h"
 #include "common/logging.h"
 
@@ -44,9 +45,9 @@ DIAGNOSTIC_POP
 #include <column/type_traits.h>
 #include <exec/arrow_type_traits.h>
 
+#include "base/types/int128.h"
 #include "column/column_helper.h"
 #include "storage/tablet_schema_helper.h"
-#include "types/large_int_value.h"
 
 namespace starrocks {
 struct StarRocksColumnToArrowTest : public testing::Test {};
@@ -66,7 +67,7 @@ void compare_arrow_value(const RunTimeCppType<LT>& datum, const ArrowTypeIdToArr
     } else if constexpr (lt_is_float<LT> || (lt_is_integer<LT> && !lt_is_largeint<LT>)) {
         ASSERT_EQ(data_array->Value(i), datum);
     } else if constexpr (lt_is_largeint<LT>) {
-        ASSERT_EQ(data_array->GetString(i), LargeIntValue::to_string(datum));
+        ASSERT_EQ(data_array->GetString(i), int128_to_string(datum));
     } else if constexpr (lt_is_string<LT> || lt_is_date_or_datetime<LT>) {
         ASSERT_EQ(data_array->GetString(i), datum.to_string());
     } else if constexpr (lt_is_hll<LT>) {

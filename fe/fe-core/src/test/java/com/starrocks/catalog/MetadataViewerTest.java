@@ -36,13 +36,13 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.backup.CatalogMocker;
-import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;

@@ -70,7 +70,7 @@ TEST_F(ArrayExprTest, test_evaluate) {
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(1, result->size());
         ASSERT_TRUE(result->is_constant());
-        auto array = down_cast<ConstColumn*>(result.get())->data_column();
+        auto array = down_cast<const ConstColumn*>(result.get())->data_column();
         ASSERT_TRUE(array->is_array());
         EXPECT_EQ(0, array->get(0).get_array().size());
     }

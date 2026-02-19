@@ -206,7 +206,7 @@ public class AstToStringBuilder {
             }
 
             // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (index.getSortKeyIdxes() != null) {
                 sb.append("\nORDER BY(");
                 List<String> sortKeysColumnNames = Lists.newArrayList();
@@ -370,13 +370,13 @@ public class AstToStringBuilder {
         // 3. rollup
         if (createRollupStmt != null && (table instanceof OlapTable)) {
             OlapTable olapTable = (OlapTable) table;
-            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexIdToMeta().entrySet()) {
-                if (entry.getKey() == olapTable.getBaseIndexId()) {
+            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexMetaIdToMeta().entrySet()) {
+                if (entry.getKey() == olapTable.getBaseIndexMetaId()) {
                     continue;
                 }
                 MaterializedIndexMeta materializedIndexMeta = entry.getValue();
                 sb = new StringBuilder();
-                String indexName = olapTable.getIndexNameById(entry.getKey());
+                String indexName = olapTable.getIndexNameByMetaId(entry.getKey());
                 sb.append("ALTER TABLE ").append(table.getName()).append(" ADD ROLLUP ").append(indexName);
                 sb.append("(");
 
@@ -415,16 +415,16 @@ public class AstToStringBuilder {
         // Partition column names
         List<String> partitionNames;
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nPARTITION BY (");
-
             if (!table.isIcebergTable()) {
+                createTableSql.append("\nPARTITION BY (");
                 partitionNames = table.getPartitionColumnNames();
+                createTableSql.append(String.join(", ", partitionNames)).append(")");
             } else {
                 partitionNames = ((IcebergTable) table).getPartitionColumnNamesWithTransform();
+                createTableSql.append("\nPARTITION BY ").append(String.join(", ", partitionNames));
             }
-
-            createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
+
 
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {

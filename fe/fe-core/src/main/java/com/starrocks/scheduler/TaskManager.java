@@ -27,12 +27,12 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterTaskInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -79,7 +79,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
@@ -465,9 +464,23 @@ public class TaskManager implements MemoryTrackable {
 
     /**
      * Suspend a task, which will stop the task scheduler and kill the running task run.
-     * NOTE: this method is thread safe, no need to task lock again.
+     * NOTE: this method will write edit log.
      */
     public void suspendTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE),
+                wal -> task.setState(Constants.TaskState.PAUSE)
+        );
+        suspendTaskInternal(task);
+    }
+
+    /**
+     * Internal method to suspend a task without writing edit log.
+     */
+    private void suspendTaskInternal(Task task) {
         if (task == null) {
             return;
         }
@@ -497,9 +510,23 @@ public class TaskManager implements MemoryTrackable {
 
     /**
      * Resume a task, which will restart the task scheduler if the task is periodical.
-     * NOTE: This method is thread safe, no need to task lock again.
+     * NOTE: this method will write edit log.
      */
     public void resumeTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                new AlterTaskInfo(task.getName(), Constants.TaskState.ACTIVE),
+                wal -> task.setState(Constants.TaskState.ACTIVE)
+        );
+        resumeTaskInternal(task);
+    }
+
+    /**
+     * Internal method to resume a task without writing edit log.
+     */
+    private void resumeTaskInternal(Task task) {
         if (task == null) {
             return;
         }
@@ -516,6 +543,50 @@ public class TaskManager implements MemoryTrackable {
             }
             // reset consecutive failure number
             task.resetConsecutiveFailCount();
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Update task properties for subsequent executions.
+     * NOTE: this method will write edit log.
+     */
+    public void updateTaskProperties(Task task, Map<String, String> properties) {
+        if (task == null || properties == null || properties.isEmpty()) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                new AlterTaskInfo(task.getName(), properties),
+                wal -> {
+                    Map<String, String> current = task.getProperties();
+                    if (current == null) {
+                        current = Maps.newHashMap();
+                        task.setProperties(current);
+                    }
+                    current.putAll(properties);
+                }
+        );
+        updateTaskPropertiesInternal(task, properties);
+    }
+
+    /**
+     * Internal method to update task properties without writing edit log.
+     */
+    private void updateTaskPropertiesInternal(Task task, Map<String, String> properties) {
+        if (task == null || properties == null || properties.isEmpty()) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when update Task properties[" + task.getName() + "]");
+        }
+        try {
+            Map<String, String> current = task.getProperties();
+            if (current == null) {
+                current = Maps.newHashMap();
+                task.setProperties(current);
+            }
+            current.putAll(properties);
         } finally {
             taskUnlock();
         }
@@ -648,7 +719,23 @@ public class TaskManager implements MemoryTrackable {
 
     public void replayAlterTask(AlterTaskInfo alterTaskInfo) {
         Task currentTask = getTask(alterTaskInfo.getName());
-        changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+        // Handle task type change (existing logic)
+        if (alterTaskInfo.getType() != null) {
+            changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+        }
+        // Handle task state change (suspend/resume)
+        if (alterTaskInfo.getState() != null) {
+            currentTask.setState(alterTaskInfo.getState());
+        }
+        // Handle properties update
+        if (alterTaskInfo.getProperties() != null) {
+            Map<String, String> current = currentTask.getProperties();
+            if (current == null) {
+                current = Maps.newHashMap();
+                currentTask.setProperties(current);
+            }
+            current.putAll(alterTaskInfo.getProperties());
+        }
     }
 
     @VisibleForTesting
@@ -719,12 +806,13 @@ public class TaskManager implements MemoryTrackable {
                 task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime);
         // set task's next schedule time
         task.setNextScheduleTime(currentDateTime.plusSeconds(initialDelay).toEpochSecond(ZoneOffset.UTC));
-        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> {
             // ensure an execute task will not throw exception
             try {
                 task.setLastScheduleTime(TimeUtils.getEpochSeconds());
                 task.setNextScheduleTime(TimeUtils.getEpochSeconds() + periodSeconds);
+                ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true,
+                        task.getProperties());
                 executeTask(task.getName(), option);
             } catch (Throwable e) {
                 LOG.warn("failed to execute periodical task: {}", task, e);
@@ -800,8 +888,8 @@ public class TaskManager implements MemoryTrackable {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("TaskName", TypeFactory.createVarchar(40)));
-        builder.addColumn(new Column("Status", TypeFactory.createVarchar(10)));
+        builder.addColumn(new Column("TaskName", TypeFactory.createVarcharType(40)));
+        builder.addColumn(new Column("Status", TypeFactory.createVarcharType(10)));
         List<String> item = ImmutableList.of(taskName, submitResult.getStatus().toString());
         List<List<String>> result = ImmutableList.of(item);
         return new ShowResultSet(builder.build(), result);
@@ -1165,12 +1253,8 @@ public class TaskManager implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> taskSamples = idToTaskMap.values()
-                .stream()
-                .limit(1)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(taskSamples, (long) idToTaskMap.size()));
+    public long estimateSize() {
+        return Estimator.estimate(idToTaskMap, 20);
     }
 
     public boolean containTask(String taskName) {

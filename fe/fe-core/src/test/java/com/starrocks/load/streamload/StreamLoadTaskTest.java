@@ -53,7 +53,7 @@ import org.mockito.Mockito;
 import java.util.Map;
 import java.util.TimeZone;
 
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doNothing;
@@ -150,7 +150,7 @@ public class StreamLoadTaskTest {
             }
         };
 
-        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_ROWS_IMPORTED.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 
@@ -312,6 +312,8 @@ public class StreamLoadTaskTest {
                 10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
         Deencapsulation.invoke(task, "setState", StreamLoadTask.State.PREPARING);
         Deencapsulation.setField(task, "coord", c);
+        Deencapsulation.setField(task, "dbName", "pipe_test_db");
+        Deencapsulation.setField(task, "tableName", "tbl1");
         StreamLoadKvParams params = new StreamLoadKvParams(java.util.Map.of("max_filter_ratio", "0.1"));
         Deencapsulation.setField(task, "streamLoadParams", params);
         new Expectations() {
@@ -340,6 +342,8 @@ public class StreamLoadTaskTest {
                 10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
         Deencapsulation.invoke(task, "setState", StreamLoadTask.State.PREPARING);
         Deencapsulation.setField(task, "coord", c);
+        Deencapsulation.setField(task, "dbName", "pipe_test_db");
+        Deencapsulation.setField(task, "tableName", "tbl1");
         StreamLoadKvParams params = new StreamLoadKvParams(java.util.Map.of("max_filter_ratio", "0.5"));
         Deencapsulation.setField(task, "streamLoadParams", params);
         new Expectations() {

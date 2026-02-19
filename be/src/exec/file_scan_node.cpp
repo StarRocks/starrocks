@@ -29,13 +29,13 @@
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
 #endif
+#include "base/utility/defer_op.h"
+#include "common/runtime_profile.h"
+#include "common/thread/thread.h"
 #include "exprs/expr.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

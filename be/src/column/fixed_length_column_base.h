@@ -17,13 +17,12 @@
 #include <span>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "column/column.h"
 #include "column/container_resource.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "util/raw_container.h"
-
+#include "types/datum.h"
 namespace starrocks {
 
 template <typename T>
@@ -59,8 +58,7 @@ public:
 
     FixedLengthColumnBase(const size_t n, const ValueType x) : _data(n, x) {}
 
-    FixedLengthColumnBase(const FixedLengthColumnBase& src)
-            : _resource(src._resource), _data(src.immutable_data().begin(), src.immutable_data().end()) {}
+    DISALLOW_COPY_TEMPLATE(FixedLengthColumnBase, FixedLengthColumnBase<T>);
 
     // Only used as a underlying type for other column type(i.e. DecimalV3Column), C++
     // is weak to implement delegation for composite type like golang, so we have to use
@@ -181,7 +179,7 @@ public:
 
     void append_default(size_t count) override;
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
@@ -191,9 +189,9 @@ public:
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to
     // access the item, so we should use 2^32 as the limit
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 
@@ -239,6 +237,9 @@ public:
         return _data;
     }
 
+    const ImmContainer get_data() const { return immutable_data(); }
+
+    // TODO: remove this function
     const ImmContainer immutable_data() const {
         if (!_resource.empty()) {
             return _resource.span<T>();

@@ -17,7 +17,8 @@ import logging
 from alembic.autogenerate import api
 from alembic.runtime.migration import MigrationContext
 import pytest
-from sqlalchemy import Engine, MetaData, text
+from sqlalchemy import MetaData, text
+from sqlalchemy.engine import Engine
 
 from starrocks.alembic.compare import combine_include_object
 from starrocks.alembic.ops import (

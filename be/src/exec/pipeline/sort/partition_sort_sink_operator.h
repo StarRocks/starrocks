@@ -61,6 +61,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
+    Status prepare_local_state(RuntimeState* state) override;
+
     void close(RuntimeState* state) override;
 
     bool has_output() const override { return false; }
@@ -105,10 +107,10 @@ public:
             std::vector<SlotId> early_materialized_slots, SpillProcessChannelFactoryPtr spill_channel_factory,
             const char* name = "local_sort_sink")
             : OperatorFactory(id, name, plan_node_id),
-              _sort_context_factory(std::move(std::move(sort_context_factory))),
+              _sort_context_factory(std::move(sort_context_factory)),
               _sort_exec_exprs(sort_exec_exprs),
-              _is_asc_order(std::move(std::move(is_asc_order))),
-              _is_null_first(std::move(std::move(is_null_first))),
+              _is_asc_order(std::move(is_asc_order)),
+              _is_null_first(std::move(is_null_first)),
               _sort_keys(std::move(sort_keys)),
               _offset(offset),
               _limit(limit),

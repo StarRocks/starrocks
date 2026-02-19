@@ -16,11 +16,11 @@
 
 #include <memory>
 
+#include "base/string/volnitsky.h"
+#include "base/utility/defer_op.h"
 #include "exprs/binary_function.h"
 #include "glog/logging.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/Volnitsky.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -334,7 +334,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         return ConstColumn::create(std::move(res), columns[0]->size());
     }
 
-    BinaryColumn* haystack = nullptr;
+    const BinaryColumn* haystack = nullptr;
     NullColumnPtr res_null = nullptr;
     if (columns[0]->is_nullable()) {
         auto haystack_null = ColumnHelper::as_column<NullableColumn>(columns[0]);
@@ -354,9 +354,9 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         const Buffer<uint32_t>& offsets = haystack->get_offset();
         res->resize(haystack->size());
 
-        const char* begin = haystack->get_slice(0).data;
+        const char* begin = haystack->get_string_begin();
         const char* pos = begin;
-        const char* end = pos + haystack->get_bytes().size();
+        const char* end = haystack->get_string_end();
 
         /// Current index in the array of strings.
         size_t i = 0;

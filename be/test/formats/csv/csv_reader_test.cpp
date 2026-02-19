@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 

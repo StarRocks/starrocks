@@ -214,7 +214,7 @@ public class TypeSerializerTest {
         TTypeDesc container = new TTypeDesc();
         container.types = new ArrayList<>();
 
-        ScalarType hllType = TypeFactory.createHllType();
+        ScalarType hllType = HLLType.HLL;
         TypeSerializer.toThrift(hllType, container);
 
         Assertions.assertEquals(1, container.types.size());
@@ -777,7 +777,7 @@ public class TypeSerializerTest {
                 TypeFactory.createCharType(10),
                 TypeFactory.createVarcharType(255),
                 TypeFactory.createVarbinary(1024),
-                TypeFactory.createHllType(),
+                HLLType.HLL,
                 TypeFactory.createDecimalV2Type(10, 4),
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2),
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6),

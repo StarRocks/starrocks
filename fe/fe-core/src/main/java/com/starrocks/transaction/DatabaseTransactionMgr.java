@@ -64,6 +64,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -102,7 +103,7 @@ import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 import static com.starrocks.common.ErrorCode.ERR_LOCK_ERROR;
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -116,7 +117,6 @@ import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 public class DatabaseTransactionMgr {
     public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
-    private static final int MEMORY_TXN_SAMPLES = 10;
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
     private final GlobalStateMgr globalStateMgr;
@@ -367,10 +367,10 @@ public class DatabaseTransactionMgr {
                 return;
             }
             // For compatible reason, the default behavior of empty load is still returning
-            // "No partitions have data available for loading" and abort transaction.
+            // "No rows were imported from upstream" and abort transaction.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
-                throw new TransactionCommitFailedException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
+                throw new TransactionCommitFailedException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
             }
 
             if (transactionState.getWriteEndTimeMs() < 0) {
@@ -946,17 +946,19 @@ public class DatabaseTransactionMgr {
                     TransactionState state = states.get(i);
                     TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
                     // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
-                    if (tableInfo == null) {
-                        states = states.subList(0, Math.max(i, 1));
-                        break;
-                    }
-                    // Handle replication transaction separately
+                    // Handle special transaction types separately to prevent batching:
+                    // 1. Replication transactions: may have non-consecutive versions
+                    // 2. DELETE transactions: each delete predicate needs its own version
+                    //    to ensure proper ordering during tablet merge operations
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
-                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep>, <txn_normal_1, txn_normal_2>
-                    if (state.getTransactionType() == TransactionType.TXN_REPLICATION) {
+                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep_0>, <txn_normal_1, txn_normal_2>
+                    if (tableInfo == null
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
+
                     Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                     for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
                         PartitionCommitInfo currTxnInfo = item.getValue();
@@ -1021,7 +1023,7 @@ public class DatabaseTransactionMgr {
                         return false;
                     }
 
-                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
+                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partition.getParentId(), table.writeQuorum());
                     int replicaNum = partitionInfo.getReplicationNum(partition.getParentId());
                     for (MaterializedIndex index : allIndices) {
@@ -1201,7 +1203,7 @@ public class DatabaseTransactionMgr {
                                 partitionInfo.getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
 
                         List<MaterializedIndex> allIndices =
-                                transactionState.getPartitionLoadedTblIndexes(tableId, physicalPartition);
+                                transactionState.getPartitionLoadedIndexesWithoutLock(tableId, physicalPartition);
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
@@ -1507,6 +1509,13 @@ public class DatabaseTransactionMgr {
                     runningTxnNums--;
                 }
             }
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                // make sure remove txn from startup active compaction transaction map for visible/aborted state
+                // The startup active compaction transaction map is built when FE starts, and it is used to track the
+                // active compaction txn when FE restarts.
+                GlobalStateMgr.getCurrentState().getCompactionMgr()
+                        .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
+            }
             transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
             finalStatusTransactionStateDeque.add(transactionState);
@@ -1542,6 +1551,13 @@ public class DatabaseTransactionMgr {
                 } else {
                     runningTxnNums--;
                 }
+            }
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                // make sure remove txn from startup active compaction transaction map for visible/aborted state
+                // The startup active compaction transaction map is built when FE starts, and it is used to track the
+                // active compaction txn when FE restarts.
+                GlobalStateMgr.getCurrentState().getCompactionMgr()
+                        .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
@@ -2289,33 +2305,22 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    public List<Object> getSamplesForMemoryTracker() {
-        readLock();
-        try {
-            if (idToRunningTransactionState.size() > 0) {
-                return idToRunningTransactionState.values()
-                        .stream()
-                        .limit(MEMORY_TXN_SAMPLES)
-                        .collect(Collectors.toList());
-            }
-            if (idToFinalStatusTransactionState.size() > 0) {
-                return idToFinalStatusTransactionState.values()
-                        .stream()
-                        .limit(MEMORY_TXN_SAMPLES)
-                        .collect(Collectors.toList());
-            }
-            return new ArrayList<>();
-        } finally {
-            readUnlock();
-        }
-    }
-
     public void resetTransactionStateTabletCommitInfos(TransactionState transactionState) {
         writeLock();
         try {
             transactionState.resetTabletCommitInfos();
         } finally {
             writeUnlock();
+        }
+    }
+
+    public long estimateSize() {
+        readLock();
+        try {
+            return Estimator.estimate(idToRunningTransactionState, 20) +
+                    Estimator.estimate(idToFinalStatusTransactionState, 20);
+        } finally {
+            readUnlock();
         }
     }
 }

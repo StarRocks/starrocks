@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -30,7 +31,6 @@
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -64,9 +64,9 @@ protected:
         TabletColumn value_column = create_int_value(2, STORAGE_AGGREGATE_NONE, true);
         map_column.add_sub_column(value_column);
 
-        UInt32Column::Ptr src_offsets = UInt32Column::create();
-        NullableColumn::Ptr src_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        NullableColumn::Ptr src_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto src_offsets = UInt32Column::create();
+        auto src_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto src_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
         ColumnPtr src_column = MapColumn::create(src_keys, src_values, src_offsets);
 

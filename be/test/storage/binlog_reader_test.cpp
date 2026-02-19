@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -26,7 +27,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -142,7 +142,7 @@ void BinlogReaderTest::create_rowset(int32_t* start_key, RowsetInfo& rowset_info
         std::vector<uint32_t> column_indexes{0, 1, 2};
         auto chunk = ChunkHelper::new_chunk(_schema, num_rows);
         for (int i = *start_key; i < num_rows + *start_key; i++) {
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
             cols[2]->append_datum(Datum(Slice(std::to_string(i))));

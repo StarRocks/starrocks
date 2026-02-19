@@ -34,6 +34,11 @@ size_t Column::serialize_batch_at_interval_with_null_masks(uint8_t* dst, size_t 
     return type_size();
 }
 
+void Column::append_selective_to(Column& dest, const uint32_t* indexes, uint32_t from, uint32_t size) const {
+    CHECK(false) << "append_selective_to is only supported by view-like columns, src=" << get_name()
+                 << ", dest=" << dest.get_name() << ", from=" << from << ", size=" << size;
+}
+
 void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                              uint32_t max_one_row_size, const uint8_t* null_masks,
                                              bool has_null) const {
@@ -57,27 +62,25 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
     }
 }
 
-StatusOr<ColumnPtr> Column::downgrade_helper_func(Ptr* col) {
-    auto ret = (*col)->downgrade();
+StatusOr<Column::MutablePtr> Column::downgrade_helper_func(Column* col) {
+    auto ret = col->downgrade();
     if (!ret.ok()) {
         return ret;
     } else if (ret.value() == nullptr) {
         return nullptr;
     } else {
-        (*col) = ret.value();
-        return nullptr;
+        return std::move(ret.value());
     }
 }
 
-StatusOr<ColumnPtr> Column::upgrade_helper_func(Ptr* col) {
-    auto ret = (*col)->upgrade_if_overflow();
+StatusOr<Column::MutablePtr> Column::upgrade_helper_func(Column* col) {
+    auto ret = col->upgrade_if_overflow();
     if (!ret.ok()) {
         return ret;
     } else if (ret.value() == nullptr) {
         return nullptr;
     } else {
-        (*col) = ret.value();
-        return nullptr;
+        return std::move(ret.value());
     }
 }
 
@@ -147,6 +150,18 @@ void Column::crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_si
 
 void Column::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
     murmur_hash3_x86_32_column(*this, hash, from, to);
+}
+
+void Column::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    xxh3_64_column(*this, hash, from, to);
+}
+
+void Column::xxh3_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const {
+    xxh3_64_column_with_selection(*this, hash, selection, from, to);
+}
+
+void Column::xxh3_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    xxh3_64_column_selective(*this, hash, sel, sel_size);
 }
 
 } // namespace starrocks

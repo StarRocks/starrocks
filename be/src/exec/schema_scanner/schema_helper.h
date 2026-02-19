@@ -20,7 +20,7 @@
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/datetime_value.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -176,7 +176,7 @@ void fill_column_with_slot(Column* result, void* slot) {
     if (result->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(result);
         NullData& null_data = nullable_column->null_column_data();
-        Column* data_column = nullable_column->data_column().get();
+        Column* data_column = nullable_column->data_column_raw_ptr();
         null_data.push_back(0);
         fill_data_column_with_slot<SlotType>(data_column, slot);
     } else {

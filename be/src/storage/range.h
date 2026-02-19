@@ -20,9 +20,10 @@
 #include <string>
 #include <vector>
 
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
+#include "common/memory/column_allocator.h"
 #include "storage/rowset/common.h"
+#include "types/datum.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -46,6 +47,9 @@ public:
 
     // the id of end row, exclusive.
     T end() const { return _end; }
+
+    // expand the end with delta
+    void expand(T delta) { _end += delta; }
 
     bool empty() const { return span_size() == 0; }
 

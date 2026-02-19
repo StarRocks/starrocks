@@ -17,15 +17,13 @@
 #include <cstdint>
 
 #include "column/column_helper.h"
-#include "column/column_view/column_view.h"
 #include "column/fixed_length_column.h"
+#include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/function_helper.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 void ArrayColumn::check_or_die() const {
@@ -123,7 +121,7 @@ void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
 
 void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_array_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     for (uint32_t i = 0; i < size; i++) {
@@ -576,21 +574,30 @@ std::string ArrayColumn::debug_string() const {
     return ss.str();
 }
 
-StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> ArrayColumn::upgrade_if_overflow() {
     if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of ArrayColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_elements);
+    auto ret = upgrade_helper_func(_elements->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _elements = std::move(ret.value());
+    }
+    return ret;
 }
 
-StatusOr<ColumnPtr> ArrayColumn::downgrade() {
-    return downgrade_helper_func(&_elements);
+StatusOr<MutableColumnPtr> ArrayColumn::downgrade() {
+    auto ret = downgrade_helper_func(_elements->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _elements = std::move(ret.value());
+    }
+    return ret;
 }
 
 Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     DCHECK(type.children.size() == 1) << "Array schema does not match data's";
-    _elements = ColumnHelper::unfold_const_column(type.children[0], _elements->size(), _elements);
+    size_t col_size = _elements->size();
+    _elements = ColumnHelper::unfold_const_column(type.children[0], col_size, _elements);
     return Status::OK();
 }
 
@@ -653,8 +660,15 @@ bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPt
     if (v1->size() != v2->size()) {
         return false;
     }
-    auto data_v1 = FunctionHelper::get_data_column_of_const(v1);
-    auto data_v2 = FunctionHelper::get_data_column_of_const(v2);
+    auto unpack_const_data_column = [](const ColumnPtr& column) -> ColumnPtr {
+        if (column->is_constant()) {
+            return down_cast<const ConstColumn*>(column.get())->data_column();
+        }
+        return column;
+    };
+
+    auto data_v1 = unpack_const_data_column(v1);
+    auto data_v2 = unpack_const_data_column(v2);
     auto* array_v1 = down_cast<const ArrayColumn*>(data_v1.get());
     auto* array_v2 = down_cast<const ArrayColumn*>(data_v2.get());
     const auto& offsets_v1 = array_v1->offsets();

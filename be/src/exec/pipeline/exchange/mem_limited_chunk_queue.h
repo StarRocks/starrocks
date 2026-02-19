@@ -17,11 +17,11 @@
 #include <mutex>
 #include <queue>
 
+#include "base/bit/bit_mask.h"
+#include "base/concurrency/spinlock.h"
+#include "base/phmap/phmap.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "serde/encode_context.h"
-#include "util/bit_mask.h"
-#include "util/phmap/phmap.h"
-#include "util/spinlock.h"
 
 namespace starrocks::pipeline {
 
@@ -151,6 +151,7 @@ public:
     void open_producer();
 
     void close_producer();
+    bool is_all_source_finished() const;
 
     void enter_release_memory_mode();
 
@@ -184,7 +185,7 @@ private:
     }
 
     RuntimeState* _state = nullptr;
-    std::shared_mutex _mutex;
+    mutable std::shared_mutex _mutex;
     // an empty chunk, only keep meta
     ChunkPtr _chunk_builder;
     Block* _head = nullptr;

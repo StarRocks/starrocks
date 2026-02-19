@@ -16,14 +16,14 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
+#include "common/thread/threadpool.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
-#include "util/threadpool.h"
 
 namespace starrocks::pipeline {
 struct GroupTaskRunner : public Runnable {
@@ -42,8 +42,8 @@ public:
     void cancel(DriverRawPtr driver) override {}
     void close() override { _tp->shutdown(); }
 
-    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
-                           bool attach_profile) override {}
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
+                           bool done) override {}
 
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override {}
 

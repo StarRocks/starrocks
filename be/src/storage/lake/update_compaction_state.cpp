@@ -14,6 +14,7 @@
 
 #include "storage/lake/update_compaction_state.h"
 
+#include "base/debug/trace.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -22,7 +23,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_manager.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

@@ -17,6 +17,8 @@
 #include <memory>
 #include <tuple>
 
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_dump.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
@@ -24,8 +26,6 @@
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "util/bloom_filter.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_dump.h"
 
 namespace starrocks {
 
@@ -33,6 +33,7 @@ class Tablet;
 class Schema;
 class Column;
 class PrimaryKeyDump;
+class ParallelPublishContext;
 
 class TabletLoader {
 public:
@@ -729,7 +730,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* stat = nullptr, ParallelPublishContext* ctx = nullptr);
 
     // batch replace without return old values
     // |n|: size of key/value array

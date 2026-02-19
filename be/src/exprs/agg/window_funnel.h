@@ -21,11 +21,12 @@
 #include <type_traits>
 #include <vector>
 
+#include "base/phmap/phmap_dump.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -37,8 +38,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/memory/memory_resource.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -177,8 +177,10 @@ struct WindowFunnelState {
     }
 
     static void serialize(int64_t* buffer, size_t length, ArrayColumn* array_column) {
-        CHECK(array_column->elements_column()->append_numbers(buffer, sizeof(int64_t) * length) > 0);
-        array_column->offsets_column()->append(array_column->offsets_column()->get_data().back() + length);
+        auto* elements_col = array_column->elements_column_raw_ptr();
+        auto* offsets_col = array_column->offsets_column_raw_ptr();
+        CHECK(elements_col->append_numbers(buffer, sizeof(int64_t) * length) > 0);
+        offsets_col->append(offsets_col->immutable_data().back() + length);
     }
 
     void serialize_to_array_column(ArrayColumn* array_column) const {
@@ -547,8 +549,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* dst_column = down_cast<ArrayColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        auto* dst_column = down_cast<ArrayColumn*>(dst.get());
         dst_column->reserve(chunk_size);
 
         const auto timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());

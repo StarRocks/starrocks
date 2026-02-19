@@ -18,9 +18,11 @@
 
 #include <memory>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
@@ -32,9 +34,7 @@
 #include "gen_cpp/Metrics_types.h"
 #include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -100,7 +100,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     }
 
     HashJoinBuildOptions build_options;
-    build_options.enable_partitioned_hash_join = param._enable_partition_hash_join;
+    build_options.enable_partitioned_hash_join =
+            param._enable_partition_hash_join && support_partitioned(_join_type, !_other_join_conjunct_ctxs.empty());
 
     _hash_join_builder = HashJoinBuilderFactory::create(_pool, build_options, *this);
     _hash_join_prober = _pool->add(new HashJoinProber(*this));
@@ -326,6 +327,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 }
 
 void HashJoiner::close(RuntimeState* state) {
+    _spiller.reset();
     _hash_join_builder->close();
 }
 
@@ -454,9 +456,10 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
 void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                  bool filter_all, bool hit_all, const Filter& filter) {
     if (filter_all) {
+        auto& columns = (*chunk)->columns();
         for (size_t i = start_column; i < start_column + column_count; i++) {
-            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>((*chunk)->columns()[i]);
-            auto& null_data = null_column->mutable_null_column()->get_data();
+            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(columns[i]->as_mutable_raw_ptr());
+            auto& null_data = null_column->null_column_raw_ptr()->get_data();
             for (size_t j = 0; j < (*chunk)->num_rows(); j++) {
                 null_data[j] = 1;
                 null_column->set_has_null(true);
@@ -467,9 +470,10 @@ void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_c
             return;
         }
 
+        auto& columns = (*chunk)->columns();
         for (size_t i = start_column; i < start_column + column_count; i++) {
-            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>((*chunk)->columns()[i]);
-            auto& null_data = null_column->mutable_null_column()->get_data();
+            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(columns[i]->as_mutable_raw_ptr());
+            auto& null_data = null_column->null_column_raw_ptr()->get_data();
             for (size_t j = 0; j < filter.size(); j++) {
                 if (filter[j] == 0) {
                     null_data[j] = 1;

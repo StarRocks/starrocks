@@ -38,6 +38,8 @@ import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RepairTabletMetadataRequest;
+import com.starrocks.proto.RepairTabletMetadataResponse;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.TabletStatRequest;
@@ -305,6 +307,20 @@ public class LakeServiceWithMetricsTest {
         };
 
         Future<GetTabletMetadatasResponse> result = lakeServiceWithMetrics.getTabletMetadatas(new GetTabletMetadatasRequest());
+        assertNotNull(result);
+    }
+
+    @Test
+    public void testRepairTabletMetadata() throws Exception {
+        new Expectations() {
+            {
+                lakeService.repairTabletMetadata((RepairTabletMetadataRequest) any);
+                result = CompletableFuture.completedFuture(new RepairTabletMetadataResponse());
+            }
+        };
+
+        Future<RepairTabletMetadataResponse> result =
+                lakeServiceWithMetrics.repairTabletMetadata(new RepairTabletMetadataRequest());
         assertNotNull(result);
     }
 }

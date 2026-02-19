@@ -20,9 +20,14 @@
 #include <random>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
+#include "common/util/thrift_util.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
@@ -40,12 +45,9 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
-#include "util/thrift_util.h"
+#include "util/global_metrics_registry.h"
 
 // TODO: test multi thread
 // TODO: test runtime filter
@@ -58,6 +60,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
 
@@ -244,8 +247,10 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {
-    _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
+    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
+        RETURN_IF_ERROR(driver->prepare(state));
+        return driver->prepare_local_state(state);
+    });
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
         LOG(WARNING) << driver->to_readable_string();

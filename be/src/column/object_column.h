@@ -17,15 +17,15 @@
 #include <memory>
 
 #include "column/column.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value.h"
+#include "types/datum.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/variant_value.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
 
 namespace starrocks {
 
@@ -54,8 +54,6 @@ public:
     explicit ObjectColumn(size_t size) : _pool(size) {}
 
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
-
-    ObjectColumn(ObjectColumn&& object_column) noexcept : _pool(std::move(object_column._pool)) {}
 
     void operator=(const ObjectColumn&) = delete;
 
@@ -90,9 +88,9 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
-    void reserve(size_t n) override { _pool.reserve(n); }
+    void reserve(size_t n) override;
 
-    void resize(size_t n) override { _pool.resize(n); }
+    void resize(size_t n) override;
 
     void assign(size_t n, size_t idx) override;
 
@@ -232,9 +230,9 @@ public:
         return Status::OK();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 

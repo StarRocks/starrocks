@@ -1,0 +1,16 @@
+#### `type`
+
+作成する Group Provider のタイプ。 有効な値:
+- `ldap`: LDAP group provider を作成します。この値が設定されている場合、`ldap_info`、`ldap_search_group_arg`、`ldap_search_user_arg`、およびオプションで `ldap_cache_arg` を指定する必要があります。
+- `unix`: Unix group provider を作成します。
+- `file`: File group provider を作成します。この値が設定されている場合、`group_file_url` を指定する必要があります。
+
+#### `group_file_url`
+
+ユーザーグループを定義するファイルへの URL または相対パス（`fe/conf` 以下）。
+
+:::note
+
+グループファイルには、グループとそのメンバーのリストが含まれています。各行でグループ名とメンバーをコロンで区切って定義できます。複数のユーザーはカンマで区切られます。例: `group_name:user_1,user_2,user_3`。
+
+:::

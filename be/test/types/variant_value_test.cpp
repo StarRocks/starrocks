@@ -14,429 +14,165 @@
 
 #include "types/variant_value.h"
 
-#include <fs/fs.h>
 #include <gtest/gtest.h>
 
-#include <boost/uuid/uuid_io.hpp>
-
-#include "cctz/time_zone.h"
-#include "formats/parquet/variant.h"
-#include "runtime/decimalv3.h"
-#include "types/timestamp_value.h"
-#include "util/timezone_utils.h"
-#include "util/variant_util.h"
+#include <cstring>
+#include <vector>
 
 namespace starrocks {
+namespace {
 
-class VariantValueTest : public testing::Test {
-public:
-    VariantValueTest() = default;
-    ~VariantValueTest() override = default;
-
-protected:
-    void SetUp() override {
-        std::string starrocks_home = getenv("STARROCKS_HOME");
-        test_exec_dir = starrocks_home + "/be/test/formats/parquet/test_data/variant";
-
-        _primitive_metadata_file_names = {
-                "primitive_null.metadata",      "primitive_boolean_true.metadata", "primitive_boolean_false.metadata",
-                "primitive_date.metadata",      "primitive_decimal4.metadata",     "primitive_decimal8.metadata",
-                "primitive_decimal16.metadata", "primitive_float.metadata",        "primitive_double.metadata",
-                "primitive_int8.metadata",      "primitive_int16.metadata",        "primitive_int32.metadata",
-                "primitive_int64.metadata",     "primitive_binary.metadata",       "primitive_string.metadata",
-                "array_primitive.metadata",
-        };
-
-        _boolean_file_names = {
-                {"primitive_boolean_true.metadata", "primitive_boolean_true.value"},
-                {"primitive_boolean_false.metadata", "primitive_boolean_false.value"},
-        };
-    }
-
-    std::string read_file_content(const std::string& file_path) {
-        FileSystem* fs = FileSystem::Default();
-        auto random_access_file = *fs->new_random_access_file(file_path);
-        return *random_access_file->read_all();
-    }
-
-    std::pair<std::string, std::string> load_variant_data(const std::string& metadata_file,
-                                                          const std::string& value_file) {
-        std::string metadata_content = read_file_content(test_exec_dir + "/" + metadata_file);
-        std::string value_content = read_file_content(test_exec_dir + "/" + value_file);
-
-        return {std::move(metadata_content), std::move(value_content)};
-    }
-
-protected:
-    std::string test_exec_dir;
-    std::vector<std::string> _primitive_metadata_file_names;
-    std::vector<std::pair<std::string, std::string>> _boolean_file_names;
-};
-
-TEST_F(VariantValueTest, NullToJson) {
-    uint8_t null_chars[] = {static_cast<uint8_t>(VariantPrimitiveType::NULL_TYPE) << 2};
-    std::string_view null_value(reinterpret_cast<const char*>(null_chars), 1);
-    VariantValue v(VariantMetadata::kEmptyMetadata, null_value);
-    auto json = v.to_json();
-    ASSERT_TRUE(json.ok());
-    EXPECT_EQ("null", *json);
+std::string make_primitive_value(VariantType type, std::string_view payload = {}) {
+    std::string value;
+    value.reserve(1 + payload.size());
+    value.push_back(static_cast<char>(static_cast<uint8_t>(type) << VariantValue::kValueHeaderBitShift));
+    value.append(payload.data(), payload.size());
+    return value;
 }
 
-TEST_F(VariantValueTest, BooleanToJson) {
-    auto [t_fst, t_snd] = _boolean_file_names[0];
-    auto [t_metadata, t_value] = load_variant_data(t_fst, t_snd);
-    VariantValue variant_true{std::string_view(t_metadata), std::string_view(t_value)};
-    auto json_true = variant_true.to_json();
-    ASSERT_TRUE(json_true.ok());
-    EXPECT_EQ("true", *json_true);
-
-    auto [f_fst, f_snd] = _boolean_file_names[1];
-    auto [f_metadata, f_value] = load_variant_data(f_fst, f_snd);
-    VariantValue variant_false{std::string_view(f_metadata), std::string_view(f_value)};
-    auto json_false = variant_false.to_json();
-    ASSERT_TRUE(json_false.ok());
-    EXPECT_EQ("false", *json_false);
+std::string make_encoded_variant(std::string_view metadata, std::string_view value) {
+    const uint32_t variant_size = static_cast<uint32_t>(metadata.size() + value.size());
+    std::string encoded(sizeof(uint32_t) + variant_size, 0);
+    std::memcpy(encoded.data(), &variant_size, sizeof(uint32_t));
+    std::memcpy(encoded.data() + sizeof(uint32_t), metadata.data(), metadata.size());
+    std::memcpy(encoded.data() + sizeof(uint32_t) + metadata.size(), value.data(), value.size());
+    return encoded;
 }
 
-TEST_F(VariantValueTest, IntegerToJson) {
-    // Test int8
-    {
-        auto [int8_metadata, int8_value] = load_variant_data("primitive_int8.metadata", "primitive_int8.value");
-        VariantValue variant{std::string_view(int8_metadata), std::string_view(int8_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("42", *json);
-    }
-
-    // Test int16
-    {
-        auto [int16_metadata, int16_value] = load_variant_data("primitive_int16.metadata", "primitive_int16.value");
-        VariantValue variant{std::string_view(int16_metadata), std::string_view(int16_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1234", *json);
-    }
-
-    // Test int32
-    {
-        auto [int32_metadata, int32_value] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
-        VariantValue variant{std::string_view(int32_metadata), std::string_view(int32_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("123456", *json);
-    }
-
-    // Test int64
-    {
-        auto [int64_metadata, int64_value] = load_variant_data("primitive_int64.metadata", "primitive_int64.value");
-        VariantValue variant{std::string_view(int64_metadata), std::string_view(int64_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1234567890123456789", *json);
-    }
+uint32_t decode_size_header(const uint8_t* bytes) {
+    uint32_t size = 0;
+    std::memcpy(&size, bytes, sizeof(uint32_t));
+    return size;
 }
 
-TEST_F(VariantValueTest, FloatToJson) {
-    // Test float
-    {
-        auto [float_metadata, float_value] = load_variant_data("primitive_float.metadata", "primitive_float.value");
-        VariantValue variant{std::string_view(float_metadata), std::string_view(float_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1.23456794e+09", *json);
-    }
+} // namespace
 
-    // Test double
-    {
-        auto [double_metadata, double_value] = load_variant_data("primitive_double.metadata", "primitive_double.value");
-        VariantValue variant{std::string_view(double_metadata), std::string_view(double_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1234567890.1234", *json);
-    }
+TEST(VariantRowValueTypeCoreTest, CreateFromNullMetadataReturnsNullVariant) {
+    auto row = VariantRowValue::create("", "");
+    ASSERT_TRUE(row.ok());
+    EXPECT_EQ(row->get_metadata().raw(), VariantMetadata::kEmptyMetadata);
+    EXPECT_EQ(row->get_value().raw(), VariantValue::kEmptyValue);
 }
 
-TEST_F(VariantValueTest, StringToJson) {
-    // Test long string
-    {
-        auto [string_metadata, string_value] = load_variant_data("primitive_string.metadata", "primitive_string.value");
-        VariantValue variant{std::string_view(string_metadata), std::string_view(string_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ(
-                "\"This string is longer than 64 bytes and therefore does not fit in a short_string and it also "
-                "includes "
-                "several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!\"",
-                *json);
-    }
+TEST(VariantRowValueTypeCoreTest, CreateFromSliceParsesMetadataAndValue) {
+    std::string value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(42)));
+    std::string encoded = make_encoded_variant(VariantMetadata::kEmptyMetadata, value);
 
-    // Test short string
-    {
-        auto [short_string_metadata, short_string_value] =
-                load_variant_data("short_string.metadata", "short_string.value");
-        VariantValue variant{std::string_view(short_string_metadata), std::string_view(short_string_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("\"Less than 64 bytes (❤️ with utf8)\"", *json);
-    }
+    auto row = VariantRowValue::create(Slice(encoded));
+    ASSERT_TRUE(row.ok());
+    EXPECT_EQ(row->get_metadata().raw(), VariantMetadata::kEmptyMetadata);
+    EXPECT_EQ(row->get_value().raw(), value);
 }
 
-TEST_F(VariantValueTest, BinaryToJson) {
-    auto [binary_metadata, binary_value] = load_variant_data("primitive_binary.metadata", "primitive_binary.value");
-    VariantValue variant{std::string_view(binary_metadata), std::string_view(binary_value)};
-    auto json = variant.to_json();
-    ASSERT_TRUE(json.ok());
-    ASSERT_EQ("\"AxM33q2+78r+\"", *json);
+TEST(VariantRowValueTypeCoreTest, CreateFromSliceRejectsInvalidInput) {
+    Slice null_data_slice(static_cast<const char*>(nullptr), sizeof(uint32_t));
+    auto null_data = VariantRowValue::create(null_data_slice);
+    ASSERT_FALSE(null_data.ok());
+    EXPECT_TRUE(null_data.status().to_string().find("null data pointer") != std::string::npos);
+
+    Slice short_slice("");
+    auto short_data = VariantRowValue::create(short_slice);
+    ASSERT_FALSE(short_data.ok());
+    EXPECT_TRUE(short_data.status().to_string().find("too small") != std::string::npos);
+
+    constexpr uint32_t oversized = VariantRowValue::kMaxVariantSize + 1;
+    std::string oversized_header(sizeof(uint32_t), 0);
+    std::memcpy(oversized_header.data(), &oversized, sizeof(uint32_t));
+    auto too_large = VariantRowValue::create(Slice(oversized_header));
+    ASSERT_FALSE(too_large.ok());
+    EXPECT_TRUE(too_large.status().to_string().find("exceeds maximum limit") != std::string::npos);
 }
 
-TEST_F(VariantValueTest, DecimalToJson) {
-    // Test decimal4
-    {
-        auto [decimal4_metadata, decimal4_value] =
-                load_variant_data("primitive_decimal4.metadata", "primitive_decimal4.value");
-        VariantValue variant{std::string_view(decimal4_metadata), std::string_view(decimal4_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("12.34", *json);
-    }
+TEST(VariantRowValueTypeCoreTest, ValidateMetadataRejectsInvalidHeader) {
+    auto short_meta = VariantRowValue::validate_metadata(std::string_view("\x01\x00", 2));
+    EXPECT_FALSE(short_meta.ok());
 
-    // Test decimal8
-    {
-        auto [decimal8_metadata, decimal8_value] =
-                load_variant_data("primitive_decimal8.metadata", "primitive_decimal8.value");
-        VariantValue variant{std::string_view(decimal8_metadata), std::string_view(decimal8_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("12345678.9", *json);
-    }
-
-    // Test decimal16
-    {
-        auto [decimal16_metadata, decimal16_value] =
-                load_variant_data("primitive_decimal16.metadata", "primitive_decimal16.value");
-        VariantValue variant{std::string_view(decimal16_metadata), std::string_view(decimal16_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("12345678912345678.9", *json);
-    }
+    const char v2_meta[] = {0x2, 0x0, 0x0};
+    auto unsupported = VariantRowValue::validate_metadata(std::string_view(v2_meta, sizeof(v2_meta)));
+    EXPECT_FALSE(unsupported.ok());
 }
 
-TEST_F(VariantValueTest, UUIDToJson) {
-    std::string_view empty_metadata = VariantMetadata::kEmptyMetadata;
-    const uint8_t uuid_chars[] = {VariantUtil::primitiveHeader(VariantPrimitiveType::UUID),
-                                  0xf2,
-                                  0x4f,
-                                  0x9b,
-                                  0x64,
-                                  0x81,
-                                  0xfa,
-                                  0x49,
-                                  0xd1,
-                                  0xb7,
-                                  0x4e,
-                                  0x8c,
-                                  0x09,
-                                  0xa6,
-                                  0xe3,
-                                  0x1c,
-                                  0x56};
+TEST(VariantRowValueTypeCoreTest, SerializeRoundTrip) {
+    std::string value = make_primitive_value(VariantType::INT32, std::string_view("\x01\x00\x00\x00", 4));
+    auto row = VariantRowValue::create(VariantMetadata::kEmptyMetadata, value);
+    ASSERT_TRUE(row.ok());
 
-    std::string_view uuid_string(reinterpret_cast<const char*>(uuid_chars), sizeof(uuid_chars));
-    VariantValue variant{empty_metadata, uuid_string};
-    auto json = variant.to_json();
-    ASSERT_TRUE(json.ok());
-    EXPECT_EQ("\"f24f9b64-81fa-49d1-b74e-8c09a6e31c56\"", *json);
+    std::vector<uint8_t> buffer(row->serialize_size(), 0);
+    size_t written = row->serialize(buffer.data());
+    ASSERT_EQ(written, row->serialize_size());
+
+    const uint32_t payload_size = decode_size_header(buffer.data());
+    ASSERT_EQ(payload_size, VariantMetadata::kEmptyMetadata.size() + value.size());
+
+    std::string encoded_expected = make_encoded_variant(VariantMetadata::kEmptyMetadata, value);
+    std::string encoded_actual(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+    EXPECT_EQ(encoded_actual, encoded_expected);
 }
 
-TEST_F(VariantValueTest, TimestampToJson) {
-    // Test timestamp with timezone
-    {
-        auto [ts_metadata, ts_value] = load_variant_data("primitive_timestamp.metadata", "primitive_timestamp.value");
-        VariantValue variant{std::string_view(ts_metadata), std::string_view(ts_value)};
+TEST(VariantRowValueTypeCoreTest, SerializeDefaultVariantUsesCanonicalEmptyPayload) {
+    VariantRowValue row;
+    std::vector<uint8_t> buffer(row.serialize_size(), 0);
+    size_t written = row.serialize(buffer.data());
+    ASSERT_EQ(written, row.serialize_size());
 
-        // Set timezone to -04:00
-        cctz::time_zone tz;
-        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("-04:00", tz));
+    const uint32_t payload_size = decode_size_header(buffer.data());
+    ASSERT_EQ(payload_size, VariantMetadata::kEmptyMetadata.size() + VariantValue::kEmptyValue.size());
 
-        auto json = variant.to_json(tz);
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("\"2025-04-16 12:34:56.78-04:00\"", *json);
-    }
-
-    // Test timestamp without timezone
-    {
-        auto [ts_ntz_metadata, ts_ntz_value] =
-                load_variant_data("primitive_timestampntz.metadata", "primitive_timestampntz.value");
-        VariantValue variant{std::string_view(ts_ntz_metadata), std::string_view(ts_ntz_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("\"2025-04-16 12:34:56.780000\"", *json);
-    }
+    std::string payload(reinterpret_cast<const char*>(buffer.data() + sizeof(uint32_t)), payload_size);
+    EXPECT_EQ(payload, std::string(VariantMetadata::kEmptyMetadata) + std::string(VariantValue::kEmptyValue));
 }
 
-TEST_F(VariantValueTest, DateToJson) {
-    auto [date_metadata, date_value] = load_variant_data("primitive_date.metadata", "primitive_date.value");
-    VariantValue variant{std::string_view(date_metadata), std::string_view(date_value)};
-    auto json = variant.to_json();
-    ASSERT_TRUE(json.ok());
-    EXPECT_EQ("\"2025-04-16\"", *json);
+TEST(VariantRowValueTypeCoreTest, CopyAndMoveKeepViewsCorrectlyBound) {
+    std::string value = make_primitive_value(VariantType::INT16, std::string_view("\x39\x30", 2));
+    VariantRowValue original(VariantMetadata::kEmptyMetadata, value);
+
+    VariantRowValue copied(original);
+    EXPECT_EQ(copied.get_metadata().raw(), original.get_metadata().raw());
+    EXPECT_EQ(copied.get_value().raw(), original.get_value().raw());
+    EXPECT_NE(copied.get_metadata().raw().data(), original.get_metadata().raw().data());
+    EXPECT_NE(copied.get_value().raw().data(), original.get_value().raw().data());
+
+    VariantRowValue moved(std::move(copied));
+    EXPECT_EQ(moved.get_metadata().raw(), original.get_metadata().raw());
+    EXPECT_EQ(moved.get_value().raw(), original.get_value().raw());
+    EXPECT_EQ(copied.get_metadata().raw(), VariantMetadata::kEmptyMetadata);
+    EXPECT_EQ(copied.get_value().raw(), VariantValue::kEmptyValue);
 }
 
-TEST_F(VariantValueTest, ObjectToJson) {
-    // Test simple object
-    {
-        auto [object_metadata, object_value] = load_variant_data("object_primitive.metadata", "object_primitive.value");
-        VariantValue variant{std::string_view(object_metadata), std::string_view(object_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
+TEST(VariantRowValueTypeCoreTest, AssignmentOperatorsPreserveValueAndMovedFromState) {
+    std::string src_value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(7)));
+    VariantRowValue source(VariantMetadata::kEmptyMetadata, src_value);
 
-        // Should be a valid JSON object
-        EXPECT_TRUE(json->front() == '{');
-        EXPECT_TRUE(json->back() == '}');
-        EXPECT_EQ(
-                "{\"boolean_false_field\":false,\"boolean_true_field\":true,\"double_field\":1.23456789,\"int_field\":"
-                "1,\"null_field\":null,\"string_field\":\"Apache "
-                "Parquet\",\"timestamp_field\":\"2025-04-16T12:34:56.78\"}",
-                *json);
-    }
+    std::string dst_value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(9)));
+    VariantRowValue destination(VariantMetadata::kEmptyMetadata, dst_value);
 
-    // Test empty object
-    {
-        auto [object_empty_metadata, object_empty_value] =
-                load_variant_data("object_empty.metadata", "object_empty.value");
-        VariantValue variant{std::string_view(object_empty_metadata), std::string_view(object_empty_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("{}", *json);
-    }
+    destination = source;
+    EXPECT_EQ(destination.get_metadata().raw(), source.get_metadata().raw());
+    EXPECT_EQ(destination.get_value().raw(), source.get_value().raw());
+    EXPECT_NE(destination.get_metadata().raw().data(), source.get_metadata().raw().data());
 
-    // Test nested object
-    {
-        auto [object_nested_metadata, object_nested_value] =
-                load_variant_data("object_nested.metadata", "object_nested.value");
-        VariantValue variant{std::string_view(object_nested_metadata), std::string_view(object_nested_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-
-        // Should be a valid JSON object
-        EXPECT_TRUE(json->front() == '{');
-        EXPECT_TRUE(json->back() == '}');
-        EXPECT_EQ(
-                "{\"id\":1,\"observation\":{\"location\":\"In the "
-                "Volcano\",\"time\":\"12:34:56\",\"value\":{\"humidity\":456,\"temperature\":123}},\"species\":{"
-                "\"name\":\"lava monster\",\"population\":6789}}",
-                *json);
-    }
+    VariantRowValue move_target(VariantMetadata::kEmptyMetadata, dst_value);
+    move_target = std::move(source);
+    EXPECT_EQ(move_target.get_value().raw(), src_value);
+    EXPECT_EQ(source.get_metadata().raw(), VariantMetadata::kEmptyMetadata);
+    EXPECT_EQ(source.get_value().raw(), VariantValue::kEmptyValue);
 }
 
-TEST_F(VariantValueTest, ArrayToJson) {
-    // Test primitive array
-    {
-        auto [array_metadata, array_value] = load_variant_data("array_primitive.metadata", "array_primitive.value");
-        VariantValue variant{std::string_view(array_metadata), std::string_view(array_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
+TEST(VariantRowValueTypeCoreTest, CompareOperatorsFollowRawOrdering) {
+    std::string low_value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(1)));
+    std::string high_value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(2)));
 
-        // Should be a valid JSON array
-        EXPECT_TRUE(json->front() == '[');
-        EXPECT_TRUE(json->back() == ']');
-        EXPECT_EQ("[2,1,5,9]", *json);
-    }
+    VariantRowValue low(VariantMetadata::kEmptyMetadata, low_value);
+    VariantRowValue high(VariantMetadata::kEmptyMetadata, high_value);
 
-    // Test empty array
-    {
-        auto [array_empty_metadata, array_empty_value] = load_variant_data("array_empty.metadata", "array_empty.value");
-        VariantValue variant{std::string_view(array_empty_metadata), std::string_view(array_empty_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-        EXPECT_EQ("[]", *json);
-    }
+    EXPECT_LT(compare(low, high), 0);
+    EXPECT_LE(compare(low, high), 0);
+    EXPECT_GT(compare(high, low), 0);
+    EXPECT_GE(compare(high, low), 0);
+    EXPECT_NE(compare(low, high), 0);
 
-    // Test nested array
-    {
-        auto [array_nested_metadata, array_nested_value] =
-                load_variant_data("array_nested.metadata", "array_nested.value");
-        VariantValue variant{std::string_view(array_nested_metadata), std::string_view(array_nested_value)};
-        auto json = variant.to_json();
-        ASSERT_TRUE(json.ok());
-
-        // Should be a valid JSON array
-        EXPECT_TRUE(json->front() == '[');
-        EXPECT_TRUE(json->back() == ']');
-        EXPECT_EQ(
-                "[{\"id\":1,\"thing\":{\"names\":[\"Contrarian\",\"Spider\"]}},null,{\"id\":2,\"names\":[\"Apple\","
-                "\"Ray\",null],\"type\":\"if\"}]",
-                *json);
-    }
-}
-
-TEST_F(VariantValueTest, InvalidVariant) {
-    // Test invalid variant with empty metadata
-    {
-        Slice empty_slice(""); // Empty slice
-        auto empty_variant = VariantValue::create(empty_slice);
-        ASSERT_FALSE(empty_variant.ok());
-        EXPECT_EQ("Invalid argument: Invalid variant slice: too small to contain size header",
-                  empty_variant.status().to_string());
-    }
-    // Test invalid variant with unsupported version
-    {
-        // Create proper format: 4-byte size header + variant data
-        constexpr char v2_metadata_char[] = {0x2, 0x0, 0x0}; // version 2 metadata
-        constexpr uint32_t data_size = sizeof(v2_metadata_char);
-
-        // Construct proper slice with size header
-        std::string variant_data;
-        variant_data.resize(sizeof(uint32_t) + data_size);
-
-        // Write size header (little endian)
-        std::memcpy(variant_data.data(), &data_size, sizeof(uint32_t));
-        // Write variant data
-        std::memcpy(variant_data.data() + sizeof(uint32_t), v2_metadata_char, data_size);
-
-        Slice variant_slice(variant_data);
-        auto unsupported_variant = VariantValue::create(variant_slice);
-        ASSERT_FALSE(unsupported_variant.ok());
-        EXPECT_EQ("Not supported: Unsupported variant version: 2", unsupported_variant.status().to_string());
-    }
-    // Test exceed maximum variant size
-    {
-        // Create size header that indicates data larger than max size
-        constexpr uint32_t oversized_data_size = VariantValue::kMaxVariantSize + 1;
-        std::string variant_data;
-        variant_data.resize(sizeof(uint32_t));
-
-        // Write oversized size in header
-        std::memcpy(variant_data.data(), &oversized_data_size, sizeof(uint32_t));
-
-        Slice variant_slice(variant_data);
-        auto large_variant = VariantValue::create(variant_slice);
-        ASSERT_FALSE(large_variant.ok());
-        EXPECT_EQ("Invalid argument: Variant size exceeds maximum limit: " +
-                          std::to_string(VariantValue::kMaxVariantSize + 1) + " > " +
-                          std::to_string(VariantValue::kMaxVariantSize),
-                  large_variant.status().to_string());
-    }
-
-    // Test variant with size header but insufficient actual data
-    {
-        constexpr uint32_t claimed_size = 100;    // Claim 100 bytes
-        constexpr uint32_t actual_data_size = 10; // But only provide 10 bytes
-
-        std::string variant_data;
-        variant_data.resize(sizeof(uint32_t) + actual_data_size);
-
-        // Write size header claiming more data than available
-        std::memcpy(variant_data.data(), &claimed_size, sizeof(uint32_t));
-        // Fill with some dummy data
-        std::memset(variant_data.data() + sizeof(uint32_t), 0x42, actual_data_size);
-
-        Slice variant_slice(variant_data);
-        auto insufficient_variant = VariantValue::create(variant_slice);
-        ASSERT_FALSE(insufficient_variant.ok());
-        EXPECT_EQ("Invalid argument: Invalid variant size: 100 exceeds available data: 10",
-                  insufficient_variant.status().to_string());
-    }
+    VariantRowValue low_copy(VariantMetadata::kEmptyMetadata, low_value);
+    EXPECT_EQ(compare(low, low_copy), 0);
 }
 
 } // namespace starrocks

@@ -25,19 +25,34 @@
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks::spill {
-class QuerySpillManager {
+class GlobalSpillManager {
 public:
-    QuerySpillManager(const TUniqueId& uid) : _uid(uid) {}
-
-    Status init_block_manager(const TQueryOptions& query_options);
-
-    void increase_spilling_operators() { _spilling_operators++; }
-    void decrease_spilling_operators() { _spilling_operators--; }
-    size_t spilling_operators() { return _spilling_operators; }
+    size_t spillable_operators() const { return _spillable_operators; }
 
     void increase_spillable_operators() { _spillable_operators++; }
     void decrease_spillable_operators() { _spillable_operators--; }
-    size_t spillable_operators() { return _spillable_operators; }
+
+    size_t spill_expected_reserved_bytes() const { return _expected_reserved_bytes; }
+    void inc_reserve_bytes(size_t bytes) { _expected_reserved_bytes += bytes; }
+    void dec_reserve_bytes(size_t bytes) { _expected_reserved_bytes -= bytes; }
+
+private:
+    std::atomic_size_t _spillable_operators = 0;
+    std::atomic_size_t _expected_reserved_bytes = 0;
+};
+
+class QuerySpillManager {
+public:
+    QuerySpillManager(const TUniqueId& uid, GlobalSpillManager* global_spill_manager)
+            : _uid(uid), _global_spill_manager(global_spill_manager) {}
+
+    Status init_block_manager(const TQueryOptions& query_options);
+
+    void increase_spillable_operators() { _global_spill_manager->increase_spillable_operators(); }
+    void decrease_spillable_operators() { _global_spill_manager->decrease_spillable_operators(); }
+
+    void inc_reserve_bytes(size_t bytes) { _global_spill_manager->inc_reserve_bytes(bytes); }
+    void dec_reserve_bytes(size_t bytes) { _global_spill_manager->dec_reserve_bytes(bytes); }
 
     BlockManager* block_manager() const { return _block_manager.get(); }
 
@@ -45,7 +60,6 @@ private:
     TUniqueId _uid;
     std::unique_ptr<BlockManager> _block_manager;
     std::unique_ptr<DirManager> _remote_dir_manager;
-    std::atomic_size_t _spilling_operators = 0;
-    size_t _spillable_operators = 0;
+    GlobalSpillManager* _global_spill_manager = nullptr;
 };
 } // namespace starrocks::spill

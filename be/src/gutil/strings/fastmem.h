@@ -29,7 +29,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "common/compiler_util.h"
+#include "gutil/compiler_util.h"
 #include "gutil/integral_types.h"
 #include "gutil/port.h"
 

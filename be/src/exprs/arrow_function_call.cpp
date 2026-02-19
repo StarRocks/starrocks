@@ -17,16 +17,17 @@
 #include <memory>
 #include <mutex>
 
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/constexpr.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 #include "udf/python/callstub.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -46,7 +47,7 @@ StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context
     size_t num_rows = chunk != nullptr ? chunk->num_rows() : 1;
     for (int i = 0; i < _children.size(); ++i) {
         ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, chunk));
-        columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, columns[i]);
+        columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, std::move(columns[i]));
     }
 
     // get call stub

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
+import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
+
 CREATE MATERIALIZED VIEW creates a materialized view. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/async_mv/Materialized_view.md).
 
 > **CAUTION**
@@ -242,7 +244,8 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 
 > **NOTE**
 >
-> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
+> - While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
+> - External table materialized views do not support automatic refresh **triggered by base table data changes**. They only support asynchronous **fixed-interval** refresh and manual refresh.
 
 The refresh strategy of the asynchronous materialized view. Valid values:
 
@@ -408,6 +411,8 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
   - `FULL`: Forces a full refresh of all data every time, regardless of whether the materialized view supports incremental or partition-level refresh.
 
+<MVWarehouse />
+
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
@@ -563,7 +568,7 @@ EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000",
 
 - About external catalog asynchronous materialized views:
 
-  - External catalog materialized view only support async fixed-interval refresh and manual refresh.
+  - External catalog materialized view only support asynchronous fixed-interval refresh and manual refresh.
   - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
   - Currently, building materialized views based on external resources is not supported.
   - Currently, StarRocks cannot perceive if the base table data in the external catalog has changed, so all partitions will be refreshed by default every time the base table is refreshed. You can manually refresh only some of partitions using [REFRESH MATERIALIZED VIEW](REFRESH_MATERIALIZED_VIEW.md).

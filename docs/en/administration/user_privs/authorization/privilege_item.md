@@ -6,11 +6,16 @@ sidebar_label: "Privilege Items"
 
 # Privileges supported by StarRocks
 
+import PrivCreateWarehouse from '../../../_assets/commonMarkdown/priv_create_warehouse.mdx'
+import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
+
 Privileges granted to a user or role determine which operations the user or role can perform on certain objects. Privileges can be used to implement fine-grained access control to safeguard data security.
 
 This topic describes privileges provided by StarRocks on different objects and their meanings. Privileges are granted and revoked by using [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md). The privileges that can be granted on an object are specific to the object type. For example, table privileges are different from database privileges.
 
-> NOTE: The privileges described in this topic are available only from v3.0. The privilege framework and syntax in v3.0 are not backward compatible with those in earlier versions. After an upgrade to v3.0, most of your original privileges are still retained except those for specific operations. For the detailed differences, see [Upgrade notes](#upgrade-notes) at the end of this topic.
+:::important
+The privileges described in this topic are available only from v3.0. The privilege framework and syntax in v3.0 are not backward compatible with those in earlier versions. After an upgrade to v3.0, most of your original privileges are still retained except those for specific operations. For the detailed differences, see [Upgrade notes](#upgrade-notes) at the end of this topic.
+:::
 
 ## Privilege list
 
@@ -18,21 +23,7 @@ This section describes privileges that are available on different objects.
 
 ### SYSTEM
 
-| Privilege               | Description                                                  |
-| ----------------------- | ------------------------------------------------------------ |
-| NODE                    | Operates nodes, such as adding, deleting, or decommissioning nodes. To ensure cluster security, this privilege cannot be directly granted to users or roles. The `cluster_admin` role has this privilege. |
-| GRANT                   | Creates a user or role, alters a user or role, or grants privileges to a user or role. This privilege cannot be directly granted to users or roles. The `user_admin` role has this privilege. |
-| CREATE RESOURCE GROUP   | Creates a resource group.                                    |
-| CREATE RESOURCE         | Creates resources for Spark Load jobs or external tables.    |
-| CREATE EXTERNAL CATALOG | Creates an external catalog.                                 |
-| PLUGIN                  | Installs or uninstalls a plugin.                             |
-| REPOSITORY              | Creates, deletes, or views repositories.                     |
-| BLACKLIST               | Creates, deletes, or displays SQL blacklists and BE Blacklist. |
-| FILE                    | Creates, deletes, or views files.                            |
-| OPERATE                 | Manages replicas, configuration items, variables, and transactions. |
-| CREATE GLOBAL FUNCTION  | Creates a global UDF.                                        |
-| CREATE STORAGE VOLUME   | Creates a storage volume for a remote storage system.        |
-| SECURITY                | Creates or manages security integrations and group providers. |
+<PrivCreateWarehouse />
 
 ### RESOURCE GROUP
 
@@ -138,6 +129,8 @@ This section describes privileges that are available on different objects.
 | DROP      | Drops a storage volume.                                                             |
 | USAGE     | Describes a storage volume and sets a storage volume as the default storage volume. |
 | ALL       | Has all the above privileges on a storage volume.                                   |
+
+<PrivWarehouse />
 
 ## Upgrade notes
 

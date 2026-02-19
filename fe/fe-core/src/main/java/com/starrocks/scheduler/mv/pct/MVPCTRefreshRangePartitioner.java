@@ -89,7 +89,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                         MaterializedView mv,
                                         MVRefreshParams mvRefreshParams) {
         super(mvContext, context, db, mv, mvRefreshParams);
-        this.differ = new RangePartitionDiffer(mv, false, null);
+        this.differ = new RangePartitionDiffer(mv, queryRewriteParams, null);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshRangePartitioner.class);
     }
 

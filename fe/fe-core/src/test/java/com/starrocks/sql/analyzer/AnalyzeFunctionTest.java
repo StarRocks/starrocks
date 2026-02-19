@@ -14,7 +14,11 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -141,6 +145,15 @@ public class AnalyzeFunctionTest {
         analyzeFail("select ndv(h1) from test_object");
         analyzeFail("select approx_count_distinct(b1) from test_object");
         analyzeFail("select ndv(b1) from test_object");
+    }
+
+    @Test
+    public void testApproxCountDistinctWithVarbinary() {
+        analyzeSuccess("select approx_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select ndv(v_varbinary) from tbinary");
+        analyzeSuccess("select ds_hll_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select ds_theta_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select count(distinct v_varbinary) from tbinary");
     }
 
     @Test
@@ -332,6 +345,83 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select sec_to_time(-1)");
         analyzeSuccess("select sec_to_time(3024000)");
         analyzeSuccess("select sec_to_time(-3024000)");
+    }
+
+    @Test
+    public void testStringAgg() throws Exception {
+        // Test basic STRING_AGG to GROUP_CONCAT conversion
+        QueryStatement stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',') from tall");
+        QueryRelation relation = stmt.getQueryRelation();
+        Assertions.assertTrue(relation instanceof SelectRelation);
+        SelectRelation selectRelation = (SelectRelation) relation;
+        Assertions.assertTrue(selectRelation.getOutputExpression().get(0) instanceof FunctionCallExpr);
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertEquals(2, functionCallExpr.getChildren().size());
+
+        // Test STRING_AGG with ORDER BY
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',' order by ta) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertNotNull(functionCallExpr.getParams().getOrderByElements());
+        Assertions.assertEquals(1, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG with ORDER BY multiple columns
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',' order by ta, tb desc) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertEquals(2, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG with DISTINCT
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(distinct ta, ',') from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertTrue(functionCallExpr.getParams().isDistinct());
+
+        // Test STRING_AGG with DISTINCT and ORDER BY
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(distinct ta, ',' order by ta) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertTrue(functionCallExpr.getParams().isDistinct());
+        Assertions.assertEquals(1, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG in various contexts
+        analyzeSuccess("select string_agg(ta, '-') from tall group by tb");
+        analyzeSuccess("select tb, string_agg(ta, '|') from tall group by tb");
+        analyzeSuccess("select string_agg(cast(ti as varchar), ',') from tall");
+        analyzeSuccess("select string_agg(concat(ta, tb), ',') from tall");
+        analyzeSuccess("select string_agg(ta, ' ') from tall where tb = 'test'");
+
+        // Test STRING_AGG error cases - invalid syntax
+        analyzeFail("select string_agg(ta) from tall",
+                "No matching function with signature: string_agg(varchar(20))");
+        analyzeFail("select string_agg(distinct ta) from tall",
+                "Getting syntax error");
+        analyzeFail("select string_agg(ta, ',', 'extra') from tall",
+                "No matching function with signature: string_agg(varchar(20), varchar, varchar)");
+        analyzeFail("select string_agg() from tall",
+                "No matching function with signature: string_agg()");
+
+        // Test STRING_AGG vs GROUP_CONCAT equivalence
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, '|' order by ta desc) from tall");
+        QueryStatement stmt2 =
+                (QueryStatement) analyzeSuccess("select group_concat(ta order by ta desc separator '|') from tall");
+        relation = stmt.getQueryRelation();
+        QueryRelation relation2 = stmt2.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        SelectRelation selectRelation2 = (SelectRelation) relation2;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        FunctionCallExpr functionCallExpr2 = (FunctionCallExpr) selectRelation2.getOutputExpression().get(0);
+        Assertions.assertEquals(functionCallExpr.getFunctionName(), functionCallExpr2.getFunctionName());
+        Assertions.assertEquals(functionCallExpr.getChildren().size(), functionCallExpr2.getChildren().size());
     }
 
     @Test

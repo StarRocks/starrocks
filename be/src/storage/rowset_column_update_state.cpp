@@ -14,6 +14,9 @@
 
 #include "rowset_column_update_state.h"
 
+#include "base/phmap/phmap.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -31,10 +34,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/defer_op.h"
-#include "util/phmap/phmap.h"
 #include "util/stack_util.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -107,7 +107,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
         return Status::InternalError(err_msg);
     }
 
-    std::shared_ptr<Chunk> chunk_shared_ptr;
+    ChunkPtr chunk_shared_ptr;
     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE));
 
     // alloc first BatchPKsPtr
@@ -533,10 +533,10 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
                                                                  type_info, tablet_column.length(), row_cnt);
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-            RETURN_IF_ERROR(
-                    default_value_iter->fetch_values_by_rowid(nullptr, row_cnt, (*columns)[column_ids[i]].get()));
+            RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, row_cnt,
+                                                                      (*columns)[column_ids[i]]->as_mutable_raw_ptr()));
         } else {
-            TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->append_default(row_cnt));
+            TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->as_mutable_raw_ptr()->append_default(row_cnt));
         }
     }
     return Status::OK();
@@ -624,7 +624,7 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             ASSIGN_OR_RETURN(auto writer, _prepare_segment_writer(rowset, tablet_schema, segid));
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, partial_chunk_ptr));
             for (uint32_t column_id : read_update_column_ids.second) {
-                chunk_ptr->get_column_by_id(column_id)->append_selective(
+                chunk_ptr->get_column_raw_ptr_by_id(column_id)->append_selective(
                         *partial_chunk_ptr->get_column_by_id(column_id), _partial_update_states[upt_id].insert_rowids);
             }
             // fill default columns

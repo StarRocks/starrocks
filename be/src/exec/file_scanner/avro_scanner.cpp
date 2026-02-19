@@ -22,9 +22,11 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/runtime_profile.h"
 #include "exec/file_scanner/json_scanner.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
@@ -35,10 +37,9 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "runtime/types.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
+#include "types/type_descriptor.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -63,14 +64,18 @@ AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _serdes(nullptr),
-          _closed(false) {}
+          _closed(false) {
+    _file_format_str = "avro_stream";
+}
 
 AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter, std::string schema_text)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _schema_text(std::move(schema_text)),
-          _closed(false) {}
+          _closed(false) {
+    _file_format_str = "avro_stream";
+}
 
 AvroScanner::~AvroScanner() {
 #if BE_TEST
@@ -154,6 +159,7 @@ Status AvroScanner::open() {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
         return st;
     }
+    ++_counter->num_files_read;
 
     for (const auto& desc : _src_slot_descriptors) {
         if (desc == nullptr) {
@@ -169,7 +175,7 @@ void AvroScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chun
     chunk->materialized_nullable();
     for (int i = 0; i < chunk->num_columns(); i++) {
         AdaptiveNullableColumn* adaptive_column =
-                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
         chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
                                                              adaptive_column->materialized_raw_null_column()),
                                       i);
@@ -193,7 +199,7 @@ Status AvroScanner::_create_src_chunk(ChunkPtr* chunk) {
 }
 
 void AvroScanner::_report_error(const std::string& line, const std::string& err_msg) {
-    _state->append_error_msg_to_file(line, err_msg);
+    RuntimeStateHelper::append_error_msg_to_file(_state, line, err_msg);
 }
 
 Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk) {
@@ -203,7 +209,7 @@ Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk)
         if (_src_slot_descriptors[i] == nullptr) {
             continue;
         }
-        auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(_src_slot_descriptors[i]->id()).get());
+        auto column = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(_src_slot_descriptors[i]->id()));
         if (UNLIKELY(i >= jsonpath_size)) {
             column->append_nulls(1);
             continue;
@@ -230,7 +236,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
 #ifdef BE_TEST
         // In general, we want to test component injection schemastr.
         avro_schema_error_t error;
-        avro_schema_t schema = NULL;
+        avro_schema_t schema = nullptr;
         int result = avro_schema_from_json(_schema_text.c_str(), _schema_text.size(), &schema, &error);
         if (result != 0) {
             auto err_msg = "parse schema from json error: " + std::string(avro_strerror());
@@ -277,7 +283,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
             auto err_msg = "serdes deserialize avro failed: " + std::string(_err_buf);
             LOG(ERROR) << err_msg;
             _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", err_msg);
+            RuntimeStateHelper::append_error_msg_to_file(_state, "", err_msg);
             return Status::InternalError("serdes deserialize avro failed");
         }
         DeferOp op([&] { avro_value_decref(&avro_value); });
@@ -312,7 +318,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
                 // hence the number of error appended to the file should be limited.
-                _state->append_error_msg_to_file("", st.to_string());
+                RuntimeStateHelper::append_error_msg_to_file(_state, "", st.to_string());
                 LOG(WARNING) << "failed to construct row: " << st;
             }
             // Before continuing to process other rows, we need to first clean the fail parsed row.
@@ -355,7 +361,7 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
             _found_columns[column_index] = true;
         }
 
-        auto& column = chunk->get_column_by_slot_id(slot_info.id);
+        auto* column = chunk->get_column_raw_ptr_by_slot_id(slot_info.id);
         // We should expand the union type.
         avro_value_t* cur_value = &element_value;
         if (UNLIKELY(avro_value_get_type(cur_value) == AVRO_UNION)) {
@@ -364,12 +370,12 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
             *cur_value = branch;
         }
         // construct column with value.
-        RETURN_IF_ERROR(_construct_column(*cur_value, column.get(), slot_info.type, slot_info.key));
+        RETURN_IF_ERROR(_construct_column(*cur_value, column, slot_info.type, slot_info.key));
     }
 
     for (int i = 0; i < _found_columns.size(); i++) {
         if (UNLIKELY(!_found_columns[i])) {
-            auto& column = chunk->get_column_by_index(i);
+            auto* column = chunk->get_column_raw_ptr_by_index(i);
             column->append_nulls(1);
         }
     }
@@ -413,7 +419,7 @@ StatusOr<ChunkPtr> AvroScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
         }
 
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[column_pos]->evaluate_checked(nullptr, src_chunk.get()));
-        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), col);
+        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), std::move(col));
         cast_chunk->append_column(std::move(col), slot->id());
     }
 

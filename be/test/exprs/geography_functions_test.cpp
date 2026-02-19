@@ -87,7 +87,7 @@ TEST_F(geographyFunctionsTest, st_xDoubleTest) {
 
     auto result = GeoFunctions::st_x(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<DoubleColumn>(result);
-    ASSERT_EQ(134, v->get_data()[0]);
+    ASSERT_EQ(134, v->immutable_data()[0]);
 
     //}
 }
@@ -107,7 +107,7 @@ TEST_F(geographyFunctionsTest, st_yDoubleTest) {
 
     auto result = GeoFunctions::st_y(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<DoubleColumn>(result);
-    ASSERT_EQ(63, v->get_data()[0]);
+    ASSERT_EQ(63, v->immutable_data()[0]);
 }
 
 TEST_F(geographyFunctionsTest, st_distance_sphereTest) {
@@ -132,7 +132,7 @@ TEST_F(geographyFunctionsTest, st_distance_sphereTest) {
     ColumnPtr result = GeoFunctions::st_distance_sphere(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<DoubleColumn>(result);
 
-    ASSERT_EQ(0, v->get_data()[0]);
+    ASSERT_EQ(0, v->immutable_data()[0]);
 }
 
 TEST_F(geographyFunctionsTest, as_wktTest) {
@@ -379,7 +379,7 @@ TEST_F(geographyFunctionsTest, st_containsGeneralTest) {
     auto res = GeoFunctions::st_contains(ctx.get(), columns).value();
     auto bools = ColumnHelper::cast_to<TYPE_BOOLEAN>(res);
     ASSERT_FALSE(res->is_null(0));
-    ASSERT_TRUE(bools->get_data()[0]);
+    ASSERT_TRUE(bools->immutable_data()[0]);
     GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 }
 

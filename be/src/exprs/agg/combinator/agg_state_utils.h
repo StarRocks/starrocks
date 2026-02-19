@@ -75,9 +75,9 @@ public:
 
     // Get the aggregate state function according to the agg_state_desc and function name.
     // If the function is not an aggregate state function, return nullptr.
-    static StatusOr<AggregateFunctionPtr> get_agg_state_function(const AggStateDesc& agg_state_desc,
-                                                                 const std::string& func_name,
-                                                                 const std::vector<TypeDescriptor>& arg_types);
+    static StatusOr<const AggregateFunction*> get_agg_state_function(const AggStateDesc& agg_state_desc,
+                                                                     const std::string& func_name,
+                                                                     const std::vector<TypeDescriptor>& arg_types);
 
     // Get the aggregate state function according to the TAggStateDesc and function name.
     // If the function is not an aggregate state function, return nullptr.

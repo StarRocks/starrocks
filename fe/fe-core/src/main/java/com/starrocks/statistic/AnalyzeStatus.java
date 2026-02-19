@@ -28,10 +28,10 @@ import java.util.Map;
 public interface AnalyzeStatus {
 
     ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("Table", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Op", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Msg_type", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Msg_text", TypeFactory.createVarchar(200)))
+            .addColumn(new Column("Table", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Op", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Msg_type", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Msg_text", TypeFactory.createVarcharType(200)))
             .build();
 
     long getId();

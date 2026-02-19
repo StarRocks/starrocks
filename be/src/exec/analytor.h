@@ -17,17 +17,17 @@
 #include <queue>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/memory/mem_hook_allocator.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/memory/mem_hook_allocator.h"
-#include "runtime/types.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -293,10 +293,10 @@ private:
     std::vector<FunctionTypes> _agg_fn_types;
 
     std::vector<ExprContext*> _partition_ctxs;
-    Columns _partition_columns;
+    MutableColumns _partition_columns;
 
     std::vector<ExprContext*> _order_ctxs;
-    Columns _order_columns;
+    MutableColumns _order_columns;
 
     // Tuple id of the buffered tuple (identical to the input child tuple, which is
     // assumed to come from a single SortNode). NULL if both partition_exprs and
@@ -339,7 +339,7 @@ private:
     bool _input_eos = false;
 
     // Temporary output related structures
-    Columns _result_window_columns;
+    MutableColumns _result_window_columns;
 
     // Assistant structures for removeing unused buffered input chunks
     int64_t _removed_from_buffer_rows = 0;

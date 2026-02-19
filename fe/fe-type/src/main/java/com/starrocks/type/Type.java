@@ -314,7 +314,7 @@ public abstract class Type implements Cloneable {
 
     public boolean canBeWindowFunctionArgumentTypes() {
         return !(isNull() || isChar() || isTime() || isComplexType()
-                || isPseudoType() || isFunctionType() || isBinaryType());
+                || isPseudoType() || isFunctionType() || isBinaryType() || isVariantType());
     }
 
     /**

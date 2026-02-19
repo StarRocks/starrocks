@@ -22,4 +22,4 @@ adbc-driver-flightsql==1.2.0
 # Relaxed pyarrow version constraint to >=17.0.0 to support the variant_query feature,
 # which requires features introduced after 17.0.0. As of this writing, no known compatibility
 # issues have been observed with newer pyarrow versions, but please verify compatibility if upgrading.
-pyarrow>=17.0.0
+pyarrow>=21.0.0

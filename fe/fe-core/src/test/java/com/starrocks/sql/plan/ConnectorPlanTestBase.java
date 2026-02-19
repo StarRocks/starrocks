@@ -384,7 +384,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         metadataMgr.registerMockedMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME, mockIcebergMetadata);
     }
 
-    private static File newFolder(File root, String... subDirs) throws IOException {
+    public static File newFolder(File root, String... subDirs) throws IOException {
         String subFolder = String.join("/", subDirs);
         File result = new File(root, subFolder);
         if (!result.mkdirs()) {

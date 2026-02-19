@@ -1,4 +1,4 @@
--- name: test_mv_with_index
+-- name: test_mv_with_index @native
 create database test_mv_with_index;
 use test_mv_with_index;
 

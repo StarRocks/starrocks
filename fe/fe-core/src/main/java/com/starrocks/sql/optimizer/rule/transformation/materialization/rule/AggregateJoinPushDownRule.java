@@ -136,13 +136,13 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     public List<MaterializationContext> doPrune(OptExpression queryExpression,
                                                 OptimizerContext context,
                                                 List<MaterializationContext> mvCandidateContexts) {
-        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
+        List<LogicalScanOperator> scanOperators = getScanOperator(queryExpression);
         List<MaterializationContext> validCandidateContexts = Lists.newArrayList();
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            if (isLogicalSPG(mvContext.getMvExpression()) && validMv(mvContext, scanOperators)) {
+            if (!isLogicalSPG(mvContext.getMvExpression())) {
+                logMVRewrite(mvContext, this, "mv pruned: not logical SPG");
+            } else if (validMv(mvContext, scanOperators)) {
                 validCandidateContexts.add(mvContext);
-            } else {
-                logMVRewrite(mvContext, this, "mv pruned: not logical SPG or not contain all columns used in scan");
             }
         }
         return validCandidateContexts;
@@ -155,16 +155,40 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
         Set<String> mvUsedColNames = mvUsedColRefs.stream()
                 .map(ColumnRefOperator::getName)
                 .collect(Collectors.toSet());
+        boolean baseTableFoundInMv = false;
         for (LogicalScanOperator scanOperator : scanOperators) {
             if (scanOperator.getTable().getId() != baseTableId) {
                 continue;
             }
+            baseTableFoundInMv = true;
             // mv should contain all columns that used in at least one query
             if (mvContainsAllColumnsUsedInScan(mvUsedColNames, scanOperator)) {
                 return true;
             }
         }
+        if (baseTableFoundInMv) {
+            logMVRewrite(mvContext, this, "mv pruned: not contain all columns used in scan");
+        }
         return false;
+    }
+
+    private List<LogicalScanOperator> getScanOperator(OptExpression root) {
+        List<LogicalScanOperator> scanOperators = Lists.newArrayList();
+        getScanOperator(root, scanOperators);
+        return scanOperators;
+    }
+
+    private void getScanOperator(OptExpression root, List<LogicalScanOperator> scanOperators) {
+        if (root.getOp() instanceof LogicalScanOperator) {
+            scanOperators.add((LogicalScanOperator) root.getOp());
+        } else {
+            for (OptExpression child : root.getInputs()) {
+                if (child.getOp() instanceof LogicalAggregationOperator) {
+                    return;
+                }
+                getScanOperator(child, scanOperators);
+            }
+        }
     }
 
     private boolean mvContainsAllColumnsUsedInScan(Set<String> mvUsedColNames, LogicalScanOperator scanOperator) {

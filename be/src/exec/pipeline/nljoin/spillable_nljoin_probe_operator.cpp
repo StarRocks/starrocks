@@ -22,6 +22,7 @@
 #include "exec/spill/common.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller_factory.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -103,12 +104,12 @@ void NLJoinProber::_permute_probe_row(Chunk* dst, const ChunkPtr& build_chunk) {
     for (size_t i = 0; i < _col_types.size(); i++) {
         bool is_probe = i < _probe_column_count;
         SlotDescriptor* slot = _col_types[i];
-        ColumnPtr& dst_col = dst->get_column_by_slot_id(slot->id());
+        auto* dst_col = dst->get_column_raw_ptr_by_slot_id(slot->id());
         if (is_probe) {
-            ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
+            const ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
             dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
         } else {
-            ColumnPtr& src_col = build_chunk->get_column_by_slot_id(slot->id());
+            const ColumnPtr& src_col = build_chunk->get_column_by_slot_id(slot->id());
             dst_col->append(*src_col);
         }
     }
@@ -132,7 +133,8 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     spill::SpilledOptions opts;
     opts.wg = state->fragment_ctx()->workgroup();
     _spiller = _spill_factory->create(opts);
-    _spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+    _spiller->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     _cross_join_context->incr_prober();
     return Status::OK();
 }
@@ -156,7 +158,6 @@ bool SpillableNLJoinProbeOperator::is_finished() const {
 
 bool SpillableNLJoinProbeOperator::has_output() const {
     if (!is_ready()) {
-        DCHECK(false) << "is_ready() must be true before call has_output";
         return false;
     }
     RETURN_TRUE_IF_SPILL_TASK_ERROR(_spiller);
@@ -165,7 +166,6 @@ bool SpillableNLJoinProbeOperator::has_output() const {
 
 bool SpillableNLJoinProbeOperator::need_input() const {
     if (!is_ready()) {
-        DCHECK(false) << "is_ready() must be true before call has_output";
         return false;
     }
     return _prober.probe_finished() && _is_current_build_probe_finished();

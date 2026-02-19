@@ -14,13 +14,13 @@
 
 #include "cache/mem_space_monitor.h"
 
+#include "base/concurrency/await.h"
+#include "base/gc/gc_helper.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
+#include "common/thread/thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "util/await.h"
-#include "util/gc_helper.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

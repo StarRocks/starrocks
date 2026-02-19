@@ -1,4 +1,4 @@
--- name: test_create_table
+-- name: test_create_table @native
 CREATE DATABASE test_create_table;
 -- result:
 -- !result
@@ -398,7 +398,7 @@ DROP TABLE t;
 DROP DATABASE test_materialized_column_schema_change;
 -- result:
 -- !result
--- name: test_normal_column_schema_change
+-- name: test_normal_column_schema_change @native
 CREATE DATABASE test_normal_column_schema_change;
 -- result:
 -- !result
@@ -477,7 +477,7 @@ DROP TABLE t;
 DROP DATABASE test_normal_column_schema_change;
 -- result:
 -- !result
--- name: test_add_multiple_column
+-- name: test_add_multiple_column @native
 CREATE DATABASE test_add_multiple_column;
 -- result:
 -- !result
@@ -888,7 +888,7 @@ DROP TABLE t;
 DROP DATABASE test_schema_change_for_constant_expression;
 -- result:
 -- !result
--- name: test_schema_change_for_after
+-- name: test_schema_change_for_after @native
 CREATE DATABASE test_schema_change_for_after;
 -- result:
 -- !result
@@ -1006,7 +1006,7 @@ PROPERTIES (
 DROP DATABASE test_schema_change_for_after;
 -- result:
 -- !result
--- name: test_compaction_after_adding_generated_column
+-- name: test_compaction_after_adding_generated_column @native
 CREATE DATABASE test_compaction_after_adding_generated_column;
 -- result:
 -- !result
@@ -1115,7 +1115,7 @@ select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where 
 select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
 -- result:
 -- !result
--- name: test_fix_adding_and_col_partial_update_conflict
+-- name: test_fix_adding_and_col_partial_update_conflict @native
 CREATE TABLE t_fix_adding_and_col_partial_update_conflict ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
 -- !result
