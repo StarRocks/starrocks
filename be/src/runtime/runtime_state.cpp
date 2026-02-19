@@ -128,7 +128,7 @@ RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
 
 RuntimeState::~RuntimeState() {
     // dict exprs
-    _dict_optimize_parser.close();
+    _dict_optimize_parser.close(this);
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -386,12 +386,12 @@ DictOptimizeParser* RuntimeState::mutable_dict_optimize_parser() {
 
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
     RETURN_IF_ERROR(_build_global_dict(global_dict_list, &_query_global_dicts, nullptr));
-    _dict_optimize_parser.set_mutable_dict_maps(this, &_query_global_dicts);
+    _dict_optimize_parser.set_mutable_dict_maps(&_query_global_dicts);
     return Status::OK();
 }
 
 Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
-    return _dict_optimize_parser.init_dict_exprs(exprs);
+    return _dict_optimize_parser.init_dict_exprs(this, exprs);
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
