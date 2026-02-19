@@ -38,12 +38,12 @@
 #include <mutex>
 #include <vector>
 
+#include "base/brpc/brpc.h"
 #include "base/concurrency/spinlock.h"
 #include "base/network/network_util.h"
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
-#include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
 
 #ifndef __APPLE__

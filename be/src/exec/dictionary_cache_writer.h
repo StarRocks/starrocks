@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include "base/brpc/reusable_closure.h"
 #include "column/chunk.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_state.h"
-#include "util/reusable_closure.h"
 
 namespace starrocks {
 

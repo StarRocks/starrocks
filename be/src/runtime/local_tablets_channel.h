@@ -18,13 +18,13 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 
+#include "base/brpc/reusable_closure.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
 #include "common/system/backend_options.h"
 #include "runtime/tablets_channel.h"
 #include "storage/async_delta_writer.h"
-#include "util/reusable_closure.h"
 
 namespace brpc {
 class Controller;

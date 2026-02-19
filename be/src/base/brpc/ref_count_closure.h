@@ -20,8 +20,9 @@
 #include <google/protobuf/stubs/common.h>
 
 #include <atomic>
+#include <string>
 
-#include "service/brpc.h"
+#include "base/brpc/brpc.h"
 
 namespace starrocks {
 
