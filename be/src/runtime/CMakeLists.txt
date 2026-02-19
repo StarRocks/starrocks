@@ -105,6 +105,7 @@ set(RUNTIME_FILES
     tablets_channel.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
+    global_dict/context.cpp
     global_dict/parser.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp
