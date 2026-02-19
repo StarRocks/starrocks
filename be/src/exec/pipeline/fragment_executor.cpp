@@ -821,17 +821,16 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
 Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParams& request) {
     const auto& fragment = request.common().fragment;
     // Set up global dict
-    auto* runtime_state = _fragment_ctx->runtime_state();
     if (fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
+        RETURN_IF_ERROR(_fragment_ctx->init_query_global_dict(fragment.query_global_dicts));
     }
 
     if (fragment.__isset.query_global_dicts && fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(_fragment_ctx->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
     }
 
     if (fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_load_global_dict(fragment.load_global_dicts));
+        RETURN_IF_ERROR(_fragment_ctx->init_load_global_dict(fragment.load_global_dicts));
     }
     return Status::OK();
 }

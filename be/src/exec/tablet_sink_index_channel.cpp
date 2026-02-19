@@ -27,6 +27,7 @@
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
 #include "common/utils.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
@@ -220,20 +221,25 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
 
     // set global dict
-    const auto& global_dict = _runtime_state->get_load_global_dict_map();
-    const auto& dict_version = _runtime_state->load_dict_versions();
+    const auto* fragment_ctx = _runtime_state->fragment_ctx();
+    const auto* global_dict = fragment_ctx != nullptr ? &fragment_ctx->get_load_global_dict_map() : nullptr;
+    const auto* dict_version = fragment_ctx != nullptr ? &fragment_ctx->load_dict_versions() : nullptr;
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
-        auto it = global_dict.find(slot->id());
-        if (it != global_dict.end()) {
-            auto dict = it->second.first;
-            for (auto& item : dict) {
-                slot->add_global_dict_words(item.first.to_string());
+        if (global_dict != nullptr) {
+            auto it = global_dict->find(slot->id());
+            if (it != global_dict->end()) {
+                auto dict = it->second.first;
+                for (auto& item : dict) {
+                    slot->add_global_dict_words(item.first.to_string());
+                }
             }
         }
-        auto it_version = dict_version.find(slot->id());
-        if (it_version != dict_version.end()) {
-            slot->set_global_dict_version(it_version->second);
+        if (dict_version != nullptr) {
+            auto it_version = dict_version->find(slot->id());
+            if (it_version != dict_version->end()) {
+                slot->set_global_dict_version(it_version->second);
+            }
         }
     }
 

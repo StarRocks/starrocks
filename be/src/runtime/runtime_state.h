@@ -37,7 +37,6 @@
 #include <atomic>
 #include <fstream>
 #include <limits>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -56,8 +55,6 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/global_dict/parser.h"
-#include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "util/logging.h"
@@ -78,7 +75,6 @@ class RowDescriptor;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
-class GlobalDictContext;
 class RuntimeStateHelper;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
@@ -463,22 +459,6 @@ public:
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
-    const GlobalDictMaps& get_query_global_dict_map() const;
-    // for query global dict
-    GlobalDictMaps* mutable_query_global_dict_map();
-
-    const GlobalDictMaps& get_load_global_dict_map() const;
-
-    DictOptimizeParser* mutable_dict_optimize_parser();
-
-    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() const;
-
-    using GlobalDictLists = std::vector<TGlobalDict>;
-    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
-    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
-
-    Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
-
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
     void set_arrow_flight_sql_version(int version) { this->_arrow_flight_sql_version = version; }
@@ -682,8 +662,6 @@ private:
     RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
-
-    std::unique_ptr<GlobalDictContext> _global_dict_ctx;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;

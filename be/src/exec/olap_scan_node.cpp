@@ -26,6 +26,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/olap_scan_prepare.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -696,7 +697,10 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager->get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &conjunct_ctxs));
+    auto* fragment_ctx = state->fragment_ctx();
+    if (fragment_ctx != nullptr) {
+        RETURN_IF_ERROR(fragment_ctx->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &conjunct_ctxs));
+    }
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {

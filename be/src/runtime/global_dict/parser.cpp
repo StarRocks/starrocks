@@ -23,6 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/statusor.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -509,7 +510,11 @@ void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, 
 void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,
                                             const std::map<int32_t, int32_t>& dict_slots_mapping,
                                             std::vector<SlotDescriptor*>* slot_descs) {
-    const auto& global_dict = runtime_state->get_query_global_dict_map();
+    auto* fragment_ctx = runtime_state->fragment_ctx();
+    if (fragment_ctx == nullptr) {
+        return;
+    }
+    const auto& global_dict = fragment_ctx->get_query_global_dict_map();
     if (global_dict.empty()) return;
 
     for (auto& slot_desc : *slot_descs) {

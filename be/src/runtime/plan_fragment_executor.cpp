@@ -107,16 +107,9 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
     _runtime_state->set_fragment_root_id(_plan->id());
 
-    if (request.fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
-    }
-
-    if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
-    }
-
-    if (request.fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
+    if (request.fragment.__isset.query_global_dicts || request.fragment.__isset.query_global_dict_exprs ||
+        request.fragment.__isset.load_global_dicts) {
+        return Status::NotSupported("global dict is only supported in pipeline execution");
     }
 
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {

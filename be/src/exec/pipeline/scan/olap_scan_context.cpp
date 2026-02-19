@@ -107,6 +107,11 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
                                         RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence) {
     TEST_ERROR_POINT("OlapScanContext::parse_conjuncts");
+    auto* fragment_ctx = state->fragment_ctx();
+    if (fragment_ctx == nullptr) {
+        return Status::InternalError("olap scan context requires fragment context");
+    }
+
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
 
@@ -145,7 +150,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     opts.scan_keys_unlimited = true;
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
-    opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
+    opts.pred_tree_params = fragment_ctx->pred_tree_params();
 
     _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
     ScanConjunctsManager& cm = *_conjuncts_manager;
@@ -158,7 +163,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     cm.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
 
     // rewrite after push down scan predicate, scan predicate should rewrite by local-dict
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_not_push_down_conjuncts));
+    RETURN_IF_ERROR(fragment_ctx->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_not_push_down_conjuncts));
 
     WARN_IF_ERROR(
             _jit_rewriter.rewrite(_not_push_down_conjuncts, &_obj_pool, RuntimeStateHelper::is_jit_enabled(state)), "");

@@ -31,6 +31,7 @@
 #include "common/util/table_metrics.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group.h"
@@ -764,7 +765,8 @@ Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 // mapping a slot-column-id to schema-columnid
 Status OlapChunkSource::_init_global_dicts(TabletReaderParams* params) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_ctx = _runtime_state->fragment_ctx();
+    const auto* global_dict_map = fragment_ctx != nullptr ? &fragment_ctx->get_query_global_dict_map() : nullptr;
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
@@ -772,8 +774,11 @@ Status OlapChunkSource::_init_global_dicts(TabletReaderParams* params) {
         if (!slot->is_materialized()) {
             continue;
         }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
+        if (global_dict_map == nullptr) {
+            continue;
+        }
+        auto iter = global_dict_map->find(slot->id());
+        if (iter != global_dict_map->end()) {
             auto& dict_map = iter->second.first;
             int32_t index;
             if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {

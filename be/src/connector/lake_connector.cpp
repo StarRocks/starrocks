@@ -208,7 +208,8 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
 // mapping a slot-column-id to schema-columnid
 Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_ctx = _runtime_state->fragment_ctx();
+    const auto* global_dict_map = fragment_ctx != nullptr ? &fragment_ctx->get_query_global_dict_map() : nullptr;
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
@@ -216,8 +217,11 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
         if (!slot->is_materialized()) {
             continue;
         }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
+        if (global_dict_map == nullptr) {
+            continue;
+        }
+        auto iter = global_dict_map->find(slot->id());
+        if (iter != global_dict_map->end()) {
             auto& dict_map = iter->second.first;
             int32_t index = _tablet_schema->field_index(slot->col_name());
             DCHECK(index >= 0);
@@ -716,7 +720,11 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager->get_key_ranges(&_key_ranges));
     _conjuncts_manager->get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_not_push_down_conjuncts));
+    auto* fragment_ctx = state->fragment_ctx();
+    if (fragment_ctx != nullptr) {
+        RETURN_IF_ERROR(
+                fragment_ctx->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_not_push_down_conjuncts));
+    }
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();

@@ -26,6 +26,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/expr.h"
@@ -523,7 +524,11 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         }
     }
     // rewrite dict
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_scanner_conjunct_ctxs));
+    auto* fragment_ctx = state->fragment_ctx();
+    if (fragment_ctx != nullptr) {
+        RETURN_IF_ERROR(
+                fragment_ctx->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_scanner_conjunct_ctxs));
+    }
     return Status::OK();
 }
 
@@ -671,7 +676,8 @@ void HiveDataSource::_init_rf_counters() {
 
 Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
     const THdfsScanNode& hdfs_scan_node = _provider->_hdfs_scan_node;
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_ctx = _runtime_state->fragment_ctx();
+    const auto* global_dict_map = fragment_ctx != nullptr ? &fragment_ctx->get_query_global_dict_map() : nullptr;
     auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
@@ -680,8 +686,11 @@ Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
         if (!slot->is_materialized()) {
             continue;
         }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
+        if (global_dict_map == nullptr) {
+            continue;
+        }
+        auto iter = global_dict_map->find(slot->id());
+        if (iter != global_dict_map->end()) {
             auto& dict_map = iter->second.first;
             global_dict->emplace(slot->id(), const_cast<GlobalDictMap*>(&dict_map));
 #ifdef DEBUG

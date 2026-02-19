@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <map>
 #include <memory>
 #include <unordered_map>
 
@@ -37,6 +38,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/global_dict/context.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
@@ -148,6 +150,18 @@ public:
     bool enable_resource_group() const { return _workgroup != nullptr; }
     TQueryType::type query_type() const;
 
+    const GlobalDictMaps& get_query_global_dict_map() const;
+    GlobalDictMaps* mutable_query_global_dict_map();
+
+    const GlobalDictMaps& get_load_global_dict_map() const;
+    DictOptimizeParser* mutable_dict_optimize_parser();
+    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() const;
+
+    using GlobalDictLists = std::vector<TGlobalDict>;
+    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
+
     // STREAM MV
     Status reset_epoch();
     void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
@@ -216,6 +230,8 @@ private:
     Pipelines _pipelines;
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
+
+    std::unique_ptr<GlobalDictContext> _global_dict_ctx;
 
     std::unique_ptr<EventScheduler> _event_scheduler;
     PipelineTimer* _pipeline_timer = nullptr;

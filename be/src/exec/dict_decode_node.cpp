@@ -21,6 +21,7 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/dict_decode_operator.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "fmt/format.h"
@@ -84,8 +85,13 @@ Status DictDecodeNode::open(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(_children[0]->open(state));
 
-    const auto& global_dict = state->get_query_global_dict_map();
-    auto* dict_optimize_parser = state->mutable_dict_optimize_parser();
+    auto* fragment_ctx = state->fragment_ctx();
+    if (fragment_ctx == nullptr) {
+        return Status::InternalError("dict decode requires fragment context");
+    }
+
+    const auto& global_dict = fragment_ctx->get_query_global_dict_map();
+    auto* dict_optimize_parser = fragment_ctx->mutable_dict_optimize_parser();
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);

@@ -25,6 +25,7 @@
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/column_ref.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/expr_context.h"
@@ -71,13 +72,17 @@ public:
         list.emplace_back(dict);
         state._obj_pool = std::make_shared<ObjectPool>();
         state._instance_mem_pool = std::make_unique<MemPool>();
-        ASSERT_OK(state.init_query_global_dict(list));
+        auto runtime_state_holder = std::shared_ptr<RuntimeState>(&state, [](RuntimeState*) {});
+        fragment_ctx.set_runtime_state(std::move(runtime_state_holder));
+        state.set_fragment_ctx(&fragment_ctx);
+        ASSERT_OK(fragment_ctx.init_query_global_dict(list));
     }
 
 public:
     TExprNode node;
     ObjectPool pool;
     RuntimeState state;
+    pipeline::FragmentContext fragment_ctx;
     Expr* dict_expr;
     Expr* origin;
     ExprContext* context;

@@ -45,12 +45,15 @@
 
 namespace starrocks::pipeline {
 
-FragmentContext::FragmentContext() : _data_sink(nullptr) {}
+FragmentContext::FragmentContext() : _data_sink(nullptr), _global_dict_ctx(std::make_unique<GlobalDictContext>()) {}
 
 FragmentContext::~FragmentContext() {
     _close_stream_load_contexts();
     _data_sink.reset();
     _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
+    if (_global_dict_ctx != nullptr && _runtime_state != nullptr) {
+        _global_dict_ctx->close(_runtime_state.get());
+    }
     close_all_execution_groups();
     if (_plan != nullptr) {
         _plan->close(_runtime_state.get());
@@ -404,6 +407,47 @@ TQueryType::type FragmentContext::query_type() const {
         return TQueryType::EXTERNAL;
     }
     return _runtime_state->query_options().query_type;
+}
+
+const GlobalDictMaps& FragmentContext::get_query_global_dict_map() const {
+    return _global_dict_ctx->query_global_dicts();
+}
+
+GlobalDictMaps* FragmentContext::mutable_query_global_dict_map() {
+    return _global_dict_ctx->mutable_query_global_dicts();
+}
+
+const GlobalDictMaps& FragmentContext::get_load_global_dict_map() const {
+    return _global_dict_ctx->load_global_dicts();
+}
+
+DictOptimizeParser* FragmentContext::mutable_dict_optimize_parser() {
+    return _global_dict_ctx->mutable_dict_optimize_parser();
+}
+
+const phmap::flat_hash_map<uint32_t, int64_t>& FragmentContext::load_dict_versions() const {
+    return _global_dict_ctx->load_dict_versions();
+}
+
+Status FragmentContext::init_query_global_dict(const GlobalDictLists& global_dict_list) {
+    if (_runtime_state == nullptr) {
+        return Status::InternalError("RuntimeState is null when initializing query global dict");
+    }
+    return _global_dict_ctx->init_query_global_dict(_runtime_state.get(), global_dict_list);
+}
+
+Status FragmentContext::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
+    if (_runtime_state == nullptr) {
+        return Status::InternalError("RuntimeState is null when initializing query global dict exprs");
+    }
+    return _global_dict_ctx->init_query_global_dict_exprs(_runtime_state.get(), exprs);
+}
+
+Status FragmentContext::init_load_global_dict(const GlobalDictLists& global_dict_list) {
+    if (_runtime_state == nullptr) {
+        return Status::InternalError("RuntimeState is null when initializing load global dict");
+    }
+    return _global_dict_ctx->init_load_global_dict(_runtime_state.get(), global_dict_list);
 }
 
 Status FragmentContext::reset_epoch() {

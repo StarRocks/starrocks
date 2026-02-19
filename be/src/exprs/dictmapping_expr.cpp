@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -27,7 +28,11 @@ Status DictMappingExpr::open(RuntimeState* state, ExprContext* context, Function
         return Status::OK();
     }
 
-    return state->mutable_dict_optimize_parser()->rewrite_expr(state, context, this, _output_id);
+    auto* fragment_ctx = state->fragment_ctx();
+    if (fragment_ctx == nullptr) {
+        return Status::InternalError("dict optimize requires fragment context");
+    }
+    return fragment_ctx->mutable_dict_optimize_parser()->rewrite_expr(state, context, this, _output_id);
 }
 
 StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
