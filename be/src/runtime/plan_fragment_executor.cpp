@@ -50,6 +50,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
@@ -107,16 +108,21 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
     _runtime_state->set_fragment_root_id(_plan->id());
 
+    auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+
     if (request.fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
+        RETURN_IF_ERROR(
+                fragment_dict_state->init_query_global_dict(_runtime_state, request.fragment.query_global_dicts));
     }
 
     if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(fragment_dict_state->init_query_global_dict_exprs(_runtime_state,
+                                                                          request.fragment.query_global_dict_exprs));
     }
 
     if (request.fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_load_global_dict(_runtime_state, request.fragment.load_global_dicts));
     }
 
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {

@@ -25,6 +25,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -84,8 +85,10 @@ Status DictDecodeNode::open(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(_children[0]->open(state));
 
-    const auto& global_dict = state->get_query_global_dict_map();
-    auto* dict_optimize_parser = state->mutable_dict_optimize_parser();
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict = fragment_dict_state->query_global_dicts();
+    auto* dict_optimize_parser = fragment_dict_state->mutable_dict_optimize_parser();
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);

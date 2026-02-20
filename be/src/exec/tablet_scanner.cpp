@@ -23,6 +23,7 @@
 #include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
 #include "runtime/current_thread.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -245,7 +246,9 @@ Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>
 
 // mapping a slot-column-id to schema-columnid
 Status TabletScanner::_init_global_dicts() {
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
     auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {

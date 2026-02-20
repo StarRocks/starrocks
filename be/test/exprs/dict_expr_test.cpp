@@ -32,6 +32,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exception.h"
 #include "runtime/global_dict/config.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -71,13 +72,16 @@ public:
         list.emplace_back(dict);
         state._obj_pool = std::make_shared<ObjectPool>();
         state._instance_mem_pool = std::make_unique<MemPool>();
-        ASSERT_OK(state.init_query_global_dict(list));
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        state.set_fragment_dict_state(_fragment_dict_state.get());
+        ASSERT_OK(_fragment_dict_state->init_query_global_dict(&state, list));
     }
 
 public:
     TExprNode node;
     ObjectPool pool;
     RuntimeState state;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     Expr* dict_expr;
     Expr* origin;
     ExprContext* context;
