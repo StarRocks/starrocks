@@ -26,6 +26,7 @@
 #include "exprs/dictmapping_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "exprs/placeholder_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors.h"
@@ -467,7 +468,7 @@ void DictOptimizeParser::disable_open_rewrite(const std::vector<ExprContext*>* p
 Status DictOptimizeParser::init_dict_exprs(RuntimeState* runtime_state, const std::map<int, TExpr>& exprs) {
     for (auto& [k, v] : exprs) {
         ExprContext* expr_ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(&_free_pool, v, &expr_ctx, runtime_state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(&_free_pool, v, &expr_ctx, runtime_state));
         auto expr = expr_ctx->root();
         if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
             f->set_output_id(k);

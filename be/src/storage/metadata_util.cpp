@@ -24,6 +24,7 @@
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
@@ -489,7 +490,7 @@ StatusOr<std::string> convert_default_expr_to_json_string(const TExpr& t_expr) {
     ObjectPool pool;
 
     ExprContext* ctx = nullptr;
-    RETURN_IF_ERROR(Expr::create_expr_tree(&pool, t_expr, &ctx, state.get()));
+    RETURN_IF_ERROR(ExprFactory::create_expr_tree(&pool, t_expr, &ctx, state.get()));
 
     if (ctx == nullptr || ctx->root() == nullptr) {
         return Status::InternalError("Failed to create expression tree from TExpr");

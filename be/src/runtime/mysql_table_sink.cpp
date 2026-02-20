@@ -39,6 +39,7 @@
 
 #include "common/runtime_profile.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 #ifndef __APPLE__
 #include "runtime/mysql_table_writer.h"
@@ -69,7 +70,7 @@ Status MysqlTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _chunk_size = MYSQL_SINK_BATCH_SIZE;
 
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 #else
     return Status::NotSupported("MySQL table sink is not supported in this build.");

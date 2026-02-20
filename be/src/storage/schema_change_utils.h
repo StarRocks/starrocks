@@ -16,6 +16,7 @@
 
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "storage/column_mapping.h"
 #include "storage/convert_helper.h"
 #include "storage/tablet.h"
@@ -67,7 +68,7 @@ public:
 
     Status prepare_where_expr(const TExpr& where_expr) {
         VLOG(2) << "parse contain where expr";
-        RETURN_IF_ERROR(Expr::create_expr_tree(&_obj_pool, where_expr, &_where_expr, _state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(&_obj_pool, where_expr, &_where_expr, _state));
         RETURN_IF_ERROR(_where_expr->prepare(_state));
         RETURN_IF_ERROR(_where_expr->open(_state));
         return Status::OK();

@@ -29,6 +29,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/expr_factory.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -323,7 +324,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     TExpr texpr;
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
-    Status st = Expr::create_expr_tree(pool, texpr, &ctx, nullptr);
+    Status st = ExprFactory::create_expr_tree(pool, texpr, &ctx, nullptr);
     DCHECK(st.ok()) << st.message();
     return ctx;
 }

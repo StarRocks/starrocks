@@ -15,6 +15,7 @@
 #include "exec/aggregate/aggregate_base_node.h"
 
 #include "exec/aggregator.h"
+#include "exprs/expr_factory.h"
 
 namespace starrocks {
 
@@ -29,7 +30,8 @@ AggregateBaseNode::~AggregateBaseNode() {
 
 Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs, state, true));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs, state, true));
     for (auto& expr : _group_by_expr_ctxs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {

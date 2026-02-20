@@ -33,6 +33,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -66,7 +67,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (auto const& [key, val] : tnode.project_node.slot_map) {
         _slot_ids.emplace_back(key);
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
         _expr_ctxs.emplace_back(context);
         _type_is_nullable.emplace_back(slot_null_mapping[key]);
     }
@@ -77,7 +78,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (auto const& [key, val] : tnode.project_node.common_slot_map) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
         _common_sub_slot_ids.emplace_back(key);
         _common_sub_expr_ctxs.emplace_back(context);
     }

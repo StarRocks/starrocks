@@ -35,6 +35,7 @@ set(EXPR_FILES
   agg/combinator/agg_state_utils.cpp
   base64.cpp
   binary_functions.cpp
+  expr_factory.cpp
   expr_context.cpp
   expr.cpp
   function_context.cpp

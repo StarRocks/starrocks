@@ -27,6 +27,7 @@
 #include "connector/connector.h"
 #include "exec/scan_node.h"
 #include "exec/short_circuit_hybrid.h"
+#include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/result_buffer_mgr.h"
@@ -46,7 +47,7 @@ public:
     Status prepare(RuntimeState* state) override {
         _row_buffer = new (std::nothrow) MysqlRowBuffer(_is_binary_format);
 
-        RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_exprs, &_output_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_exprs, &_output_expr_ctxs, state));
         RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
         return DataSink::prepare(state);
     }

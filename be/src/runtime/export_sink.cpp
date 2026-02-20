@@ -42,6 +42,7 @@
 #include "common/runtime_profile.h"
 #include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
@@ -63,7 +64,7 @@ Status ExportSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _t_export_sink = t_sink.export_sink;
 
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 }
 

@@ -32,6 +32,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
@@ -261,8 +262,8 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops, [this]() {
             std::vector<ExprContext*> group_by_expr_ctxs;
-            WARN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs,
-                                                  runtime_state(), true),
+            WARN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs,
+                                                         runtime_state(), true),
                           "create grouping expr failed");
             return group_by_expr_ctxs;
         });

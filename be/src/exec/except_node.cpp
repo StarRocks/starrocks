@@ -22,6 +22,7 @@
 #include "exec/pipeline/set/except_output_source_operator.h"
 #include "exec/pipeline/set/except_probe_sink_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
@@ -39,7 +40,7 @@ Status ExceptNode::init(const TPlanNode& tnode, RuntimeState* state) {
     auto& result_texpr_lists = tnode.except_node.result_expr_lists;
     for (auto& texprs : result_texpr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, texprs, &ctxs, state));
         _child_expr_lists.push_back(ctxs);
     }
 
@@ -47,7 +48,7 @@ Status ExceptNode::init(const TPlanNode& tnode, RuntimeState* state) {
         auto& local_partition_by_exprs = tnode.except_node.local_partition_by_exprs;
         for (auto& texprs : local_partition_by_exprs) {
             std::vector<ExprContext*> ctxs;
-            RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, texprs, &ctxs, state));
             _local_partition_by_exprs.push_back(ctxs);
         }
     }

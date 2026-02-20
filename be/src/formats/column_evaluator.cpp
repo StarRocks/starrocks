@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -67,7 +68,7 @@ ColumnExprEvaluator::~ColumnExprEvaluator() {
 
 Status ColumnExprEvaluator::init() {
     if (_expr_ctx == nullptr) {
-        RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), _expr, &_expr_ctx, _state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_state->obj_pool(), _expr, &_expr_ctx, _state));
         RETURN_IF_ERROR(_expr_ctx->prepare(_state));
         RETURN_IF_ERROR(_expr_ctx->open(_state));
     }

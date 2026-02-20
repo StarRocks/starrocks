@@ -18,6 +18,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
+#include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
@@ -589,8 +590,8 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 if (runtime_state == nullptr) {
                     return Status::InternalError("change materialized view but query_options/query_globals is not set");
                 }
-                RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), *(mvParam.mv_expr),
-                                                       &(column_mapping->mv_expr_ctx), runtime_state));
+                RETURN_IF_ERROR(ExprFactory::create_expr_tree(chunk_changer->get_object_pool(), *(mvParam.mv_expr),
+                                                              &(column_mapping->mv_expr_ctx), runtime_state));
                 RETURN_IF_ERROR(column_mapping->mv_expr_ctx->prepare(runtime_state));
                 RETURN_IF_ERROR(column_mapping->mv_expr_ctx->open(runtime_state));
             }

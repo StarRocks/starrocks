@@ -20,6 +20,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_file_writer.h"
 #include "glog/logging.h"
@@ -138,8 +139,8 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
             partition_exprs.push_back(output_exprs[id]);
         }
         std::vector<ExprContext*> partition_expr_ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
-                                                runtime_state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                       runtime_state));
         auto ops = context->interpolate_local_key_partition_exchange(
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);

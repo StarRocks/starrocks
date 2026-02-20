@@ -43,6 +43,7 @@
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
@@ -792,8 +793,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
-                                                   chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
+                                                          chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->prepare(chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->open(chunk_changer->get_runtime_state()));
 

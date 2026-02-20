@@ -4,6 +4,7 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/expr_factory.h"
 #include "gtest/gtest.h"
 
 namespace starrocks::pipeline {
@@ -203,7 +204,7 @@ TEST_F(TableFunctionOperatorTest, key_partition_exchanger) {
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
     std::vector<ExprContext*> expr_ctxs;
-    Expr::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr);
+    ExprFactory::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr);
     Expr::prepare(expr_ctxs, _runtime_state);
     Expr::open(expr_ctxs, _runtime_state);
 

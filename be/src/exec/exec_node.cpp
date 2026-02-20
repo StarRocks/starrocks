@@ -81,6 +81,7 @@
 #include "exec/union_node.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
@@ -204,7 +205,7 @@ void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::P
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
     _runtime_state = state;
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs, state));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));
     if (tnode.__isset.local_rf_waiting_set) {
         _local_rf_waiting_set = tnode.local_rf_waiting_set;

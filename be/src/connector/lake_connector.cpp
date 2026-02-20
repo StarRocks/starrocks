@@ -21,6 +21,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/parser.h"
@@ -1088,7 +1089,7 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
         _partition_exprs.resize(bucket_exprs.size());
         for (int i = 0; i < bucket_exprs.size(); ++i) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
         }
     }
     return Status::OK();

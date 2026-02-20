@@ -33,6 +33,7 @@
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exprs/expr_factory.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 
@@ -58,8 +59,8 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool, state));
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
-                                                &_analytic_partition_exprs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
+                                                       &_analytic_partition_exprs, state));
         RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, runtime_state()));
         RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, runtime_state()));
         for (auto& expr : _analytic_partition_exprs) {
@@ -74,7 +75,7 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.partition_exprs) {
         RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.sort_node.partition_exprs, &_local_partition_exprs, state));
+                ExprFactory::create_expr_trees(_pool, tnode.sort_node.partition_exprs, &_local_partition_exprs, state));
     }
 
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;

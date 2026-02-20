@@ -33,6 +33,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
+#include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
@@ -417,9 +418,11 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _intermediate_tuple_id = _params->intermediate_tuple_id;
     _output_tuple_id = _params->output_tuple_id;
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->conjuncts, &_conjunct_ctxs, state, true));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->grouping_min_max, &_group_by_min_max, state, true));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool.get(), _params->conjuncts, &_conjunct_ctxs, state, true));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(_pool.get(), _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(_pool.get(), _params->grouping_min_max, &_group_by_min_max, state, true));
     _ranges.resize(_group_by_expr_ctxs.size());
     if (_group_by_min_max.size() == _group_by_expr_ctxs.size() * 2) {
         for (size_t i = 0; i < _group_by_expr_ctxs.size(); ++i) {
@@ -474,9 +477,9 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool.get(), desc.nodes, nullptr, &node_idx, &expr,
-                                                                   &ctx, state));
+            RETURN_IF_ERROR(
+                    ExprFactory::create_expr_from_thrift_nodes(_pool.get(), desc.nodes, &node_idx, &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -495,9 +498,9 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         for (int i = 0; i < agg_size; ++i) {
             int node_idx = 0;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool.get(), aggr_exprs[i].nodes, nullptr, &node_idx,
-                                                                   &expr, &ctx, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_from_thrift_nodes(_pool.get(), aggr_exprs[i].nodes, &node_idx,
+                                                                       &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _intermediate_agg_expr_ctxs[i].emplace_back(ctx);
         }
     }

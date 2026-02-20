@@ -38,6 +38,7 @@
 
 #include "common/config.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -83,7 +84,7 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
 
 Status ResultSink::prepare_exprs(RuntimeState* state) {
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     return Status::OK();

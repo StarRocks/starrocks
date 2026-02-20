@@ -20,6 +20,7 @@
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
@@ -173,7 +174,7 @@ FileSinkOperatorFactory::FileSinkOperatorFactory(int32_t id, std::vector<TExpr> 
 
 Status FileSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
     _file_sink_buffer = std::make_shared<FileSinkIOBuffer>(_output_expr_ctxs, _file_opts, _num_sinkers, _fragment_ctx);
