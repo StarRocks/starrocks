@@ -30,6 +30,9 @@ Status DictMappingExpr::open(RuntimeState* state, ExprContext* context, Function
 
     auto* fragment_dict_state = state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
+    if (fragment_dict_state == nullptr) {
+        return Status::InternalError("fragment dict state is not set");
+    }
     return fragment_dict_state->mutable_dict_optimize_parser()->rewrite_expr(state, context, this, _output_id);
 }
 

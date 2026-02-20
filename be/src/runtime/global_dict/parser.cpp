@@ -512,6 +512,9 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
                                             std::vector<SlotDescriptor*>* slot_descs) {
     const auto* fragment_dict_state = runtime_state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
+    if (fragment_dict_state == nullptr) {
+        return;
+    }
     const auto& global_dict = fragment_dict_state->query_global_dicts();
     if (global_dict.empty()) return;
 
