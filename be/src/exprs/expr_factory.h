@@ -45,6 +45,10 @@ public:
     // Compatibility overload for call sites that still materialize ExprContext directly.
     static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
                                     RuntimeState* state, bool can_jit = false);
+private:
+    // Create a new vectorized expr
+    static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
+                                         RuntimeState* state);
 };
 
 } // namespace starrocks
