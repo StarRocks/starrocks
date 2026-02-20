@@ -50,6 +50,7 @@ public:
         _fragment_context->set_fragment_instance_id(_fragment_id);
         _fragment_context->set_runtime_state(std::shared_ptr<RuntimeState>{_runtime_state});
         _runtime_state->set_fragment_ctx(_fragment_context.get());
+        _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
 
         TNetworkAddress address;
         address.__set_hostname(BackendOptions::get_local_ip());

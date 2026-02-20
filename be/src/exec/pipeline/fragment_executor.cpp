@@ -48,6 +48,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/result_sink.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -227,6 +228,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
+    runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
     runtime_state->set_query_ctx(_query_ctx);
     RuntimeStateHelper::init_runtime_filter_port(runtime_state);
 
@@ -824,16 +826,19 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     const auto& fragment = request.common().fragment;
     // Set up global dict
     auto* runtime_state = _fragment_ctx->runtime_state();
+    auto* fragment_dict_state = runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
     if (fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_query_global_dict(runtime_state, fragment.query_global_dicts));
     }
 
     if (fragment.__isset.query_global_dicts && fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(
+                fragment_dict_state->init_query_global_dict_exprs(runtime_state, fragment.query_global_dict_exprs));
     }
 
     if (fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_load_global_dict(fragment.load_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_load_global_dict(runtime_state, fragment.load_global_dicts));
     }
     return Status::OK();
 }

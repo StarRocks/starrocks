@@ -28,7 +28,7 @@ namespace starrocks {
 class MemPool;
 class RuntimeState;
 
-class GlobalDictContext {
+class FragmentDictState {
 public:
     using GlobalDictLists = std::vector<TGlobalDict>;
 

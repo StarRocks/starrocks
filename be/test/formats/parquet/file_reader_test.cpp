@@ -48,6 +48,7 @@
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
@@ -64,6 +65,8 @@ class FileReaderTest : public testing::Test {
 public:
     void SetUp() override {
         _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
         _rf_probe_collector = _pool.add(new RuntimeFilterProbeCollector());
     }
     void TearDown() override {}
@@ -327,6 +330,7 @@ protected:
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ObjectPool _pool;
 
     const size_t _chunk_size = 4096;

@@ -29,6 +29,7 @@
 #include "storage/table_reader.h"
 
 namespace starrocks {
+class FragmentDictState;
 
 class ShortCircuitExecutor {
 public:
@@ -62,6 +63,7 @@ private:
     // env
     ExecEnv* _exec_env;
     std::shared_ptr<RuntimeState> _runtime_state;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     RuntimeProfile* _runtime_profile;
     bool _enable_profile;
 

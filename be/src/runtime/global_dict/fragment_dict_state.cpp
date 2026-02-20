@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/global_dict/context.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 
 #include <cstring>
 
@@ -21,27 +21,27 @@
 
 namespace starrocks {
 
-Status GlobalDictContext::init_query_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list) {
+Status FragmentDictState::init_query_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list) {
     RETURN_IF_ERROR(
             _build_global_dict(runtime_state->instance_mem_pool(), global_dict_list, &_query_global_dicts, nullptr));
     _dict_optimize_parser.set_mutable_dict_maps(&_query_global_dicts);
     return Status::OK();
 }
 
-Status GlobalDictContext::init_query_global_dict_exprs(RuntimeState* runtime_state, const std::map<int, TExpr>& exprs) {
+Status FragmentDictState::init_query_global_dict_exprs(RuntimeState* runtime_state, const std::map<int, TExpr>& exprs) {
     return _dict_optimize_parser.init_dict_exprs(runtime_state, exprs);
 }
 
-Status GlobalDictContext::init_load_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list) {
+Status FragmentDictState::init_load_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list) {
     return _build_global_dict(runtime_state->instance_mem_pool(), global_dict_list, &_load_global_dicts,
                               &_load_dict_versions);
 }
 
-void GlobalDictContext::close(RuntimeState* runtime_state) noexcept {
+void FragmentDictState::close(RuntimeState* runtime_state) noexcept {
     _dict_optimize_parser.close(runtime_state);
 }
 
-Status GlobalDictContext::_build_global_dict(MemPool* mem_pool, const GlobalDictLists& global_dict_list,
+Status FragmentDictState::_build_global_dict(MemPool* mem_pool, const GlobalDictLists& global_dict_list,
                                              GlobalDictMaps* result,
                                              phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_version) {
     for (const auto& global_dict : global_dict_list) {

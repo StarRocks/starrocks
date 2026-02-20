@@ -18,6 +18,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 
 namespace starrocks::pipeline {
 
@@ -34,6 +35,7 @@ protected:
     TPlanNode _tnode;
     ChunkBufferLimiterPtr _chunk_buffer_limiter;
     QueryContext _query_ctx;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
 };
 
 void OlapScanOperatorTest::SetUp() {
@@ -53,6 +55,8 @@ void OlapScanOperatorTest::SetUp() {
     ASSERT_TRUE(st.ok());
 
     _runtime_state.set_desc_tbl(_tbl);
+    _fragment_dict_state = std::make_unique<FragmentDictState>();
+    _runtime_state.set_fragment_dict_state(_fragment_dict_state.get());
     _chunk_buffer_limiter = std::make_unique<UnlimitedChunkBufferLimiter>();
 
     _query_ctx.init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());

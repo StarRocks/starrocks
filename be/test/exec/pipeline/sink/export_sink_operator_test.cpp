@@ -60,6 +60,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _runtime_state->set_query_ctx(_query_ctx);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     TExportSink t_sink;
     std::vector<TExpr> t_output_expr;
@@ -128,6 +129,7 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _runtime_state->set_query_ctx(_query_ctx);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     // Configure export sink with header options
     TExportSink t_sink;

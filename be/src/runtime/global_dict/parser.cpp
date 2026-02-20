@@ -32,6 +32,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/dict_column.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/runtime_state.h"
@@ -510,7 +511,12 @@ void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, 
 void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,
                                             const std::map<int32_t, int32_t>& dict_slots_mapping,
                                             std::vector<SlotDescriptor*>* slot_descs) {
-    const auto& global_dict = runtime_state->get_query_global_dict_map();
+    const auto* fragment_dict_state = runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    if (fragment_dict_state == nullptr) {
+        return;
+    }
+    const auto& global_dict = fragment_dict_state->query_global_dicts();
     if (global_dict.empty()) return;
 
     for (auto& slot_desc : *slot_descs) {

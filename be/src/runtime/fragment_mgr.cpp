@@ -62,6 +62,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
@@ -144,6 +145,7 @@ public:
     std::shared_ptr<RuntimeState> runtime_state() { return _runtime_state; }
 
 private:
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     void coordinator_callback(const Status& status, RuntimeProfile* profile, RuntimeProfile* load_channel_profile,
                               bool done);
 
@@ -169,7 +171,8 @@ private:
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
                                      ExecEnv* exec_env, const TNetworkAddress& coord_addr)
-        : _query_id(query_id),
+        : _fragment_dict_state(std::make_unique<FragmentDictState>()),
+          _query_id(query_id),
           _fragment_instance_id(fragment_instance_id),
           _backend_num(backend_num),
           _exec_env(exec_env),
@@ -180,11 +183,16 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
     _start_time = DateTimeValue::local_time();
 }
 
-FragmentExecState::~FragmentExecState() = default;
+FragmentExecState::~FragmentExecState() {
+    if (_fragment_dict_state != nullptr && _runtime_state != nullptr) {
+        _fragment_dict_state->close(_runtime_state.get());
+    }
+}
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
                                                     params.query_options, params.query_globals, _exec_env);
+    _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     int func_version = params.__isset.func_version ? params.func_version
                                                    : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     _runtime_state->set_func_version(func_version);

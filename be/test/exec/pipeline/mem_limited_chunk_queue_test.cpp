@@ -55,6 +55,7 @@ public:
         dummy_query_ctx = std::make_shared<QueryContext>();
 
         dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx);
+        dummy_runtime_state.set_fragment_dict_state(dummy_fragment_ctx.dict_state());
         dummy_runtime_state.set_query_ctx(dummy_query_ctx.get());
     }
     void TearDown() override {}

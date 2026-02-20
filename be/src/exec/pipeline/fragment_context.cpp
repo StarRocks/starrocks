@@ -37,6 +37,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/logconfig.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -45,7 +46,7 @@
 
 namespace starrocks::pipeline {
 
-FragmentContext::FragmentContext() : _data_sink(nullptr) {}
+FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
 
 FragmentContext::~FragmentContext() {
     _close_stream_load_contexts();
@@ -54,6 +55,9 @@ FragmentContext::~FragmentContext() {
     close_all_execution_groups();
     if (_plan != nullptr) {
         _plan->close(_runtime_state.get());
+    }
+    if (_fragment_dict_state != nullptr && _runtime_state != nullptr) {
+        _fragment_dict_state->close(_runtime_state.get());
     }
     clear_pipeline_timer();
 }

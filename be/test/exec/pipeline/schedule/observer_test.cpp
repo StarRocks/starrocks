@@ -169,6 +169,7 @@ public:
         _runtime_state->_obj_pool = std::make_shared<ObjectPool>();
         _runtime_state->set_query_ctx(_dummy_query_ctx.get());
         _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get());
+        _runtime_state->set_fragment_dict_state(_dummy_fragment_ctx->dict_state());
         _runtime_state->_profile = std::make_shared<RuntimeProfile>("dummy");
         _dummy_fragment_ctx->set_runtime_state(std::move(_runtime_state));
         _runtime_state = _dummy_fragment_ctx->runtime_state_ptr();

@@ -26,6 +26,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "service/service_be/lake_service.h"
@@ -361,6 +362,8 @@ inline std::shared_ptr<RuntimeState> create_runtime_state(const TQueryOptions& q
     TQueryGlobals query_globals;
     std::shared_ptr<RuntimeState> runtime_state =
             std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+    auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
+    runtime_state->set_fragment_dict_state(fragment_dict_state);
     TUniqueId id;
     runtime_state->init_mem_trackers(id);
     return runtime_state;

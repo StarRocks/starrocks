@@ -45,16 +45,14 @@
 #include "common/constexpr.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "runtime/global_dict/context.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/mem_tracker.h"
 #include "types/datetime_value.h"
 
 namespace starrocks {
 
 // for ut only
-RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {
-    _global_dict_ctx = std::make_unique<GlobalDictContext>();
-}
+RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {}
 
 // for ut only
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -69,7 +67,6 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
-    _global_dict_ctx = std::make_unique<GlobalDictContext>();
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
@@ -87,7 +84,6 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
-    _global_dict_ctx = std::make_unique<GlobalDictContext>();
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
@@ -95,7 +91,6 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
-    _global_dict_ctx = std::make_unique<GlobalDictContext>();
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
@@ -122,7 +117,6 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
 }
 
 RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
-    _global_dict_ctx = std::make_unique<GlobalDictContext>();
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
@@ -131,10 +125,6 @@ RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
 }
 
 RuntimeState::~RuntimeState() {
-    // dict exprs
-    if (_global_dict_ctx != nullptr) {
-        _global_dict_ctx->close(this);
-    }
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -144,6 +134,13 @@ RuntimeState::~RuntimeState() {
     // close rejected record file
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
+    }
+}
+
+void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) {
+    _fragment_ctx = fragment_ctx;
+    if (_fragment_ctx != nullptr && _fragment_dict_state == nullptr) {
+        _fragment_dict_state = _fragment_ctx->dict_state();
     }
 }
 
@@ -301,38 +298,6 @@ int64_t RuntimeState::get_load_mem_limit() const {
         return _query_options.load_mem_limit;
     }
     return 0;
-}
-
-const GlobalDictMaps& RuntimeState::get_query_global_dict_map() const {
-    return _global_dict_ctx->query_global_dicts();
-}
-
-const GlobalDictMaps& RuntimeState::get_load_global_dict_map() const {
-    return _global_dict_ctx->load_global_dicts();
-}
-
-GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
-    return _global_dict_ctx->mutable_query_global_dicts();
-}
-
-DictOptimizeParser* RuntimeState::mutable_dict_optimize_parser() {
-    return _global_dict_ctx->mutable_dict_optimize_parser();
-}
-
-const phmap::flat_hash_map<uint32_t, int64_t>& RuntimeState::load_dict_versions() const {
-    return _global_dict_ctx->load_dict_versions();
-}
-
-Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
-    return _global_dict_ctx->init_query_global_dict(this, global_dict_list);
-}
-
-Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
-    return _global_dict_ctx->init_query_global_dict_exprs(this, exprs);
-}
-
-Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
-    return _global_dict_ctx->init_load_global_dict(this, global_dict_list);
 }
 
 Status RuntimeState::reset_epoch() {

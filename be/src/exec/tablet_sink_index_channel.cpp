@@ -32,6 +32,7 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
@@ -220,8 +221,10 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
 
     // set global dict
-    const auto& global_dict = _runtime_state->get_load_global_dict_map();
-    const auto& dict_version = _runtime_state->load_dict_versions();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict = fragment_dict_state->load_global_dicts();
+    const auto& dict_version = fragment_dict_state->load_dict_versions();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());

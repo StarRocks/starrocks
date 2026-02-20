@@ -31,6 +31,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -525,7 +526,10 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         }
     }
     // rewrite dict
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_scanner_conjunct_ctxs));
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    RETURN_IF_ERROR(
+            fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_scanner_conjunct_ctxs));
     return Status::OK();
 }
 
@@ -673,7 +677,9 @@ void HiveDataSource::_init_rf_counters() {
 
 Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
     const THdfsScanNode& hdfs_scan_node = _provider->_hdfs_scan_node;
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
     auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);

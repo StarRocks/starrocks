@@ -37,7 +37,6 @@
 #include <atomic>
 #include <fstream>
 #include <limits>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -47,20 +46,17 @@
 #include <vector>
 
 #include "base/debug/debug_action.h"
-#include "base/phmap/phmap.h"
 #include "base/uid_util.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
+#include "common/logging.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/global_dict/parser.h"
-#include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -78,7 +74,7 @@ class RowDescriptor;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
-class GlobalDictContext;
+class FragmentDictState;
 class RuntimeStateHelper;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
@@ -129,7 +125,7 @@ public:
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
-    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) { _fragment_ctx = fragment_ctx; }
+    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx);
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
@@ -466,21 +462,9 @@ public:
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
-    const GlobalDictMaps& get_query_global_dict_map() const;
-    // for query global dict
-    GlobalDictMaps* mutable_query_global_dict_map();
-
-    const GlobalDictMaps& get_load_global_dict_map() const;
-
-    DictOptimizeParser* mutable_dict_optimize_parser();
-
-    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() const;
-
-    using GlobalDictLists = std::vector<TGlobalDict>;
-    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
-    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
-
-    Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
+    void set_fragment_dict_state(FragmentDictState* ptr) { _fragment_dict_state = ptr; }
+    FragmentDictState* fragment_dict_state() { return _fragment_dict_state; }
+    const FragmentDictState* fragment_dict_state() const { return _fragment_dict_state; }
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -686,7 +670,7 @@ private:
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
 
-    std::unique_ptr<GlobalDictContext> _global_dict_ctx;
+    FragmentDictState* _fragment_dict_state = nullptr;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;
