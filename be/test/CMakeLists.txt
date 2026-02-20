@@ -372,6 +372,7 @@ add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
 add_subdirectory(runtime)
+add_subdirectory(exprs)
 add_subdirectory(io)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})

@@ -35,6 +35,9 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#ifndef __APPLE__
+#include "udf/java/java_udf.h"
+#endif
 #include "udf/java/utils.h"
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
@@ -361,6 +364,19 @@ Status Analytor::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 
     auto create_fn_states = [this]() {
+        std::vector<int> attached_udaf_idx;
+        bool init_success = false;
+        DeferOp cleanup_on_fail([&]() {
+#ifndef __APPLE__
+            if (init_success) {
+                return;
+            }
+            for (int idx : attached_udaf_idx) {
+                destroy_java_udaf_context(_agg_fn_ctxs[idx]);
+            }
+#endif
+        });
+
         for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
 #ifndef __APPLE__
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
@@ -368,13 +384,16 @@ Status Analytor::open(RuntimeState* state) {
                 auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
                                                   _agg_fn_ctxs[i]);
                 RETURN_IF_ERROR(st);
+                attached_udaf_idx.emplace_back(i);
             }
 #endif
         }
         AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        RETURN_IF_UNLIKELY_NULL(agg_states, Status::MemoryAllocFailed("alloc analytic agg states failed"));
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         _managed_fn_states.emplace_back(
                 std::make_unique<ManagedFunctionStates<Analytor>>(&_agg_fn_ctxs, agg_states, this));
+        init_success = true;
         return Status::OK();
     };
 
@@ -414,6 +433,14 @@ void Analytor::close(RuntimeState* state) {
         if (_mem_pool != nullptr) {
             _mem_pool->free_all();
         }
+
+#ifndef __APPLE__
+        for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+            if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                destroy_java_udaf_context(_agg_fn_ctxs[i]);
+            }
+        }
+#endif
 
         Expr::close(_order_ctxs, state);
         Expr::close(_partition_ctxs, state);

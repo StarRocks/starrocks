@@ -590,6 +590,12 @@ struct JavaUDAFContext {
     std::unique_ptr<UDAFFunction> _func;
 };
 
+// Java UDAF lifecycle management based on FunctionContext::THREAD_LOCAL state.
+JavaUDAFContext* get_java_udaf_context(FunctionContext* ctx);
+void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFContext> udaf_ctx);
+void clear_java_udaf_states(FunctionContext* ctx);
+void destroy_java_udaf_context(FunctionContext* ctx);
+
 // Check whether java runtime can work
 Status detect_java_runtime();
 
