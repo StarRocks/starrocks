@@ -147,7 +147,9 @@ TEST_F(FunctionHelperTest, testCreateColumnArray) {
     auto* col = down_cast<ArrayColumn*>(array_column.get());
     ASSERT_TRUE(col->elements().is_nullable());
     ASSERT_TRUE(ColumnHelper::get_data_column(col->elements_column_raw_ptr())->is_numeric());
-    ASSERT_EQ(col->offsets().size(), 0);
+    ASSERT_EQ(col->size(), 0);
+    ASSERT_EQ(col->offsets().size(), 1);
+    ASSERT_EQ(col->offsets().immutable_data().back(), 0);
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnStruct) {
@@ -179,7 +181,11 @@ TEST_F(FunctionHelperTest, testCreateColumnMapUnknownFallbackToNull) {
     auto* col = down_cast<MapColumn*>(map_column.get());
     ASSERT_TRUE(col->keys().is_nullable());
     ASSERT_TRUE(col->values().is_nullable());
-    ASSERT_TRUE(ColumnHelper::get_data_column(col->keys_column_raw_ptr())->only_null());
-    ASSERT_TRUE(ColumnHelper::get_data_column(col->values_column_raw_ptr())->only_null());
+    auto* key_data = ColumnHelper::get_data_column(col->keys_column_raw_ptr());
+    auto* value_data = ColumnHelper::get_data_column(col->values_column_raw_ptr());
+    ASSERT_NE(dynamic_cast<const NullColumn*>(key_data), nullptr);
+    ASSERT_NE(dynamic_cast<const NullColumn*>(value_data), nullptr);
+    ASSERT_EQ(key_data->size(), 0);
+    ASSERT_EQ(value_data->size(), 0);
 }
 } // namespace starrocks
