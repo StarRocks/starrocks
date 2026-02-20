@@ -57,6 +57,28 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactAzureOAuth2ClientId() {
+        String sql = "select * from FILES(\n" +
+                "    \"path\" = \"abfs://container@account.dfs.core.windows.net/path\",\n" +
+                "    \"format\" = \"parquet\",\n" +
+                "    \"azure.adls2.oauth2_client_id\" = \"fab0d1b8-3af6-4e75-b934-a6f7f93dedd7\",\n" +
+                "    \"azure.adls2.oauth2_client_secret\" = \"DevId_A08-MpqyRQGByA5\",\n" +
+                "    \"azure.adls2.oauth2_client_endpoint\" = \"https://login.microsoftonline.com/tenant-id/oauth2/token\"\n" +
+                ")";
+
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("fab0d1b8-3af6-4e75-b934-a6f7f93dedd7"),
+                "OAuth2 client_id should be redacted");
+        Assertions.assertFalse(redacted.contains("DevId_A08-MpqyRQGByA5"),
+                "OAuth2 client_secret should be redacted");
+        Assertions.assertTrue(redacted.contains("oauth2_client_endpoint"),
+                "oauth2_client_endpoint key should remain");
+        Assertions.assertTrue(redacted.contains("https://login.microsoftonline.com"),
+                "OAuth endpoint URL (non-credential) should remain");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
+    }
+
+    @Test
     public void testRedactGcpCredentials() {
         String sql = "CREATE EXTERNAL CATALOG gcs_catalog\n" +
                 "PROPERTIES (\n" +
