@@ -20,6 +20,7 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
