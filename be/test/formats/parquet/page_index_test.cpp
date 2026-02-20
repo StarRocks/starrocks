@@ -27,6 +27,7 @@
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 
 namespace starrocks::parquet {
 
@@ -35,7 +36,11 @@ using starrocks::HdfsScannerContext;
 
 class PageIndexTest : public testing::Test {
 public:
-    void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); }
+    void SetUp() override {
+        _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
+    }
 
     void TearDown() override {}
 
@@ -51,6 +56,7 @@ protected:
     HdfsScannerContext* _create_file_c0_c1_c2_context(const std::string& file_path);
 
     RuntimeState* _runtime_state = nullptr;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ObjectPool _pool;
 };
 

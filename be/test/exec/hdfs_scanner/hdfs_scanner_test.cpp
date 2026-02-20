@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "cache/datacache.h"
@@ -31,6 +32,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
@@ -66,6 +68,7 @@ protected:
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
+    std::vector<std::unique_ptr<FragmentDictState>> _fragment_dict_states;
     std::string _debug_row_output;
     int _debug_rows_per_call = 1;
 };
@@ -83,6 +86,8 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
         query_globals.__set_time_zone(timezone);
     }
     _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
+    _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
+    _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
     _runtime_state->init_instance_mem_tracker();
     pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});
