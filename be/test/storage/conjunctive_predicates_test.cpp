@@ -29,6 +29,7 @@
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
@@ -318,6 +319,12 @@ struct MockConstExprBuilder {
 
 class ConjunctiveTestFixture : public testing::TestWithParam<std::tuple<TExprOpcode::type, LogicalType>> {
 public:
+    void SetUp() override {
+        _runtime_state.init_instance_mem_tracker();
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        _runtime_state.set_fragment_dict_state(_fragment_dict_state.get());
+    }
+
     TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
         TSlotDescriptorBuilder builder;
 
@@ -380,6 +387,7 @@ public:
 protected:
     RuntimeState _runtime_state;
     ObjectPool _pool;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
 };
 
 // normalize a simple predicate: col op const

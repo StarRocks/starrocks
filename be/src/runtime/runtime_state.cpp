@@ -45,6 +45,7 @@
 #include "common/constexpr.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/mem_tracker.h"
 #include "types/datetime_value.h"
 
@@ -133,6 +134,13 @@ RuntimeState::~RuntimeState() {
     // close rejected record file
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
+    }
+}
+
+void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) {
+    _fragment_ctx = fragment_ctx;
+    if (_fragment_ctx != nullptr && _fragment_dict_state == nullptr) {
+        _fragment_dict_state = _fragment_ctx->dict_state();
     }
 }
 
