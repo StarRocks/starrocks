@@ -25,6 +25,7 @@
 #include "common/runtime_profile.h"
 #include "exec/tablet_info.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/update_config_action.h"
 #include "runtime/runtime_state.h"
@@ -48,7 +49,7 @@ Status SchemaTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _nodes_info = std::make_unique<StarRocksNodesInfo>(schema_table_sink.nodes_info);
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 }
 

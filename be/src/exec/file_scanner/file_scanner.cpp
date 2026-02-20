@@ -25,6 +25,7 @@
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
@@ -110,7 +111,7 @@ Status FileScanner::init_expr_ctx() {
         }
 
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), it->second, &ctx, _state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_state->obj_pool(), it->second, &ctx, _state));
         RETURN_IF_ERROR(ctx->prepare(_state));
         RETURN_IF_ERROR(ctx->open(_state));
 

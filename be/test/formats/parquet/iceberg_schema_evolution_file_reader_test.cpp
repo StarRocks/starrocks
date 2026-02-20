@@ -23,6 +23,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/metadata.h"
@@ -563,7 +564,7 @@ static void _create_null_conjunct_ctxs(SlotId slot_id, std::vector<ExprContext*>
     t_expr.nodes = nodes;
     t_conjuncts.emplace_back(t_expr);
 
-    ASSERT_OK(Expr::create_expr_trees(&pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, t_conjuncts, conjunct_ctxs, nullptr));
     ASSERT_OK(Expr::prepare(*conjunct_ctxs, runtime_state));
     ASSERT_OK(Expr::open(*conjunct_ctxs, runtime_state));
 }

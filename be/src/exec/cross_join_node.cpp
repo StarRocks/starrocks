@@ -30,6 +30,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
@@ -71,8 +72,8 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
 
         if (tnode.nestloop_join_node.__isset.join_conjuncts) {
-            RETURN_IF_ERROR(
-                    Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts,
+                                                           &_join_conjuncts, state));
         }
 
         if (tnode.nestloop_join_node.__isset.interpolate_passthrough) {
@@ -91,7 +92,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         if (tnode.nestloop_join_node.__isset.common_slot_map) {
             for (const auto& [key, val] : tnode.nestloop_join_node.common_slot_map) {
                 ExprContext* context;
-                RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+                RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
                 _common_expr_ctxs.insert({key, context});
             }
         }

@@ -146,37 +146,6 @@ public:
 
     virtual void for_each_slot_id(const std::function<void(SlotId)>& cb) const;
 
-    /// Create expression tree from the list of nodes contained in texpr within 'pool'.
-    /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
-    /// 'ctx'.
-    static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
-                                   bool can_jit = false);
-
-    /// Creates vector of ExprContexts containing exprs from the given vector of
-    /// TExprs within 'pool'.  Returns an error if any of the individual conversions caused
-    /// an error, otherwise OK.
-    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
-                                    RuntimeState* state, bool can_jit = false);
-
-    /// Creates an expr tree for the node rooted at 'node_idx' via depth-first traversal.
-    /// parameters
-    ///   nodes: vector of thrift expression nodes to be translated
-    ///   parent: parent of node at node_idx (or NULL for node_idx == 0)
-    ///   node_idx:
-    ///     in: root of TExprNode tree
-    ///     out: next node in 'nodes' that isn't part of tree
-    ///   root_expr: out: root of constructed expr tree
-    ///   ctx: out: context of constructed expr tree
-    /// return
-    ///   Status.ok() if successful
-    ///   !Status.ok() if tree is inconsistent or corrupt
-    static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
-                                          int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state);
-
-    static Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
-                                                   int* node_idx, Expr** root_expr, ExprContext** ctx,
-                                                   RuntimeState* state);
-
     /// Convenience function for preparing multiple expr trees.
     static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
     static Status prepare(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state);
@@ -381,11 +350,6 @@ protected:
 #ifdef STARROCKS_JIT_ENABLE
     Status prepare_jit_expr(RuntimeState* state, ExprContext* context);
 #endif
-
-private:
-    // Create a new vectorized expr
-    static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
-                                         RuntimeState* state);
 };
 
 } // namespace starrocks

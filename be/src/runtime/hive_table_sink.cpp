@@ -16,6 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -116,8 +117,8 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
         context->add_pipeline(std::move(ops));
     } else {
         std::vector<ExprContext*> partition_expr_ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
-                                                runtime_state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                       runtime_state));
         auto ops = context->interpolate_local_key_partition_exchange(
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);

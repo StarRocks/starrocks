@@ -38,6 +38,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/select_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -56,7 +57,7 @@ Status SelectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.select_node && tnode.select_node.__isset.common_slot_map) {
         for (const auto& [key, val] : tnode.select_node.common_slot_map) {
             ExprContext* context;
-            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
             _common_expr_ctxs.insert({key, context});
         }
     }

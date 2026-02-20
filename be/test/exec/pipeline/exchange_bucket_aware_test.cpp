@@ -17,6 +17,7 @@
 #include "base/testutil/assert.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Partitions_types.h"
@@ -99,7 +100,7 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
     std::vector<ExprContext*> partition_exprs;
-    Expr::create_expr_trees(&_object_pool, t_conjuncts, &partition_exprs, nullptr);
+    ExprFactory::create_expr_trees(&_object_pool, t_conjuncts, &partition_exprs, nullptr);
     Expr::prepare(partition_exprs, _runtime_state.get());
     Expr::open(partition_exprs, _runtime_state.get());
 

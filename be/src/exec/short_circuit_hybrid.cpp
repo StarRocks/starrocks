@@ -23,6 +23,7 @@
 #include "common/util/thrift_util.h"
 #include "exec/scan_node.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/memory_scratch_sink.h"
 #include "storage/chunk_helper.h"
@@ -148,8 +149,8 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             std::vector<ExprContext*> expr_ctxs;
             std::vector<TExpr> key_literal_expr{keys_literal_expr[j]};
             // prepare
-            RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs,
-                                                    runtime_state()));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs,
+                                                           runtime_state()));
             RETURN_IF_ERROR(Expr::prepare(expr_ctxs, runtime_state()));
             RETURN_IF_ERROR(Expr::open(expr_ctxs, runtime_state()));
             auto& iteral_expr_ctx = expr_ctxs[0];

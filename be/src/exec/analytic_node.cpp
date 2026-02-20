@@ -30,6 +30,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/agg/count.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 
@@ -47,7 +48,8 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
                                 _tnode.analytic_node.use_hash_based_partition;
 
     if (!tnode.analytic_node.partition_exprs.empty()) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_partition_exprs, state));
+        RETURN_IF_ERROR(
+                ExprFactory::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_partition_exprs, state));
     }
     DCHECK(_conjunct_ctxs.empty());
 

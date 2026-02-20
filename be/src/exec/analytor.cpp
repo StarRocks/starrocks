@@ -29,6 +29,7 @@
 #include "exprs/agg/window.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "exprs/function_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -161,9 +162,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
             RETURN_IF_ERROR(
-                    Expr::create_tree_from_thrift_with_jit(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+                    ExprFactory::create_expr_from_thrift_nodes(_pool, desc.nodes, &node_idx, &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -294,7 +295,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
         _partition_columns[i] = ColumnHelper::create_column(
@@ -302,7 +303,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 _partition_ctxs[i]->root()->is_constant(), 0);
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
     _order_columns.resize(_order_ctxs.size());
     for (size_t i = 0; i < _order_ctxs.size(); i++) {
         _order_columns[i] = ColumnHelper::create_column(_order_ctxs[i]->root()->type(),

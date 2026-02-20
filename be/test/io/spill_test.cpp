@@ -52,6 +52,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
@@ -575,7 +576,7 @@ TEST_F(SpillTest, partition_process) {
     (void)ctx;
 
     std::vector<ExprContext*> tuple;
-    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
 
     // create chunk
     RandomChunkBuilder chunk_builder;
@@ -658,7 +659,7 @@ TEST_F(SpillTest, partition_yield_with_failed) {
     (void)ctx;
 
     std::vector<ExprContext*> tuple;
-    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
 
     // create chunk
     RandomChunkBuilder chunk_builder;

@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "exec/chunks_sorter_topn.h"
+#include "exprs/expr_factory.h"
 
 namespace starrocks::pipeline {
 
@@ -43,7 +44,7 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t
 }
 
 Status LocalPartitionTopnContext::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
     for (auto& expr : _partition_exprs) {
@@ -91,9 +92,9 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(state->obj_pool(), desc.nodes, nullptr, &node_idx,
-                                                                   &expr, &ctx, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_from_thrift_nodes(state->obj_pool(), desc.nodes, &node_idx, &expr,
+                                                                       state, true));
+            ExprContext* ctx = state->obj_pool()->add(new ExprContext(expr));
             _pre_agg->_agg_expr_ctxs[i].emplace_back(ctx);
         }
 

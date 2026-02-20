@@ -41,6 +41,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -82,9 +83,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (const auto& eq_join_conjunct : eq_join_conjuncts) {
         ExprContext* left = nullptr;
         ExprContext* right = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &left, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, eq_join_conjunct.left, &left, state));
         _probe_expr_ctxs.push_back(left);
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, eq_join_conjunct.right, &right, state));
         _build_expr_ctxs.push_back(right);
         if (!left->root()->type().support_join() || !right->root()->type().support_join()) {
             return Status::NotSupported(fmt::format("join on type {}={} is not supported",
@@ -101,10 +102,10 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (tnode.hash_join_node.__isset.asof_join_condition) {
         auto asof_join_condition = tnode.hash_join_node.asof_join_condition;
-        RETURN_IF_ERROR(
-                Expr::create_expr_tree(_pool, asof_join_condition.left, &_asof_join_condition_probe_expr_ctx, state));
-        RETURN_IF_ERROR(
-                Expr::create_expr_tree(_pool, asof_join_condition.right, &_asof_join_condition_build_expr_ctx, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, asof_join_condition.left,
+                                                      &_asof_join_condition_probe_expr_ctx, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, asof_join_condition.right,
+                                                      &_asof_join_condition_build_expr_ctx, state));
         _asof_join_condition_op = tnode.hash_join_node.asof_join_condition.opcode;
     }
 
@@ -138,13 +139,13 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.hash_join_node && tnode.hash_join_node.__isset.common_slot_map) {
         for (const auto& [key, val] : tnode.hash_join_node.common_slot_map) {
             ExprContext* context;
-            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
             _common_expr_ctxs.insert({key, context});
         }
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts,
-                                            &_other_join_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts,
+                                                   &_other_join_conjunct_ctxs, state));
 
     for (const auto& desc : tnode.hash_join_node.build_runtime_filters) {
         auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());

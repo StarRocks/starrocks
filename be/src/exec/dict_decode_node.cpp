@@ -23,6 +23,7 @@
 #include "exec/pipeline/dict_decode_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/expr_factory.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
@@ -39,7 +40,7 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     std::vector<SlotId> slots;
     for (const auto& [slot_id, texpr] : tnode.decode_node.string_functions) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, texpr, &context, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, texpr, &context, state));
         _string_functions[slot_id] = std::make_pair(context, DictOptimizeContext{});
         _expr_ctxs.push_back(context);
         slots.emplace_back(slot_id);

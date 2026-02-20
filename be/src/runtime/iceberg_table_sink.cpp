@@ -16,6 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
 
@@ -94,8 +95,8 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     } else {
         std::vector<ExprContext*> partition_expr_ctxs;
 
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
-                                                runtime_state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
+                                                       runtime_state));
 
         // Validate partition expressions were created successfully
         for (int i = 0; i < partition_expr_ctxs.size(); i++) {

@@ -18,6 +18,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/mem_pool.h"
 #include "storage/metadata_util.h"
 #include "storage/tablet_schema.h"
@@ -190,7 +191,8 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
             index->column_param = col_param;
         }
         if (t_index.__isset.where_clause) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state));
+            RETURN_IF_ERROR(
+                    ExprFactory::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state));
         }
         if (t_index.__isset.schema_id) {
             index->schema_id = t_index.schema_id;
@@ -279,7 +281,8 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
         if (state == nullptr) {
             return Status::InternalError("state is null when partition_exprs is not empty");
         }
-        RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
+        RETURN_IF_ERROR(
+                ExprFactory::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
     }
 
     if (_t_param.__isset.distribution_type) {

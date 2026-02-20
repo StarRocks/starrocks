@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
@@ -124,7 +125,7 @@ MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, c
 
 Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
     _prepare_id_to_col_name_map();

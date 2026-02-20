@@ -33,6 +33,7 @@
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "glog/logging.h"
@@ -90,7 +91,7 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         const auto& bucket_exprs = _olap_scan_node.bucket_exprs;
         _bucket_exprs.resize(bucket_exprs.size());
         for (int i = 0; i < bucket_exprs.size(); ++i) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, bucket_exprs[i], &_bucket_exprs[i], state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, bucket_exprs[i], &_bucket_exprs[i], state));
         }
     }
 

@@ -36,6 +36,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/runtime_filter.h"
 #include "formats/parquet/column_chunk_reader.h"
@@ -982,7 +983,7 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(opcode, slot_id, value, &t_conjuncts);
 
-    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(ExprFactory::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
     ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
     ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
 }
@@ -1005,7 +1006,7 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(ExprFactory::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
     ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
     ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
 }
@@ -1060,7 +1061,7 @@ void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(ExprFactory::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
     ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
     ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
 }
@@ -3246,7 +3247,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop4) {
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr));
+    ASSERT_OK(ExprFactory::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr));
     ASSERT_OK(Expr::prepare(expr_ctxs, _runtime_state));
     ASSERT_OK(Expr::open(expr_ctxs, _runtime_state));
 
