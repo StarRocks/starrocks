@@ -25,6 +25,7 @@
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
+#include "exprs/function_helper.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 
@@ -359,7 +360,7 @@ public:
             }
         }
         for (auto i = 0; i < num; ++i) {
-            state.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
+            state.data_columns->emplace_back(FunctionHelper::create_column(*ctx->get_arg_type(i), true));
         }
         DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
     }

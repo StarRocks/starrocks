@@ -15,10 +15,81 @@
 #include "function_helper.h"
 
 #include <base/container/raw_container.h>
+#include <fmt/format.h>
+
+#include <stdexcept>
 
 #include "base/simd/multi_version.h"
+#include "column/array_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
+#include "column/type_traits.h"
 
 namespace starrocks {
+
+struct ColumnBuilder {
+    template <LogicalType Type>
+    ColumnPtr operator()(const TypeDescriptor& type_desc) {
+        if constexpr (lt_is_decimal<Type>) {
+            return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
+        } else if constexpr (lt_is_collection<Type>) {
+            throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
+            return nullptr;
+        } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {
+            throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
+            return nullptr;
+        } else {
+            return RunTimeColumnType<Type>::create();
+        }
+    }
+};
+
+MutableColumnPtr FunctionHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
+    const auto type = type_desc.type;
+    MutableColumnPtr p = nullptr;
+
+    if (type == TYPE_STRUCT) {
+        size_t field_size = type_desc.children.size();
+        DCHECK_EQ(field_size, type_desc.field_names.size());
+        MutableColumns columns;
+        for (size_t i = 0; i < field_size; i++) {
+            auto field_column = create_column(type_desc.children[i], true);
+            columns.emplace_back(std::move(field_column));
+        }
+        p = StructColumn::create(std::move(columns), type_desc.field_names);
+    } else if (type == TYPE_ARRAY) {
+        auto offsets = UInt32Column::create();
+        auto data = create_column(type_desc.children[0], true);
+        p = ArrayColumn::create(std::move(data), std::move(offsets));
+    } else if (type == TYPE_MAP) {
+        auto offsets = UInt32Column::create();
+        MutableColumnPtr keys = nullptr;
+        MutableColumnPtr values = nullptr;
+        if (type_desc.children[0].type == TYPE_UNKNOWN) {
+            TypeDescriptor desc;
+            desc.type = TYPE_NULL;
+            keys = create_column(desc, true);
+        } else {
+            keys = create_column(type_desc.children[0], true);
+        }
+        if (type_desc.children[1].type == TYPE_UNKNOWN) {
+            TypeDescriptor desc;
+            desc.type = TYPE_NULL;
+            values = create_column(desc, true);
+        } else {
+            values = create_column(type_desc.children[1], true);
+        }
+        p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+    } else {
+        auto col = type_dispatch_column(type, ColumnBuilder(), type_desc);
+        p = col ? std::move(*col).mutate() : nullptr;
+    }
+
+    if (nullable && p != nullptr) {
+        return NullableColumn::create(std::move(p), NullColumn::create());
+    }
+    return p;
+}
 
 NullColumn::MutablePtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2) {
     // union nullable column

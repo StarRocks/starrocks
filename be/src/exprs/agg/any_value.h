@@ -23,6 +23,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "exprs/function_context.h"
+#include "exprs/function_helper.h"
 #include "gutil/casts.h"
 
 namespace starrocks {
@@ -110,7 +111,7 @@ public:
 struct AnyValueSemiState {
     void update(FunctionContext* ctx, const Column& column, size_t offset) {
         if (!has_fill) {
-            data_column = ctx->create_column(*ctx->get_arg_type(0), false);
+            data_column = FunctionHelper::create_column(*ctx->get_arg_type(0), false);
             data_column->append(column, offset, 1);
             has_fill = true;
         }
