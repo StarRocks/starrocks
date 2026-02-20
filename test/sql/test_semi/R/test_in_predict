@@ -859,3 +859,19 @@ select st1 not in (map{}) from sc2 order by 1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 24. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
 -- !result
+select 10 in (select v1 from sc2), 10 not in (select v1 from sc2) from sc2;
+-- result:
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+-- !result

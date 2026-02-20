@@ -112,4 +112,5 @@ select st1 not in (row(1, [2,1,3], map{1:1, 2:2}, row(1, 2)),row(1, [2,1,3], map
 
 select st1 in (map{}) from sc2 order by 1;
 select st1 not in (map{}) from sc2 order by 1;
+select 10 in (select v1 from sc2), 10 not in (select v1 from sc2) from sc2;
 
