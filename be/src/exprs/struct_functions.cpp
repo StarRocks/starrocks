@@ -17,11 +17,12 @@
 #include "column/column_helper.h"
 #include "column/struct_column.h"
 #include "exprs/function_context.h"
+#include "exprs/function_helper.h"
 
 namespace starrocks {
 
 StatusOr<ColumnPtr> StructFunctions::new_struct(FunctionContext* context, const Columns& columns) {
-    MutableColumnPtr res = context->create_column(context->get_return_type(), false);
+    MutableColumnPtr res = FunctionHelper::create_column(context->get_return_type(), false);
 
     StructColumn* st = down_cast<StructColumn*>(res.get());
     size_t fields_size = st->fields_size();

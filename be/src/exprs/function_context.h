@@ -15,16 +15,12 @@
 #pragma once
 
 #include <cstdint>
-#include <cstring>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "column/column.h"
-#include "common/status.h"
-#include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -32,8 +28,6 @@ namespace starrocks {
 class MemPool;
 class RuntimeState;
 
-class Column;
-class Slice;
 struct JavaUDAFContext;
 #if defined(__APPLE__)
 // On macOS build, Java is disabled. Provide an empty definition so that
@@ -137,8 +131,6 @@ public:
 
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
-
-    MutableColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
 
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.
