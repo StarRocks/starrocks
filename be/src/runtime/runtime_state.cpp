@@ -47,7 +47,6 @@
 #include "common/status.h"
 #include "runtime/global_dict/context.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
 
 namespace starrocks {
@@ -190,8 +189,6 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     if (_query_options.batch_size <= 0) {
         _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     }
-
-    RuntimeStateHelper::init_runtime_filter_port(this);
 }
 
 bool RuntimeState::set_timezone(const std::string& tz) {

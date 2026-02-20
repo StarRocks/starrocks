@@ -153,7 +153,10 @@ public:
     }
     const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
-    RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
+    RuntimeFilterPort* runtime_filter_port() {
+        DCHECK(_runtime_filter_port != nullptr);
+        return _runtime_filter_port;
+    }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
     void set_fragment_root_id(PlanNodeId id) {

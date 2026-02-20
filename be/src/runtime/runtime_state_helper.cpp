@@ -45,6 +45,9 @@ constexpr int64_t kMaxErrorNum = 50;
 }
 
 void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
+    if (state->_runtime_filter_port != nullptr) {
+        return;
+    }
     state->_runtime_filter_port = state->_obj_pool->add(new RuntimeFilterPort(state));
 }
 

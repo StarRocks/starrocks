@@ -49,6 +49,7 @@
 #include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_sink.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
@@ -227,6 +228,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
+    RuntimeStateHelper::init_runtime_filter_port(runtime_state);
 
     // Only consider the `query_mem_limit` variable
     // If query_mem_limit is <= 0, it would set to -1, which means no limit

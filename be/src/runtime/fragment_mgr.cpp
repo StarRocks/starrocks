@@ -190,6 +190,7 @@ Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     _runtime_state->set_func_version(func_version);
     _runtime_state->init_mem_trackers(_query_id, _exec_env->query_pool_mem_tracker());
     _executor.set_runtime_state(_runtime_state.get());
+    RuntimeStateHelper::init_runtime_filter_port(_runtime_state.get());
 
     if (params.__isset.query_options) {
         _timeout_second = params.query_options.query_timeout;
