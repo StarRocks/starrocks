@@ -22,7 +22,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
 
-For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md).
+For detailed description of the returned fields, see [`ADMIN SHOW CONFIG`](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md).
 
 :::note
 You must have administrator privileges to run cluster administration-related commands.
@@ -32,7 +32,7 @@ You must have administrator privileges to run cluster administration-related com
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [`ADMIN SET FRONTEND CONFIG`](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -59,7 +59,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `audit_log_dir`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -72,7 +72,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: N/A
 - Is mutable: No
-- Description: When true, the generated Log4j2 configuration appends a ".gz" postfix to rotated audit log filenames (fe.audit.log.*) so that Log4j2 will produce compressed (.gz) archived audit log files on rollover. The setting is read during FE startup in Log4jConfig.initLogging and is applied to the RollingFile appender for audit logs; it only affects rotated/archived files, not the active audit log. Because the value is initialized at startup, changing it requires restarting the FE to take effect. Use alongside audit log rotation settings (audit_log_dir, audit_log_roll_interval, audit_roll_maxsize, audit_log_roll_num).
+- Description: When true, the generated Log4j2 configuration appends a ".gz" postfix to rotated audit log filenames (fe.audit.log.*) so that Log4j2 will produce compressed (.gz) archived audit log files on rollover. The setting is read during FE startup in Log4jConfig.initLogging and is applied to the RollingFile appender for audit logs; it only affects rotated/archived files, not the active audit log. Because the value is initialized at startup, changing it requires restarting the FE to take effect. Use alongside audit log rotation settings (`audit_log_dir`, `audit_log_roll_interval`, `audit_roll_maxsize`, `audit_log_roll_num`).
 - Introduced in: 3.2.12
 
 ##### `audit_log_json_format`
@@ -86,7 +86,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `audit_log_modules`
 
-- Default: slow_query, query
+- Default: `slow_query`, query
 - Type: String[]
 - Unit: -
 - Is mutable: No
@@ -119,7 +119,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: Controls the logging level used by Berkeley DB Java Edition (BDB JE) in StarRocks. During BDB environment initialization BDBEnvironment.initConfigs() applies this value to the Java logger for the `com.sleepycat.je` package and to the BDB JE environment file logging level (EnvironmentConfig.FILE_LOGGING_LEVEL). Accepts standard java.util.logging.Level names such as SEVERE, WARNING, INFO, CONFIG, FINE, FINER, FINEST, ALL, OFF. Setting to ALL enables all log messages. Increasing verbosity will raise log volume and may impact disk I/O and performance; the value is read when the BDB environment is initialized, so it takes effect only after environment (re)initialization.
+- Description: Controls the logging level used by Berkeley DB Java Edition (BDB JE) in StarRocks. During BDB environment initialization BDBEnvironment.initConfigs() applies this value to the Java logger for the `com.sleepycat.je` package and to the BDB JE environment file logging level (`EnvironmentConfig.FILE_LOGGING_LEVEL`). Accepts standard java.util.logging.Level names such as SEVERE, WARNING, INFO, CONFIG, FINE, FINER, FINEST, ALL, OFF. Setting to ALL enables all log messages. Increasing verbosity will raise log volume and may impact disk I/O and performance; the value is read when the BDB environment is initialized, so it takes effect only after environment (re)initialization.
 - Introduced in: v3.2.0
 
 ##### `big_query_log_delete_age`
@@ -178,7 +178,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `dump_log_dir`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -247,7 +247,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: N/A
 - Is mutable: Yes
-- Description: When enabled, the FE builtin audit plugin (AuditLogBuilder) will write query events whose measured execution time ("Time" field) exceeds the threshold configured by qe_slow_log_ms into the slow-query audit log (AuditLog.getSlowAudit). If disabled, those slow-query entries are suppressed (regular query and connection audit logs are unaffected). The slow-audit entries follow the global audit_log_json_format setting (JSON vs. plain string). Use this flag to control generation of slow-query audit volume independently of regular audit logging; turning it off may reduce log I/O when qe_slow_log_ms is low or workloads produce many long-running queries.
+- Description: When enabled, the FE builtin audit plugin (AuditLogBuilder) will write query events whose measured execution time ("Time" field) exceeds the threshold configured by `qe_slow_log_ms` into the slow-query audit log (AuditLog.getSlowAudit). If disabled, those slow-query entries are suppressed (regular query and connection audit logs are unaffected). The slow-audit entries follow the global `audit_log_json_format` setting (JSON vs. plain string). Use this flag to control generation of slow-query audit volume independently of regular audit logging; turning it off may reduce log I/O when `qe_slow_log_ms` is low or workloads produce many long-running queries.
 - Introduced in: 3.2.11
 
 ##### `enable_sql_desensitize_in_log`
@@ -270,7 +270,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `internal_log_dir`
 
-- Default: `Config.STARROCKS_HOME_DIR + "/log"`
+- Default: `Config.STARROCKS_HOME_DIR` + "/log"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -414,7 +414,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `profile_log_dir`
 
-- Default: `Config.STARROCKS_HOME_DIR + "/log"`
+- Default: `Config.STARROCKS_HOME_DIR` + "/log"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -463,7 +463,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval (in ms) to wait before emitting another "slow lock" warning for the same SlowLockLogStats instance. LockUtils checks this value after a lock wait exceeds slow_lock_threshold_ms and will suppress additional warnings until slow_lock_log_every_ms milliseconds have passed since the last logged slow-lock event. Use a larger value to reduce log volume during prolonged contention or a smaller value to get more frequent diagnostics. Changes take effect at runtime for subsequent checks.
+- Description: Minimum interval (in ms) to wait before emitting another "slow lock" warning for the same SlowLockLogStats instance. LockUtils checks this value after a lock wait exceeds `slow_lock_threshold_ms` and will suppress additional warnings until `slow_lock_log_every_ms` milliseconds have passed since the last logged slow-lock event. Use a larger value to reduce log volume during prolonged contention or a smaller value to get more frequent diagnostics. Changes take effect at runtime for subsequent checks.
 - Introduced in: v3.2.0
 
 ##### `slow_lock_print_stack`
@@ -481,7 +481,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Threshold (in ms) used to classify a lock operation or a held lock as "slow". When the elapsed wait or hold time for a lock exceeds this value, StarRocks will (depending on context) emit diagnostic logs, include stack traces or waiter/owner info, and—in LockManager—start deadlock detection after this delay. It's used by LockUtils (slow-lock logging), QueryableReentrantReadWriteLock (filtering slow readers), LockManager (deadlock-detection delay and slow-lock trace), LockChecker (periodic slow-lock detection), and other callers (e.g., DiskAndTabletLoadReBalancer logging). Lowering the value increases sensitivity and logging/diagnostic overhead; setting it to 0 or negative disables the initial wait-based deadlock-detection delay behavior. Tune together with slow_lock_log_every_ms, slow_lock_print_stack, and slow_lock_stack_trace_reserve_levels.
+- Description: Threshold (in ms) used to classify a lock operation or a held lock as "slow". When the elapsed wait or hold time for a lock exceeds this value, StarRocks will (depending on context) emit diagnostic logs, include stack traces or waiter/owner info, and—in LockManager—start deadlock detection after this delay. It's used by LockUtils (slow-lock logging), QueryableReentrantReadWriteLock (filtering slow readers), LockManager (deadlock-detection delay and slow-lock trace), LockChecker (periodic slow-lock detection), and other callers (e.g., DiskAndTabletLoadReBalancer logging). Lowering the value increases sensitivity and logging/diagnostic overhead; setting it to 0 or negative disables the initial wait-based deadlock-detection delay behavior. Tune together with `slow_lock_log_every_ms`, `slow_lock_print_stack`, and `slow_lock_stack_trace_reserve_levels`.
 - Introduced in: 3.2.0
 
 ##### `sys_log_delete_age`
@@ -495,7 +495,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `sys_log_dir`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1075,7 +1075,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Percent
 - Is mutable: No
-- Description: Sets the relative cost (as a percentage) of replaying transactions from a BDB JE log versus obtaining the same data via a network restore. The value is supplied to the underlying JE replication parameter REPLAY_COST_PERCENT and is typically `>100` to indicate that replay is usually more expensive than a network restore. When deciding whether to retain cleaned log files for potential replay, the system compares replay cost multiplied by log size against the cost of a network restore; files will be removed if network restore is judged more efficient. A value of 0 disables retention based on this cost comparison. Log files required for replicas within `REP_STREAM_TIMEOUT` or for any active replication are always retained.
+- Description: Sets the relative cost (as a percentage) of replaying transactions from a BDB JE log versus obtaining the same data via a network restore. The value is supplied to the underlying JE replication parameter `REPLAY_COST_PERCENT` and is typically `>100` to indicate that replay is usually more expensive than a network restore. When deciding whether to retain cleaned log files for potential replay, the system compares replay cost multiplied by log size against the cost of a network restore; files will be removed if network restore is judged more efficient. A value of 0 disables retention based on this cost comparison. Log files required for replicas within `REP_STREAM_TIMEOUT` or for any active replication are always retained.
 - Introduced in: v3.2.0
 
 ##### `bdbje_replica_ack_timeout_second`
@@ -1395,7 +1395,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `meta_dir`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/meta"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/meta"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1422,7 +1422,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `replica_ack_policy`
 
-- Default: SIMPLE_MAJORITY
+- Default: `SIMPLE_MAJORITY`
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1510,7 +1510,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
+- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (available only for shared-data clusters). Example: `"stream_load,routine_load"`.
 - Introduced in: v4.0
 
 ##### `txn_rollback_limit`
@@ -1530,7 +1530,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in information_schema.tasks and information_schema.task_runs by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. When false, raw task definitions are returned (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or task_runs is large; disable only if you need unredacted definitions and accept the security risk.
+- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. When false, raw task definitions are returned (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
 - Introduced in: v3.5.6
 
 ##### `privilege_max_role_depth`
@@ -1972,7 +1972,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The minimum allowed refresh interval (in seconds) for ASYNC materialized view schedules. When a materialized view is created with a time-based interval, the interval is converted to seconds and must not be less tham this value; otherwise the CREATE/ALTER operation fails with a DDL error. If this value is greater than 0, the check is enforced; set it to 0 or a negative value to disable the limit, which prevents excessive TaskManager scheduling and high FE memory/CPU usage from overly frequent refreshes. This item does not apply to EVENT_TRIGGERED refreshes.
+- Description: The minimum allowed refresh interval (in seconds) for ASYNC materialized view schedules. When a materialized view is created with a time-based interval, the interval is converted to seconds and must not be less tham this value; otherwise the CREATE/ALTER operation fails with a DDL error. If this value is greater than 0, the check is enforced; set it to 0 or a negative value to disable the limit, which prevents excessive TaskManager scheduling and high FE memory/CPU usage from overly frequent refreshes. This item does not apply to `EVENT_TRIGGERED` refreshes.
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### `materialized_view_refresh_ascending`
@@ -2080,7 +2080,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: When the background active_checker thread is enabled, the system will periodically detect and automatically reactivate materialized views that became Inactive due to schema changes or rebuilds of their base tables (or views). This parameter controls the scheduling interval of the checker thread, in seconds. The default value is system-defined.
+- Description: When the background `active_checker` thread is enabled, the system will periodically detect and automatically reactivate materialized views that became Inactive due to schema changes or rebuilds of their base tables (or views). This parameter controls the scheduling interval of the checker thread, in seconds. The default value is system-defined.
 - Introduced in: v3.1.6
 
 ##### `mv_rewrite_consider_data_layout_mode`
@@ -2129,7 +2129,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: planner CPU cost units
 - Is mutable: Yes
-- Description: Per-slot CPU cost threshold used to estimate how many slots a query needs from its planner CPU cost. The scheduler computes slots as integer(plan_cpu_costs / `query_queue_v2_cpu_costs_per_slot`) and then clamps the result to the range [1, totalSlots] (totalSlots is derived from the query queue V2 `V2` parameters). The V2 code normalizes non-positive settings to 1 (Math.max(1, value)), so a non-positive value effectively becomes `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query. Tune together with `query_queue_v2_num_rows_per_slot` and concurrency settings to control parallelism vs. resource granularity.
+- Description: Per-slot CPU cost threshold used to estimate how many slots a query needs from its planner CPU cost. The scheduler computes slots as integer(`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`) and then clamps the result to the range [1, totalSlots] (totalSlots is derived from the query queue V2 `V2` parameters). The V2 code normalizes non-positive settings to 1 (Math.max(1, value)), so a non-positive value effectively becomes `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query. Tune together with `query_queue_v2_num_rows_per_slot` and concurrency settings to control parallelism vs. resource granularity.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
 
 ##### `query_queue_v2_num_rows_per_slot`
@@ -2138,7 +2138,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Rows
 - Is mutable: Yes
-- Description: The target number of source-row records assigned to a single scheduling slot when estimating per-query slot count. StarRocks computes estimated_slots = (cardinality of the Source Node) / `query_queue_v2_num_rows_per_slot`, then clamps the result to the range [1, totalSlots] and enforces a minimum of 1 if the computed value is non-positive. totalSlots is derived from available resources (roughly DOP * `query_queue_v2_concurrency_level` * number_of_workers/BE) and therefore depends on cluster/core counts. Increase this value to reduce slot count (each slot handles more rows) and lower scheduling overhead; decrease it to increase parallelism (more, smaller slots), up to the resource limit.
+- Description: The target number of source-row records assigned to a single scheduling slot when estimating per-query slot count. StarRocks computes `estimated_slots` = (cardinality of the Source Node) / `query_queue_v2_num_rows_per_slot`, then clamps the result to the range [1, totalSlots] and enforces a minimum of 1 if the computed value is non-positive. totalSlots is derived from available resources (roughly DOP * `query_queue_v2_concurrency_level` * number_of_workers/BE) and therefore depends on cluster/core counts. Increase this value to reduce slot count (each slot handles more rows) and lower scheduling overhead; decrease it to increase parallelism (more, smaller slots), up to the resource limit.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
 
 ##### `query_queue_v2_schedule_strategy`
@@ -2282,7 +2282,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Minimum allowed schedule interval (in seconds) for task schedules checked by the SQL layer. When a task is submitted, TaskAnalyzer converts the schedule period to seconds and rejects the submission with ERR_INVALID_PARAMETER if the period is smaller than `task_min_schedule_interval_s`. This prevents creating tasks that run too frequently and protects the scheduler from high-frequency tasks. If a schedule has no explicit start time, TaskAnalyzer sets the start time to the current epoch seconds.
+- Description: Minimum allowed schedule interval (in seconds) for task schedules checked by the SQL layer. When a task is submitted, TaskAnalyzer converts the schedule period to seconds and rejects the submission with `ERR_INVALID_PARAMETER` if the period is smaller than `task_min_schedule_interval_s`. This prevents creating tasks that run too frequently and protects the scheduler from high-frequency tasks. If a schedule has no explicit start time, TaskAnalyzer sets the start time to the current epoch seconds.
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### `task_runs_timeout_second`
@@ -2519,7 +2519,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `max_broker_load_job_concurrency`
 
 - Default: 5
-- Alias: async_load_task_pool_size
+- Alias: `async_load_task_pool_size`
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -2640,7 +2640,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [`job_properties`](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 ##### `routine_load_task_timeout_second`
@@ -2649,7 +2649,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [`job_properties`](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 ##### `routine_load_unstable_threshold_second`
@@ -2672,7 +2672,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### `spark_home_default_dir`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/spark2x"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -2681,7 +2681,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### `spark_launcher_log_dir`
 
-- Default: sys_log_dir + "/spark_launcher_log"
+- Default: `sys_log_dir` + "/spark_launcher_log"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -2780,7 +2780,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### `yarn_client_path`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/yarn-client/hadoop/bin/yarn"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -2789,7 +2789,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### `yarn_config_dir`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/yarn-config"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -2984,7 +2984,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Limits the maximum number of partitions that can be created at once when analyzing or creating a dynamic-partitioned table. During dynamic partition property validation, the systemtask_runs_max_history_number computes expected partitions (end offset + history partition number) and throws a DDL error if that total exceeds `max_dynamic_partition_num`. Raise this value only when you expect legitimately large partition ranges; increasing it allows more partitions to be created but can increase metadata size, scheduling work, and operational complexity.
+- Description: Limits the maximum number of partitions that can be created at once when analyzing or creating a dynamic-partitioned table. During dynamic partition property validation, the `systemtask_runs_max_history_number` computes expected partitions (end offset + history partition number) and throws a DDL error if that total exceeds `max_dynamic_partition_num`. Raise this value only when you expect legitimately large partition ranges; increasing it allows more partitions to be created but can increase metadata size, scheduling work, and operational complexity.
 - Introduced in: v3.2.0
 
 ##### `max_partition_number_per_table`
@@ -3026,7 +3026,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `storage_usage_hard_limit_percent`
 
 - Default: 95
-- Alias: storage_flood_stage_usage_percent
+- Alias: `storage_flood_stage_usage_percent`
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -3036,7 +3036,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `storage_usage_hard_limit_reserve_bytes`
 
 - Default: 100 * 1024 * 1024 * 1024
-- Alias: storage_flood_stage_left_capacity_bytes
+- Alias: `storage_flood_stage_left_capacity_bytes`
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
@@ -3046,7 +3046,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `storage_usage_soft_limit_percent`
 
 - Default: 90
-- Alias: storage_high_watermark_usage_percent
+- Alias: `storage_high_watermark_usage_percent`
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -3056,7 +3056,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `storage_usage_soft_limit_reserve_bytes`
 
 - Default: 200 * 1024 * 1024 * 1024
-- Alias: storage_min_left_capacity_bytes
+- Alias: `storage_min_left_capacity_bytes`
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
@@ -3093,7 +3093,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_balance_load_disk_safe_threshold`
 
 - Default: 0.5
-- Alias: balance_load_disk_safe_threshold
+- Alias: `balance_load_disk_safe_threshold`
 - Type: Double
 - Unit: -
 - Is mutable: Yes
@@ -3103,7 +3103,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_balance_load_score_threshold`
 
 - Default: 0.1
-- Alias: balance_load_score_threshold
+- Alias: `balance_load_score_threshold`
 - Type: Double
 - Unit: -
 - Is mutable: Yes
@@ -3122,7 +3122,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_disable_balance`
 
 - Default: false
-- Alias: disable_balance
+- Alias: `disable_balance`
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -3132,7 +3132,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_disable_colocate_balance`
 
 - Default: false
-- Alias: disable_colocate_balance
+- Alias: `disable_colocate_balance`
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -3142,7 +3142,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_max_balancing_tablets`
 
 - Default: 500
-- Alias: max_balancing_tablets
+- Alias: `max_balancing_tablets`
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -3152,7 +3152,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_max_clone_task_timeout_sec`
 
 - Default: 2 * 60 * 60
-- Alias: max_clone_task_timeout_sec
+- Alias: `max_clone_task_timeout_sec`
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
@@ -3171,7 +3171,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_max_scheduling_tablets`
 
 - Default: 10000
-- Alias: max_scheduling_tablets
+- Alias: `max_scheduling_tablets`
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -3181,7 +3181,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_min_clone_task_timeout_sec`
 
 - Default: 3 * 60
-- Alias: min_clone_task_timeout_sec
+- Alias: `min_clone_task_timeout_sec`
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
@@ -3195,13 +3195,13 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: Doing num based balance may break the disk size balance, but the maximum gap between disks cannot exceed tablet_sched_num_based_balance_threshold_ratio * tablet_sched_balance_load_score_threshold. If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value. If you want the tablet distribution to be more balanced, increase this value.
+- Description: Doing num based balance may break the disk size balance, but the maximum gap between disks cannot exceed `tablet_sched_num_based_balance_threshold_ratio` * `tablet_sched_balance_load_score_threshold`. If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value. If you want the tablet distribution to be more balanced, increase this value.
 - Introduced in: - 3.1
 
 ##### `tablet_sched_repair_delay_factor_second`
 
 - Default: 60
-- Alias: tablet_repair_delay_factor_second
+- Alias: `tablet_repair_delay_factor_second`
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
@@ -3211,7 +3211,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_slot_num_per_path`
 
 - Default: 8
-- Alias: schedule_slot_num_per_path
+- Alias: `schedule_slot_num_per_path`
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -3221,7 +3221,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 ##### `tablet_sched_storage_cooldown_second`
 
 - Default: -1
-- Alias: storage_cooldown_second
+- Alias: `storage_cooldown_second`
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
@@ -3668,7 +3668,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### `run_mode`
 
-- Default: shared_nothing
+- Default: `shared_nothing`
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -4148,7 +4148,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### locale
 
-- Default: zh_CN.UTF-8
+- Default: `zh_CN.UTF-8`
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -4364,7 +4364,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### `plugin_dir`
 
-- Default: System.getenv("STARROCKS_HOME") + "/plugins"
+- Default: `System.getenv("STARROCKS_HOME")` + "/plugins"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -4463,7 +4463,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### `small_file_dir`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/small_files"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/small_files"
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -4481,7 +4481,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### `tmp_dir`
 
-- Default: StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"
+- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/temp_dir"
 - Type: String
 - Unit: -
 - Is mutable: No
