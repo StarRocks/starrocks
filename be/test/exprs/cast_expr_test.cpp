@@ -2376,7 +2376,9 @@ TEST_F(VectorizedCastExprTest, unsupported_test) {
 
     Expr* expr3 = nullptr;
     ObjectPool pool;
-    ASSERT_FALSE(ExprFactory::create_vectorized_expr(&pool, cast_expr, &expr3, &runtime_state).ok());
+    TExpr texpr;
+    texpr.nodes.emplace_back(cast_expr);
+    ASSERT_FALSE(ExprFactory::create_expr_tree(&pool, texpr, &expr3, &runtime_state).ok());
 }
 
 TTypeDesc gen_struct_type_desc(const std::vector<TPrimitiveType::type>& field_types,
