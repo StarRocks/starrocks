@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # `is_json_scalar`
 
-Returns whether a JSON value is a scalar (not an object or array).
+JSON値がスカラ（オブジェクトでも配列でもない）であるかどうかを返します。
 
-## 別名
+## エイリアス
 なし
 
 ## 構文
@@ -15,24 +15,24 @@ Returns whether a JSON value is a scalar (not an object or array).
 BOOLEAN is_json_scalar(JSON)
 ```
 
-### パラメーター
+### パラメータ
 
-`json` : JSON 型の値。関数は解析済みの JSON 値を調べ、それがスカラーかどうかを判定します。有効な JSON スカラー型には number、string、boolean、および JSON null が含まれます。入力が SQL NULL（または JSON 列の値が NULL）の場合、関数は SQL NULL を返します。
+`json` : JSON型の値。この関数は、解析されたJSON値を検査し、それがスカラであるかどうかを判断します。有効なJSONスカラ型には、数値、文字列、ブール値、およびJSON nullが含まれます。入力がSQL NULL（またはJSON列の値がNULL）の場合、関数はSQL NULLを返します。
 
 ## 戻り値
 
-BOOLEAN を返します:
-- TRUE (1) — JSON 値がスカラー（number、string、boolean、または JSON null）の場合。
-- FALSE (0) — JSON 値が非スカラー（オブジェクトまたは配列）の場合。
-- NULL — 入力が SQL NULL の場合。
+戻り値はBOOLEANです。
+- TRUE (1): JSON値がスカラ（数値、文字列、ブール値、またはJSON null）である場合。
+- FALSE (0): JSON値が非スカラ（オブジェクトまたは配列）である場合。
+- NULL: 入力がSQL NULLである場合。
 
 ## 使用上の注意
 
-- この関数は JSON 型の値に対して動作します。JSON 式を渡すか、文字列リテラルを JSON に CAST してください。例: CAST('{"a": 1}' AS JSON)。
-- JSON null（リテラルの JSON 値 null）は、オブジェクトや配列ではないため、この関数ではスカラーと見なされます。
-- SQL NULL（値の欠如）は JSON null とは別物です。SQL NULL の入力に対しては NULL が返ります。
-- この関数はトップレベルの JSON 値のみを検査します。オブジェクトと配列は、その中身に関係なく非スカラーと見なされます。
-- この関数は JsonFunctions::is_json_scalar として実装されており、基になる VPack スライスがオブジェクトでも配列でもないことをチェックします。
+- この関数はJSON型の値に対して動作します。JSON式または`CAST`文字列リテラルをJSONに渡します。例：`CAST('{"a": 1}' AS JSON)`。
+- `JSON null`（リテラルJSON値null）は、オブジェクトまたは配列ではないため、この関数によってスカラと見なされます。
+- `SQL NULL`（値の欠如）は`JSON null`とは異なります。`SQL NULL`はNULL結果を生成します。
+- この関数はトップレベルのJSON値のみを検査します。オブジェクトと配列は、その内容に関わらず非スカラです。
+- この関数は`JsonFunctions::is_json_scalar`として実装されており、基となるVPackスライスがオブジェクトでも配列でもないことを確認します。
 
 ## 例
 

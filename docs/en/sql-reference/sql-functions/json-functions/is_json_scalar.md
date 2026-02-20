@@ -28,11 +28,11 @@ Returns a BOOLEAN:
 
 ## Usage notes
 
-- The function operates on values of JSON type. Pass JSON expressions or CAST string literals to JSON: e.g., CAST('{"a": 1}' AS JSON).
-- JSON null (the literal JSON value null) is considered a scalar by this function because it is not an object or array.
-- SQL NULL (absence of a value) is distinct from JSON null; SQL NULL yields a NULL result.
+- The function operates on values of JSON type. Pass JSON expressions or `CAST` string literals to JSON: e.g., `CAST('{"a": 1}' AS JSON)`.
+- `JSON null` (the literal JSON value null) is considered a scalar by this function because it is not an object or array.
+- `SQL NULL` (absence of a value) is distinct from `JSON null`; `SQL NULL` yields a NULL result.
 - The function only inspects the top-level JSON value: object and array are non-scalar regardless of their contents.
-- This function is implemented as JsonFunctions::is_json_scalar, which checks that the underlying VPack slice is not an object and not an array.
+- This function is implemented as `JsonFunctions::is_json_scalar`, which checks that the underlying VPack slice is not an object and not an array.
 
 ## Examples
 
