@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.expression.ArraySliceExpr;
 import com.starrocks.sql.ast.expression.ArrowExpr;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CloneExpr;
@@ -82,6 +83,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -667,6 +669,45 @@ public final class SqlToScalarOperatorTranslator {
             }
             ColumnRefOperator rightColRef = rightColRefs.get(0);
 
+            // When the left side is a constant, rewrite IN to EXISTS to bypass
+            // QuantifiedApply2OuterJoinRule which rejects constant LHS. Three branches
+            // cover all three-valued cases:
+            //   1. LHS is NULL              : CASE WHEN EXISTS(sub) THEN NULL ELSE FALSE END
+            //      (NULL IN non-empty sub = NULL; NULL IN empty sub = FALSE)
+            //   2. LHS non-null, col NOT NULL: EXISTS (sub WHERE col = const)
+            //   3. LHS non-null, col nullable: CASE WHEN EXISTS(col=c) THEN TRUE
+            //                                       WHEN EXISTS(col IS NULL) THEN NULL
+            //                                       ELSE FALSE END
+            // NOT IN mirrors each branch by swapping TRUE/FALSE leaves.
+            if (leftColRef.isConstant() && !context.useSemiAnti) {
+                ((Subquery) node.getChild(1)).setUseSemiAnti(context.useSemiAnti);
+                ConstantOperator matched = node.isNotIn() ? ConstantOperator.FALSE : ConstantOperator.TRUE;
+                ConstantOperator unmatched = node.isNotIn() ? ConstantOperator.TRUE : ConstantOperator.FALSE;
+
+                if (leftColRef.isConstantNull()) {
+                    ColumnRefOperator existsAnyRef = buildExistsRewriteForConstantIn(queryStatement, false,
+                            null, context);
+                    return new CaseWhenOperator(ConstantOperator.TRUE.getType(),
+                            null, unmatched,
+                            Lists.newArrayList(existsAnyRef, ConstantOperator.NULL));
+                }
+                if (!rightColRef.isNullable()) {
+                    return buildExistsRewriteForConstantIn(queryStatement, node.isNotIn(),
+                            col -> new BinaryPredicateOperator(BinaryType.EQ, col, leftColRef),
+                            context);
+                }
+                ColumnRefOperator existsMatchRef = buildExistsRewriteForConstantIn(queryStatement, false,
+                        col -> new BinaryPredicateOperator(BinaryType.EQ, col, leftColRef),
+                        context);
+                ColumnRefOperator existsNullRef = buildExistsRewriteForConstantIn(queryStatement, false,
+                        col -> new IsNullPredicateOperator(col),
+                        context);
+                return new CaseWhenOperator(ConstantOperator.TRUE.getType(),
+                        null, unmatched,
+                        Lists.newArrayList(existsMatchRef, matched, existsNullRef, ConstantOperator.NULL));
+            }
+
+            // Original IN predicate logic for non-constant left side
             ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
             ScalarOperator inPredicateOperator =
                     rewriter.rewrite(new InPredicateOperator(node.isNotIn(), true, leftColRef, rightColRef),
@@ -685,6 +726,42 @@ public final class SqlToScalarOperatorTranslator {
 
             subqueryPlaceholders.put(outputPredicateRef, subqueryOperator);
 
+            return outputPredicateRef;
+        }
+
+        // Build a single EXISTS / NOT EXISTS apply over the given subquery. `filterBuilder`
+        // may be null (use the subquery as-is) or produce a WHERE predicate from the
+        // subquery's output column. Returns the column ref bound to the apply output.
+        private ColumnRefOperator buildExistsRewriteForConstantIn(
+                QueryStatement queryStatement, boolean isNotExists,
+                java.util.function.Function<ColumnRefOperator, ScalarOperator> filterBuilder,
+                Context context) {
+            LogicalPlan subqueryPlan = getSubqueryPlan(queryStatement);
+            ColumnRefOperator rightColRef = subqueryPlan.getOutputColumn().get(0);
+
+            OptExprBuilder rootBuilder = subqueryPlan.getRootBuilder();
+            if (filterBuilder != null) {
+                ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+                ScalarOperator filterPredicate = rewriter.rewrite(filterBuilder.apply(rightColRef),
+                        ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
+                rootBuilder = rootBuilder.withNewRoot(new LogicalFilterOperator(filterPredicate));
+            }
+            LogicalPlan filteredSubqueryPlan = new LogicalPlan(rootBuilder,
+                    subqueryPlan.getOutputColumn(), subqueryPlan.getCorrelation());
+
+            ExistsPredicateOperator existsPredicateOperator =
+                    new ExistsPredicateOperator(isNotExists, rightColRef);
+            ColumnRefOperator outputPredicateRef = columnRefFactory.create(existsPredicateOperator,
+                    existsPredicateOperator.getType(), existsPredicateOperator.isNullable());
+
+            LogicalApplyOperator applyOperator = LogicalApplyOperator.builder().setOutput(outputPredicateRef)
+                    .setSubqueryOperator(existsPredicateOperator)
+                    .setCorrelationColumnRefs(filteredSubqueryPlan.getCorrelation())
+                    .setUseSemiAnti(context.useSemiAnti).build();
+
+            SubqueryOperator subqueryOperator = new SubqueryOperator(rightColRef.getType(), queryStatement,
+                    applyOperator, filteredSubqueryPlan.getRootBuilder());
+            subqueryPlaceholders.put(outputPredicateRef, subqueryOperator);
             return outputPredicateRef;
         }
 
