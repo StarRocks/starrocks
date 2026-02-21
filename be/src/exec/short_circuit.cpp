@@ -25,6 +25,7 @@
 #include "common/status.h"
 #include "common/util/thrift_util.h"
 #include "connector/connector.h"
+#include "exec/exec_factory.h"
 #include "exec/scan_node.h"
 #include "exec/short_circuit_hybrid.h"
 #include "exprs/expr_factory.h"
@@ -249,7 +250,7 @@ Status ShortCircuitExecutor::build_source_exec_node(starrocks::ObjectPool* pool,
     }
     case TPlanNodeType::PROJECT_NODE:
     case TPlanNodeType::UNION_NODE: // values
-        RETURN_IF_ERROR(ExecNode::create_vectorized_node(runtime_state(), pool, t_node, descs, node));
+        RETURN_IF_ERROR(ExecFactory::create_vectorized_node(runtime_state(), pool, t_node, descs, node));
         break;
     default:
         return Status::InternalError(strings::Substitute("Short circuit not support node: $0", t_node.node_type));
