@@ -50,6 +50,10 @@ private:
     std::vector<SlotId> _common_sub_slot_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
 
+    // SQL form of expressions for profile
+    std::string _sql_project_exprs;
+    std::string _sql_common_exprs;
+
     RuntimeProfile::Counter* _expr_compute_timer = nullptr;
     RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;
 };

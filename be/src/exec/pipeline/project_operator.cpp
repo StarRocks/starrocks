@@ -18,6 +18,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/expr.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
@@ -25,6 +26,12 @@ namespace starrocks::pipeline {
 Status ProjectOperator::prepare(RuntimeState* state) {
     _expr_compute_timer = ADD_TIMER(_unique_metrics, "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(_unique_metrics, "CommonSubExprComputeTime");
+    if (!_sql_project_exprs.empty()) {
+        _unique_metrics->add_info_string("ProjectExpressions", _sql_project_exprs);
+    }
+    if (!_sql_common_exprs.empty()) {
+        _unique_metrics->add_info_string("CommonExpressions", _sql_common_exprs);
+    }
     return Operator::prepare(state);
 }
 

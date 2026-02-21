@@ -54,6 +54,16 @@ ProjectNode::~ProjectNode() {
 
 Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+
+    if (tnode.project_node.__isset.sql_project_exprs) {
+        _runtime_profile->add_info_string("ProjectExpressions", tnode.project_node.sql_project_exprs);
+        _sql_project_exprs = tnode.project_node.sql_project_exprs;
+    }
+    if (tnode.project_node.__isset.sql_common_exprs) {
+        _runtime_profile->add_info_string("CommonExpressions", tnode.project_node.sql_common_exprs);
+        _sql_common_exprs = tnode.project_node.sql_common_exprs;
+    }
+
     size_t column_size = tnode.project_node.slot_map.size();
     _expr_ctxs.reserve(column_size);
     _slot_ids.reserve(column_size);
@@ -95,7 +105,6 @@ Status ProjectNode::prepare(RuntimeState* state) {
 
     _expr_compute_timer = ADD_TIMER(runtime_profile(), "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(runtime_profile(), "CommonSubExprComputeTime");
-
     return Status::OK();
 }
 
@@ -295,7 +304,8 @@ pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuild
 
     operators.emplace_back(std::make_shared<ProjectOperatorFactory>(
             context->next_operator_id(), id(), std::move(_slot_ids), std::move(_expr_ctxs),
-            std::move(_type_is_nullable), std::move(_common_sub_slot_ids), std::move(_common_sub_expr_ctxs)));
+            std::move(_type_is_nullable), std::move(_common_sub_slot_ids), std::move(_common_sub_expr_ctxs),
+            std::move(_sql_project_exprs), std::move(_sql_common_exprs)));
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     if (limit() != -1) {
