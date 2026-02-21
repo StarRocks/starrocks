@@ -26,6 +26,7 @@ set(EXEC_FILES
     capture_version_node.cpp
     data_sink.cpp
     empty_set_node.cpp
+    exec_factory.cpp
     exec_node.cpp
     exchange_node.cpp
     scan_node.cpp

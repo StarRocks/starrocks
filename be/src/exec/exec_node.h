@@ -244,9 +244,6 @@ public:
 
     const std::vector<ExecNode*>& children() const { return _children; }
 
-    static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
-                                         const DescriptorTbl& descs, ExecNode** node);
-
 protected:
     friend class DataSink;
 
