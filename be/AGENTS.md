@@ -205,6 +205,16 @@ Use `#pragma once` instead of traditional include guards:
 - **No higher-level BE deps**: do not include headers from `runtime/*` components that require full `Runtime`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, `exprs/*`, etc.
 - **UT constraint**: keep `RuntimeCore` unit tests in `runtime_core_test`, and ensure that `runtime_core_test` links only `RuntimeCore` plus its allowed core dependencies (similar to `column_test`/`types_test` style minimal linkage).
 
+### exprcore (`ExprCore` target)
+- **Allowed deps only**: code compiled into `ExprCore` (currently selected files under `be/src/exprs`, starting with `function_context.cpp`) may only depend on `runtimecore` (`RuntimeCore`) and its transitive core dependencies (`ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `gen_cpp/*`), plus system headers and third-party libraries.
+- **No higher-level BE deps**: do not include headers from `exprs/*` components that require full `Exprs`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, or other non-core modules.
+- **Goal**: `ExprCore` should remain minimal and independently buildable, so core expression infrastructure can be tested quickly without linking the full `Exprs` stack.
+- **UT constraint**: keep `ExprCore` unit tests in `expr_core_test`, and ensure `expr_core_test` links only `ExprCore` plus its allowed core dependencies. To verify changes quickly, run:
+  ```bash
+  CMAKE_BUILD_PREFIX=/home/az/sr-build STARROCKS_LINKER=lld STARROCKS_THIRDPARTY=/var/local/thirdparty \
+  ./run-be-ut.sh --clean --with-dynamic --build-target expr_core_test --module expr_core_test --without-java-ext
+  ```
+
 ## Common Patterns
 
 ### Status and StatusOr

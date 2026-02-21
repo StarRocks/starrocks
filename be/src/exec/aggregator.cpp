@@ -39,6 +39,9 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "types/logical_type.h"
+#ifndef __APPLE__
+#include "udf/java/java_udf.h"
+#endif
 #include "udf/java/utils.h"
 
 namespace starrocks {
@@ -297,12 +300,20 @@ Status Aggregator::open(RuntimeState* state) {
 #ifndef __APPLE__
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, [this]() {
+            std::vector<int> attached_udaf_idx;
+            attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
                     auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
                                                 _agg_fn_ctxs[i]);
-                    RETURN_IF_ERROR(st);
+                    if (!st.ok()) {
+                        for (int idx : attached_udaf_idx) {
+                            destroy_java_udaf_context(_agg_fn_ctxs[idx]);
+                        }
+                        return st;
+                    }
+                    attached_udaf_idx.emplace_back(i);
                 }
             }
             return Status::OK();
@@ -670,11 +681,13 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
         _release_agg_memory();
     }
 
+#ifndef __APPLE__
     for (int i = 0; i < _agg_functions.size(); i++) {
-        if (_agg_fn_ctxs[i]) {
-            _agg_fn_ctxs[i]->release_mems();
+        if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+            clear_java_udaf_states(_agg_fn_ctxs[i]);
         }
     }
+#endif
 
     _mem_pool->free_all();
     _agg_state_mem_usage = 0;
@@ -748,11 +761,13 @@ void Aggregator::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
+#ifndef __APPLE__
         for (int i = 0; i < _agg_functions.size(); i++) {
-            if (_agg_fn_ctxs[i]) {
-                _agg_fn_ctxs[i]->release_mems();
+            if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                destroy_java_udaf_context(_agg_fn_ctxs[i]);
             }
         }
+#endif
 
         if (_is_only_group_by_columns) {
             _hash_set_variant.reset();

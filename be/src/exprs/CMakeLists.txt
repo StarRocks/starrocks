@@ -17,6 +17,13 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
+set(EXPR_CORE_FILES
+  function_context.cpp
+)
+
+ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
+target_link_libraries(ExprCore PUBLIC RuntimeCore)
+
 set(EXPR_FILES
   agg/data_sketch/ds_theta.cpp
   agg/factory/aggregate_factory.cpp
@@ -38,7 +45,6 @@ set(EXPR_FILES
   expr_factory.cpp
   expr_context.cpp
   expr.cpp
-  function_context.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
   table_function/list_rowsets.cpp
@@ -126,3 +132,4 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Exprs ${EXPR_FILES})
+target_link_libraries(Exprs PUBLIC ExprCore)

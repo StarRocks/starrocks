@@ -17,11 +17,8 @@
 #include <iostream>
 #include <sstream>
 
+#include "common/ngram_bloom_filter_state.h"
 #include "runtime/runtime_state.h"
-#ifndef __APPLE__
-#include "udf/java/java_udf.h"
-#endif
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -35,9 +32,6 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(__APPLE__) && !defined(BUILD_FORMAT_LIB)
-    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
-#endif
     return ctx;
 }
 
@@ -51,9 +45,6 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(__APPLE__) && !defined(BUILD_FORMAT_LIB)
-    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
-#endif
     ctx->_is_distinct = is_distinct;
     ctx->_is_asc_order = is_asc_order;
     ctx->_nulls_first = nulls_first;
@@ -131,15 +122,6 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
         // TODO: signal error somehow
         return nullptr;
     }
-}
-
-void FunctionContext::release_mems() {
-#ifndef __APPLE__
-    if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
-        auto env = JVMFunctionHelper::getInstance().getEnv();
-        _jvm_udaf_ctxs->states->clear(this, env);
-    }
-#endif
 }
 
 void FunctionContext::set_error(const char* error_msg, const bool is_udf) {
