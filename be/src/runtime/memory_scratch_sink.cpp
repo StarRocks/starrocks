@@ -40,6 +40,7 @@
 #include <sstream>
 
 #include "common/logging.h"
+#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
@@ -72,9 +73,9 @@ Status MemoryScratchSink::prepare_exprs(RuntimeState* state) {
     // From the thrift expressions create the real exprs.
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(_output_expr_ctxs, state));
 
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::open(_output_expr_ctxs, state));
     // Prepare id_to_col_name map
     _prepare_id_to_col_name_map();
     // generate the arrow schema
@@ -112,7 +113,7 @@ Status MemoryScratchSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 Status MemoryScratchSink::open(RuntimeState* state) {
-    return Expr::open(_output_expr_ctxs, state);
+    return ExecExecutor::open(_output_expr_ctxs, state);
 }
 
 Status MemoryScratchSink::close(RuntimeState* state, Status exec_status) {
@@ -123,7 +124,7 @@ Status MemoryScratchSink::close(RuntimeState* state, Status exec_status) {
     if (_queue != nullptr) {
         _queue->blocking_put(nullptr);
     }
-    Expr::close(_output_expr_ctxs, state);
+    ExecExecutor::close(_output_expr_ctxs, state);
     _closed = true;
     return Status::OK();
 }

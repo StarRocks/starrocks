@@ -22,6 +22,7 @@
 #include "exec/spill/common.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller_factory.h"
+#include "exprs/exec_executor.h"
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
@@ -258,17 +259,17 @@ Status SpillableNLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     _cross_join_context->ref();
 
     _init_row_desc();
-    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
-    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExecExecutor::open(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::open(_conjunct_ctxs, state));
 
     return Status::OK();
 }
 
 void SpillableNLJoinProbeOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_join_conjuncts, state);
-    Expr::close(_conjunct_ctxs, state);
+    ExecExecutor::close(_join_conjuncts, state);
+    ExecExecutor::close(_conjunct_ctxs, state);
 
     OperatorWithDependencyFactory::close(state);
 }

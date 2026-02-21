@@ -24,6 +24,7 @@
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
+#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "types/logical_type.h"
@@ -249,8 +250,8 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
 
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
     }
-    RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_cast_exprs, state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(_cast_exprs, state));
+    RETURN_IF_ERROR(ExecExecutor::open(_cast_exprs, state));
 
     return Status::OK();
 }

@@ -91,13 +91,6 @@ Status ExprContext::open(RuntimeState* state) {
     }
 }
 
-Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
-    for (auto& eval : evals) {
-        RETURN_IF_ERROR(eval->open(state));
-    }
-    return Status::OK();
-}
-
 void ExprContext::close(RuntimeState* state) {
     if (!_prepared) {
         return;

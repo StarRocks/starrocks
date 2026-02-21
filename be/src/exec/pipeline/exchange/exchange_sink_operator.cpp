@@ -25,6 +25,7 @@
 #include "exec/partition/bucket_aware_partition.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
+#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
@@ -859,15 +860,15 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
-        RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+        RETURN_IF_ERROR(ExecExecutor::prepare(_partition_expr_ctxs, state));
+        RETURN_IF_ERROR(ExecExecutor::open(_partition_expr_ctxs, state));
     }
     return Status::OK();
 }
 
 void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
     _buffer.reset();
-    Expr::close(_partition_expr_ctxs, state);
+    ExecExecutor::close(_partition_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

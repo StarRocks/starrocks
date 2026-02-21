@@ -15,6 +15,7 @@
 #include "exec/pipeline/select_operator.h"
 
 #include "column/chunk.h"
+#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -112,20 +113,20 @@ Status SelectOperator::reset_state(starrocks::RuntimeState* state, const std::ve
 
 Status SelectOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(_conjunct_ctxs, state));
     std::vector<ExprContext*> common_expr_ctxs;
     for (const auto& [_, ctx] : _common_exprs) {
         common_expr_ctxs.emplace_back(ctx);
     }
-    RETURN_IF_ERROR(Expr::prepare(common_expr_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(common_expr_ctxs, state));
 
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(common_expr_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::open(common_expr_ctxs, state));
     return Status::OK();
 }
 
 void SelectOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_conjunct_ctxs, state);
+    ExecExecutor::close(_conjunct_ctxs, state);
     OperatorFactory::close(state);
 }
 

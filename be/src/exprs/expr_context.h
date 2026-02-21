@@ -76,8 +76,6 @@ public:
     /// reinitializing function state).
     Status open(RuntimeState* state);
 
-    static Status open(std::vector<ExprContext*> input_evals, RuntimeState* state);
-
     /// Creates a copy of this ExprContext. Open() must be called first. The copy contains
     /// clones of each FunctionContext, which share the fragment-local state of the
     /// originals but have their own MemPool and thread-local state. Clone() should be used

@@ -28,6 +28,7 @@
 #include "exec/hdfs_scanner/jni_scanner.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors_ext.h"
@@ -272,10 +273,10 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
         _case_sensitive = hdfs_scan_node.case_sensitive;
     }
 
-    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(_min_max_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(_partition_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::open(_min_max_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExecExecutor::open(_partition_conjunct_ctxs, state));
     _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
@@ -355,8 +356,8 @@ Status HiveDataSource::_init_extended_values() {
 
     RETURN_IF_ERROR(
             ExprFactory::create_expr_trees(&_pool, extended_column_values, &_extended_column_values, _runtime_state));
-    RETURN_IF_ERROR(Expr::prepare(_extended_column_values, _runtime_state));
-    RETURN_IF_ERROR(Expr::open(_extended_column_values, _runtime_state));
+    RETURN_IF_ERROR(ExecExecutor::prepare(_extended_column_values, _runtime_state));
+    RETURN_IF_ERROR(ExecExecutor::open(_extended_column_values, _runtime_state));
 
     return Status::OK();
 }
@@ -477,7 +478,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
     }
 
     std::vector<ExprContext*> cloned_conjunct_ctxs;
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(ExecExecutor::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
 
     for (ExprContext* ctx : cloned_conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
@@ -537,13 +538,13 @@ Status HiveDataSource::_setup_all_conjunct_ctxs(RuntimeState* state) {
     // clone conjunct from _min_max_conjunct_ctxs & _conjunct_ctxs
     // then we will generate PredicateTree based on _all_conjunct_ctxs
     std::vector<ExprContext*> cloned_conjunct_ctxs;
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(ExecExecutor::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
     for (auto* ctx : cloned_conjunct_ctxs) {
         _all_conjunct_ctxs.emplace_back(ctx);
     }
 
     cloned_conjunct_ctxs.clear();
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(ExecExecutor::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
     for (auto* ctx : cloned_conjunct_ctxs) {
         _all_conjunct_ctxs.emplace_back(ctx);
     }
@@ -916,11 +917,11 @@ void HiveDataSource::close(RuntimeState* state) {
         }
         _scanner->close();
     }
-    Expr::close(_min_max_conjunct_ctxs, state);
-    Expr::close(_partition_conjunct_ctxs, state);
-    Expr::close(_scanner_conjunct_ctxs, state);
+    ExecExecutor::close(_min_max_conjunct_ctxs, state);
+    ExecExecutor::close(_partition_conjunct_ctxs, state);
+    ExecExecutor::close(_scanner_conjunct_ctxs, state);
     for (auto& it : _conjunct_ctxs_by_slot) {
-        Expr::close(it.second, state);
+        ExecExecutor::close(it.second, state);
     }
 }
 
