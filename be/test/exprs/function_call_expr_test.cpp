@@ -24,7 +24,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/cast_expr.h"
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
@@ -69,8 +69,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathPiExprTest) {
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -82,7 +82,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathPiExprTest) {
         ASSERT_EQ(M_PI, value);
     }
 
-    ExecExecutor::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
@@ -112,8 +112,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -129,7 +129,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
         }
     }
 
-    ExecExecutor::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
@@ -169,8 +169,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -186,7 +186,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
         }
     }
 
-    ExecExecutor::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
@@ -226,8 +226,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
     ASSERT_FALSE(result->is_constant());
@@ -250,7 +250,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
         }
     }
 
-    ExecExecutor::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, prepareFaileCase) {

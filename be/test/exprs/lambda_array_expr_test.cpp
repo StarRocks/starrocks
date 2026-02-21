@@ -27,7 +27,7 @@
 #include "exprs/array_expr.h"
 #include "exprs/array_map_expr.h"
 #include "exprs/cast_expr.h"
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/function_helper.h"
 #include "exprs/is_null_predicate.h"
@@ -251,8 +251,8 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
             std::vector<ExprContext*> expr_ctxs = {&exprContext};
-            ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-            ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+            ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+            ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
             auto lambda = dynamic_cast<LambdaFunction*>(lambda_funcs[j]);
 
             // check LambdaFunction::prepare()
@@ -309,7 +309,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
                 ASSERT_EQ(-110, result->get(2).get_array()[1].get_int32());
             }
 
-            ExecExecutor::close(expr_ctxs, &_runtime_state);
+            ExprExecutor::close(expr_ctxs, &_runtime_state);
         }
     }
 }
@@ -327,8 +327,8 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
             std::vector<ExprContext*> expr_ctxs = {&exprContext};
-            ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-            ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+            ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+            ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
             auto lambda = dynamic_cast<LambdaFunction*>(lambda_funcs[j]);
 
             // check LambdaFunction::prepare()
@@ -379,7 +379,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
                 ASSERT_TRUE(result->is_null(2));
             }
 
-            ExecExecutor::close(expr_ctxs, &_runtime_state);
+            ExprExecutor::close(expr_ctxs, &_runtime_state);
         }
     }
 }
@@ -397,8 +397,8 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
             std::vector<ExprContext*> expr_ctxs = {&exprContext};
-            ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-            ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+            ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+            ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
             auto lambda = dynamic_cast<LambdaFunction*>(lambda_funcs[j]);
 
             // check LambdaFunction::prepare()
@@ -485,7 +485,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 auto array_col = ArrayColumn::dynamic_pointer_cast(data_column);
                 ASSERT_EQ(2, array_col->elements_column()->type_size());
             }
-            ExecExecutor::close(expr_ctxs, &_runtime_state);
+            ExprExecutor::close(expr_ctxs, &_runtime_state);
         }
     }
 }
@@ -624,8 +624,8 @@ TEST_F(VectorizedLambdaFunctionExprTest, test_lambda_common_expr_slot_conflict) 
 
     ExprContext exprContext(&array_map_expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
-    ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
 
     // Check LambdaFunction::prepare()
     std::vector<SlotId> ids, arguments;
@@ -653,7 +653,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, test_lambda_common_expr_slot_conflict) 
     ASSERT_EQ(58, result->get(2).get_array()[0].get_int32());
     ASSERT_EQ(69, result->get(2).get_array()[1].get_int32());
 
-    ExecExecutor::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 } // namespace starrocks

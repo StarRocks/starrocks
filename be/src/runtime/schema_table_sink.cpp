@@ -24,8 +24,8 @@
 #include "common/configbase.h"
 #include "common/runtime_profile.h"
 #include "exec/tablet_info.h"
-#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/update_config_action.h"
@@ -56,14 +56,14 @@ Status SchemaTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
 
 Status SchemaTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     _profile =
             state->obj_pool()->add(new RuntimeProfile(strings::Substitute("SchemaTableSink (table=$0)", _table_name)));
     return Status::OK();
 }
 
 Status SchemaTableSink::open(RuntimeState* state) {
-    return ExecExecutor::open(_output_expr_ctxs, state);
+    return ExprExecutor::open(_output_expr_ctxs, state);
 }
 
 static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be_id, const string& name,
@@ -152,7 +152,7 @@ Status SchemaTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 Status SchemaTableSink::close(RuntimeState* state, Status exec_status) {
-    ExecExecutor::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 

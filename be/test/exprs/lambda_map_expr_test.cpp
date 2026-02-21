@@ -22,7 +22,7 @@
 #include "column/map_column.h"
 #include "exprs/arithmetic_expr.h"
 #include "exprs/cast_expr.h"
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/lambda_function.h"
@@ -215,14 +215,14 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
 
         ExprContext exprContext(map_apply_expr.get());
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
-        ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-        ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_TRUE(result->is_nullable());
         EXPECT_TRUE(result->debug_string() == column->debug_string());
 
-        ExecExecutor::close(expr_ctxs, &_runtime_state);
+        ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
 
     // Inputs:
@@ -247,14 +247,14 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
 
         ExprContext exprContext(map_apply_expr.get());
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
-        ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-        ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_TRUE(result->is_nullable());
         EXPECT_STREQ(result->debug_string().c_str(), "[{0:67}, {0:89}, {0:NULL}, {}, NULL]");
 
-        ExecExecutor::close(expr_ctxs, &_runtime_state);
+        ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
 }
 
@@ -318,14 +318,14 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
 
         ExprContext exprContext(map_apply_expr.get());
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
-        ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-        ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_FALSE(result->is_nullable());
         EXPECT_TRUE(result->debug_string() == column->debug_string());
 
-        ExecExecutor::close(expr_ctxs, &_runtime_state);
+        ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
 
     // Inputs:
@@ -349,14 +349,14 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
 
         ExprContext exprContext(map_apply_expr.get());
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
-        ASSERT_OK(ExecExecutor::prepare(expr_ctxs, &_runtime_state));
-        ASSERT_OK(ExecExecutor::open(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_FALSE(result->is_nullable());
         EXPECT_STREQ(result->debug_string().c_str(), "{0:34}, {0:67}, {0:89}, {0:100}, {}");
 
-        ExecExecutor::close(expr_ctxs, &_runtime_state);
+        ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
 }
 

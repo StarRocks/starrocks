@@ -21,8 +21,8 @@
 #include "common/runtime_profile.h"
 #include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
-#include "exprs/exec_executor.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "gutil/hash/hash.h"
 
 namespace starrocks::pipeline {
@@ -169,13 +169,13 @@ void PartitionExchanger::incr_sinker() {
 
 Status PartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     return Status::OK();
 }
 
 void PartitionExchanger::close(RuntimeState* state) {
-    ExecExecutor::close(_partition_exprs, state);
+    ExprExecutor::close(_partition_exprs, state);
     LocalExchanger::close(state);
 }
 
@@ -206,13 +206,13 @@ OrderedPartitionExchanger::OrderedPartitionExchanger(const std::shared_ptr<Chunk
 
 Status OrderedPartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     return Status::OK();
 }
 
 void OrderedPartitionExchanger::close(RuntimeState* state) {
-    ExecExecutor::close(_partition_exprs, state);
+    ExprExecutor::close(_partition_exprs, state);
     LocalExchanger::close(state);
 }
 
@@ -308,8 +308,8 @@ KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMe
 
 Status KeyPartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_partition_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_expr_ctxs, state));
     // Read exchange_hash_function_version from query options
     if (state->query_options().__isset.exchange_hash_function_version) {
         _exchange_hash_function_version = state->query_options().exchange_hash_function_version;
@@ -318,7 +318,7 @@ Status KeyPartitionExchanger::prepare(RuntimeState* state) {
 }
 
 void KeyPartitionExchanger::close(RuntimeState* state) {
-    ExecExecutor::close(_partition_expr_ctxs, state);
+    ExprExecutor::close(_partition_expr_ctxs, state);
     LocalExchanger::close(state);
 }
 

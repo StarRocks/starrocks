@@ -27,7 +27,7 @@ class ObjectPool;
 class RuntimeState;
 
 // Helper class for orchestrating ExprContext lifecycle.
-class ExecExecutor {
+class ExprExecutor {
 public:
     static Status prepare(ExprContext* ctx, RuntimeState* state);
     static Status open(ExprContext* ctx, RuntimeState* state);

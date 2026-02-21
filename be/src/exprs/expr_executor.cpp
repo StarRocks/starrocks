@@ -12,41 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 
 #include "exprs/expr_context.h"
 
 namespace starrocks {
 
-Status ExecExecutor::prepare(ExprContext* ctx, RuntimeState* state) {
+Status ExprExecutor::prepare(ExprContext* ctx, RuntimeState* state) {
     return ctx->prepare(state);
 }
 
-Status ExecExecutor::open(ExprContext* ctx, RuntimeState* state) {
+Status ExprExecutor::open(ExprContext* ctx, RuntimeState* state) {
     return ctx->open(state);
 }
 
-void ExecExecutor::close(ExprContext* ctx, RuntimeState* state) {
+void ExprExecutor::close(ExprContext* ctx, RuntimeState* state) {
     if (ctx != nullptr) {
         ctx->close(state);
     }
 }
 
-Status ExecExecutor::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
+Status ExprExecutor::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto* ctx : ctxs) {
         RETURN_IF_ERROR(ctx->prepare(state));
     }
     return Status::OK();
 }
 
-Status ExecExecutor::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
+Status ExprExecutor::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto* ctx : ctxs) {
         RETURN_IF_ERROR(ctx->open(state));
     }
     return Status::OK();
 }
 
-void ExecExecutor::close(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
+void ExprExecutor::close(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto* ctx : ctxs) {
         if (ctx != nullptr) {
             ctx->close(state);
@@ -54,21 +54,21 @@ void ExecExecutor::close(const std::vector<ExprContext*>& ctxs, RuntimeState* st
     }
 }
 
-Status ExecExecutor::prepare(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
+Status ExprExecutor::prepare(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
     for (const auto& [_, ctx] : ctxs) {
         RETURN_IF_ERROR(ctx->prepare(state));
     }
     return Status::OK();
 }
 
-Status ExecExecutor::open(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
+Status ExprExecutor::open(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
     for (const auto& [_, ctx] : ctxs) {
         RETURN_IF_ERROR(ctx->open(state));
     }
     return Status::OK();
 }
 
-void ExecExecutor::close(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
+void ExprExecutor::close(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
     for (const auto& [_, ctx] : ctxs) {
         if (ctx != nullptr) {
             ctx->close(state);
@@ -76,7 +76,7 @@ void ExecExecutor::close(const std::map<SlotId, ExprContext*>& ctxs, RuntimeStat
     }
 }
 
-Status ExecExecutor::clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
+Status ExprExecutor::clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
                                          std::vector<ExprContext*>* new_ctxs) {
     if (new_ctxs == nullptr) {
         return Status::InvalidArgument("new_ctxs is null");

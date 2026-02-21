@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/set/except_probe_sink_operator.h"
 
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 
 namespace starrocks::pipeline {
 
@@ -43,14 +43,14 @@ Status ExceptProbeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& 
 Status ExceptProbeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RETURN_IF_ERROR(ExecExecutor::prepare(_dst_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_dst_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_dst_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_dst_exprs, state));
 
     return Status::OK();
 }
 
 void ExceptProbeSinkOperatorFactory::close(RuntimeState* state) {
-    ExecExecutor::close(_dst_exprs, state);
+    ExprExecutor::close(_dst_exprs, state);
 
     OperatorFactory::close(state);
 }

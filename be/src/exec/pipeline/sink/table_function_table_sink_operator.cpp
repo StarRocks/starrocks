@@ -18,7 +18,7 @@
 #include <utility>
 
 #include "base/url_coding.h"
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
 
@@ -217,11 +217,11 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
 Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RETURN_IF_ERROR(ExecExecutor::prepare(_output_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_output_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_exprs, state));
 
-    RETURN_IF_ERROR(ExecExecutor::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
 
     if (boost::algorithm::iequals(_file_format, PARQUET_FORMAT)) {
         auto result = parquet::ParquetBuildHelper::make_schema(
@@ -245,8 +245,8 @@ OperatorPtr TableFunctionTableSinkOperatorFactory::create(int32_t degree_of_para
 }
 
 void TableFunctionTableSinkOperatorFactory::close(RuntimeState* state) {
-    ExecExecutor::close(_partition_exprs, state);
-    ExecExecutor::close(_output_exprs, state);
+    ExprExecutor::close(_partition_exprs, state);
+    ExprExecutor::close(_output_exprs, state);
     OperatorFactory::close(state);
 }
 

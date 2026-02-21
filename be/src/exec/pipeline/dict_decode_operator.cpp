@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "common/logging.h"
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 
@@ -92,8 +92,8 @@ Status DictDecodeOperator::reset_state(RuntimeState* state, const std::vector<Ch
 Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RETURN_IF_ERROR(ExecExecutor::prepare(_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
 
     auto* fragment_dict_state = state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
@@ -147,7 +147,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void DictDecodeOperatorFactory::close(RuntimeState* state) {
-    ExecExecutor::close(_expr_ctxs, state);
+    ExprExecutor::close(_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

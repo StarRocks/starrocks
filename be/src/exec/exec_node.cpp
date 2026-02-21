@@ -51,8 +51,8 @@
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/dictionary_get_expr.h"
-#include "exprs/exec_executor.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
@@ -197,7 +197,7 @@ Status ExecNode::prepare(RuntimeState* state) {
             "");
     _mem_tracker.reset(new MemTracker(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
                                       _runtime_profile->name(), nullptr));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, _runtime_profile.get()));
 
     // TODO(zc):
@@ -212,7 +212,7 @@ Status ExecNode::prepare(RuntimeState* state) {
 
 Status ExecNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
-    RETURN_IF_ERROR(ExecExecutor::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.open(state));
     push_down_join_runtime_filter(state, &_runtime_filter_collector);
     _runtime_filter_collector.wait(is_scan_node());
@@ -320,7 +320,7 @@ void ExecNode::close(RuntimeState* state) {
         i->close(state);
     }
 
-    ExecExecutor::close(_conjunct_ctxs, state);
+    ExprExecutor::close(_conjunct_ctxs, state);
     _runtime_filter_collector.close(state);
 }
 

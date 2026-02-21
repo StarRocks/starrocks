@@ -14,16 +14,16 @@
 
 #include "exec/pipeline/hash_partition_context.h"
 
-#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 
 namespace starrocks::pipeline {
 
 Status HashPartitionContext::prepare(RuntimeState* state, RuntimeProfile* profile) {
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     for (auto& expr : _partition_exprs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {

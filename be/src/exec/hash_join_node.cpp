@@ -40,8 +40,8 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
-#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/runtime_filter_bank.h"
@@ -204,9 +204,9 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _avg_output_chunk_size = ADD_COUNTER(_runtime_profile, "AvgOutputChunkSize", TUnit::UNIT);
     _runtime_profile->add_info_string("JoinType", to_string(_join_type));
 
-    RETURN_IF_ERROR(ExecExecutor::prepare(_build_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_probe_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_other_join_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_build_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_probe_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_other_join_conjunct_ctxs, state));
     if (_asof_join_condition_build_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_asof_join_condition_build_expr_ctx->prepare(state));
     }
@@ -286,9 +286,9 @@ Status HashJoinNode::open(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
 
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(ExecExecutor::open(_build_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_probe_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_other_join_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_build_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_probe_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_other_join_conjunct_ctxs, state));
     if (_asof_join_condition_build_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_asof_join_condition_build_expr_ctx->open(state));
     }
@@ -483,9 +483,9 @@ void HashJoinNode::close(RuntimeState* state) {
         return;
     }
 
-    ExecExecutor::close(_build_expr_ctxs, state);
-    ExecExecutor::close(_probe_expr_ctxs, state);
-    ExecExecutor::close(_other_join_conjunct_ctxs, state);
+    ExprExecutor::close(_build_expr_ctxs, state);
+    ExprExecutor::close(_probe_expr_ctxs, state);
+    ExprExecutor::close(_other_join_conjunct_ctxs, state);
     if (_asof_join_condition_build_expr_ctx != nullptr) {
         _asof_join_condition_build_expr_ctx->close(state);
     }

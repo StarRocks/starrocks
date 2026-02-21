@@ -18,7 +18,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"
@@ -143,14 +143,14 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
-    RETURN_IF_ERROR(ExecExecutor::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
     return Status::OK();
 }
 
 void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    ExecExecutor::close(conjunct_ctxs, state);
+    ExprExecutor::close(conjunct_ctxs, state);
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {

@@ -17,8 +17,8 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
@@ -102,21 +102,21 @@ Status ProjectOperator::reset_state(RuntimeState* state, const std::vector<Chunk
 
 Status ProjectOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_common_sub_expr_ctxs, state));
 
     DictOptimizeParser::set_output_slot_id(&_common_sub_expr_ctxs, _common_sub_column_ids);
     DictOptimizeParser::set_output_slot_id(&_expr_ctxs, _column_ids);
 
-    RETURN_IF_ERROR(ExecExecutor::open(_common_sub_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
 
     return Status::OK();
 }
 
 void ProjectOperatorFactory::close(RuntimeState* state) {
-    ExecExecutor::close(_expr_ctxs, state);
-    ExecExecutor::close(_common_sub_expr_ctxs, state);
+    ExprExecutor::close(_expr_ctxs, state);
+    ExprExecutor::close(_common_sub_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 } // namespace starrocks::pipeline

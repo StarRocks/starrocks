@@ -16,8 +16,8 @@
 
 #include <arrow/type.h>
 
-#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/arrow_result_writer.h"
 #include "runtime/buffer_control_block.h"
@@ -160,8 +160,8 @@ Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
 
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
 
-    RETURN_IF_ERROR(ExecExecutor::prepare(_output_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
 
     return Status::OK();
 }
@@ -171,7 +171,7 @@ void ResultSinkOperatorFactory::close(RuntimeState* state) {
         WARN_IF_ERROR(_sender->close(_fragment_ctx->final_status()), "close sender failed");
     }
 
-    ExecExecutor::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

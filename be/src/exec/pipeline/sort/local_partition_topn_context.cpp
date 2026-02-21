@@ -19,7 +19,7 @@
 #include <utility>
 
 #include "exec/chunks_sorter_topn.h"
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 
 namespace starrocks::pipeline {
@@ -46,8 +46,8 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t
 
 Status LocalPartitionTopnContext::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     for (auto& expr : _partition_exprs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {
@@ -157,8 +157,8 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
     }
 
     for (const auto& ctx : _pre_agg->_agg_expr_ctxs) {
-        RETURN_IF_ERROR(ExecExecutor::prepare(ctx, state));
-        RETURN_IF_ERROR(ExecExecutor::open(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::open(ctx, state));
     }
 
     return Status::OK();
@@ -407,8 +407,8 @@ LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driv
 }
 
 Status LocalPartitionTopnContextFactory::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecExecutor::prepare(_sort_exprs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_sort_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_sort_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_sort_exprs, state));
     return Status::OK();
 }
 

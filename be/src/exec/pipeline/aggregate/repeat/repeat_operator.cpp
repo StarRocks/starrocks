@@ -16,7 +16,7 @@
 
 #include "column/chunk.h"
 #include "exec/exec_node.h"
-#include "exprs/exec_executor.h"
+#include "exprs/expr_executor.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {
@@ -83,8 +83,8 @@ Status RepeatOperator::reset_state(starrocks::RuntimeState* state, const std::ve
 }
 
 Status RepeatOperatorFactory::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecExecutor::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
     return Status::OK();
 }
 

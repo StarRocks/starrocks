@@ -31,9 +31,9 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
 #include "exprs/column_ref.h"
-#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
@@ -91,8 +91,8 @@ Status ProjectNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
 
-    RETURN_IF_ERROR(ExecExecutor::prepare(_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::prepare(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_common_sub_expr_ctxs, state));
 
     _expr_compute_timer = ADD_TIMER(runtime_profile(), "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(runtime_profile(), "CommonSubExprComputeTime");
@@ -109,8 +109,8 @@ Status ProjectNode::open(RuntimeState* state) {
     DictOptimizeParser::set_output_slot_id(&_common_sub_expr_ctxs, _common_sub_slot_ids);
     DictOptimizeParser::set_output_slot_id(&_expr_ctxs, _slot_ids);
 
-    RETURN_IF_ERROR(ExecExecutor::open(_common_sub_expr_ctxs, state));
-    RETURN_IF_ERROR(ExecExecutor::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -193,8 +193,8 @@ void ProjectNode::close(RuntimeState* state) {
         return;
     }
 
-    ExecExecutor::close(_expr_ctxs, state);
-    ExecExecutor::close(_common_sub_expr_ctxs, state);
+    ExprExecutor::close(_expr_ctxs, state);
+    ExprExecutor::close(_common_sub_expr_ctxs, state);
 
     ExecNode::close(state);
 }

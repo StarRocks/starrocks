@@ -17,8 +17,8 @@
 #include "base/string/string_parser.hpp"
 #include "column/binary_column.h"
 #include "column/chunk.h"
-#include "exprs/exec_executor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/mem_pool.h"
 #include "storage/metadata_util.h"
@@ -359,17 +359,17 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
 }
 
 Status OlapTablePartitionParam::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecExecutor::prepare(_partitions_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partitions_expr_ctxs, state));
     return Status::OK();
 }
 
 Status OlapTablePartitionParam::open(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecExecutor::open(_partitions_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partitions_expr_ctxs, state));
     return Status::OK();
 }
 
 void OlapTablePartitionParam::close(RuntimeState* state) {
-    ExecExecutor::close(_partitions_expr_ctxs, state);
+    ExprExecutor::close(_partitions_expr_ctxs, state);
 }
 
 Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key) {
