@@ -52,7 +52,10 @@ protected:
                                           config::vector_chunk_size)
                             .ok());
         _runtime_state.set_desc_tbl(_desc_tbl);
-        _tuple_id = _desc_tbl->tuple_descriptors()[0]->id();
+        std::vector<TupleDescriptor*> tuple_descs;
+        _desc_tbl->get_tuple_descs(&tuple_descs);
+        ASSERT_EQ(1, tuple_descs.size());
+        _tuple_id = tuple_descs[0]->id();
     }
 
     TPlanNode make_base_plan_node(TPlanNodeType::type node_type) const {
