@@ -126,6 +126,9 @@ set(EXPR_FILES
 
 if(STARROCKS_JIT_ENABLE)
   set(EXPR_FILES ${EXPR_FILES}
+      jit/expr_jit_codegen.cpp
+      jit/expr_jit_rewriter.cpp
+      jit/expr_jit_pass.cpp
       jit/ir_helper.cpp
       jit/jit_engine.cpp
       jit/jit_expr.cpp)

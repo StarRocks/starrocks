@@ -47,7 +47,6 @@
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -207,26 +206,6 @@ bool ExprContext::is_index_only_filter() const {
 
 bool ExprContext::error_if_overflow() const {
     return _runtime_state != nullptr && _runtime_state->error_if_overflow();
-}
-
-Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
-    if (_runtime_state == nullptr || !RuntimeStateHelper::is_jit_enabled(_runtime_state)) {
-        return Status::OK();
-    }
-#ifdef STARROCKS_JIT_ENABLE
-    bool replaced = false;
-    auto st = _root->replace_compilable_exprs(&_root, pool, _runtime_state, replaced);
-    if (!st.ok()) {
-        LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (root())->debug_string();
-        // Fall back to the non-JIT path.
-        return Status::OK();
-    }
-    if (replaced) { // only prepare jit_expr
-        WARN_IF_ERROR(_root->prepare_jit_expr(_runtime_state, this), "prepare rewritten expr failed");
-    }
-#endif
-
-    return Status::OK();
 }
 
 } // namespace starrocks
