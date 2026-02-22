@@ -60,7 +60,6 @@ class Literal;
 struct UserFunctionCacheEntry;
 
 class Chunk;
-class ColumnRef;
 class ColumnPredicateRewriter;
 class JITContext;
 class JITExpr;
@@ -165,9 +164,6 @@ public:
 
     // TODO:(murphy) remove this unchecked evaluate
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
-
-    // Get the first column ref in expr.
-    ColumnRef* get_column_ref();
 
 #ifdef STARROCKS_JIT_ENABLE
     StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
