@@ -39,7 +39,7 @@ public:
     // The input column is nullable or non-nullable uint8 column
     // The result column is not nullable uint8 column
     // For nullable uint8 column, we merge it's null column and data column
-    // Used in ExecNode::eval_conjuncts
+    // Used in ChunkPredicateEvaluator::eval_conjuncts
     static Filter& merge_nullable_filter(Column* column);
 
     // merge column with filter, and save result to filer.

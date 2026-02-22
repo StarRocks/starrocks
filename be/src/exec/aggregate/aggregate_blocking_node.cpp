@@ -32,6 +32,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 
@@ -155,7 +156,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+    RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
     _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>((*chunk)->num_rows())));
 
     _aggregator->process_limit(chunk);

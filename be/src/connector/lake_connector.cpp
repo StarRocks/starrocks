@@ -21,6 +21,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "runtime/current_thread.h"
@@ -173,7 +174,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         if (!_not_push_down_conjuncts.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t before_rows = chunk_ptr->num_rows();
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk_ptr));
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_not_push_down_conjuncts, chunk_ptr));
             size_t after_rows = chunk_ptr->num_rows();
             DCHECK_CHUNK(chunk_ptr);
             COUNTER_UPDATE(_expr_filter_counter, before_rows - after_rows);

@@ -14,13 +14,13 @@
 
 #include "connector/file_connector.h"
 
-#include "exec/exec_node.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/avro_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/json_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "file_chunk_sink.h"
 #include "runtime/starrocks_metrics.h"
@@ -151,7 +151,7 @@ Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         _counter.filtered_rows_read += before_rows;
         // eval conjuncts
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
         _counter.num_rows_read += (*chunk)->num_rows();
         _counter.num_rows_unselected += (before_rows - (*chunk)->num_rows());
         _counter.num_bytes_read += (*chunk)->bytes_usage();

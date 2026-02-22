@@ -46,6 +46,7 @@ set(EXPR_FILES
   binary_functions.cpp
   expr_factory.cpp
   expr_executor.cpp
+  chunk_predicate_evaluator.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
   table_function/list_rowsets.cpp

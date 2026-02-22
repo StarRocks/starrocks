@@ -160,16 +160,6 @@ public:
     // Collect all scan node types.
     void collect_scan_nodes(std::vector<ExecNode*>* nodes);
 
-    // evaluate exprs over chunk to get a filter
-    // if filter_ptr is not null, save filter to filter_ptr.
-    // then running filter on chunk.
-    static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk, FilterPtr* filter_ptr = nullptr,
-                                 bool apply_filter = true);
-    static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, Chunk* chunk,
-                                                       Filter* filter);
-
-    static void eval_filter_null_values(Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
-
     Status init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state);
     void register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc);
     void eval_join_runtime_filters(Chunk* chunk);
