@@ -33,7 +33,6 @@ set(EXPR_CORE_FILES
   literal.cpp
   map_expr.cpp
   map_element_expr.cpp
-  map_functions.cpp
   match_expr.cpp
   placeholder_ref.cpp
   regexp_split.cpp
@@ -103,6 +102,7 @@ set(EXPR_FILES
   variant_functions.cpp
   like_predicate.cpp
   locate.cpp
+  map_functions.cpp
   math_functions.cpp
   percentile_functions.cpp
   runtime_filter_bank.cpp

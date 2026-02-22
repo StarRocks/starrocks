@@ -29,7 +29,7 @@ set(STARROCKS_LIBS
     Connector
     Exec
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
-    ExprCore
+    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
     FileSystem
     Formats
     Gutil

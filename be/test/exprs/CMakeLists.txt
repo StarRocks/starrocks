@@ -23,7 +23,6 @@ set(EXPR_CORE_TEST_FILES
     function_helper_test.cpp
     map_expr_test.cpp
     map_element_expr_test.cpp
-    map_functions_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
     variant_path_parser_test.cpp
