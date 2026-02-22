@@ -31,6 +31,17 @@ TypeDescriptor map_type(LogicalType key, LogicalType value) {
     return type_creator;
 }
 
+TypeDescriptor array_type(const TypeDescriptor& child_type) {
+    TypeDescriptor type_creator;
+    type_creator.type = LogicalType::TYPE_ARRAY;
+    type_creator.children.emplace_back(child_type);
+    return type_creator;
+}
+
+TypeDescriptor array_type(const LogicalType& child_type) {
+    return array_type(TypeDescriptor(child_type));
+}
+
 PARALLEL_TEST(MapFunctionsTest, test_map) {
     TypeDescriptor input_keys_type;
     input_keys_type.type = LogicalType::TYPE_ARRAY;

@@ -21,7 +21,20 @@ set(EXPR_CORE_FILES
   function_context.cpp
   expr_context.cpp
   expr.cpp
+  array_element_expr.cpp
+  function_helper.cpp
+  literal.cpp
+  map_element_expr.cpp
+  map_functions.cpp
+  struct_functions.cpp
+  subfield_expr.cpp
+  variant_path_parser.cpp
 )
+
+if(STARROCKS_JIT_ENABLE)
+  set(EXPR_CORE_FILES ${EXPR_CORE_FILES}
+      jit/ir_helper.cpp)
+endif()
 
 ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
 target_link_libraries(ExprCore PUBLIC RuntimeCore)
@@ -51,7 +64,6 @@ set(EXPR_FILES
   table_function/json_each.cpp
   table_function/list_rowsets.cpp
   arithmetic_expr.cpp
-  array_element_expr.cpp
   array_expr.cpp
   array_functions.cpp
   arrow_function_call.cpp
@@ -73,7 +85,6 @@ set(EXPR_FILES
   es_functions.cpp
   find_in_set.cpp
   function_call_expr.cpp
-  function_helper.cpp
   geo_functions.cpp
   grouping_sets_functions.cpp
   hyperloglog_functions.cpp
@@ -85,13 +96,8 @@ set(EXPR_FILES
   json_functions.cpp
   jsonpath.cpp
   variant_functions.cpp
-  variant_path_parser.cpp
   like_predicate.cpp
-  literal.cpp
   locate.cpp
-  map_element_expr.cpp
-  map_functions.cpp
-  struct_functions.cpp
   math_functions.cpp
   percentile_functions.cpp
   runtime_filter_bank.cpp
@@ -110,7 +116,6 @@ set(EXPR_FILES
   lambda_function.cpp
   array_map_expr.cpp
   array_sort_lambda_expr.cpp
-  subfield_expr.cpp
   map_apply_expr.cpp
   map_expr.cpp
   substring_index.cpp
@@ -130,7 +135,6 @@ if(STARROCKS_JIT_ENABLE)
       jit/expr_jit_codegen.cpp
       jit/expr_jit_rewriter.cpp
       jit/expr_jit_pass.cpp
-      jit/ir_helper.cpp
       jit/jit_engine.cpp
       jit/jit_expr.cpp)
 
