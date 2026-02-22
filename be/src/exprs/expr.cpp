@@ -43,6 +43,7 @@
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
+#include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 
 #ifdef STARROCKS_JIT_ENABLE

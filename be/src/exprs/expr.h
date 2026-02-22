@@ -41,7 +41,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
@@ -52,6 +51,7 @@ namespace starrocks {
 class BloomFilter;
 class Expr;
 class ObjectPool;
+struct NgramBloomFilterReaderOptions;
 class RuntimeState;
 class TColumnValue;
 class TExpr;
@@ -60,6 +60,7 @@ class Literal;
 struct UserFunctionCacheEntry;
 
 class Chunk;
+class ExprContext;
 class ColumnPredicateRewriter;
 class JITContext;
 class JITExpr;
