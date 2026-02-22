@@ -22,6 +22,7 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "exprs/expr_context.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 

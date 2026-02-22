@@ -40,6 +40,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -810,7 +811,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
 
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_where_conjunct_evaluate_timer);
-            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
             if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
@@ -831,7 +832,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
 
         eval_join_runtime_filters(chunk);
         if (!_conjunct_ctxs.empty()) {
-            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
         }
 
         if (check_chunk_zero_and_create_new(chunk)) {
@@ -970,7 +971,7 @@ Status HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
     default:
         // the other join conjunct for inner join will be convert to other predicate
         // so can't reach here
-        return eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get());
+        return ChunkPredicateEvaluator::eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get());
     }
 }
 

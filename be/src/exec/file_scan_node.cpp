@@ -32,6 +32,7 @@
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "common/thread/thread.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "fs/fs.h"
@@ -268,7 +269,7 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
         runtime_state()->update_num_bytes_load_from_source(temp_chunk->bytes_usage());
 
         // eval conjuncts
-        RETURN_IF_ERROR(eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
         counter->num_rows_unselected += (before_rows - temp_chunk->num_rows());
 
         // Row batch has been filled, push this to the queue
