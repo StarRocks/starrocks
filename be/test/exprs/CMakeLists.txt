@@ -14,11 +14,14 @@
 
 set(EXPR_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    array_expr_test.cpp
     function_context_core_test.cpp
     expr_core_test.cpp
     expr_context_core_test.cpp
     array_element_expr_test.cpp
+    es_functions_test.cpp
     function_helper_test.cpp
+    map_expr_test.cpp
     map_element_expr_test.cpp
     map_functions_test.cpp
     struct_functions_test.cpp

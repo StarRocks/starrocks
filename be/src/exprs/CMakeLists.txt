@@ -22,10 +22,22 @@ set(EXPR_CORE_FILES
   expr_context.cpp
   expr.cpp
   array_element_expr.cpp
+  array_expr.cpp
+  base64.cpp
+  bit_functions.cpp
+  column_ref.cpp
+  es_functions.cpp
+  expr_executor.cpp
   function_helper.cpp
+  info_func.cpp
   literal.cpp
+  map_expr.cpp
   map_element_expr.cpp
   map_functions.cpp
+  match_expr.cpp
+  placeholder_ref.cpp
+  regexp_split.cpp
+  runtime_filter_layout.cpp
   struct_functions.cpp
   subfield_expr.cpp
   variant_path_parser.cpp
@@ -55,16 +67,13 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
   agg/combinator/agg_state_utils.cpp
-  base64.cpp
   binary_functions.cpp
   expr_factory.cpp
-  expr_executor.cpp
   chunk_predicate_evaluator.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
   table_function/list_rowsets.cpp
   arithmetic_expr.cpp
-  array_expr.cpp
   array_functions.cpp
   arrow_function_call.cpp
   binary_predicate.cpp
@@ -76,20 +85,16 @@ set(EXPR_FILES
   cast_expr_struct.cpp
   cast_expr_map.cpp
   cast_nested.cpp
-  column_ref.cpp
-  placeholder_ref.cpp
   dictmapping_expr.cpp
   compound_predicate.cpp
   condition_expr.cpp
   encryption_functions.cpp
-  es_functions.cpp
   find_in_set.cpp
   function_call_expr.cpp
   geo_functions.cpp
   grouping_sets_functions.cpp
   hyperloglog_functions.cpp
   in_const_predicate.cpp
-  info_func.cpp
   inet_aton.cpp
   in_predicate.cpp
   is_null_predicate.cpp
@@ -103,7 +108,6 @@ set(EXPR_FILES
   runtime_filter_bank.cpp
   runtime_filter.cpp
   split.cpp
-  regexp_split.cpp
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
@@ -117,14 +121,10 @@ set(EXPR_FILES
   array_map_expr.cpp
   array_sort_lambda_expr.cpp
   map_apply_expr.cpp
-  map_expr.cpp
   substring_index.cpp
   dict_query_expr.cpp
-  runtime_filter_layout.cpp
   dictionary_get_expr.cpp
   ngram.cpp
-  match_expr.cpp
-  bit_functions.cpp
   hash_functions.cpp
   gin_functions.cpp
   ai_functions.cpp

@@ -135,7 +135,6 @@ set(EXEC_FILES
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/decimal_binary_function_test.cpp
-        ./exprs/array_expr_test.cpp
         ./exprs/array_functions_test.cpp
         ./exprs/binary_function_test.cpp
         ./exprs/binary_functions_test.cpp
@@ -166,7 +165,6 @@ set(EXEC_FILES
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
-        ./exprs/map_expr_test.cpp
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
@@ -186,7 +184,6 @@ set(EXEC_FILES
         ./exprs/string_fn_money_format_decimal_test.cpp
         ./exprs/string_fn_url_extract_parameter_test.cpp
         ./exprs/time_functions_test.cpp
-        ./exprs/es_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
         ./exprs/variant_functions_test.cpp
