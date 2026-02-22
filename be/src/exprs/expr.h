@@ -42,6 +42,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
+#include "exprs/jit/expr_jit_types.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
@@ -62,10 +63,6 @@ struct UserFunctionCacheEntry;
 class Chunk;
 class ExprContext;
 class ColumnPredicateRewriter;
-class JITContext;
-class JITExpr;
-struct JitScore;
-struct LLVMDatum;
 class LambdaFunction;
 
 // This is the superclass of all expr evaluation nodes.
@@ -101,6 +98,7 @@ public:
 
     const TypeDescriptor& type() const { return _type; }
     const std::vector<Expr*>& children() const { return _children; }
+    std::vector<Expr*>& mutable_children() { return _children; }
 
     TExprOpcode::type op() const { return _opcode; }
 
@@ -167,33 +165,8 @@ public:
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
 
 #ifdef STARROCKS_JIT_ENABLE
-    StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
-
-    virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
-
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable(RuntimeState* state) const { return false; }
-
-    std::string jit_func_name(RuntimeState* state) const;
-
-    virtual std::string jit_func_name_impl(RuntimeState* state) const;
-
-    std::string jit_func_name() const;
-
-    // This function will collect all uncompiled expressions in this expression tree.
-    // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
-    void get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state);
-
-    // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
-    // This method searches from top to bottom for compilable expressions.
-    // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
-    // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
-    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced);
-
-    // Establishes whether the current expression should undergo compilation.
-    // if adaptive, the valuable expressions should take the majority, i.e., `jit_score_ratio` of all expressions,
-    // but case_when expr is especial, refer to its `compute_jit_score()`.
-    bool should_compile(RuntimeState* state) const;
 
     // The valuable expressions get 1 score per expression, others get 0 score per expression, including
     // comparison expr, logical expr, branch expr, div and mod.
@@ -326,7 +299,6 @@ protected:
         return out.str();
     }
 #ifdef STARROCKS_JIT_ENABLE
-    Status prepare_jit_expr(RuntimeState* state, ExprContext* context);
 #endif
 };
 

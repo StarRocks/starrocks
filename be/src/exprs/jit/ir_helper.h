@@ -20,6 +20,7 @@
 
 #include "column/type_traits.h"
 #include "common/statusor.h"
+#include "exprs/jit/expr_jit_types.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -68,21 +69,6 @@ struct JITContext {
     int input_index = 0;
 };
 
-struct JitScore {
-    int64_t score = 0;
-    int64_t num = 0;
-};
-
-enum CompilableExprType : int32_t {
-    ARITHMETIC = 2, // except /, %
-    CAST = 4,
-    CASE = 8,
-    CMP = 16,
-    LOGICAL = 32,
-    DIV = 64,
-    MOD = 128,
-};
-
 class IRHelper {
 public:
     /**
@@ -117,8 +103,6 @@ public:
     static llvm::Value* build_if_else(llvm::Value* condition, llvm::Type* return_type,
                                       const std::function<llvm::Value*()>& then_func,
                                       const std::function<llvm::Value*()>& else_func, llvm::IRBuilder<>* builder);
-
-    static constexpr double jit_score_ratio = 0.88; // whether the expr can be jit
 };
 
 } // namespace starrocks

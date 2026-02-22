@@ -62,6 +62,7 @@
 #include "util/variant_encoder.h"
 
 #ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_codegen.h"
 #include "exprs/jit/ir_helper.h"
 #endif
 
@@ -1155,7 +1156,13 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 // clang-format on
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-class VectorizedCastExpr final : public Expr {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedCastExpr final : public Expr,
+                                 public JITCodegenNode
+#else
+class VectorizedCastExpr final : public Expr
+#endif
+{
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
@@ -1242,12 +1249,12 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{cast(" + _children[0]->jit_func_name(state) + ")}" + (is_constant() ? "c:" : "") +
+        return "{cast(" + ExprJITCodegen::func_name(_children[0], state) + ")}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
-        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(auto datum, ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
         auto* l = datum.value;
         auto& b = jit_ctx->builder;
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {

@@ -20,6 +20,9 @@
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state_helper.h"
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_pass.h"
+#endif
 #include "storage/tablet.h"
 
 namespace starrocks::pipeline {
@@ -31,7 +34,11 @@ Status ConcurrentJitRewriter::rewrite(std::vector<ExprContext*>& expr_ctxs, Obje
     }
     _barrier.arrive();
     for (int i = _id.fetch_add(1); i < expr_ctxs.size(); i = _id.fetch_add(1)) {
-        auto st = expr_ctxs[i]->rewrite_jit_expr(pool);
+#ifdef STARROCKS_JIT_ENABLE
+        auto st = ExprJITPass::rewrite_context(expr_ctxs[i], pool);
+#else
+        auto st = Status::OK();
+#endif
         if (!st.ok()) {
             _errors++;
         }

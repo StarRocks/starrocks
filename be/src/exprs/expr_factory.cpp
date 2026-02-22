@@ -55,6 +55,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_pass.h"
+#endif
 
 namespace starrocks {
 
@@ -259,12 +262,7 @@ Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExp
     }
 
 #ifdef STARROCKS_JIT_ENABLE
-    bool replaced = false;
-    status = (*root_expr)->replace_compilable_exprs(root_expr, pool, state, replaced);
-    if (!status.ok()) {
-        LOG(WARNING) << "Can't replace compilable exprs.\n" << status.message() << "\n" << (*root_expr)->debug_string();
-        return Status::OK();
-    }
+    RETURN_IF_ERROR(ExprJITPass::rewrite_root(root_expr, pool, state));
 #endif
 
     return status;

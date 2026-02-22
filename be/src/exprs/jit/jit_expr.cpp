@@ -26,6 +26,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
+#include "exprs/jit/expr_jit_codegen.h"
 #include "exprs/jit/jit_engine.h"
 #include "runtime/runtime_state.h"
 
@@ -45,7 +46,7 @@ JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {}
 
 void JITExpr::set_uncompilable_children(RuntimeState* state) {
     _children.clear();
-    _expr->get_uncompilable_exprs(_children, state);
+    ExprJITCodegen::collect_uncompilable_exprs(_expr, _children, state);
 }
 
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
@@ -74,7 +75,7 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
         if (!jit_engine->support_jit()) {
             return Status::JitCompileError("JIT is not supported");
         }
-        auto expr_name = _expr->jit_func_name(state);
+        auto expr_name = ExprJITCodegen::func_name(_expr, state);
         ASSIGN_OR_RETURN(_jit_callable, jit_engine->get_jit_callable(expr_name, context, _expr, _children));
         auto elapsed = MonotonicNanos() - start;
         if (state->fragment_ctx() != nullptr) {

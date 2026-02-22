@@ -103,6 +103,9 @@ public:
     }
 
     Expr* root() { return _root; }
+    Expr** mutable_root() { return &_root; }
+    void set_root(Expr* root) { _root = root; }
+    RuntimeState* runtime_state() const { return _runtime_state; }
 
     bool closed() { return _closed; }
 
@@ -119,8 +122,6 @@ public:
     bool is_index_only_filter() const;
 
     bool error_if_overflow() const;
-
-    Status rewrite_jit_expr(ObjectPool* pool);
 
     void set_build_from_only_in_filter(bool build_from_only_in_filter) {
         _build_from_only_in_filter = build_from_only_in_filter;
