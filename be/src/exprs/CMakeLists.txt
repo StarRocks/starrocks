@@ -19,6 +19,8 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 set(EXPR_CORE_FILES
   function_context.cpp
+  expr_context.cpp
+  expr.cpp
 )
 
 ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
@@ -44,8 +46,6 @@ set(EXPR_FILES
   binary_functions.cpp
   expr_factory.cpp
   expr_executor.cpp
-  expr_context.cpp
-  expr.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
   table_function/list_rowsets.cpp

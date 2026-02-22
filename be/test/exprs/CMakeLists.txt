@@ -15,6 +15,8 @@
 set(EXPR_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     function_context_core_test.cpp
+    expr_core_test.cpp
+    expr_context_core_test.cpp
 )
 
 set(EXPR_CORE_TEST_LINK_LIBS
@@ -41,4 +43,3 @@ target_link_libraries(starrocks_expr_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_expr_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(expr_core_test $<TARGET_OBJECTS:starrocks_expr_core_test_objs>)
 target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS} gtest_main)
-
