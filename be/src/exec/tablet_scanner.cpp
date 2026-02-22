@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/fragment_dict_state.h"
@@ -294,7 +295,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         }
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, chunk));
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk));
             DCHECK_CHUNK(chunk);
         }
         TRY_CATCH_ALLOC_SCOPE_END()

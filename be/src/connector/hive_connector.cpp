@@ -18,7 +18,6 @@
 
 #include "common/config.h"
 #include "connector/hive_chunk_sink.h"
-#include "exec/exec_node.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
@@ -28,6 +27,7 @@
 #include "exec/hdfs_scanner/jni_scanner.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -320,9 +320,9 @@ Status HiveDataSource::_init_partition_values() {
                             _conjunct_ctxs_by_slot.at(slotId).end());
             }
         }
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, partition_chunk.get()));
     } else if (_has_partition_conjuncts) {
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
     }
 
     if (!partition_chunk->has_rows()) {

@@ -20,7 +20,7 @@
 #include "exec/es/es_scan_reader.h"
 #include "exec/es/es_scroll_parser.h"
 #include "exec/es/es_scroll_query.h"
-#include "exec/exec_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
@@ -263,7 +263,7 @@ Status ESDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
             _rows_read_number += before;
             _bytes_read += ck->bytes_usage();
 
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, ck));
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, ck));
 
             int64_t after = ck->num_rows();
             _rows_return_number += after;

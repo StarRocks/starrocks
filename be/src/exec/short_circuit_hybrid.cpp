@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/util/thrift_util.h"
 #include "exec/scan_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -109,7 +110,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
                         ->append(*(_value_chunk->get_column_by_name(field->name().data()).get()));
             }
         }
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
         if (result_chunk->num_rows() == 0) {
             *eos = true;
         }

@@ -24,8 +24,8 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
-#include "exec/exec_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/utils.h"
 #include "gen_cpp/parquet_types.h"
@@ -71,8 +71,8 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     dict_value_chunk->append_column(result_column, slot_id);
     Filter filter(dict_size, 1);
     int dict_values_after_filter = 0;
-    ASSIGN_OR_RETURN(dict_values_after_filter,
-                     ExecNode::eval_conjuncts_into_filter(conjunct_ctxs, dict_value_chunk.get(), &filter));
+    ASSIGN_OR_RETURN(dict_values_after_filter, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
+                                                       conjunct_ctxs, dict_value_chunk.get(), &filter));
 
     // dict column is empty after conjunct eval, file group can be skipped
     if (dict_values_after_filter == 0) {

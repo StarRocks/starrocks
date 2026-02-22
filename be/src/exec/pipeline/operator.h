@@ -174,7 +174,7 @@ public:
 
     const std::vector<SlotId>& filter_null_value_columns() const;
 
-    // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
+    // equal to ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
                                          FilterPtr* filter = nullptr, bool apply_filter = true);
     // evaluate no eq join runtime in filters

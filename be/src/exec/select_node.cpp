@@ -37,6 +37,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/select_operator.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
@@ -94,7 +95,7 @@ Status SelectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
     {
         SCOPED_TIMER(_conjunct_evaluate_timer);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
     }
     _num_rows_returned += (*chunk)->num_rows();
 

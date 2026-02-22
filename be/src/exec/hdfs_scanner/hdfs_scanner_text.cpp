@@ -18,7 +18,7 @@
 
 #include "base/string/utf8_check.h"
 #include "column/column_helper.h"
-#include "exec/exec_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "gutil/strings/substitute.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_decompressor.h"
@@ -315,7 +315,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
         // do evaluation.
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, ck.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(it.second, ck.get()));
         if (ck->num_rows() == 0) {
             break;
         }

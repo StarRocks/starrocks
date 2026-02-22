@@ -18,6 +18,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -159,7 +160,7 @@ Status RepeatNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     if ((*chunk) != nullptr) {
         ExecNode::eval_join_runtime_filters(chunk);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
         _num_rows_returned += (*chunk)->num_rows();
     }
     DCHECK_CHUNK(*chunk);

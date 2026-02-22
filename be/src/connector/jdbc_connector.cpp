@@ -17,7 +17,6 @@
 #include <sstream>
 
 #include "base/string/slice.h"
-#include "exec/exec_node.h"
 #include "exec/jdbc_scanner.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors_ext.h"

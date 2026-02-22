@@ -21,6 +21,7 @@
 #include "exec/pipeline/scan/schema_scan_context.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/schema_scanner/schema_helper.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
 
@@ -254,7 +255,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         {
             SCOPED_TIMER(_filter_timer);
             if (!_conjunct_ctxs.empty()) {
-                RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_dst.get()));
+                RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk_dst.get()));
             }
         }
         row_num = chunk_dst->num_rows();
