@@ -24,6 +24,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/cast_expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_tracker.h"

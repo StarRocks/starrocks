@@ -47,6 +47,7 @@
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "runtime/exception.h"

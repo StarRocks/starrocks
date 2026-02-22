@@ -18,6 +18,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/mem_pool.h"
