@@ -34,6 +34,7 @@
 #include "common/status.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "format_utils.h"
@@ -416,7 +417,7 @@ private:
 
             if (!_not_push_down_conjuncts.empty()) {
                 // SCOPED_TIMER(_expr_filter_timer);
-                auto status = ExecNode::eval_conjuncts(_not_push_down_conjuncts, _scan_chunk.get());
+                auto status = ChunkPredicateEvaluator::eval_conjuncts(_not_push_down_conjuncts, _scan_chunk.get());
                 DCHECK_CHUNK(_scan_chunk.get());
             }
 
