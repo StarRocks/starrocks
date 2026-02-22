@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -153,7 +154,7 @@ Status TabletSinkColocateSender::try_open(RuntimeState* state) {
         return TabletSinkSender::try_open(state);
     }
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     RETURN_IF_ERROR(_partition_params->open(state));
     for_each_node_channel([](NodeChannel* ch) { ch->try_open(); });
     return Status::OK();
@@ -320,7 +321,7 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
     COUNTER_UPDATE(ts_profile->server_wait_flush_timer, total_server_wait_memtable_flush_time_us * 1000);
     LOG(INFO) << ss.str();
 
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     if (_partition_params) {
         _partition_params->close(state);
     }

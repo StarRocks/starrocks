@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
+#include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/starrocks_metrics.h"
@@ -48,7 +49,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     _need_agg_finalize = params.need_agg_finalize;
     _update_num_scan_range = params.update_num_scan_range;
 
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
+    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
 
     // if column_desc come from fe, reset tablet schema
@@ -119,7 +120,7 @@ void TabletScanner::close(RuntimeState* state) {
     update_counter();
     _reader.reset();
     _predicate_free_pool.clear();
-    Expr::close(_conjunct_ctxs, state);
+    ExprExecutor::close(_conjunct_ctxs, state);
     _is_closed = true;
 }
 

@@ -22,6 +22,7 @@
 #include "exec/pipeline/set/except_output_source_operator.h"
 #include "exec/pipeline/set/except_probe_sink_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -67,7 +68,7 @@ Status ExceptNode::prepare(RuntimeState* state) {
     _get_result_timer = ADD_TIMER(runtime_profile(), "GetResultTime");
 
     for (auto& _child_expr_list : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_list, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_child_expr_list, state));
         DCHECK_EQ(_child_expr_list.size(), _tuple_desc->slots().size());
     }
 
@@ -100,7 +101,7 @@ Status ExceptNode::open(RuntimeState* state) {
 
     // open result expr lists.
     for (const vector<ExprContext*>& exprs : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     // initial build hash table used for remove duplicted
@@ -228,7 +229,7 @@ void ExceptNode::close(RuntimeState* state) {
     }
 
     for (auto& exprs : _child_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
 
     if (_build_pool != nullptr) {

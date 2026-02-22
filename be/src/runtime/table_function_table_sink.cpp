@@ -20,6 +20,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_file_writer.h"
@@ -42,7 +43,7 @@ Status TableFunctionTableSink::init(const TDataSink& thrift_sink, RuntimeState* 
 
 Status TableFunctionTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     std::stringstream title;
     title << "TableFunctionTableSink (frag_id=" << state->fragment_instance_id() << ")";
     _profile = _pool->add(new RuntimeProfile(title.str()));
@@ -50,7 +51,7 @@ Status TableFunctionTableSink::prepare(RuntimeState* state) {
 }
 
 Status TableFunctionTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -59,7 +60,7 @@ Status TableFunctionTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 Status TableFunctionTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 

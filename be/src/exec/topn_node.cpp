@@ -33,6 +33,7 @@
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -61,8 +62,8 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
                                                        &_analytic_partition_exprs, state));
-        RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, runtime_state()));
-        RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, runtime_state()));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_analytic_partition_exprs, runtime_state()));
+        RETURN_IF_ERROR(ExprExecutor::open(_analytic_partition_exprs, runtime_state()));
         for (auto& expr : _analytic_partition_exprs) {
             auto& type_desc = expr->root()->type();
             if (!type_desc.support_groupby()) {

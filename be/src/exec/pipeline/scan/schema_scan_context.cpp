@@ -18,14 +18,15 @@
 
 #include "exec/schema_scanner.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 
 namespace starrocks::pipeline {
 
 Status SchemaScanContext::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_obj_pool, _tnode.conjuncts, &_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_prepare_params(state, _conjunct_ctxs));
     return Status::OK();
 }

@@ -25,6 +25,7 @@
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
@@ -60,7 +61,7 @@ FileScanner::~FileScanner() = default;
 
 void FileScanner::close() {
     if (!_schema_only) {
-        Expr::close(_dest_expr_ctx, _state);
+        ExprExecutor::close(_dest_expr_ctx, _state);
     }
 }
 

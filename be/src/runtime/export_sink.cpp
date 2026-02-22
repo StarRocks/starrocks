@@ -42,6 +42,7 @@
 #include "common/runtime_profile.h"
 #include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
@@ -80,7 +81,7 @@ Status ExportSink::prepare(RuntimeState* state) {
     SCOPED_TIMER(_profile->total_time_counter());
 
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
 
     // TODO(lingbin): add some Counter
     _bytes_written_counter = ADD_COUNTER(profile(), "BytesExported", TUnit::BYTES);
@@ -92,7 +93,7 @@ Status ExportSink::prepare(RuntimeState* state) {
 
 Status ExportSink::open(RuntimeState* state) {
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     // open broker
     int query_timeout = state->query_options().query_timeout;
     int timeout_ms = query_timeout > 3600 ? 3600000 : query_timeout * 1000;
@@ -104,7 +105,7 @@ Status ExportSink::close(RuntimeState* state, Status exec_status) {
     if (_closed) {
         return Status::OK();
     }
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     if (_file_builder != nullptr) {
         Status st = _file_builder->finish();
         _file_builder.reset();

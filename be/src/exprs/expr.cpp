@@ -207,39 +207,11 @@ struct MemLayoutData {
     }
 };
 
-Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
-    for (auto ctx : ctxs) {
-        RETURN_IF_ERROR(ctx->prepare(state));
-    }
-    return Status::OK();
-}
-
-Status Expr::prepare(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
-    for (const auto& [_, ctx] : ctxs) {
-        RETURN_IF_ERROR(ctx->prepare(state));
-    }
-    return Status::OK();
-}
-
 Status Expr::prepare(RuntimeState* state, ExprContext* context) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(randome_error);
     DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->prepare(state, context));
-    }
-    return Status::OK();
-}
-
-Status Expr::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
-    for (auto ctx : ctxs) {
-        RETURN_IF_ERROR(ctx->open(state));
-    }
-    return Status::OK();
-}
-
-Status Expr::open(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
-    for (const auto& [_, ctx] : ctxs) {
-        RETURN_IF_ERROR(ctx->open(state));
     }
     return Status::OK();
 }
@@ -251,22 +223,6 @@ Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::Fu
         RETURN_IF_ERROR(i->open(state, context, scope));
     }
     return Status::OK();
-}
-
-void Expr::close(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
-    for (auto ctx : ctxs) {
-        if (ctx != nullptr) {
-            ctx->close(state);
-        }
-    }
-}
-
-void Expr::close(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state) {
-    for (const auto& [_, ctx] : ctxs) {
-        if (ctx != nullptr) {
-            ctx->close(state);
-        }
-    }
 }
 
 void Expr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
@@ -283,25 +239,6 @@ void Expr::close(RuntimeState* state, ExprContext* context, FunctionContext::Fun
         }
     }
 #endif
-}
-
-Status Expr::clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
-                                 std::vector<ExprContext*>* new_ctxs) {
-    DCHECK(new_ctxs != nullptr);
-    if (!new_ctxs->empty()) {
-        // 'ctxs' was already cloned into '*new_ctxs', nothing to do.
-        DCHECK_EQ(new_ctxs->size(), ctxs.size());
-        for (auto& new_ctx : *new_ctxs) {
-            DCHECK(new_ctx->_is_clone);
-        }
-        return Status::OK();
-    }
-
-    new_ctxs->resize(ctxs.size());
-    for (int i = 0; i < ctxs.size(); ++i) {
-        RETURN_IF_ERROR(ctxs[i]->clone(state, pool, &(*new_ctxs)[i]));
-    }
-    return Status::OK();
 }
 
 std::string Expr::debug_string() const {

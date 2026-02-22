@@ -23,6 +23,7 @@
 #include "exec/pipeline/dict_decode_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
@@ -75,14 +76,14 @@ void DictDecodeNode::_init_counter() {
 Status DictDecodeNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
     return Status::OK();
 }
 
 Status DictDecodeNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(_children[0]->open(state));
 
@@ -181,7 +182,7 @@ void DictDecodeNode::close(RuntimeState* state) {
         return;
     }
     ExecNode::close(state);
-    Expr::close(_expr_ctxs, state);
+    ExprExecutor::close(_expr_ctxs, state);
 }
 
 pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

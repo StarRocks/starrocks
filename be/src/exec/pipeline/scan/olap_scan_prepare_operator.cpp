@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
 #include "exec/olap_scan_node.h"
+#include "exprs/expr_executor.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {
@@ -128,15 +129,15 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
                                            &(tuple_desc->decoded_slots()));
     DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
 
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
 
     return Status::OK();
 }
 
 void OlapScanPrepareOperatorFactory::close(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
+    ExprExecutor::close(conjunct_ctxs, state);
 
     SourceOperatorFactory::close(state);
 }

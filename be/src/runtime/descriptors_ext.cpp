@@ -25,6 +25,7 @@
 #include "common/util/thrift_util.h"
 #include "exprs/base64.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -42,8 +43,8 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsPartition& thrift_pa
 Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool) {
     RETURN_IF_ERROR(
             ExprFactory::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
-    RETURN_IF_ERROR(Expr::open(_partition_key_value_evals, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_key_value_evals, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_key_value_evals, state));
     return Status::OK();
 }
 

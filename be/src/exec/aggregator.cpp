@@ -33,6 +33,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -284,15 +285,15 @@ Status Aggregator::open(RuntimeState* state) {
         return Status::OK();
     }
     _is_opened = true;
-    RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+        RETURN_IF_ERROR(ExprExecutor::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
     for (auto& _intermediate_agg_expr_ctx : _intermediate_agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::open(_intermediate_agg_expr_ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::open(_intermediate_agg_expr_ctx, state));
     }
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
 
     // init function context
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
@@ -526,17 +527,17 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
 
-    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_group_by_expr_ctxs, state));
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
     for (const auto& ctx : _intermediate_agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -775,11 +776,11 @@ void Aggregator::close(RuntimeState* state) {
             _hash_map_variant.reset();
         }
 
-        Expr::close(_group_by_expr_ctxs, state);
+        ExprExecutor::close(_group_by_expr_ctxs, state);
         for (const auto& i : _agg_expr_ctxs) {
-            Expr::close(i, state);
+            ExprExecutor::close(i, state);
         }
-        Expr::close(_conjunct_ctxs, state);
+        ExprExecutor::close(_conjunct_ctxs, state);
 
         for (auto* func : _combinator_function) {
             delete func;

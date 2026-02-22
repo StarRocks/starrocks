@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "exprs/array_expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/jit/jit_expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptors.h"
@@ -172,15 +173,15 @@ public:
         ExprContext exprContext(jit_expr);
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, runtime_state));
         ASSERT_TRUE(jit_expr->is_jit_compiled());
 
         ptr = jit_expr->evaluate(&exprContext, nullptr);
         // Verify the result after JIT.
         test_func(ptr);
 
-        Expr::close(expr_ctxs, runtime_state);
+        ExprExecutor::close(expr_ctxs, runtime_state);
     }
 
     static void verify_result_with_jit(const ColumnPtr& ptr, Expr* expr, RuntimeState* runtime_state) {
@@ -196,8 +197,8 @@ public:
         ExprContext exprContext(jit_expr);
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, runtime_state));
         ASSERT_TRUE(jit_expr->is_jit_compiled());
 
         Chunk chunk;
@@ -213,7 +214,7 @@ public:
             ASSERT_TRUE(jit_ptr->equals(i, *ptr, i));
         }
 
-        Expr::close(expr_ctxs, runtime_state);
+        ExprExecutor::close(expr_ctxs, runtime_state);
     }
 };
 

@@ -29,6 +29,7 @@
 #include "exprs/agg/window.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/function_context.h"
 #include "gutil/strings/substitute.h"
@@ -326,7 +327,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -335,10 +336,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         tuple_ids.push_back(_buffered_tuple_id);
         RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids);
         if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state));
+            RETURN_IF_ERROR(ExprExecutor::prepare(_partition_ctxs, state));
         }
         if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state));
+            RETURN_IF_ERROR(ExprExecutor::prepare(_order_ctxs, state));
         }
     }
 
@@ -353,10 +354,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 Status Analytor::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(Expr::open(_partition_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_order_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_order_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+        RETURN_IF_ERROR(ExprExecutor::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
 
@@ -442,10 +443,11 @@ void Analytor::close(RuntimeState* state) {
         }
 #endif
 
-        Expr::close(_order_ctxs, state);
-        Expr::close(_partition_ctxs, state);
+        ExprExecutor::close(_order_ctxs, state);
+        ExprExecutor::close(_partition_ctxs, state);
+
         for (const auto& i : _agg_expr_ctxs) {
-            Expr::close(i, state);
+            ExprExecutor::close(i, state);
         }
         return Status::OK();
     };

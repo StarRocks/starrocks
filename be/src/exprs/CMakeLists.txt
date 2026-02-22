@@ -43,6 +43,7 @@ set(EXPR_FILES
   base64.cpp
   binary_functions.cpp
   expr_factory.cpp
+  expr_executor.cpp
   expr_context.cpp
   expr.cpp
   table_function/table_function_factory.cpp

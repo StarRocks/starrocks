@@ -23,6 +23,7 @@
 #include "common/util/thrift_util.h"
 #include "exec/scan_node.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/memory_scratch_sink.h"
@@ -61,7 +62,7 @@ Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     DCHECK(_tuple_desc != nullptr);
 
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
     return Status::OK();
 }
 
@@ -151,8 +152,8 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             // prepare
             RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs,
                                                            runtime_state()));
-            RETURN_IF_ERROR(Expr::prepare(expr_ctxs, runtime_state()));
-            RETURN_IF_ERROR(Expr::open(expr_ctxs, runtime_state()));
+            RETURN_IF_ERROR(ExprExecutor::prepare(expr_ctxs, runtime_state()));
+            RETURN_IF_ERROR(ExprExecutor::open(expr_ctxs, runtime_state()));
             auto& iteral_expr_ctx = expr_ctxs[0];
             ASSIGN_OR_RETURN(ColumnPtr value, iteral_expr_ctx->root()->evaluate_const(iteral_expr_ctx));
             if (UNLIKELY(value == nullptr || value->only_null() || value->is_null(0))) {

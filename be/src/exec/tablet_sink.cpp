@@ -57,6 +57,7 @@
 #include "exec/range_tablet_sink_sender.h"
 #include "exec/tablet_sink_colocate_sender.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
@@ -250,7 +251,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _num_senders = state->num_per_fragment_instances();
 
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(_vectorized_partition->prepare(state));
 
     // get table's tuple descriptor

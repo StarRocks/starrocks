@@ -22,6 +22,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exprs/array_expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -283,8 +284,8 @@ public:
     static Status create_and_open_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime_state,
                                                 std::vector<TExpr>* tExprs, std::vector<ExprContext*>* conjunct_ctxs) {
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(pool, *tExprs, conjunct_ctxs, nullptr));
-        RETURN_IF_ERROR(Expr::prepare(*conjunct_ctxs, runtime_state));
-        return Expr::open(*conjunct_ctxs, runtime_state);
+        RETURN_IF_ERROR(ExprExecutor::prepare(*conjunct_ctxs, runtime_state));
+        return ExprExecutor::open(*conjunct_ctxs, runtime_state);
     }
 
     static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc ttype, bool is_nullable) {

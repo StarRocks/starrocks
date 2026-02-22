@@ -4,6 +4,7 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gtest/gtest.h"
 
@@ -205,8 +206,8 @@ TEST_F(TableFunctionOperatorTest, key_partition_exchanger) {
     t_conjuncts.emplace_back(t_expr);
     std::vector<ExprContext*> expr_ctxs;
     ExprFactory::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr);
-    Expr::prepare(expr_ctxs, _runtime_state);
-    Expr::open(expr_ctxs, _runtime_state);
+    ExprExecutor::prepare(expr_ctxs, _runtime_state);
+    ExprExecutor::open(expr_ctxs, _runtime_state);
 
     auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(1, pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_degree_of_parallelism(1);

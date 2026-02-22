@@ -38,6 +38,7 @@
 
 #include "common/config.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
@@ -86,7 +87,7 @@ Status ResultSink::prepare_exprs(RuntimeState* state) {
     // From the thrift expressions create the real exprs.
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -136,7 +137,7 @@ Status ResultSink::prepare(RuntimeState* state) {
 
 Status ResultSink::open(RuntimeState* state) {
     RETURN_IF_ERROR(_writer->open(state));
-    return Expr::open(_output_expr_ctxs, state);
+    return ExprExecutor::open(_output_expr_ctxs, state);
 }
 
 Status ResultSink::send_chunk(RuntimeState* state, Chunk* chunk) {
@@ -173,7 +174,7 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
     }
     (void)state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
                                                           state->fragment_instance_id());
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
 
     _closed = true;
     return Status::OK();

@@ -36,6 +36,7 @@
 
 #include <fmt/format.h>
 
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 
 namespace starrocks {
@@ -77,18 +78,18 @@ Status SortExecExprs::prepare(RuntimeState* state, const RowDescriptor& child_ro
                               const RowDescriptor& output_row_desc) {
     _runtime_state = state;
     if (_materialize_tuple) {
-        RETURN_IF_ERROR(Expr::prepare(_sort_tuple_slot_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_sort_tuple_slot_expr_ctxs, state));
     }
-    RETURN_IF_ERROR(Expr::prepare(_lhs_ordering_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_lhs_ordering_expr_ctxs, state));
     return Status::OK();
 }
 
 Status SortExecExprs::open(RuntimeState* state) {
     if (_materialize_tuple) {
-        RETURN_IF_ERROR(Expr::open(_sort_tuple_slot_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(_sort_tuple_slot_expr_ctxs, state));
     }
-    RETURN_IF_ERROR(Expr::open(_lhs_ordering_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, _pool, _lhs_ordering_expr_ctxs, &_rhs_ordering_expr_ctxs));
+    RETURN_IF_ERROR(ExprExecutor::open(_lhs_ordering_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, _pool, _lhs_ordering_expr_ctxs, &_rhs_ordering_expr_ctxs));
     return Status::OK();
 }
 
@@ -98,10 +99,10 @@ void SortExecExprs::close(RuntimeState* state) {
     }
     _is_closed = true;
     if (_materialize_tuple) {
-        Expr::close(_sort_tuple_slot_expr_ctxs, state);
+        ExprExecutor::close(_sort_tuple_slot_expr_ctxs, state);
     }
-    Expr::close(_lhs_ordering_expr_ctxs, state);
-    Expr::close(_rhs_ordering_expr_ctxs, state);
+    ExprExecutor::close(_lhs_ordering_expr_ctxs, state);
+    ExprExecutor::close(_rhs_ordering_expr_ctxs, state);
 }
 
 SortExecExprs::~SortExecExprs() {

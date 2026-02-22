@@ -39,6 +39,7 @@
 
 #include "common/runtime_profile.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 #ifndef __APPLE__
@@ -80,7 +81,7 @@ Status MysqlTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
 Status MysqlTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     std::stringstream title;
     title << "MysqlTableSink (frag_id=" << state->fragment_instance_id() << ")";
     // create profile
@@ -91,7 +92,7 @@ Status MysqlTableSink::prepare(RuntimeState* state) {
 Status MysqlTableSink::open(RuntimeState* state) {
 #ifndef __APPLE__
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     // create writer
     _writer = std::make_unique<MysqlTableWriter>(_output_expr_ctxs, _chunk_size);
     RETURN_IF_ERROR(_writer->open(_conn_info, _mysql_tbl));
@@ -110,7 +111,7 @@ Status MysqlTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 Status MysqlTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 

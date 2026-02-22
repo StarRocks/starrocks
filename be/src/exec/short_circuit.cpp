@@ -28,6 +28,7 @@
 #include "exec/exec_factory.h"
 #include "exec/scan_node.h"
 #include "exec/short_circuit_hybrid.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
@@ -50,11 +51,11 @@ public:
         _row_buffer = new (std::nothrow) MysqlRowBuffer(_is_binary_format);
 
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_exprs, &_output_expr_ctxs, state));
-        RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
         return DataSink::prepare(state);
     }
 
-    Status open(RuntimeState* state) override { return Expr::open(_output_expr_ctxs, state); }
+    Status open(RuntimeState* state) override { return ExprExecutor::open(_output_expr_ctxs, state); }
 
     RuntimeProfile* profile() override { return nullptr; }
 

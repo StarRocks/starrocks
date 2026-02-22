@@ -23,6 +23,7 @@
 #include "exec/pipeline/set/union_passthrough_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 
 namespace starrocks {
@@ -101,11 +102,11 @@ Status UnionNode::prepare(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(exprs, state));
     }
 
     for (auto& _child_expr_list : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_list, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_child_expr_list, state));
     }
 
     return Status::OK();
@@ -117,11 +118,11 @@ Status UnionNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     for (const vector<ExprContext*>& exprs : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     if (!_children.empty()) {
@@ -187,10 +188,10 @@ void UnionNode::close(RuntimeState* state) {
         return;
     }
     for (auto& exprs : _child_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
     for (auto& exprs : _const_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
     ExecNode::close(state);
 }

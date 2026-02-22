@@ -17,6 +17,7 @@
 #include "base/testutil/assert.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
@@ -102,8 +103,8 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
     t_conjuncts.emplace_back(t_expr);
     std::vector<ExprContext*> partition_exprs;
     ExprFactory::create_expr_trees(&_object_pool, t_conjuncts, &partition_exprs, nullptr);
-    Expr::prepare(partition_exprs, _runtime_state.get());
-    Expr::open(partition_exprs, _runtime_state.get());
+    ExprExecutor::prepare(partition_exprs, _runtime_state.get());
+    ExprExecutor::open(partition_exprs, _runtime_state.get());
 
     TBucketProperty bucket_prperty = TBucketProperty();
     bucket_prperty.bucket_func = TBucketFunction::MURMUR3_X86_32;

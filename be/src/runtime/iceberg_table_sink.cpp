@@ -16,6 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
@@ -36,7 +37,7 @@ Status IcebergTableSink::init(const TDataSink& thrift_sink, RuntimeState* state)
 
 Status IcebergTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     std::stringstream title;
     title << "IcebergTableSink (frag_id=" << state->fragment_instance_id() << ")";
     _profile = _pool->add(new RuntimeProfile(title.str()));
@@ -44,7 +45,7 @@ Status IcebergTableSink::prepare(RuntimeState* state) {
 }
 
 Status IcebergTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -53,7 +54,7 @@ Status IcebergTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 Status IcebergTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 

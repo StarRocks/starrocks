@@ -17,17 +17,18 @@
 #include <memory>
 
 #include "exec/exec_node.h"
+#include "exprs/expr_executor.h"
 
 namespace starrocks::pipeline {
 
 Status SplitLocalExchanger::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::prepare(_split_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_split_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_split_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_split_expr_ctxs, state));
     return Status::OK();
 }
 
 void SplitLocalExchanger::close(RuntimeState* state) {
-    Expr::close(_split_expr_ctxs, state);
+    ExprExecutor::close(_split_expr_ctxs, state);
 }
 
 Status SplitLocalExchanger::init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) {

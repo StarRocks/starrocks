@@ -33,6 +33,7 @@
 #include "common/runtime_profile.h"
 #include "common/thread/thread.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -310,8 +311,8 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
 
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
-    DeferOp close_exprs([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
-    auto status = Expr::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
+    DeferOp close_exprs([this, &scanner_expr_ctxs] { ExprExecutor::close(scanner_expr_ctxs, runtime_state()); });
+    auto status = ExprExecutor::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
 
     if (!status.ok()) {
         LOG(WARNING) << "Clone conjuncts failed.";
