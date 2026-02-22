@@ -62,6 +62,23 @@
 #include "types/logical_type.h"
 
 namespace starrocks::vectorized {
+
+namespace {
+
+ColumnRef* find_first_column_ref(Expr* expr) {
+    if (expr->is_slotref()) {
+        return down_cast<ColumnRef*>(expr);
+    }
+    for (Expr* child : expr->children()) {
+        if (ColumnRef* ref = find_first_column_ref(child); ref != nullptr) {
+            return ref;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
 class TExprBuilder {
 public:
     TExprBuilder& operator<<(const LogicalType& slot_type) {
@@ -137,7 +154,7 @@ public:
         for (size_t i = 0; i < ctxs.size(); ++i) {
             auto ctx = ctxs[i];
             CHECK(ctx->root()->is_slotref());
-            auto ref = ctx->root()->get_column_ref();
+            auto ref = find_first_column_ref(ctx->root());
             auto col = ColumnHelper::create_column(ctx->root()->type(), nullable[i]);
             CHECK(col->accept_mutable(&filler).ok());
             chunk->append_column(std::move(col), ref->slot_id());

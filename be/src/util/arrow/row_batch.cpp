@@ -51,6 +51,8 @@
 #include "base/utility/arrow_utils.h"
 #include "common/logging.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -58,6 +60,22 @@
 namespace starrocks {
 
 using strings::Substitute;
+
+namespace {
+
+ColumnRef* find_first_column_ref(Expr* expr) {
+    if (expr->is_slotref()) {
+        return down_cast<ColumnRef*>(expr);
+    }
+    for (Expr* child : expr->children()) {
+        if (ColumnRef* ref = find_first_column_ref(child); ref != nullptr) {
+            return ref;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
     switch (type.type) {
@@ -274,7 +292,7 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
         Expr* expr = expr_context->root();
         std::shared_ptr<arrow::Field> field;
         string col_name;
-        ColumnRef* col_ref = expr->get_column_ref();
+        ColumnRef* col_ref = find_first_column_ref(expr);
         DCHECK(col_ref != nullptr);
         int64_t slot_id = col_ref->slot_id();
         int64_t tuple_id = col_ref->tuple_id();

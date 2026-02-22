@@ -41,7 +41,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
@@ -52,6 +51,7 @@ namespace starrocks {
 class BloomFilter;
 class Expr;
 class ObjectPool;
+struct NgramBloomFilterReaderOptions;
 class RuntimeState;
 class TColumnValue;
 class TExpr;
@@ -60,7 +60,7 @@ class Literal;
 struct UserFunctionCacheEntry;
 
 class Chunk;
-class ColumnRef;
+class ExprContext;
 class ColumnPredicateRewriter;
 class JITContext;
 class JITExpr;
@@ -165,9 +165,6 @@ public:
 
     // TODO:(murphy) remove this unchecked evaluate
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
-
-    // Get the first column ref in expr.
-    ColumnRef* get_column_ref();
 
 #ifdef STARROCKS_JIT_ENABLE
     StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);

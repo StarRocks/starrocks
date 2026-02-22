@@ -41,6 +41,7 @@
 #include "column/mysql_row_buffer.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"

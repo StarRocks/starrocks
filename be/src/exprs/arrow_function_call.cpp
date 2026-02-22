@@ -23,6 +23,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/constexpr.h"
+#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"

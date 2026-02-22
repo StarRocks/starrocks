@@ -28,6 +28,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "jni.h"

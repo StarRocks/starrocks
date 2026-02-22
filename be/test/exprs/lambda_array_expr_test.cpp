@@ -27,6 +27,7 @@
 #include "exprs/array_expr.h"
 #include "exprs/array_map_expr.h"
 #include "exprs/cast_expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/function_helper.h"

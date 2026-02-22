@@ -22,6 +22,7 @@
 #include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "runtime/buffer_control_block.h"
 #include "storage/chunk_helper.h"

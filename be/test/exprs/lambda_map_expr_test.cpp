@@ -22,6 +22,7 @@
 #include "column/map_column.h"
 #include "exprs/arithmetic_expr.h"
 #include "exprs/cast_expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/is_null_predicate.h"

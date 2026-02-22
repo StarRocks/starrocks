@@ -43,8 +43,7 @@
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
-#include "exprs/column_ref.h"
-#include "gutil/casts.h"
+#include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 
 #ifdef STARROCKS_JIT_ENABLE
@@ -380,19 +379,6 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
 
 StatusOr<ColumnPtr> Expr::evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) {
     return evaluate_checked(context, ptr);
-}
-
-ColumnRef* Expr::get_column_ref() {
-    if (this->is_slotref()) {
-        return down_cast<ColumnRef*>(this);
-    }
-    for (auto child : this->children()) {
-        ColumnRef* ref = nullptr;
-        if ((ref = child->get_column_ref()) != nullptr) {
-            return ref;
-        }
-    }
-    return nullptr;
 }
 
 #ifdef STARROCKS_JIT_ENABLE

@@ -7,6 +7,7 @@
 #include "column/mysql_row_buffer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_escape.h"
 #include "gutil/strings/substitute.h"

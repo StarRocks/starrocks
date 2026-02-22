@@ -36,6 +36,7 @@
 
 #include <fmt/format.h>
 
+#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 
