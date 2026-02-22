@@ -21,7 +21,41 @@ set(EXPR_CORE_FILES
   function_context.cpp
   expr_context.cpp
   expr.cpp
+  array_element_expr.cpp
+  array_expr.cpp
+  base64.cpp
+  bit_functions.cpp
+  cast_nested.cpp
+  chunk_predicate_evaluator.cpp
+  column_ref.cpp
+  compound_predicate.cpp
+  es_functions.cpp
+  expr_executor.cpp
+  function_helper.cpp
+  gin_functions.cpp
+  grouping_sets_functions.cpp
+  info_func.cpp
+  jsonpath.cpp
+  lambda_function.cpp
+  literal.cpp
+  map_expr.cpp
+  map_element_expr.cpp
+  map_functions.cpp
+  match_expr.cpp
+  placeholder_ref.cpp
+  regexp_split.cpp
+  runtime_filter_layout.cpp
+  struct_functions.cpp
+  subfield_expr.cpp
+  table_function/json_each.cpp
+  variant_path_parser.cpp
 )
+
+if(STARROCKS_JIT_ENABLE)
+  set(EXPR_CORE_FILES ${EXPR_CORE_FILES}
+      jit/ir_helper.cpp
+      jit/expr_jit_codegen.cpp)
+endif()
 
 ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
 target_link_libraries(ExprCore PUBLIC RuntimeCore)
@@ -42,17 +76,11 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
   agg/combinator/agg_state_utils.cpp
-  base64.cpp
   binary_functions.cpp
   expr_factory.cpp
-  expr_executor.cpp
-  chunk_predicate_evaluator.cpp
   table_function/table_function_factory.cpp
-  table_function/json_each.cpp
   table_function/list_rowsets.cpp
   arithmetic_expr.cpp
-  array_element_expr.cpp
-  array_expr.cpp
   array_functions.cpp
   arrow_function_call.cpp
   binary_predicate.cpp
@@ -63,41 +91,26 @@ set(EXPR_FILES
   cast_expr_json.cpp
   cast_expr_struct.cpp
   cast_expr_map.cpp
-  cast_nested.cpp
-  column_ref.cpp
-  placeholder_ref.cpp
   dictmapping_expr.cpp
-  compound_predicate.cpp
   condition_expr.cpp
   encryption_functions.cpp
-  es_functions.cpp
   find_in_set.cpp
   function_call_expr.cpp
-  function_helper.cpp
   geo_functions.cpp
-  grouping_sets_functions.cpp
   hyperloglog_functions.cpp
   in_const_predicate.cpp
-  info_func.cpp
   inet_aton.cpp
   in_predicate.cpp
   is_null_predicate.cpp
   json_functions.cpp
-  jsonpath.cpp
   variant_functions.cpp
-  variant_path_parser.cpp
   like_predicate.cpp
-  literal.cpp
   locate.cpp
-  map_element_expr.cpp
-  map_functions.cpp
-  struct_functions.cpp
   math_functions.cpp
   percentile_functions.cpp
   runtime_filter_bank.cpp
   runtime_filter.cpp
   split.cpp
-  regexp_split.cpp
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
@@ -107,30 +120,21 @@ set(EXPR_FILES
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   java_function_call_expr.cpp
-  lambda_function.cpp
   array_map_expr.cpp
   array_sort_lambda_expr.cpp
-  subfield_expr.cpp
   map_apply_expr.cpp
-  map_expr.cpp
   substring_index.cpp
   dict_query_expr.cpp
-  runtime_filter_layout.cpp
   dictionary_get_expr.cpp
   ngram.cpp
-  match_expr.cpp
-  bit_functions.cpp
   hash_functions.cpp
-  gin_functions.cpp
   ai_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
   set(EXPR_FILES ${EXPR_FILES}
-      jit/expr_jit_codegen.cpp
       jit/expr_jit_rewriter.cpp
       jit/expr_jit_pass.cpp
-      jit/ir_helper.cpp
       jit/jit_engine.cpp
       jit/jit_expr.cpp)
 

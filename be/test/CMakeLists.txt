@@ -134,9 +134,7 @@ set(EXEC_FILES
         ./exprs/ai_functions_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
-        ./exprs/array_element_expr_test.cpp
         ./exprs/decimal_binary_function_test.cpp
-        ./exprs/array_expr_test.cpp
         ./exprs/array_functions_test.cpp
         ./exprs/binary_function_test.cpp
         ./exprs/binary_functions_test.cpp
@@ -155,11 +153,9 @@ set(EXEC_FILES
         ./exprs/encryption_functions_test.cpp
         ./exprs/function_call_expr_test.cpp
         ./exprs/geography_functions_test.cpp
-        ./exprs/gin_functions_test.cpp
         ./exprs/hash_functions_test.cpp
         ./exprs/hyperloglog_functions_test.cpp
         ./exprs/if_expr_test.cpp
-        ./exprs/function_helper_test.cpp
         ./exprs/in_predicate_test.cpp
         ./exprs/is_null_predicate_test.cpp
         ./exprs/jit_cache_test.cpp
@@ -168,9 +164,6 @@ set(EXEC_FILES
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
-        ./exprs/map_element_expr_test.cpp
-        ./exprs/map_expr_test.cpp
-        ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
@@ -189,15 +182,10 @@ set(EXEC_FILES
         ./exprs/string_fn_trim_test.cpp
         ./exprs/string_fn_money_format_decimal_test.cpp
         ./exprs/string_fn_url_extract_parameter_test.cpp
-        ./exprs/struct_functions_test.cpp
         ./exprs/time_functions_test.cpp
-        ./exprs/es_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
-        ./exprs/subfield_expr_test.cpp
-        ./exprs/variant_path_parser_test.cpp
         ./exprs/variant_functions_test.cpp
-        ./exprs/vectorized_literal_test.cpp
         ./exprs/min_max_predicate_test.cpp
         ./exprs/in_const_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
