@@ -35,20 +35,29 @@
 #include "exprs/expr_context.h"
 
 #include <fmt/format.h>
-#include <storage/chunk_helper.h>
 
 #include <memory>
-#include <sstream>
 #include <stdexcept>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/statusor.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+
+namespace {
+
+ChunkPtr create_dummy_chunk() {
+    auto dummy_chunk = std::make_shared<Chunk>();
+    auto column = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
+    dummy_chunk->append_column(std::move(column), 0);
+    return dummy_chunk;
+}
+
+} // namespace
 
 ExprContext::ExprContext(Expr* root) : _root(root) {}
 
@@ -166,7 +175,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     // but some expr can not handle situation that input chunk is nullptr or empty correctly
     // so we create chunk with one column and one raw
     if (chunk == nullptr) {
-        dummy_chunk = ChunkHelper::createDummyChunk();
+        dummy_chunk = create_dummy_chunk();
         chunk = dummy_chunk.get();
     }
 #ifndef NDEBUG

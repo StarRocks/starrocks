@@ -43,7 +43,6 @@
 
 #include "base/failpoint/fail_point.h"
 #include "exprs/expr_context.h"
-#include "runtime/runtime_state.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
