@@ -7,5 +7,5 @@ Depends: openjdk-17-jre-headless | openjdk-17-jdk, bash, procps
 Maintainer: StarRocks Team <dev@starrocks.io>
 Description: StarRocks Frontend (FE)
  StarRocks is a next-generation real-time analytical warehouse.
- This package contains the Frontend (FE) nodes responsible for 
+ This package contains the Frontend (FE) nodes responsible for
  metadata management and query planning.
