@@ -3,17 +3,25 @@ set -e
 
 # --- StarRocks Debian Packaging Build Script ---
 # Purpose: Generates .deb packages for FE, BE, and CN components.
-# Usage: ./build.sh [version] [fe_src] [be_src] [arch] [cn_src]
+# Usage: ./build.sh <version> [fe_src] [be_src] [arch] [cn_src]
 # Example: ./build.sh 4.0.4 ../../out/fe ../../out/be amd64 ../../out/be
 #
 # Parameters:
-# $1: Version (default: 4.0.4)
+# $1: Version (if omitted, will be read from ./VERSION if present)
 # $2: FE Source directory (default: ../../out/fe)
 # $3: BE Source directory (default: ../../out/be)
 # $4: Architecture (default: output of dpkg --print-architecture)
 # $5: CN Source directory (default: defaults to BE_SOURCE)
 
-VERSION=${1:-"4.0.4"}
+if [ -n "$1" ]; then
+    VERSION="$1"
+elif [ -f VERSION ]; then
+    VERSION="$(cat VERSION)"
+else
+    echo "ERROR: Version not specified and VERSION file not found." >&2
+    echo "Please rerun as: $0 <version> [fe_src] [be_src] [arch] [cn_src]" >&2
+    exit 1
+fi
 FE_SOURCE=${2:-"../../out/fe"}
 BE_SOURCE=${3:-"../../out/be"}
 
