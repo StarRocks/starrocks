@@ -2,7 +2,14 @@
 set -e
 
 case "$1" in
-    purge|remove)
+    purge)
+        # Remove StarRocks configuration and data on purge
+        rm -rf /etc/starrocks /var/lib/starrocks /var/log/starrocks || true
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
+        fi
+    ;;
+    remove)
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload >/dev/null 2>&1 || true
         fi
