@@ -3,8 +3,8 @@ set -e
 
 # --- StarRocks Debian Packaging Build Script ---
 # Purpose: Generates .deb packages for FE, BE, and CN components.
-# Usage: ./build.sh [version] [fe_src] [be_src] [arch]
-# Example: ./build.sh 4.0.4 ../../out/fe ../../out/be amd64
+# Usage: ./build.sh [version] [fe_src] [be_src] [arch] [cn_src]
+# Example: ./build.sh 4.0.4 ../../out/fe ../../out/be amd64 ../../out/be
 #
 # Parameters:
 # $1: Version (default: 4.0.4)
