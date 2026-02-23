@@ -553,8 +553,9 @@ public class ListPartitionPruner implements PartitionPruner {
 
         for (Map.Entry<LiteralExpr, Set<Long>> entry : partitionValueMap.entrySet()) {
             LiteralExpr key = entry.getKey();
+            String value = key.getStringValue().trim();
             if (castOperator.getType().isNumericType() && key instanceof StringLiteral &&
-                    !NumberUtils.isNumber(key.getStringValue())) {
+                    !NumberUtils.isNumber(value)) {
                 // Partition values (p='1','2','a'), select * from tb where p=1, cast(p as decimal). An error occurs when the value is 'a'.
                 continue;
             }
