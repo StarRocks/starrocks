@@ -5,11 +5,12 @@ set -e
 # $1: Version (default: 4.0.4)
 # $2: FE Source directory (default: ../../out/fe)
 # $3: BE/CN Source directory (default: ../../out/be)
+# $4: Architecture (default: output of dpkg --print-architecture)
 
 VERSION=${1:-"4.0.4"}
-ARCH=${4:-"$(dpkg --print-architecture)"}
 FE_SOURCE=${2:-"../../out/fe"}
 BE_SOURCE=${3:-"../../out/be"}
+ARCH=${4:-"$(dpkg --print-architecture)"}
 
 echo "### StarRocks Debian Packaging Build ###"
 
