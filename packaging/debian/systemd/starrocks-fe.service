@@ -10,6 +10,16 @@ RuntimeDirectory=starrocks
 ExecStart=/usr/lib/starrocks/fe/bin/start_fe.sh
 Restart=on-failure
 LimitNOFILE=65536
+TimeoutStartSec=300
+TimeoutStopSec=300
+
+# NOTE:  
+# - FE is started via start_fe.sh, which runs in foreground mode by default  
+#   (RUN_DAEMON=0) unless the --daemon flag is explicitly provided.  
+# - For systemd Type=simple, the main process must stay in the foreground.  
+# - Therefore we intentionally do NOT pass --daemon or a separate  
+#   "foreground" flag here. In contrast, BE/CN services use --daemonize 0  
+#   on their binaries to enforce the same foreground behavior. 
 
 [Install]
 WantedBy=multi-user.target

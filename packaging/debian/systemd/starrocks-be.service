@@ -12,6 +12,8 @@ ExecStart=/usr/lib/starrocks/be/bin/start_be.sh --daemonize 0
 Restart=on-failure
 LimitNOFILE=262144
 LimitMEMLOCK=infinity
+TimeoutStartSec=300
+TimeoutStopSec=300
 
 [Install]
 WantedBy=multi-user.target
