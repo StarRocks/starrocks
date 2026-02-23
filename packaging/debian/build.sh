@@ -16,9 +16,33 @@ set -e
 VERSION=${1:-"4.0.4"}
 FE_SOURCE=${2:-"../../out/fe"}
 BE_SOURCE=${3:-"../../out/be"}
-ARCH=${4:-"$(dpkg --print-architecture)"}
-CN_SOURCE=${5:-"$BE_SOURCE"}
 
+# Determine target architecture  
+if [ -n "$4" ]; then  
+    ARCH="$4"  
+else  
+    if command -v dpkg >/dev/null 2>&1; then  
+        ARCH="$(dpkg --print-architecture)"  
+    else  
+        # Fallback: derive a reasonable Debian architecture from uname -m  
+        UNAME_M="$(uname -m)"  
+        case "$UNAME_M" in  
+            x86_64)  
+                ARCH="amd64"  
+                ;;  
+            aarch64|arm64)  
+                ARCH="arm64"  
+                ;;  
+            *)  
+                echo "ERROR: Unable to determine architecture automatically (uname -m: $UNAME_M)." >&2  
+                echo "Please rerun as: $0 <version> <fe_src> <be_src> <arch> [cn_src]" >&2  
+                exit 1  
+                ;;  
+        esac  
+    fi  
+fi  
+
+CN_SOURCE=${5:-"$BE_SOURCE"}
 echo "### StarRocks Debian Packaging Build ###"
 
 # Detect OS for portable sed
