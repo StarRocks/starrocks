@@ -61,6 +61,18 @@ case "$1" in
         done  
 
         # Secure the configuration directory for the detected component  
+        #  
+        # NOTE:  
+        # - For Debian packages we intentionally keep configuration under /etc/starrocks/$COMP  
+        #   owned by root and only readable by the 'starrocks' group (root:starrocks with  
+        #   750 for directories and 640 for files).  
+        # - This is stricter than the default tarball installation, where the StarRocks  
+        #   process may write its own configuration files.  
+        # - With this Debian packaging, configuration is expected to be managed by an  
+        #   administrator (root) rather than by the running service.  
+        # - If a deployment requires auto-generated or runtime-writable configuration,  
+        #   use a separate writable location (e.g. under /var/lib/starrocks) or adjust  
+        #   permissions for the specific files as part of local administration.  
         if [ -n "$COMP" ]; then  
             CONF_DIR="/etc/starrocks/$COMP"  
             if [ -d "$CONF_DIR" ]; then  
