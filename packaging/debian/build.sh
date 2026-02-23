@@ -61,18 +61,18 @@ for COMP in "fe" "be" "cn"; do
     mkdir -p "$STAGING_DIR/lib/systemd/system"
 
     # Copy Binaries/Libs
-    cp -r "$SRC_DIR/bin" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
-    cp -r "$SRC_DIR/lib" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
+    cp -a "$SRC_DIR/bin" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
+    cp -a "$SRC_DIR/lib" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
     
     if [ "$COMP" == "fe" ]; then
-        [ -d "$SRC_DIR/spark-dpp" ] && cp -r "$SRC_DIR/spark-dpp" "$STAGING_DIR/usr/lib/starrocks/fe/"
-        [ -d "$SRC_DIR/webroot" ] && cp -r "$SRC_DIR/webroot" "$STAGING_DIR/usr/lib/starrocks/fe/"
+        [ -d "$SRC_DIR/spark-dpp" ] && cp -a "$SRC_DIR/spark-dpp" "$STAGING_DIR/usr/lib/starrocks/fe/"
+        [ -d "$SRC_DIR/webroot" ] && cp -a "$SRC_DIR/webroot" "$STAGING_DIR/usr/lib/starrocks/fe/"
     else
-        [ -d "$SRC_DIR/www" ] && cp -r "$SRC_DIR/www" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
+        [ -d "$SRC_DIR/www" ] && cp -a "$SRC_DIR/www" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
     fi
 
     # Copy Configs and set up symlink
-    cp -r "$SRC_DIR/conf/"* "$STAGING_DIR/etc/starrocks/$COMP/"
+    cp -a "$SRC_DIR/conf/"* "$STAGING_DIR/etc/starrocks/$COMP/"
     ln -s "/etc/starrocks/$COMP" "$STAGING_DIR/usr/lib/starrocks/$COMP/conf"
 
     # Cleanup either BE or CN
@@ -142,7 +142,7 @@ for COMP in "fe" "be" "cn"; do
     
 
     echo "Generating conffiles for $COMP..."
-    find "$STAGING_DIR/etc/starrocks/$COMP" -type f 2>/dev/null | sed "s|^$STAGING_DIR||" > "$STAGING_DIR/DEBIAN/conffiles" || true
+    find "$STAGING_DIR/etc/starrocks/$COMP" -type f 2>/dev/null | sed "s|^$STAGING_DIR||" | LC_ALL=C sort > "$STAGING_DIR/DEBIAN/conffiles" || true  
 
     # Inject Systemd
     if [ -f "systemd/starrocks-$COMP.service" ]; then

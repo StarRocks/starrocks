@@ -51,10 +51,11 @@ case "$1" in
         done
 
         # Secure the configuration directory
-        if [ -d "/etc/starrocks" ]; then
-            chown -R root:starrocks /etc/starrocks
-            find /etc/starrocks -type d -exec chmod 750 {} \;
-            find /etc/starrocks -type f -exec chmod 640 {} \;
+        CONF_DIR="/etc/starrocks/$COMP"
+        if [ -d "$CONF_DIR" ]; then
+            chown -R root:starrocks "$CONF_DIR"
+            find "$CONF_DIR" -type d -exec chmod 750 {} \;
+            find "$CONF_DIR" -type f -exec chmod 640 {} \;
         fi
 
         # Reload systemd units to pick up changes immediately
