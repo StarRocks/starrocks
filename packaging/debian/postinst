@@ -27,27 +27,39 @@ case "$1" in
 
         # 3. Create specific subdirectories for FE,BE,CN with correct ownership and permissions
         echo "Creating StarRocks runtime directories..."
-        for dir in \
-            /var/log/starrocks \
-            /var/log/starrocks/fe \
-            /var/log/starrocks/be \
-            /var/log/starrocks/cn \
-            /var/lib/starrocks \
-            /var/lib/starrocks/fe \
-            /var/lib/starrocks/fe/meta \
-            /var/lib/starrocks/be \
-            /var/lib/starrocks/be/storage \
-            /var/lib/starrocks/cn \
-            /var/lib/starrocks/cn/cache
-        do
+
+        # Always ensure shared base directories exist
+        for dir in /var/log/starrocks /var/lib/starrocks; do
             install -d -o starrocks -g starrocks -m 0750 "$dir"
         done
-        
+
+        # Map package name to specific directories
+        case "$DPKG_MAINTSCRIPT_PACKAGE" in
+            starrocks-fe)
+                COMPONENT_DIRS="/var/log/starrocks/fe /var/lib/starrocks/fe /var/lib/starrocks/fe/meta"
+                ;;
+            starrocks-be)
+                COMPONENT_DIRS="/var/log/starrocks/be /var/lib/starrocks/be /var/lib/starrocks/be/storage"
+                ;;
+            starrocks-cn)
+                COMPONENT_DIRS="/var/log/starrocks/cn /var/lib/starrocks/cn /var/lib/starrocks/cn/cache"
+                ;;
+        esac
+
+        for dir in $COMPONENT_DIRS; do
+            install -d -o starrocks -g starrocks -m 0750 "$dir"
+        done
+
         # Secure the configuration directory
-        if [ -d /etc/starrocks ]; then
+        if [ -d "/etc/starrocks" ]; then
             chown -R root:starrocks /etc/starrocks
-            find /etc/starrocks -type d -exec chmod 750 {} \;  
-            find /etc/starrocks -type f -exec chmod 640 {} \;  
+            find /etc/starrocks -type d -exec chmod 750 {} \;
+            find /etc/starrocks -type f -exec chmod 640 {} \;
+        fi
+
+        # Reload systemd units to pick up changes immediately
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
         fi
     ;;
 

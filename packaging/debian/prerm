@@ -3,13 +3,13 @@ set -e
 
 case "$1" in
     remove|deconfigure)
-        for COMP in fe be cn; do
-            if systemctl is-active --quiet starrocks-$COMP; then
-                echo "Stopping starrocks-$COMP service..."
-                systemctl stop starrocks-$COMP || true
-            fi
-        done
+        COMP=$(echo "$DPKG_MAINTSCRIPT_PACKAGE" | sed 's/starrocks-//')
+        
+        if systemctl is-active --quiet "starrocks-$COMP"; then
+            echo "Stopping starrocks-$COMP service..."
+            systemctl stop "starrocks-$COMP" || true
+        fi
     ;;
-    *) ;;
 esac
+
 exit 0
