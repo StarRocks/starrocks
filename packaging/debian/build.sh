@@ -7,7 +7,7 @@ set -e
 # $3: BE/CN Source directory (default: ../../out/be)
 
 VERSION=${1:-"4.0.4"}
-ARCH="amd64"
+ARCH=${4:-"$(dpkg --print-architecture)"}
 FE_SOURCE=${2:-"../../out/fe"}
 BE_SOURCE=${3:-"../../out/be"}
 
@@ -83,17 +83,25 @@ for COMP in "fe" "be" "cn"; do
     fi
 
     # Robust Regex Patching
-    if grep -Eq "^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=" "$CONF_FILE"; then
-        sed "${SED_I[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=.*|$KEY = $VAL|" "$CONF_FILE"
+    if grep -Eq "^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=[[:space:]]*\$\{STARROCKS_HOME\}.*" "$CONF_FILE"; then
+        sed "${SED_I[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=[[:space:]]*\$\{STARROCKS_HOME\}.*|$KEY = $VAL|" "$CONF_FILE"
     else
-        echo "$KEY = $VAL" >> "$CONF_FILE"
+        if ! grep -Eq "^[[:space:]]*$KEY[[:space:]]*=" "$CONF_FILE"; then
+            echo "$KEY = $VAL" >> "$CONF_FILE"
+        fi
     fi
 
     # Patch common log and PID paths
     for VAR in "sys_log_dir" "LOG_DIR" "PID_DIR"; do
         VALUE="/var/log/starrocks/$COMP"
-        [ "$VAR" == "PID_DIR" ] && VALUE="/run/starrocks"
         
+        if [ "$VAR" == "PID_DIR" ]; then
+            if [ "$COMP" != "fe" ]; then
+                continue
+            fi
+            VALUE="/run/starrocks"
+        fi
+
         if grep -Eq "^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=" "$CONF_FILE"; then
             sed "${SED_I[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=.*|$VAR = $VALUE|" "$CONF_FILE"
         else
@@ -104,6 +112,7 @@ for COMP in "fe" "be" "cn"; do
     # Inject Metadata
     cp "control.$COMP" "$STAGING_DIR/DEBIAN/control"
     sed "${SED_I[@]}" "s|^Version:.*|Version: $VERSION|" "$STAGING_DIR/DEBIAN/control"
+    sed "${SED_I[@]}" "s|^Architecture:.*|Architecture: $ARCH|" "$STAGING_DIR/DEBIAN/control"
     echo "" >> "$STAGING_DIR/DEBIAN/control"
     cp "postinst" "$STAGING_DIR/DEBIAN/postinst"
     chmod 755 "$STAGING_DIR/DEBIAN/postinst"
