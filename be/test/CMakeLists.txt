@@ -132,7 +132,6 @@ set(EXEC_FILES
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/ai_functions_test.cpp
-        ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/decimal_binary_function_test.cpp
         ./exprs/array_functions_test.cpp
@@ -140,7 +139,6 @@ set(EXEC_FILES
         ./exprs/binary_functions_test.cpp
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp
-        ./exprs/case_expr_test.cpp
         ./exprs/cast_expr_test.cpp
         ./exprs/decimal_cast_expr_decimal_test.cpp
         ./exprs/decimal_cast_expr_integer_test.cpp
@@ -153,11 +151,7 @@ set(EXEC_FILES
         ./exprs/encryption_functions_test.cpp
         ./exprs/function_call_expr_test.cpp
         ./exprs/geography_functions_test.cpp
-        ./exprs/hash_functions_test.cpp
-        ./exprs/hyperloglog_functions_test.cpp
         ./exprs/if_expr_test.cpp
-        ./exprs/in_predicate_test.cpp
-        ./exprs/is_null_predicate_test.cpp
         ./exprs/jit_cache_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/flat_json_functions_test.cpp
@@ -187,7 +181,6 @@ set(EXEC_FILES
         ./exprs/runtime_filter_test.cpp
         ./exprs/variant_functions_test.cpp
         ./exprs/min_max_predicate_test.cpp
-        ./exprs/in_const_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
         ./formats/csv/array_converter_test.cpp

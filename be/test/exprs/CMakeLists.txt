@@ -14,10 +14,17 @@
 
 set(EXPR_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    arithmetic_expr_test.cpp
     array_expr_test.cpp
+    case_expr_test.cpp
     function_context_core_test.cpp
     expr_core_test.cpp
     expr_context_core_test.cpp
+    hash_functions_test.cpp
+    hyperloglog_functions_test.cpp
+    in_const_predicate_test.cpp
+    in_predicate_test.cpp
+    is_null_predicate_test.cpp
     array_element_expr_test.cpp
     es_functions_test.cpp
     function_helper_test.cpp
@@ -54,6 +61,7 @@ set(EXPR_CORE_TEST_LINK_LIBS
 
 add_library(starrocks_expr_core_test_objs OBJECT ${EXPR_CORE_TEST_FILES})
 target_link_libraries(starrocks_expr_core_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_expr_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+set_target_properties(starrocks_expr_core_test_objs PROPERTIES
+    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
 add_executable(expr_core_test $<TARGET_OBJECTS:starrocks_expr_core_test_objs>)
 target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS} gtest_main)

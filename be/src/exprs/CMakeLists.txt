@@ -18,6 +18,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 set(EXPR_CORE_FILES
+  arithmetic_expr.cpp
   function_context.cpp
   expr_context.cpp
   expr.cpp
@@ -25,19 +26,31 @@ set(EXPR_CORE_FILES
   array_expr.cpp
   base64.cpp
   bit_functions.cpp
+  bitmap_functions.cpp
   cast_nested.cpp
+  case_expr.cpp
+  cast_expr_json.cpp
+  cast_expr_map.cpp
   chunk_predicate_evaluator.cpp
   column_ref.cpp
   compound_predicate.cpp
+  encryption_functions.cpp
   es_functions.cpp
   expr_executor.cpp
   function_helper.cpp
   gin_functions.cpp
   grouping_sets_functions.cpp
+  hash_functions.cpp
+  hyperloglog_functions.cpp
   info_func.cpp
+  in_const_predicate.cpp
+  in_predicate.cpp
+  is_null_predicate.cpp
   jsonpath.cpp
   lambda_function.cpp
+  like_predicate.cpp
   literal.cpp
+  math_functions.cpp
   map_expr.cpp
   map_element_expr.cpp
   map_functions.cpp
@@ -48,6 +61,7 @@ set(EXPR_CORE_FILES
   struct_functions.cpp
   subfield_expr.cpp
   table_function/json_each.cpp
+  time_functions.cpp
   variant_path_parser.cpp
 )
 
@@ -80,33 +94,21 @@ set(EXPR_FILES
   expr_factory.cpp
   table_function/table_function_factory.cpp
   table_function/list_rowsets.cpp
-  arithmetic_expr.cpp
   array_functions.cpp
   arrow_function_call.cpp
   binary_predicate.cpp
-  bitmap_functions.cpp
-  case_expr.cpp
   cast_expr.cpp
   cast_expr_array.cpp
-  cast_expr_json.cpp
   cast_expr_struct.cpp
-  cast_expr_map.cpp
   dictmapping_expr.cpp
   condition_expr.cpp
-  encryption_functions.cpp
   find_in_set.cpp
   function_call_expr.cpp
   geo_functions.cpp
-  hyperloglog_functions.cpp
-  in_const_predicate.cpp
   inet_aton.cpp
-  in_predicate.cpp
-  is_null_predicate.cpp
   json_functions.cpp
   variant_functions.cpp
-  like_predicate.cpp
   locate.cpp
-  math_functions.cpp
   percentile_functions.cpp
   runtime_filter_bank.cpp
   runtime_filter.cpp
@@ -114,7 +116,6 @@ set(EXPR_FILES
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
-  time_functions.cpp
   utility_functions.cpp
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp
@@ -127,7 +128,6 @@ set(EXPR_FILES
   dict_query_expr.cpp
   dictionary_get_expr.cpp
   ngram.cpp
-  hash_functions.cpp
   ai_functions.cpp
 )
 
