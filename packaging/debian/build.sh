@@ -132,8 +132,13 @@ for COMP in "fe" "be" "cn"; do
     cp "control.$COMP" "$STAGING_DIR/DEBIAN/control"
     sed "${SED_I[@]}" "s|^Version:.*|Version: $VERSION|" "$STAGING_DIR/DEBIAN/control"
     sed "${SED_I[@]}" "s|^Architecture:.*|Architecture: $ARCH|" "$STAGING_DIR/DEBIAN/control"
-    cp "postinst" "$STAGING_DIR/DEBIAN/postinst"
-    chmod 755 "$STAGING_DIR/DEBIAN/postinst"
+    
+    for script in postinst prerm postrm; do
+        if [ -f "$script" ]; then
+            cp "$script" "$STAGING_DIR/DEBIAN/$script"
+            chmod 755 "$STAGING_DIR/DEBIAN/$script"
+        fi
+    done
     
 
     echo "Generating conffiles for $COMP..."

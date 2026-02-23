@@ -5,18 +5,24 @@ case "$1" in
     configure)
         # 1. Create starrocks group
         if ! getent group starrocks >/dev/null; then
-            groupadd --system starrocks
+            if ! groupadd --system starrocks; then
+                echo "Error: Failed to create system group 'starrocks'." >&2
+                exit 1
+            fi
         fi
 
         # 2. Create starrocks user
         if ! getent passwd starrocks >/dev/null; then
-            useradd --system \
+            if ! useradd --system \
                 --gid starrocks \
                 --home-dir /var/lib/starrocks \
                 --no-create-home \
                 --shell /usr/sbin/nologin \
                 --comment "StarRocks system user" \
-                starrocks
+                starrocks; then
+                echo "Error: Failed to create system user 'starrocks'." >&2
+                exit 1
+            fi
         fi
 
         # 3. Create specific subdirectories for FE,BE,CN with correct ownership and permissions
