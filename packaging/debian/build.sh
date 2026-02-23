@@ -54,6 +54,11 @@ CN_SOURCE=${5:-"$BE_SOURCE"}
 echo "### StarRocks Debian Packaging Build ###"
 
 # Detect OS for portable sed
+if [ -z "$BASH_VERSION" ]; then
+    echo "ERROR: This script requires Bash." >&2
+    exit 1
+fi
+
 SED_I=(-i)
 if [[ "$OSTYPE" == "darwin"* ]]; then
   SED_I=(-i '')
@@ -105,18 +110,21 @@ for COMP in "fe" "be" "cn"; do
 
     # Copy Configs and set up symlink
     cp -a "$SRC_DIR/conf/"* "$STAGING_DIR/etc/starrocks/$COMP/"
-    ln -s "/etc/starrocks/$COMP" "$STAGING_DIR/usr/lib/starrocks/$COMP/conf"
+    ln -sfn "/etc/starrocks/$COMP" "$STAGING_DIR/usr/lib/starrocks/$COMP/conf"
 
     # Cleanup either BE or CN
     if [ "$COMP" == "be" ]; then
         rm -f "$STAGING_DIR/etc/starrocks/be/cn.conf"
+        echo "Note: BE and CN are mutually exclusive. Do not convert this BE directory to CN in-place." > "$STAGING_DIR/etc/starrocks/be/PACKAGE_NOTE"
     elif [ "$COMP" == "cn" ]; then
         rm -f "$STAGING_DIR/etc/starrocks/cn/be.conf"
+        echo "Note: CN and BE are mutually exclusive. Do not convert this CN directory to BE in-place." > "$STAGING_DIR/etc/starrocks/cn/PACKAGE_NOTE"
     fi
 
     # Path Patching (LSB)
     echo "Patching $COMP.conf for standard paths..."
     CONF_FILE="$STAGING_DIR/etc/starrocks/$COMP/$COMP.conf"
+    sed "${SED_I[@]}" 's/\r$//' "$CONF_FILE"
 
     # Define the key and path based on component
     if [ "$COMP" == "fe" ]; then
@@ -183,6 +191,9 @@ for COMP in "fe" "be" "cn"; do
 
     # Build .deb
     echo "Building $PACKAGE_NAME.deb..."
+    # NOTE: --root-owner-group requires dpkg >= 1.19.0 (Debian 10+, Ubuntu 18.10+).
+    # We intentionally do not support legacy versions as StarRocks requires a 
+    # modern environment (GLIBC, etc.) found in these versions or newer.
     dpkg-deb --root-owner-group --build "$STAGING_DIR" "target/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
 done
 
