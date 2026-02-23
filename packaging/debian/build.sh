@@ -1,16 +1,23 @@
 #!/bin/bash
 set -e
 
-# --- Configuration & Arguments ---
+# --- StarRocks Debian Packaging Build Script ---
+# Purpose: Generates .deb packages for FE, BE, and CN components.
+# Usage: ./build.sh [version] [fe_src] [be_src] [arch]
+# Example: ./build.sh 4.0.4 ../../out/fe ../../out/be amd64
+#
+# Parameters:
 # $1: Version (default: 4.0.4)
 # $2: FE Source directory (default: ../../out/fe)
-# $3: BE/CN Source directory (default: ../../out/be)
+# $3: BE Source directory (default: ../../out/be)
 # $4: Architecture (default: output of dpkg --print-architecture)
+# $5: CN Source directory (default: defaults to BE_SOURCE)
 
 VERSION=${1:-"4.0.4"}
 FE_SOURCE=${2:-"../../out/fe"}
 BE_SOURCE=${3:-"../../out/be"}
 ARCH=${4:-"$(dpkg --print-architecture)"}
+CN_SOURCE=${5:-"$BE_SOURCE"}
 
 echo "### StarRocks Debian Packaging Build ###"
 
@@ -28,7 +35,15 @@ mkdir -p target
 for COMP in "fe" "be" "cn"; do
     PACKAGE_NAME="starrocks-$COMP"
     STAGING_DIR="target/${PACKAGE_NAME}_${VERSION}_${ARCH}"
-    SRC_DIR=$([ "$COMP" == "fe" ] && echo "$FE_SOURCE" || echo "$BE_SOURCE")
+    
+    # Determine Source Directory dynamically
+    if [ "$COMP" == "fe" ]; then
+        SRC_DIR="$FE_SOURCE"
+    elif [ "$COMP" == "cn" ]; then
+        SRC_DIR="$CN_SOURCE"
+    else
+        SRC_DIR="$BE_SOURCE"
+    fi
     
     echo "--- Processing $PACKAGE_NAME ---"
 
@@ -94,18 +109,21 @@ for COMP in "fe" "be" "cn"; do
 
     # Patch common log and PID paths
     for VAR in "sys_log_dir" "LOG_DIR" "PID_DIR"; do
-        VALUE="/var/log/starrocks/$COMP"
-        
         if [ "$VAR" == "PID_DIR" ]; then
-            if [ "$COMP" != "fe" ]; then
-                continue
-            fi
             VALUE="/run/starrocks"
+        else
+            VALUE="/var/log/starrocks/$COMP"
         fi
 
+        # Robust Regex:
+        # 1. Matches lines with leading/trailing whitespace
+        # 2. Handles commented or uncommented lines (#?)
+        # 3. Uses -E for Extended Regex to handle [[:space:]] properly
         if grep -Eq "^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=" "$CONF_FILE"; then
+            echo "Updating $VAR in $CONF_FILE"
             sed "${SED_I[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=.*|$VAR = $VALUE|" "$CONF_FILE"
         else
+            echo "Appending $VAR to $CONF_FILE"
             echo "$VAR = $VALUE" >> "$CONF_FILE"
         fi
     done
@@ -114,13 +132,12 @@ for COMP in "fe" "be" "cn"; do
     cp "control.$COMP" "$STAGING_DIR/DEBIAN/control"
     sed "${SED_I[@]}" "s|^Version:.*|Version: $VERSION|" "$STAGING_DIR/DEBIAN/control"
     sed "${SED_I[@]}" "s|^Architecture:.*|Architecture: $ARCH|" "$STAGING_DIR/DEBIAN/control"
-    echo "" >> "$STAGING_DIR/DEBIAN/control"
     cp "postinst" "$STAGING_DIR/DEBIAN/postinst"
     chmod 755 "$STAGING_DIR/DEBIAN/postinst"
     
 
     echo "Generating conffiles for $COMP..."
-    find "$STAGING_DIR/etc/starrocks/$COMP" -type f | sed "s|^$STAGING_DIR||" | grep . > "$STAGING_DIR/DEBIAN/conffiles"
+    find "$STAGING_DIR/etc/starrocks/$COMP" -type f 2>/dev/null | sed "s|^$STAGING_DIR||" > "$STAGING_DIR/DEBIAN/conffiles" || true
 
     # Inject Systemd
     if [ -f "systemd/starrocks-$COMP.service" ]; then
