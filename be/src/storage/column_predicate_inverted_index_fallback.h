@@ -50,10 +50,10 @@ public:
 
     PredicateType type() const override { return PredicateType::kGinFallback; }
     bool can_vectorized() const override;
-    
+
     // Fallback predicates already have their bitmap loaded, shouldn't call seek_inverted_index again
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                              roaring::Roaring* row_bitmap) const override {
+                               roaring::Roaring* row_bitmap) const override {
         return Status::InternalError("seek_inverted_index should not be called on InvertedIndexFallbackPredicate");
     }
 
@@ -64,18 +64,18 @@ public:
 
     // Access to the wrapped predicate
     const ColumnExprPredicate* wrapped_predicate() const { return _wrapped_predicate; }
-    
+
     // Forward to wrapped predicate
     bool is_negated_expr() const;
-    
+
     // Access to the segment-specific bitmap for optimization decisions
     const roaring::Roaring& get_bitmap() const { return _bitmap; }
 
 private:
-    roaring::Roaring _bitmap;                       // Segment-specific bitmap
-    const ColumnExprPredicate* _wrapped_predicate;  // Shared across segments
-    const std::vector<rowid_t>* _rowid_buffer;      // Pointer to SegmentIterator's rowid buffer
-    mutable std::vector<uint8_t> _tmp_select;       // Reusable buffer for evaluate_and/evaluate_or
+    roaring::Roaring _bitmap;                      // Segment-specific bitmap
+    const ColumnExprPredicate* _wrapped_predicate; // Shared across segments
+    const std::vector<rowid_t>* _rowid_buffer;     // Pointer to SegmentIterator's rowid buffer
+    mutable std::vector<uint8_t> _tmp_select;      // Reusable buffer for evaluate_and/evaluate_or
 };
 
 } // namespace starrocks

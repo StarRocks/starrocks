@@ -322,15 +322,15 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
         return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
     }
-    
+
     if (PredicateType::kGinFallback == pred->type()) {
-        const auto* fallback_pred = down_cast<const InvertedIndexFallbackPredicate*>(pred);        
+        const auto* fallback_pred = down_cast<const InvertedIndexFallbackPredicate*>(pred);
         if (fallback_pred->get_bitmap().isEmpty()) {
             return fallback_pred->is_negated_expr() ? RewriteStatus::ALWAYS_TRUE : RewriteStatus::ALWAYS_FALSE;
         }
         return RewriteStatus::UNCHANGED;
     }
-    
+
     if (PredicateType::kPlaceHolder == pred->type()) {
         return RewriteStatus::ALWAYS_TRUE;
     }

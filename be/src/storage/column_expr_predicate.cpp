@@ -302,8 +302,8 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
 
     return Status::OK();
 }
-StatusOr<std::optional<roaring::Roaring>> ColumnExprPredicate::read_inverted_index(const std::string& column_name,
-                                                                                   InvertedIndexIterator* iterator) const {
+StatusOr<std::optional<roaring::Roaring>> ColumnExprPredicate::read_inverted_index(
+        const std::string& column_name, InvertedIndexIterator* iterator) const {
 #ifndef __APPLE__
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate

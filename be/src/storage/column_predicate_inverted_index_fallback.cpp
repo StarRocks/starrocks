@@ -58,7 +58,7 @@ Status InvertedIndexFallbackPredicate::evaluate_and(const Column* column, uint8_
     uint16_t size = to - from;
     _tmp_select.resize(size);
     uint8_t* tmp = _tmp_select.data();
-    
+
     RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
         sel[i + from] &= tmp[i];
@@ -74,7 +74,7 @@ Status InvertedIndexFallbackPredicate::evaluate_or(const Column* column, uint8_t
     uint16_t size = to - from;
     _tmp_select.resize(size);
     uint8_t* tmp = _tmp_select.data();
-    
+
     RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
         sel[i + from] |= tmp[i];
@@ -109,8 +109,8 @@ Status InvertedIndexFallbackPredicate::convert_to(const ColumnPredicate** output
 }
 
 std::string InvertedIndexFallbackPredicate::debug_string() const {
-    return "InvertedIndexFallback(" + _wrapped_predicate->debug_string() + ", bitmap_size=" +
-           std::to_string(_bitmap.cardinality()) + ")";
+    return "InvertedIndexFallback(" + _wrapped_predicate->debug_string() +
+           ", bitmap_size=" + std::to_string(_bitmap.cardinality()) + ")";
 }
 
 } // namespace starrocks
