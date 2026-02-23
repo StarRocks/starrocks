@@ -19,6 +19,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import org.slf4j.Logger;
@@ -40,6 +41,8 @@ public class DMLStmtAnalyzer {
                 ((DeleteStmt) dmlStmt).setTableRef(tableRef);
             } else if (dmlStmt instanceof UpdateStmt) {
                 ((UpdateStmt) dmlStmt).setTableRef(tableRef);
+            } else if (dmlStmt instanceof MergeIntoStmt) {
+                ((MergeIntoStmt) dmlStmt).setTargetTableRef(tableRef);
             }
             visit(dmlStmt, context);
         }
@@ -59,6 +62,12 @@ public class DMLStmtAnalyzer {
         @Override
         public Void visitDeleteStatement(DeleteStmt stmt, ConnectContext context) {
             DeleteAnalyzer.analyze(stmt, context);
+            return null;
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt stmt, ConnectContext context) {
+            MergeIntoAnalyzer.analyze(stmt, context);
             return null;
         }
     }

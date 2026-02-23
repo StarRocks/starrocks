@@ -247,6 +247,8 @@ import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
+import com.starrocks.sql.ast.MergeClause;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
@@ -2699,6 +2701,70 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         ret.setHintNodes(hintMap.get(context));
         return ret;
+    }
+
+    // ------------------------------------------- Merge Into Statement ------------------------------------------------
+
+    @Override
+    public ParseNode visitMergeIntoStatement(com.starrocks.sql.parser.StarRocksParser.MergeIntoStatementContext context) {
+        QualifiedName targetName = getQualifiedName(context.qualifiedName());
+        TableRef targetTableRef = new TableRef(normalizeName(targetName), null, createPos(context));
+
+        String targetAlias = null;
+        if (!context.identifier().isEmpty()) {
+            targetAlias = ((Identifier) visit(context.identifier(0))).getValue();
+        }
+
+        Relation sourceRelation = (Relation) visit(context.relation());
+
+        String sourceAlias = null;
+
+        Expr mergeCondition = (Expr) visit(context.expression());
+
+        List<MergeClause> mergeClauses = visit(context.mergeClause(), MergeClause.class);
+
+        MergeIntoStmt stmt = new MergeIntoStmt(targetTableRef, targetAlias,
+                sourceRelation, sourceAlias, mergeCondition, mergeClauses, createPos(context));
+
+        if (context.explainDesc() != null) {
+            stmt.setIsExplain(true, getExplainType(context.explainDesc()));
+            if (StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
+            }
+        }
+
+        stmt.setHintNodes(hintMap.get(context));
+        return stmt;
+    }
+
+    @Override
+    public ParseNode visitMergeUpdateClause(com.starrocks.sql.parser.StarRocksParser.MergeUpdateClauseContext context) {
+        Expr condition = context.expression() != null ? (Expr) visit(context.expression()) : null;
+        List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
+        return new MergeClause.MergeUpdateClause(condition, assignments, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitMergeDeleteClause(com.starrocks.sql.parser.StarRocksParser.MergeDeleteClauseContext context) {
+        Expr condition = context.expression() != null ? (Expr) visit(context.expression()) : null;
+        return new MergeClause.MergeDeleteClause(condition, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitMergeInsertClause(com.starrocks.sql.parser.StarRocksParser.MergeInsertClauseContext context) {
+        Expr condition = context.expression() != null ? (Expr) visit(context.expression()) : null;
+
+        List<String> targetColumnNames = null;
+        if (!context.identifier().isEmpty()) {
+            targetColumnNames = context.identifier().stream()
+                    .map(id -> ((Identifier) visit(id)).getValue())
+                    .collect(toList());
+        }
+
+        ValueList valueList = (ValueList) visit(context.expressionsWithDefault());
+        List<Expr> valueExpressions = valueList.getRow();
+
+        return new MergeClause.MergeInsertClause(condition, targetColumnNames, valueExpressions, createPos(context));
     }
 
     // ------------------------------------------- Routine Statement ---------------------------------------------------
