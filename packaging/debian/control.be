@@ -7,5 +7,5 @@ Depends: bash, procps, libssl1.0.0 | libssl1.1 | libssl3, libibverbs1
 Maintainer: StarRocks Team <dev@starrocks.io>
 Description: StarRocks Backend (BE)
  StarRocks is a next-generation real-time analytical warehouse.
- This package contains the Backend (BE) nodes responsible for 
+ This package contains the Backend (BE) nodes responsible for
  data storage and query execution.
