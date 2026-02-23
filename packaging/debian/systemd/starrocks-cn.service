@@ -8,7 +8,8 @@ User=starrocks
 Group=starrocks
 RuntimeDirectory=starrocks
 ExecStart=/usr/lib/starrocks/cn/bin/start_cn.sh
-Restart=on-failure
+Restart=always
+RestartSec=5
 LimitNOFILE=262144
 LimitMEMLOCK=infinity
 
