@@ -419,13 +419,15 @@ public class RestoreHandler {
 
                     // Generate new tablets in origin tablet order
                     List<Long> originalTabletIds = idx.getTabletIdsInOrder();
+                    List<Tablet> originalTablets = new ArrayList<>(idx.getTablets());
                     int tabletNum = originalTabletIds.size();
                     idx.clearTabletsForRestore();
                     createTabletsForRestore(
                             tableForRestore,
                             tabletNum,
                             idx,
-                            physicalPartition.getId());
+                            physicalPartition.getId(),
+                            originalTablets);
                     List<Long> newTabletIds = idx.getTabletIdsInOrder();
                     if (originalTabletIds.size() == newTabletIds.size()) {
                         for (int i = 0; i < originalTabletIds.size(); ++i) {
@@ -458,8 +460,10 @@ public class RestoreHandler {
      * @param tabletNum           Number of tablets to create
      * @param index               MaterializedIndex to add tablets to
      * @param physicalPartitionId Physical partition ID
+     * @param originalTablets     Original tablets before restore, used to copy range info
      */
-    private void createTabletsForRestore(LakeTable table, int tabletNum, MaterializedIndex index, long physicalPartitionId)
+    private void createTabletsForRestore(LakeTable table, int tabletNum, MaterializedIndex index, long physicalPartitionId,
+                                         List<Tablet> originalTablets)
             throws StarRocksException {
         // Use physical partition id as path id when creating a new physical partition
         FilePathInfo fsInfo = table.getPartitionFilePathInfo(physicalPartitionId);
@@ -477,8 +481,11 @@ public class RestoreHandler {
             LOG.error(e.getMessage(), e);
             throw new StarRocksException("Failed to create shards: " + e.getMessage(), e);
         }
-        for (long shardId : shardIds) {
-            LakeTablet tablet = new LakeTablet(shardId);
+        for (int i = 0; i < shardIds.size(); i++) {
+            LakeTablet tablet = new LakeTablet(shardIds.get(i));
+            if (table.isRangeDistribution() && i < originalTablets.size()) {
+                tablet.setRange(originalTablets.get(i).getRange());
+            }
             index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
         }
     }

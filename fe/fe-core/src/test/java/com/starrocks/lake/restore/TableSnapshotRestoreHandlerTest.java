@@ -26,10 +26,13 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -140,6 +143,51 @@ public class TableSnapshotRestoreHandlerTest {
         Assertions.assertEquals(baseIndex, updatedPhysicalPartition.getIndex(baseIndex.getId()));
     }
 
+    @Test
+    public void testResetIdsForRestoreCopiesTabletRangeForRangeDistribution() throws Exception {
+        LakeTable table = createLakeTableWithRangeDistribution();
+        Database targetDb = new Database(33L, "target_db");
+
+        // Save original tablet ranges before restore
+        Partition origPartition = table.getPartitions().iterator().next();
+        MaterializedIndex origIndex = origPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        List<TabletRange> originalRanges = Lists.newArrayList();
+        for (Tablet tablet : origIndex.getTablets()) {
+            originalRanges.add(tablet.getRange());
+        }
+
+        handler.resetIdsForRestore(targetDb, table);
+
+        // Verify that all new tablets inherited the range from the original tablets
+        Partition restoredPartition = table.getPartitions().iterator().next();
+        MaterializedIndex restoredIndex = restoredPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        List<Tablet> restoredTablets = restoredIndex.getTablets();
+        Assertions.assertEquals(originalRanges.size(), restoredTablets.size());
+        for (int i = 0; i < restoredTablets.size(); i++) {
+            Assertions.assertSame(originalRanges.get(i), restoredTablets.get(i).getRange(),
+                    "New tablet should inherit the range from the original tablet");
+        }
+    }
+
+    @Test
+    public void testResetIdsForRestoreNoTabletRangeForRandomDistribution() throws Exception {
+        LakeTable table = createLakeTable();
+        Database targetDb = new Database(55L, "target_db");
+
+        handler.resetIdsForRestore(targetDb, table);
+
+        // Verify that tablets do NOT have a TabletRange for random distribution
+        for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
+                for (Tablet tablet : baseIndex.getTablets()) {
+                    Assertions.assertNull(tablet.getRange(),
+                            "TabletRange should be null for random distribution table after restore");
+                }
+            }
+        }
+    }
+
     private LakeTable createLakeTable() {
         List<Column> columns = Lists.newArrayList(new Column("c0", IntegerType.BIGINT, true));
         LakeTable table = new LakeTable(100L, "lake_table", columns, KeysType.DUP_KEYS,
@@ -166,6 +214,41 @@ public class TableSnapshotRestoreHandlerTest {
         long[] tabletIds = new long[] {4001L, 4002L};
         for (long tabletId : tabletIds) {
             LakeTablet tablet = new LakeTablet(tabletId);
+            TabletMeta meta = new TabletMeta(10L, table.getId(), physicalPartitionId, indexId,
+                    TStorageMedium.HDD, true);
+            baseIndex.addTablet(tablet, meta, false);
+        }
+
+        return table;
+    }
+
+    private LakeTable createLakeTableWithRangeDistribution() {
+        List<Column> columns = Lists.newArrayList(new Column("c0", IntegerType.BIGINT, true));
+        LakeTable table = new LakeTable(100L, "lake_range_table", columns, KeysType.DUP_KEYS,
+                new SinglePartitionInfo(), new RangeDistributionInfo());
+
+        TableProperty property = new TableProperty(Maps.newHashMap());
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        property.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
+        table.setTableProperty(property);
+
+        long indexId = 200L;
+        MaterializedIndex baseIndex = new MaterializedIndex(indexId);
+        baseIndex.setState(IndexState.NORMAL);
+        table.setBaseIndexMetaId(indexId);
+        table.setIndexMeta(indexId, table.getName(), columns, 0, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        long physicalPartitionId = 301L;
+        Partition partition = new Partition(300L, physicalPartitionId, "p1", baseIndex,
+                new RangeDistributionInfo());
+        table.addPartition(partition);
+
+        long[] tabletIds = new long[] {4001L};
+        for (long tabletId : tabletIds) {
+            LakeTablet tablet = new LakeTablet(tabletId);
+            tablet.setRange(new TabletRange());
             TabletMeta meta = new TabletMeta(10L, table.getId(), physicalPartitionId, indexId,
                     TStorageMedium.HDD, true);
             baseIndex.addTablet(tablet, meta, false);
