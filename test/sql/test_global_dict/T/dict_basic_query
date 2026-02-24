@@ -17,18 +17,35 @@ PROPERTIES (
 create table t2 like t1;
 create table t3 like t1;
 
+CREATE TABLE `t4` (
+  `v1` varchar(20) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
 -- prepare data and analyze
 insert into t1 SELECT generate_series%100, generate_series%255 FROM TABLE(generate_series(1, 65535));
 insert into t2 SELECT generate_series%100, generate_series%255 FROM TABLE(generate_series(1, 65535));
 insert into t3 SELECT generate_series%100 + 1000, generate_series%255 + 1000 FROM TABLE(generate_series(1, 65535));
+insert into t4 values ('a');
+insert into t4 values (NULL);
 
 [UC]analyze full table t1;
 [UC]analyze full table t2;
 [UC]analyze full table t3;
+[UC]analyze full table t4;
 
 function: wait_global_dict_ready('v1', 't1')
 function: wait_global_dict_ready('v1', 't2')
 function: wait_global_dict_ready('v1', 't3')
+function: wait_global_dict_ready('v1', 't4')
 
 select lower(l.v1) as r1, upper(r.v2) as r2 from t1 l join t2 r on l.v2 = r.v2 order by r1, r2 limit 2;
 select lower(l.v1) as r1, if(l.v1 is null, 1, 0) as r2, upper(r.v2)  as r3 from t1 l join t2 r on l.v2 = r.v2 order by r1, r2, r3 limit 2;
@@ -45,3 +62,5 @@ select lower(l.v1) as r1, if(l.v1 is null, 1, null) as r2, upper(r.v2) as r3 fro
 select lower(l.v1) as r1, if(l.v1 is null, 1, null) as r2, upper(r.v2) as r3 from t1 l left join t3 r on l.v2 = r.v2 order by r1, r2, r3 limit 2;
 select lower(l.v1) as r1, if(l.v1 is null, 1, null) as r2, upper(r.v2) as r3 from t1 l right join t3 r on l.v2 = r.v2 order by r1, r2, r3 limit 2;
 select lower(l.v1) as r1, if(l.v1 = 1, 1, null) as r2, upper(r.v2) as r3 from t1 l right join t3 r on l.v2 = r.v2 order by r1, r2, r3 limit 2;
+
+select v1, if(v1='a', null, 'b') from t4 order by 1;
