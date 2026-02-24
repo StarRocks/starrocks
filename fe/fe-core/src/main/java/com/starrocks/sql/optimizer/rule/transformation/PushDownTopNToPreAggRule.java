@@ -124,6 +124,28 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
         OptExpression localAgg = agg.inputAt(0);
         LogicalAggregationOperator localAggOp = (LogicalAggregationOperator) localAgg.getOp();
 
+<<<<<<< HEAD
+=======
+        // Create a new TopN operator that will be placed above the local aggregate
+        // This TopN operator will be used to filter group by data during local aggregation
+        LogicalTopNOperator localTopNOp = new LogicalTopNOperator.Builder()
+                .withOperator(topn)
+                .setSortPhase(SortPhase.PARTIAL)
+                .setIsSplit(false)
+                .setPerPipeline(true) // No merge needed
+                .build();
+        localTopNOp.setTopNPushDownAgg();
+
+        LogicalTopNOperator.TopNSortInfo localTopNSortInfo = null;
+        int topNPushDownAggMode = context.getSessionVariable().getTopNPushDownAggMode();
+        // disable topn push down when the first topN's cardinality is low enough
+        if (topNPushDownAggMode >= 1) {
+            localTopNSortInfo = new LogicalTopNOperator.TopNSortInfo(
+                    topn.getOrderByElements(), topn.getSortPhase(), topn.getTopNType(),
+                    topn.getLimit(), topn.getOffset());
+        }
+        // Create new local aggregation with TopN information for filtering during aggregation
+>>>>>>> d86c629ecd ([BugFix] Fix PushDownTopNToPreAggRule bugs (#68954))
         OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
                         .withOperator(localAggOp)
                         .setTopNLocalAgg(true)
