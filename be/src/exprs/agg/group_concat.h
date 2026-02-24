@@ -341,6 +341,8 @@ class GroupConcatAggregateFunctionV2 final
         : public AggregateFunctionBatchHelper<GroupConcatAggregateStateV2, GroupConcatAggregateFunctionV2> {
 public:
     // group_concat(a, b order by c, d), the arguments are a,b,',',c,d
+    bool support_nullable_immediate_input() const override { return true; }
+
     void create_impl(FunctionContext* ctx, GroupConcatAggregateStateV2& state) const {
         auto num = ctx->get_num_args();
         state.data_columns = std::make_unique<MutableColumns>();
