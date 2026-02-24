@@ -434,6 +434,12 @@ class WindowSkewTest extends PlanTestBase {
 
     @Test
     void testMixedWindowPartitionsWithSkewHint() throws Exception {
+        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.0).build();
+
+        OlapTable table = getOlapTable("window_skew_table");
+        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
+        statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
         // Three analytical windows:
         // 1. partition by p (with skew hint)
         // 2. partition by p (no skew hint)
@@ -449,5 +455,17 @@ class WindowSkewTest extends PlanTestBase {
         // Verify that the skew hint on 'p' triggered the split
         assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
         assertContains(plan, "Predicates: [7: p, INT, true] IS NOT NULL");
+    }
+
+    @Test
+    void testWindowSkewHintRejectsMultipleValues() {
+        // Window skew hint currently only supports a single value
+        String sql = "select p, s, sum(x) over ([skew|p(1, 2)] partition by p order by s) from window_skew_table";
+        Exception e = assertThrows(Exception.class, () -> getFragmentPlan(sql));
+        assertContains(e.getMessage(), "Window skew hint currently supports only a single value, but got 2 values");
+
+        String sql2 = "select p, s, sum(x) over ([skew|p(NULL, 2)] partition by p order by s) from window_skew_table";
+        Exception e2 = assertThrows(Exception.class, () -> getFragmentPlan(sql2));
+        assertContains(e2.getMessage(), "Window skew hint currently supports only a single value, but got 2 values");
     }
 }

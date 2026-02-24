@@ -394,7 +394,7 @@ public class QueryTransformer {
                 }
                 if (rewriteOperator.getSkewColumn() != null) {
                     windowOperator.setSkewColumn(rewriteOperator.getSkewColumn());
-                    windowOperator.setSkewValue(rewriteOperator.getSkewValue());
+                    windowOperator.setSkewValues(rewriteOperator.getSkewValues());
                 }
                 windowOperator.addFunction(analyticExpr);
             } else {

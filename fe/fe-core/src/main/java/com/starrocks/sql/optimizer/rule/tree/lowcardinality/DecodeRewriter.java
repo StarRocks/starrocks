@@ -416,7 +416,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 windowOp.isUseHashBasedPartition(),
                 windowOp.isSkewed(),
                 windowOp.getSkewColumn(),
-                windowOp.getSkewValue(),
+                windowOp.getSkewValues(),
                 windowOp.isInputIsBinary(),
                 windowOp.getLimit(),
                 predicate,

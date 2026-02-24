@@ -44,7 +44,7 @@ public class WindowImplementationRule extends ImplementationRule {
                 logical.isUseHashBasedPartition(),
                 logical.isSkewed(),
                 logical.getSkewColumn(),
-                logical.getSkewValue(),
+                logical.getSkewValues(),
                 logical.isInputIsBinary(),
                 logical.getLimit(),
                 logical.getPredicate(),

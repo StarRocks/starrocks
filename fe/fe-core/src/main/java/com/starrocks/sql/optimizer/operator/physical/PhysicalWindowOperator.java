@@ -43,9 +43,9 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final boolean useHashBasedPartition;
     private final boolean isSkewed;
 
-    // Skew hint with explicit column and value: [skew|t.column(value)]
+    // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
     private final ScalarOperator skewColumn;
-    private final ScalarOperator skewValue;
+    private final List<ScalarOperator> skewValues;
 
     // only true when rank <=1 with preAgg optimization is triggered, imply this window should merge input instead of update
     // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
@@ -59,7 +59,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                                   boolean useHashBasedPartition,
                                   boolean isSkewed,
                                   ScalarOperator skewColumn,
-                                  ScalarOperator skewValue,
+                                  List<ScalarOperator> skewValues,
                                   boolean inputIsBinary,
                                   long limit,
                                   ScalarOperator predicate,
@@ -73,7 +73,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         this.useHashBasedPartition = useHashBasedPartition;
         this.isSkewed = isSkewed;
         this.skewColumn = skewColumn;
-        this.skewValue = skewValue;
+        this.skewValues = skewValues;
         this.inputIsBinary = inputIsBinary;
         this.limit = limit;
         this.predicate = predicate;
@@ -112,8 +112,8 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         return skewColumn;
     }
 
-    public ScalarOperator getSkewValue() {
-        return skewValue;
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
     }
 
     public boolean isInputIsBinary() {
@@ -160,14 +160,14 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                 Objects.equals(useHashBasedPartition, that.useHashBasedPartition) &&
                 Objects.equals(isSkewed, that.isSkewed) &&
                 Objects.equals(skewColumn, that.skewColumn) &&
-                Objects.equals(skewValue, that.skewValue) &&
+                Objects.equals(skewValues, that.skewValues) &&
                 Objects.equals(inputIsBinary, that.inputIsBinary);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), analyticCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition, isSkewed, skewColumn, skewValue, inputIsBinary);
+                useHashBasedPartition, isSkewed, skewColumn, skewValues, inputIsBinary);
     }
 
     @Override

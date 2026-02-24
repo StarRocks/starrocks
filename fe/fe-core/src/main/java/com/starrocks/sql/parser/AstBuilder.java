@@ -8104,25 +8104,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         List<Expr> partitionExprs = visit(context.partition, Expr.class);
 
         Expr skewColumn = null;
-        Expr skewValue = null;
+        List<Expr> skewValues = List.of();
         // Handle skew hint with explicit column and value: [skew|t.column(value)]
         if (context.bracketHint() != null) {
             if (context.bracketHint().primaryExpression() != null) {
                 skewColumn = (Expr) visit(context.bracketHint().primaryExpression());
             }
             if (context.bracketHint().generalLiteralExpressionList() != null) {
-                List<Expr> skewValues = visit(
+                skewValues = visit(
                         context.bracketHint().generalLiteralExpressionList().generalLiteralExpression(),
                         Expr.class);
-                if (!skewValues.isEmpty()) {
-                    skewValue = skewValues.get(0);
-                }
             }
         }
         return new AnalyticExpr(functionCallExpr, partitionExprs, orderByElements,
                 (AnalyticWindow) visitIfPresent(context.windowFrame()),
                 context.bracketHint() == null ? null : context.bracketHint().identifier().stream()
-                        .map(RuleContext::getText).collect(toList()), pos, skewColumn, skewValue);
+                        .map(RuleContext::getText).collect(toList()), pos, skewColumn, skewValues);
     }
 
     @Override

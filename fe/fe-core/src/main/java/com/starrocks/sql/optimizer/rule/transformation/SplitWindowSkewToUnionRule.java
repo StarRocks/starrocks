@@ -247,7 +247,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
         LogicalWindowOperator.Builder windowBuilder = new LogicalWindowOperator.Builder()
                 .withOperator(originalWindow)
                 .setSkewColumn(null)
-                .setSkewValue(null)
+                .setSkewValues(List.of())
                 .setUseHashBasedPartition(partitionExprs.isEmpty() && originalWindow.isUseHashBasedPartition())
                 .setIsSkewed(partitionExprs.isEmpty() && originalWindow.isSkewed());
 
@@ -321,17 +321,13 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
      */
     private List<SkewedInfo> findSkewedPartitionFromHint(LogicalWindowOperator window) {
         ScalarOperator skewColumn = window.getSkewColumn();
-        ScalarOperator skewValue = window.getSkewValue();
+        List<ScalarOperator> skewValues = window.getSkewValues();
 
-        if (skewColumn == null || skewValue == null) {
+        if (skewColumn == null || skewValues == null || skewValues.isEmpty()) {
             return Collections.emptyList();
         }
 
         if (!(skewColumn instanceof ColumnRefOperator col)) {
-            return Collections.emptyList();
-        }
-
-        if (!(skewValue instanceof ConstantOperator val)) {
             return Collections.emptyList();
         }
 
@@ -340,7 +336,10 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             throw new StarRocksConnectorException("Can't find skew column");
         }
 
-        return List.of(new SkewedInfo(col, val));
+        return skewValues.stream()
+                .filter(v -> v instanceof ConstantOperator)
+                .map(v -> new SkewedInfo(col, (ConstantOperator) v))
+                .toList();
     }
 
     private List<SkewedInfo> findSkewedPartition(List<ScalarOperator> partitionExprs, Statistics statistics) {

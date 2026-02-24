@@ -2054,21 +2054,6 @@ public class QueryAnalyzer {
             for (int i = 0; i < analyticExpr.getChildren().size(); ++i) {
                 analyticExpr.setChild(i, visit(analyticExpr.getChild(i)));
             }
-
-            if (HintNode.HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(analyticExpr.getSkewHint())) {
-                if (analyticExpr.getSkewColumn() == null) {
-                    throw new SemanticException("Window skew column must be specified when using explicit skew hint");
-                }
-                ExpressionAnalyzer.analyzeExpression(analyticExpr.getSkewColumn(), new AnalyzeState(), sourceScope, session);
-                if (analyticExpr.getSkewValue() != null) {
-                    if (!analyticExpr.getSkewValue().isConstant()) {
-                        throw new SemanticException("Window skew join value must be constant");
-                    }
-                } else {
-                    throw new SemanticException("Window skew join value must be specified");
-                }
-            }
-
             return analyticExpr;
         }
 
