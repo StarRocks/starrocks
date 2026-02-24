@@ -3025,6 +3025,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述: 存算分离集群下，是否将写入到对象存储的文件打上对象存储 Tag，方便自定义管理文件。
 - 引入版本: v3.5.3
 
+##### tablet_warmup_max_threads
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群的 CN 节点上，后台 Tablet 预热线程池（`cloud_native_warmup`）的最大线程数。当新 Tablet 被分配到 CN 节点时，预热管理器（Warmup Manager）会使用该线程池在后台从远端存储获取 Tablet 最新的元数据和数据文件。增大此值可以并行预热更多 Tablet，减少预热队列深度，缩短新副本处于不可见状态的时间；减小此值则可降低扩容期间对远端存储的 I/O 压力。在运行时更新该值后，设置立即生效。
+- 引入版本：v3.5.0
+
 ##### table_schema_service_max_retries
 
 - 默认值：3

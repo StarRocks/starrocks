@@ -3204,6 +3204,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 有効にすると、Lake テーブルは関連するトランザクションで combined transaction log パスを使用することを許可します。このフラグはクラスタが shared-data モード（RunMode.isSharedDataMode()）で動作している場合にのみ考慮されます。`lake_use_combined_txn_log = true` のとき、BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING、BATCH_LOAD_JOB タイプのロードトランザクションは combined txn log を使用する対象になります（詳細は LakeTableHelper.supportCombinedTxnLog を参照）。compaction を含むコードパスは isTransactionSupportCombinedTxnLog を通じて combined-log のサポートを確認します。無効化されているか shared-data モードでない場合は、combined transaction log の動作は使用されません。
 - 導入バージョン: v3.3.7, v3.4.0, v3.5.0
 
+##### lake_compute_replica_warmup_timeout_secs
+
+- デフォルト: 900
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 存算分離クラスタで、タブレットが Compute Node 上のウォームアップを完了するまでのタイムアウト時間（秒）。新しいタブレットが CN ノードに割り当てられると、StarRocks はレプリカを公開する前にリモートストレージから最新のメタデータおよびデータファイルを取得します（ウォームアップ）。ウォームアップがこのタイムアウト時間内に完了しない場合、FE はウォームアップが成功したとみなしてレプリカを公開済みにマークします。大きなタブレットや低速なリモートストレージによるウォームアップ失敗が観察される場合はこの値を増やし、スケールアウト後にレプリカが公開されるまでの時間を短縮したい場合は減らしてください。
+- 導入バージョン: v3.5.0
+
 ##### enable_iceberg_commit_queue
 
 - デフォルト: true
