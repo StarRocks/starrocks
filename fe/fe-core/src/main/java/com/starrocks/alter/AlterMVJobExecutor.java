@@ -213,6 +213,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
         }
 
+        boolean isChanged = false;
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
@@ -226,9 +227,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             if (!materializedView.isCloudNativeMaterializedView()) {
                 PropertyAnalyzer.analyzeLocation(materializedView, properties);
             }
+            isChanged = true;
         }
 
-        boolean isChanged = false;
         // bloom_filter_columns
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
             List<Column> baseSchema = materializedView.getColumns();
