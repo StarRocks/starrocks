@@ -34,7 +34,7 @@
 
 #include <fmt/format.h>
 
-#include "base/status_fmt.h"
+#include "base/status.h"
 
 #include <gtest/gtest.h>
 
@@ -182,22 +182,22 @@ TEST_F(StatusTest, test_to_string) {
     ASSERT_EQ("Query not exist: test query not exist", query_not_exist.to_string());
 }
 
-TEST_F(StatusTest, PublishTimeoutFmtFunction) {
-    Status st = Status_PublishTimeout("txn {} timed out after {}ms", 42, 3000);
+TEST_F(StatusTest, PublishTimeoutFmtOverload) {
+    Status st = Status::PublishTimeout("txn {} timed out after {}ms", 42, 3000);
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.is_publish_timeout());
     ASSERT_EQ("txn 42 timed out after 3000ms", st.message());
 }
 
-TEST_F(StatusTest, InternalErrorFmtFunction) {
-    Status st = Status_InternalError("unexpected value {}", 99);
+TEST_F(StatusTest, InternalErrorFmtOverload) {
+    Status st = Status::InternalError("unexpected value {}", 99);
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.is_internal_error());
     ASSERT_EQ("unexpected value 99", st.message());
 }
 
-TEST_F(StatusTest, NotFoundFmtFunction) {
-    Status st = Status_NotFound("tablet {} not found on disk {}", 123, "ssd0");
+TEST_F(StatusTest, NotFoundFmtOverload) {
+    Status st = Status::NotFound("tablet {} not found on disk {}", 123, "ssd0");
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.is_not_found());
     ASSERT_EQ("tablet 123 not found on disk ssd0", st.message());
