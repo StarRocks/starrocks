@@ -444,10 +444,11 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
-            });
-            return null;
+            try {
+                return context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
+            } catch (StarRocksException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override
