@@ -28,6 +28,7 @@ set(EXEC_FILES
     empty_set_node.cpp
     exec_factory.cpp
     exec_node.cpp
+    exec_node_executor.cpp
     exchange_node.cpp
     scan_node.cpp
     select_node.cpp
