@@ -410,9 +410,9 @@ public abstract class BaseMVRefreshProcessor {
                     throw new DmlException("Force refresh failed, database:" + db.getFullName() + " not exist");
                 }
                 try {
-                    // for non-partition mv or complete refresh of partition mv, just clear the visible version map
-                    // directly since all partitions will be refreshed.
-                    if (mvRefreshParams.isCompleteRefresh()) {
+                    // for non-partitioned MVs, or for complete refresh of partitioned MVs, just clear the visible
+                    // version map directly since all partitions will be refreshed.
+                    if (!mv.isPartitionedTable() || mvRefreshParams.isCompleteRefresh()) {
                         mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                     } else {
                         for (PCellWithName partName : toRefreshPartitions.getPartitions()) {
@@ -420,7 +420,7 @@ public abstract class BaseMVRefreshProcessor {
                         }
                     }
                 } catch (Exception e) {
-                    logger.warn("failed to drop partitions {} for force refresh",
+                    logger.warn("failed to drop partitions or clear version map {} for force refresh",
                             Joiner.on(",").join(toRefreshPartitions.getPartitionNames()),
                             DebugUtil.getRootStackTrace(e));
                     throw new AnalysisException("failed to drop partitions for force refresh: " + e.getMessage());

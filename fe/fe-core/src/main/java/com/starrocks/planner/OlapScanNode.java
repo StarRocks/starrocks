@@ -1596,7 +1596,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 MaterializedIndex materializedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
                 if (materializedIndex == null) {
                     throw new StarRocksException(String.format(
-                            "Materialized index with meta id %d not found in partition %s (id: %d) of table %s. " +
+                            "Materialized index with meta id %d not found in partition %s (physical partition id: %d) " +
+                            "of table %s. " +
                             "The index (e.g., materialized view) may have been dropped or the metadata is out of sync. " +
                             "Please retry the query.",
                             index.indexMetaId, partition.getName(), physicalPartition.getId(), olapTable.getName()));
