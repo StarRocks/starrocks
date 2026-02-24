@@ -1048,14 +1048,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
 
-<<<<<<< HEAD
     public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
     public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
 
     public static final String ENABLE_PRE_AGG_TOP_N_PUSH_DOWN = "enable_pre_agg_top_n_push_down";
-=======
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
->>>>>>> 0662e9c8a9 ([BugFix] Fix Arrow Flight Proxy with Multiple FE (#68300))
 
     public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
 
@@ -2180,7 +2177,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
 
-<<<<<<< HEAD
     @VarAttr(name = ARROW_FLIGHT_PROXY)
     private String arrowFlightProxy = "";
     @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
@@ -2188,10 +2184,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRE_AGG_TOP_N_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enablePreAggTopNPushDown = true;
-=======
     @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
     private int topNPushDownAggMode = 1;
->>>>>>> 0662e9c8a9 ([BugFix] Fix Arrow Flight Proxy with Multiple FE (#68300))
 
     @VarAttr(name = ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT)
     private boolean enableLabeledColumnStatisticOutput = false;
@@ -5743,10 +5737,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePreAggTopNPushDown(boolean enablePreAggTopNPushDown) {
         this.enablePreAggTopNPushDown = enablePreAggTopNPushDown;
-=======
+    }
+
     public void setEnablePreAggTopNPushDown(int  topNPushDownAggMode) {
         this.topNPushDownAggMode = topNPushDownAggMode;
->>>>>>> 0662e9c8a9 ([BugFix] Fix Arrow Flight Proxy with Multiple FE (#68300))
     }
 
     public boolean isEnablePreAggTopNPushDown() {

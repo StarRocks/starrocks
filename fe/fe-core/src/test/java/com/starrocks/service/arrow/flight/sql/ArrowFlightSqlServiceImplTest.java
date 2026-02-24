@@ -16,21 +16,15 @@ package com.starrocks.service.arrow.flight.sql;
 
 import com.google.common.cache.Cache;
 import com.google.protobuf.ByteString;
-<<<<<<< HEAD
 import com.starrocks.analysis.ParseNode;
-=======
 import com.starrocks.common.Config;
->>>>>>> 0662e9c8a9 ([BugFix] Fix Arrow Flight Proxy with Multiple FE (#68300))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.plugin.AuditEvent;
-<<<<<<< HEAD
-import com.starrocks.qe.OriginStatement;
-=======
 import com.starrocks.qe.GlobalVariable;
->>>>>>> 0662e9c8a9 ([BugFix] Fix Arrow Flight Proxy with Multiple FE (#68300))
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
