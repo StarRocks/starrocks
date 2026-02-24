@@ -3179,15 +3179,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：启用时，StarRocks 允许 Lake 表对相关事务使用 combined transaction log 路径。仅在集群以 shared-data 模式运行（RunMode.isSharedDataMode()）时此标志才会被考虑。设置 `lake_use_combined_txn_log = true` 时，类型为 BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING 和 BATCH_LOAD_JOB 的加载事务将有资格使用 combined txn logs（参见 LakeTableHelper.supportCombinedTxnLog）。包含 compaction 的代码路径通过 isTransactionSupportCombinedTxnLog 检查 combined-log 支持。如果禁用或不在 shared-data 模式下，则不使用 combined transaction log 行为。
 - 引入版本：`v3.3.7, v3.4.0, v3.5.0`
 
-##### lake_compute_replica_warmup_timeout_secs
-
-- 默认值：`900`
-- 类型：Int
-- 单位：秒
-- 是否动态：是
-- 描述：存算分离集群中，Tablet 在 Compute Node 上完成预热（Warmup）的超时时间（秒）。当新 Tablet 被分配到 CN 节点时，StarRocks 会在将副本设置为可见之前，从远端存储获取该 Tablet 最新的元数据和数据文件（即预热）。若预热未能在该超时时间内完成，FE 将视预热成功并将副本标记为可见。如果因 Tablet 较大或远端存储速度慢而出现预热失败，可适当增大此值；若希望缩短扩容后副本不可见的等待时间，可适当减小此值。
-- 引入版本：`v3.5.0`
-
 ##### enable_iceberg_commit_queue
 
 - 默认值：`true`
