@@ -236,9 +236,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
 
-        // do not cache if jwt or oauth2 is not used OR if it is not a REST Catalog.
-        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() && 
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+        // do not cache if vended credentials are enabled, because credentials may expire before cache TTL.
+        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog)) &&
+                !delegate.isVendedCredentialsEnabled();
         if (!cacheAllowed) {
             return delegate.getTable(connectContext, dbName, tableName);
         }
