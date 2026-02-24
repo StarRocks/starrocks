@@ -5718,7 +5718,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.pushDownHeavyExprs;
     }
 
-<<<<<<< HEAD
     public void setArrowFlightProxy(String proxy) {
         this.arrowFlightProxy = proxy;
     }
