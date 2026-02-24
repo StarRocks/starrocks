@@ -183,6 +183,7 @@ public class LoadLoadingTask extends LoadTask {
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(getLoadId()));
         summaryProfile.addInfoString(ProfileManager.START_TIME,
                 TimeUtils.longToTimeString(createTimestamp));
+        summaryProfile.addInfoString(ProfileManager.START_TIME_MS, String.valueOf(createTimestamp));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - createTimestamp;

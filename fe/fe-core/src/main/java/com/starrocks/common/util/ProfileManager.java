@@ -45,6 +45,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -68,6 +69,7 @@ public class ProfileManager implements MemoryTrackable {
     private static ProfileManager INSTANCE = null;
     public static final String QUERY_ID = "Query ID";
     public static final String START_TIME = "Start Time";
+    public static final String START_TIME_MS = "Start Time Ms";
     public static final String END_TIME = "End Time";
     public static final String TOTAL_TIME = "Total";
     public static final String RETRY_TIMES = "Retry Times";
@@ -93,11 +95,18 @@ public class ProfileManager implements MemoryTrackable {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
         public ProfilingExecPlan plan;
+        // Raw epoch milliseconds for the start time, used to reformat with session timezone.
+        public long startTimeMs;
 
         public List<String> toRow() {
             List<String> res = Lists.newArrayList();
             res.add(infoStrings.get(QUERY_ID));
-            res.add(infoStrings.get(START_TIME));
+            if (startTimeMs > 0) {
+                ZoneId zoneId = TimeUtils.getOrSystemTimeZone(TimeUtils.getSessionTimeZone()).toZoneId();
+                res.add(TimeUtils.longToTimeString(startTimeMs, zoneId));
+            } else {
+                res.add(infoStrings.get(START_TIME));
+            }
             res.add(infoStrings.get(TOTAL_TIME));
             res.add(infoStrings.get(QUERY_STATE));
             String statement = infoStrings.get(SQL_STATEMENT);
@@ -133,6 +142,15 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = new ProfileElement();
         for (String header : PROFILE_HEADERS) {
             element.infoStrings.put(header, summaryProfile.getInfoString(header));
+        }
+        String startTimeMsStr = summaryProfile.getInfoString(START_TIME_MS);
+        if (startTimeMsStr != null && !startTimeMsStr.isEmpty()) {
+            try {
+                element.startTimeMs = Long.parseLong(startTimeMsStr);
+            } catch (NumberFormatException e) {
+                LOG.warn("Failed to parse {} '{}' for query {}",
+                        START_TIME_MS, startTimeMsStr, summaryProfile.getInfoString(QUERY_ID));
+            }
         }
         try {
             element.profileContent = CompressionUtils.gzipCompressString(profileString);

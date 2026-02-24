@@ -173,6 +173,13 @@ public class TimeUtils {
         return longToTimeString(timeStamp, DATETIME_TO_STRING_FORMAT);
     }
 
+    public static String longToTimeString(long timeStamp, ZoneId zoneId) {
+        if (timeStamp <= 0L) {
+            return FeConstants.NULL_STRING;
+        }
+        return DATETIME_TO_STRING_FORMAT.withZone(zoneId).format(Instant.ofEpochMilli(timeStamp));
+    }
+
     public static LocalDate parseDate(String dateStr) throws AnalysisException {
         LocalDate date;
         Matcher matcher = DATETIME_FORMAT_REG.matcher(dateStr);

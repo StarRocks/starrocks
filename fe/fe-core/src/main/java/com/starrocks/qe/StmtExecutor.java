@@ -396,6 +396,7 @@ public class StmtExecutor {
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
         summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(context.getStartTime()));
+        summaryProfile.addInfoString(ProfileManager.START_TIME_MS, String.valueOf(context.getStartTime()));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - context.getStartTime();

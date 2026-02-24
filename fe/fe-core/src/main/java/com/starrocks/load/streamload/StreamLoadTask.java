@@ -1214,6 +1214,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
         summaryProfile.addInfoString(ProfileManager.START_TIME,
                 TimeUtils.longToTimeString(createTimeMs));
+        summaryProfile.addInfoString(ProfileManager.START_TIME_MS, String.valueOf(createTimeMs));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - createTimeMs;

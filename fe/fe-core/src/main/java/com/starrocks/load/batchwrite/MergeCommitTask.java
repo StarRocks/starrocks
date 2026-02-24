@@ -631,6 +631,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
             summaryProfile.addInfoString(ProfileManager.START_TIME,
                     TimeUtils.longToTimeString(loadTimeTrace.createTimeMs));
+            summaryProfile.addInfoString(ProfileManager.START_TIME_MS, String.valueOf(loadTimeTrace.createTimeMs));
             summaryProfile.addInfoString(ProfileManager.END_TIME,
                     TimeUtils.longToTimeString(loadTimeTrace.endTimeMs.get()));
             summaryProfile.addInfoString(ProfileManager.TOTAL_TIME,

@@ -194,6 +194,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, String.valueOf(job.getId()));
         summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(job.getStartTimeMs()));
+        summaryProfile.addInfoString(ProfileManager.START_TIME_MS, String.valueOf(job.getStartTimeMs()));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - job.getStartTimeMs();
