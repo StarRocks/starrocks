@@ -5,27 +5,46 @@ case "$1" in
     configure)
         # 1. Create starrocks group
         if ! getent group starrocks >/dev/null; then
-            groupadd --system starrocks
+            if command -v groupadd >/dev/null 2>&1; then
+                groupadd --system starrocks
+            elif command -v addgroup >/dev/null 2>&1; then
+                addgroup --system starrocks
+            else
+                echo "Error: Neither 'groupadd' nor 'addgroup' found." >&2
+                exit 1
+            fi
         fi
 
-        # 2. Create base directories BEFORE user creation
-        # This ensures the home-dir exists when the user is created.
+        # 2. Create base directories
         for dir in /var/log/starrocks /var/lib/starrocks; do
             if [ ! -d "$dir" ]; then
                 mkdir -p "$dir"
-                # We will fix ownership in the next step once the user exists
             fi
         done
 
         # 3. Create starrocks user
         if ! getent passwd starrocks >/dev/null; then
-            useradd --system \
-                --gid starrocks \
-                --home-dir /var/lib/starrocks \
-                --no-create-home \
-                --shell /usr/sbin/nologin \
-                --comment "StarRocks system user" \
-                starrocks
+            if command -v useradd >/dev/null 2>&1; then
+                useradd --system \
+                    --gid starrocks \
+                    --home-dir /var/lib/starrocks \
+                    --no-create-home \
+                    --shell /usr/sbin/nologin \
+                    --comment "StarRocks system user" \
+                    starrocks
+            elif command -v adduser >/dev/null 2>&1; then
+                # Note: adduser uses --ingroup and --gecos instead of --gid and --comment
+                adduser --system \
+                    --ingroup starrocks \
+                    --home /var/lib/starrocks \
+                    --no-create-home \
+                    --shell /usr/sbin/nologin \
+                    --gecos "StarRocks system user" \
+                    starrocks
+            else
+                echo "Error: Neither 'useradd' nor 'adduser' found." >&2
+                exit 1
+            fi
         fi
         
         # 4. Enforce ownership and permissions on base and specific directories
