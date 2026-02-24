@@ -152,6 +152,11 @@ for COMP in "fe" "be" "cn"; do
     cp -a "$SRC_DIR/bin" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
     cp -a "$SRC_DIR/lib" "$STAGING_DIR/usr/lib/starrocks/$COMP/"
     
+    # Ensure shell scripts and binaries have appropriate execute permissions (755)
+    if [ -d "$STAGING_DIR/usr/lib/starrocks/$COMP/bin" ]; then
+        find "$STAGING_DIR/usr/lib/starrocks/$COMP/bin" -type f -exec chmod 755 {} +
+    fi
+    
     if [ "$COMP" == "fe" ]; then
         [ -d "$SRC_DIR/spark-dpp" ] && cp -a "$SRC_DIR/spark-dpp" "$STAGING_DIR/usr/lib/starrocks/fe/"
         [ -d "$SRC_DIR/webroot" ] && cp -a "$SRC_DIR/webroot" "$STAGING_DIR/usr/lib/starrocks/fe/"
@@ -236,7 +241,10 @@ for COMP in "fe" "be" "cn"; do
 
     echo "Generating conffiles for $COMP..."
     if [ -d "$STAGING_DIR/etc/starrocks/$COMP" ]; then
-        find "$STAGING_DIR/etc/starrocks/$COMP" -type f 2>/dev/null | sed "s|^$STAGING_DIR||" | LC_ALL=C sort > "$STAGING_DIR/DEBIAN/conffiles"
+        if ! find "$STAGING_DIR/etc/starrocks/$COMP" -type f | sed "s|^$STAGING_DIR||" | LC_ALL=C sort > "$STAGING_DIR/DEBIAN/conffiles"; then
+            echo "ERROR: Failed to generate conffiles for $COMP" >&2
+            exit 1
+        fi
     else
         echo "No configuration directory found for $COMP at $STAGING_DIR/etc/starrocks/$COMP; generating empty conffiles."
         : > "$STAGING_DIR/DEBIAN/conffiles"
