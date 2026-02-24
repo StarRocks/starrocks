@@ -673,6 +673,3 @@ struct StatusInstance {
 #define RETURN_IF_DCHECK_GT_FAILED(val1, val2) DCHECK_GT(val1, val2)
 
 #endif
-
-// Inline implementations of the fmt overloads declared above.
-#include "base/status_fmt.hpp"
