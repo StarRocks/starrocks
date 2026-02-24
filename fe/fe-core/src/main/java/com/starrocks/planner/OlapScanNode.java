@@ -1213,7 +1213,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
      */
     public void updateScanInfo(List<Long> selectedPartitionIds,
                                List<Long> scanTabletIds,
-                               List<Long> hintsReplicaIds) {
+                               List<Long> hintsReplicaIds) throws StarRocksException {
         this.scanTabletIds = Lists.newArrayList(scanTabletIds);
         this.hintsReplicaIds = Lists.newArrayList(hintsReplicaIds);
         this.selectedTabletsNum = scanTabletIds.size();
@@ -1579,14 +1579,28 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 
-    private Map<Long, List<Long>> mapTabletsToPartitions() {
+    private Map<Long, List<Long>> mapTabletsToPartitions() throws StarRocksException {
         Map<Long, Long> tabletToPartitionMap = Maps.newHashMap();
         Map<Long, List<Long>> partitionToTabletMap = Maps.newHashMap();
 
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                throw new StarRocksException(String.format(
+                        "Partition %d not found in table %s. " +
+                        "The partition may have been dropped or the metadata is out of sync. " +
+                        "Please retry the query.",
+                        partitionId, olapTable.getName()));
+            }
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 MaterializedIndex materializedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
+                if (materializedIndex == null) {
+                    throw new StarRocksException(String.format(
+                            "Materialized index with meta id %d not found in partition %s (id: %d) of table %s. " +
+                            "The index (e.g., materialized view) may have been dropped or the metadata is out of sync. " +
+                            "Please retry the query.",
+                            index.indexMetaId, partition.getName(), physicalPartition.getId(), olapTable.getName()));
+                }
                 for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
                     tabletToPartitionMap.put(tabletId, physicalPartition.getId());
                 }
@@ -1596,8 +1610,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         for (Long tabletId : scanTabletIds) {
             // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
             // maybe invalid.
-            Preconditions.checkState(tabletToPartitionMap.containsKey(tabletId),
-                    "Invalid tablet id: '" + tabletId + "'");
+            if (!tabletToPartitionMap.containsKey(tabletId)) {
+                throw new StarRocksException(String.format(
+                        "Invalid tablet id: '%d'. The tablet may have been dropped " +
+                        "(e.g., due to materialized view deletion or partition drop). " +
+                        "Selected partitions: %s, Table: %s, IndexMetaId: %d. " +
+                        "Please retry the query.",
+                        tabletId, selectedPartitionIds, olapTable.getName(), index.indexMetaId));
+            }
             long partitionId = tabletToPartitionMap.get(tabletId);
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }
