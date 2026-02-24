@@ -34,6 +34,29 @@ PROPERTIES (
 );
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+create table t2 like t1;
+-- result:
+-- !result
+create table t3 like t1;
+-- result:
+-- !result
+CREATE TABLE `t4` (
+  `v1` varchar(20) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+>>>>>>> 404cee3d5b ([BugFix] Fixing derived dictionary translations for expressions with f(null) != null (#69376))
 insert into t1 SELECT generate_series%100, generate_series%255 FROM TABLE(generate_series(1, 65535));
 -- result:
 -- !result
