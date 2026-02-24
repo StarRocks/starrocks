@@ -466,10 +466,29 @@ public class TaskManager implements MemoryTrackable {
      * Suspend a task, which will stop the task scheduler and kill the running task run.
      * NOTE: this method is thread safe, no need to task lock again.
      */
-    public void suspendTask(Task task) {
+    public void suspendTask(Task task, boolean isReplay) {
         if (task == null) {
             return;
         }
+<<<<<<< HEAD
+=======
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE),
+                    wal -> task.setState(Constants.TaskState.PAUSE)
+            );
+        }
+        suspendTaskInternal(task);
+    }
+
+    /**
+     * Internal method to suspend a task without writing edit log.
+     */
+    private void suspendTaskInternal(Task task) {
+        if (task == null) {
+            return;
+        }
+>>>>>>> 0ab248b441 ([BugFix] Only resume/suspend task in Leader FE (#69308))
         if (!tryTaskLock()) {
             throw new RuntimeException("Failed to get task lock when suspend Task sync[" + task.getName() + "]");
         }
@@ -498,10 +517,29 @@ public class TaskManager implements MemoryTrackable {
      * Resume a task, which will restart the task scheduler if the task is periodical.
      * NOTE: This method is thread safe, no need to task lock again.
      */
-    public void resumeTask(Task task) {
+    public void resumeTask(Task task, boolean isReplay) {
         if (task == null) {
             return;
         }
+<<<<<<< HEAD
+=======
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.ACTIVE),
+                    wal -> task.setState(Constants.TaskState.ACTIVE)
+            );
+        }
+        resumeTaskInternal(task);
+    }
+
+    /**
+     * Internal method to resume a task without writing edit log.
+     */
+    private void resumeTaskInternal(Task task) {
+        if (task == null) {
+            return;
+        }
+>>>>>>> 0ab248b441 ([BugFix] Only resume/suspend task in Leader FE (#69308))
         if (!tryTaskLock()) {
             throw new RuntimeException("Failed to get task lock when resume Task sync[" + task.getName() + "]");
         }

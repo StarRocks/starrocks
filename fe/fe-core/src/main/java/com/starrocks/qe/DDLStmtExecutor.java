@@ -1156,6 +1156,36 @@ public class DDLStmtExecutor {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public ShowResultSet visitAlterTaskStatement(AlterTaskStmt alterTaskStmt, ConnectContext context) {
+            TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
+            String taskName = alterTaskStmt.getTaskName().getName();
+            if (!taskManager.containTask(taskName)) {
+                if (alterTaskStmt.isIfExists()) {
+                    return null;
+                }
+                throw new SemanticException("Task " + taskName + " is not exist");
+            }
+            Task task = taskManager.getTask(taskName);
+            switch (alterTaskStmt.getAction()) {
+                case RESUME:
+                    taskManager.resumeTask(task, false);
+                    break;
+                case SUSPEND:
+                    taskManager.suspendTask(task, false);
+                    break;
+                case SET:
+                    taskManager.updateTaskProperties(task, alterTaskStmt.getProperties());
+                    break;
+                default:
+                    throw new SemanticException("Unsupported alter task action: " + alterTaskStmt.getAction());
+            }
+            return null;
+        }
+
+        @Override
+>>>>>>> 0ab248b441 ([BugFix] Only resume/suspend task in Leader FE (#69308))
         public ShowResultSet visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
