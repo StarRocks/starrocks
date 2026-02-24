@@ -15,9 +15,13 @@
 package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.metric.IcebergMetricsMgr;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -25,6 +29,8 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;
@@ -70,7 +76,7 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         if (args.size() > 4) {
             throw new StarRocksConnectorException("invalid args. only support `rewrite_all`, " +
                     "`min_file_size_bytes`, `batch_size` and `batch_parallelism` in the rewrite data files operation");
@@ -108,6 +114,10 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         String catalogName = context.stmt().getCatalogName();
         String dbName = context.stmt().getDbName();
         String tableName = context.stmt().getTableName();
+        long startMs = System.currentTimeMillis();
+        boolean success = false;
+        String failureReason = IcebergMetricsMgr.classifyFailReason((String) null);
+        IcebergRewriteDataJob.RewriteMetrics metrics = IcebergRewriteDataJob.RewriteMetrics.EMPTY;
 
         VelocityContext velCtx = new VelocityContext();
         velCtx.put("catalogName", catalogName);
@@ -137,14 +147,76 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         String executeStmt = writer.toString();
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll,
                 minFileSizeBytes, batchSize, batchParallelism, context.context(), stmt);
+        long durationMs = 0L;
         try {
             job.prepare();
-            job.execute();
+            metrics = job.execute();
+            success = true;
         } catch (Exception e) {
+            failureReason = IcebergMetricsMgr.classifyFailReason(e);
             LOGGER.error("failed to rewrite data files for iceberg table {}.{}",
                     stmt.getDbName(), stmt.getTableName(), e);
             throw new StarRocksConnectorException("execute rewrite data files for iceberg table %s.%s failed: %s",
                     stmt.getDbName(), stmt.getTableName(), e.getMessage(), e);
+        } finally {
+            durationMs = Math.max(0, System.currentTimeMillis() - startMs);
+            recordManualCompactionMetrics(success, durationMs, metrics, failureReason);
         }
+        return getRewriteResult(context, metrics, durationMs);
+    }
+
+    private ShowResultSet getRewriteResult(IcebergTableProcedureContext context, 
+                                                            IcebergRewriteDataJob.RewriteMetrics metrics,
+                                                            long durationMs) {
+        ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
+                .column("db_name", TypeFactory.createVarcharType(128))
+                .column("table_name", TypeFactory.createVarcharType(128))
+                .column("input_data_files", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("output_data_files", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("removed_delete_files", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("duration_ms", TypeFactory.createType(PrimitiveType.BIGINT))
+                .column("status", TypeFactory.createVarcharType(128))
+                .build();
+        List<List<String>> rows = new ArrayList<>();
+        rows.add(Arrays.asList(
+                context.stmt().getDbName(),
+                context.stmt().getTableName(),
+                String.valueOf(metrics.getRewrittenDataFilesCount()),
+                String.valueOf(metrics.getAddedDataFilesCount()),
+                String.valueOf(metrics.getRewrittenDeleteFilesCount()),
+                String.valueOf(durationMs),
+                "success"
+        ));
+        String message = String.format(
+                "Iceberg compaction finished [%s.%s]: input_data_files=%d, output_data_files=%d, " +
+                        "removed_delete_files=%d, duration_ms=%d",
+                context.stmt().getDbName(),
+                context.stmt().getTableName(),
+                metrics.getRewrittenDataFilesCount(),
+                metrics.getAddedDataFilesCount(),
+                metrics.getRewrittenDeleteFilesCount(),
+                durationMs);
+        Tracers.record(Tracers.Module.EXTERNAL,
+                String.format("ICEBERG.RewriteDataFiles.%s.%s", context.stmt().getDbName(), context.stmt().getTableName()),
+                message);
+        context.context().getState().setOk(0, 0, message);
+        return new ShowResultSet(metaData, rows);
+    }
+
+    private void recordManualCompactionMetrics(boolean success, long durationMs,
+                                               IcebergRewriteDataJob.RewriteMetrics metrics, String failureReason) {
+        String compactionType = "manual";
+        if (success) {
+            IcebergMetricsMgr.increaseIcebergCompactionTotalSuccess();
+        } else {
+            IcebergMetricsMgr.increaseIcebergCompactionTotal("failed", failureReason, compactionType);
+        }
+        IcebergMetricsMgr.increaseIcebergCompactionDurationMs(durationMs, compactionType);
+        if (!success) {
+            return;
+        }
+        IcebergMetricsMgr.increaseIcebergCompactionInputFiles(metrics.getRewrittenDataFilesCount(), compactionType);
+        IcebergMetricsMgr.increaseIcebergCompactionOutputFiles(metrics.getAddedDataFilesCount(), compactionType);
+        IcebergMetricsMgr.increaseIcebergCompactionRemovedDeleteFiles(metrics.getRewrittenDeleteFilesCount(), compactionType);
     }
 }
