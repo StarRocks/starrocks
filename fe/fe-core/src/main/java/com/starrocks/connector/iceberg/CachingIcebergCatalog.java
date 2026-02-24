@@ -232,10 +232,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(ConnectContext connectContext, String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
-        if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
-            tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
-        }
-
         // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
         // do not cache if vended credentials are enabled, because credentials may expire before cache TTL.
         boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
@@ -243,6 +239,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 !delegate.isVendedCredentialsEnabled();
         if (!cacheAllowed) {
             return delegate.getTable(connectContext, dbName, tableName);
+        }
+
+        if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
+            tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
         try {
             TABLE_LOAD_CONTEXT.set(connectContext);
