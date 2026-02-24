@@ -77,6 +77,8 @@ public final class GlobalVariable {
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
     public static final String ENABLE_TDE = "enable_tde";
+    public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
+    public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
     public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
 
     //AutoMV's MVLifecycle
@@ -312,6 +314,14 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = AUTOMV_RECOMMENDATIONS_TASK_PENDING_LIMIT)
     private static long autoMVRecommendationsTaskPendingLimit = 100;
+
+    // Arrow Flight SQL proxy endpoint. Format: "hostname:port" or "grpcs://hostname:port" for TLS.
+    @VariableMgr.VarAttr(name = ARROW_FLIGHT_PROXY, flag = VariableMgr.GLOBAL)
+    private static volatile String arrowFlightProxy = "";
+
+    // Enable Arrow Flight SQL proxy mode.
+    @VariableMgr.VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED, flag = VariableMgr.GLOBAL)
+    private static volatile boolean arrowFlightProxyEnabled = true;
 
     @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
     private static int maxUnknownStringMetaLength = 64;
@@ -670,6 +680,22 @@ public final class GlobalVariable {
 
     public static long getAutoMVRecommendationsTaskPendingLimit() {
         return autoMVRecommendationsTaskPendingLimit;
+    }
+
+    public static String getArrowFlightProxy() {
+        return arrowFlightProxy;
+    }
+
+    public static void setArrowFlightProxy(String arrowFlightProxy) {
+        GlobalVariable.arrowFlightProxy = arrowFlightProxy;
+    }
+
+    public static boolean isArrowFlightProxyEnabled() {
+        return arrowFlightProxyEnabled;
+    }
+
+    public static void setArrowFlightProxyEnabled(boolean arrowFlightProxyEnabled) {
+        GlobalVariable.arrowFlightProxyEnabled = arrowFlightProxyEnabled;
     }
 
     public static int getMaxUnknownStringMetaLength() {
