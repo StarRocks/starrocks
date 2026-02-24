@@ -58,6 +58,10 @@ public class CloneExpr extends Expr {
         msg.setNode_type(TExprNodeType.CLONE_EXPR);
     }
 
+    public boolean isNullable() {
+        return getChild(0).isNullable();
+    }
+
     @Override
     public Expr clone() {
         return new CloneExpr(getChild(0));
