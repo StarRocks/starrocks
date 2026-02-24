@@ -26,7 +26,6 @@
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 #include "types/date_value.h"
-#include "types/datum.h"
 
 using namespace std;
 
