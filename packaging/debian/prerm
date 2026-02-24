@@ -2,7 +2,7 @@
 set -e
 
 case "$1" in
-    remove|upgrade|deconfigure)
+    remove|deconfigure)
         if [ -n "$DPKG_MAINTSCRIPT_PACKAGE" ]; then
             case "$DPKG_MAINTSCRIPT_PACKAGE" in
                 starrocks-*)
@@ -14,13 +14,13 @@ case "$1" in
             esac
 
             if [ -n "$COMP" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
-                echo "Stopping StarRocks $COMP service..."
+                echo "Stopping StarRocks $COMP service before removal..."
                 systemctl stop "starrocks-$COMP" || true
             fi
         fi
     ;;
 
-    failed-upgrade)
+    upgrade|failed-upgrade)
     ;;
 
     *)
