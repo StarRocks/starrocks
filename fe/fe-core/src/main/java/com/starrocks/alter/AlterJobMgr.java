@@ -61,6 +61,7 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -97,6 +98,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -503,6 +505,14 @@ public class AlterJobMgr {
             } else {
                 tableProperty.modifyTableProperties(properties);
                 tableProperty.buildProperty(opCode);
+            }
+            // handle warehouse property
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                if (warehouse != null) {
+                    mv.setWarehouseId(warehouse.getId());
+                }
             }
         } catch (Throwable e) {
             mv.setInactiveAndReason("replay failed: " + e.getMessage());

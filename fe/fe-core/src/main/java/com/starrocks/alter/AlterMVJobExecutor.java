@@ -218,6 +218,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
             materializedView.setWarehouseId(warehouse.getId());
+            isChanged = true;
         }
 
         // labels.location

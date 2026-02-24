@@ -1680,6 +1680,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS)) {
                 continue;
             }
+            // warehouse is handled separately below
+            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                continue;
+            }
             if (!first) {
                 sb.append(",\n");
             }
