@@ -31,6 +31,10 @@ jobs:
               });
               prNumber = pullRequests.length > 0 ? pullRequests[0].number : null;
             }
+            if (!prNumber) {
+              core.setFailed('No open pull request found for this workflow_run head branch or unsupported event context.');
+              return;
+            }
             core.setOutput('pr_number', prNumber);
       
       # 1. Checkout the PR's Merge Commit so we can see the NEW files
