@@ -187,7 +187,9 @@ for COMP in "fe" "be" "cn"; do
     # Path Patching (LSB)
     echo "Patching $COMP.conf for standard paths..."
     CONF_FILE="$STAGING_DIR/etc/starrocks/$COMP/$COMP.conf"
-    sed "${SED_INPLACE[@]}" 's/\r$//' "$CONF_FILE"
+    
+    # Portable CR removal and patching
+    sed 's/\r$//' "$CONF_FILE" > "${CONF_FILE}.tmp" && mv "${CONF_FILE}.tmp" "$CONF_FILE"
 
     # Define the key and path based on component
     if [ "$COMP" == "fe" ]; then
@@ -246,7 +248,11 @@ for COMP in "fe" "be" "cn"; do
 
     echo "Generating conffiles for $COMP..."
     if [ -d "$STAGING_DIR/etc/starrocks/$COMP" ]; then
-        if ! find "$STAGING_DIR/etc/starrocks/$COMP" -type f | sed "s|^$STAGING_DIR||" | LC_ALL=C sort > "$STAGING_DIR/DEBIAN/conffiles"; then
+        if ! find "$STAGING_DIR/etc/starrocks/$COMP" -type f -print0 \
+            | LC_ALL=C sort -z \
+            | xargs -0 -I {} sh -c 'echo "$1" | sed "s|^'"$STAGING_DIR"'||"' _ {} \
+            > "$STAGING_DIR/DEBIAN/conffiles"
+        then
             echo "ERROR: Failed to generate conffiles for $COMP" >&2
             exit 1
         fi
