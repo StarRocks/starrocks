@@ -167,8 +167,10 @@ protected:
             chunk->append_column(std::move(col), (SlotId)0);
 
             MutableColumnPtr pk_column;
-            RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+            const auto encoding_type = _tablet_metadata->has_range() ? PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2
+                                                                     : PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+            RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type));
+            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), encoding_type);
             std::string key;
             if (pk_column->is_binary()) {
                 key = ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
@@ -1287,6 +1289,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
     ASSERT_OK(mgr->init());
 
     // 1. Setup Tablet Metadata with a specific range [100, 200)
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
     auto* range = _tablet_metadata->mutable_range();
     auto* lower = range->mutable_lower_bound();
     auto* v_lower = lower->add_values();
@@ -1327,8 +1330,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
         col->append_datum(Datum(v));
         chunk->append_column(std::move(col), (SlotId)0);
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
         if (pk_column->is_binary()) {
             return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -1370,6 +1375,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
     c2->set_type("INT");
     c2->set_is_key(false);
     c2->set_is_nullable(false);
+    schema->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
 
     auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
     ASSERT_OK(mgr->init());
@@ -1414,8 +1420,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
         return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
     };
 

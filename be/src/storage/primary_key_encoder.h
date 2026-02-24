@@ -17,7 +17,9 @@
 #include "column/field.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "gen_cpp/types.pb.h"
 #include "gutil/endian.h"
+#include "storage/primary_key_encoding_types.h"
 
 namespace starrocks {
 
@@ -106,42 +108,73 @@ void encode_slice(const Slice& s, std::string* dst, bool is_last);
 //           add a tailing 0x00 0x00, then append
 class PrimaryKeyEncoder {
 public:
+    static PrimaryKeyEncodingType encoding_type_from_pb(PrimaryKeyEncodingTypePB encoding_type_pb) {
+        switch (encoding_type_pb) {
+        case PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE:
+            return PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+        case PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1:
+            return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+        case PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2:
+            return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
+        default:
+            return PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+        }
+    }
+
+    static PrimaryKeyEncodingTypePB pb_from_encoding_type(PrimaryKeyEncodingType encoding_type) {
+        switch (encoding_type) {
+        case PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE:
+            return PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE;
+        case PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1:
+            return PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1;
+        case PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2:
+            return PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2;
+        default:
+            return PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE;
+        }
+    }
+
     static bool is_supported(const Field& f);
 
     static bool is_supported(const Schema& schema, const std::vector<ColumnId>& key_idxes);
 
     // Return |TYPE_NONE| if no primary key contained in |schema|.
-    static LogicalType encoded_primary_key_type(const Schema& schema, const std::vector<ColumnId>& key_idxes);
+    static LogicalType encoded_primary_key_type(const Schema& schema, const std::vector<ColumnId>& key_idxes,
+                                                PrimaryKeyEncodingType encoding_type);
 
     // Return -1 if encoded key is not fixed size
-    static size_t get_encoded_fixed_size(const Schema& schema);
+    static size_t get_encoded_fixed_size(const Schema& schema, PrimaryKeyEncodingType encoding_type);
 
     // create suitable column to hold encoded key
     //   schema: schema of the table
     //   pcolumn: output column
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
-    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool large_column = false);
+    //   encoding_type: encoding type of the primary key
+    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, PrimaryKeyEncodingType encoding_type,
+                                bool large_column = false);
 
     // create suitable column to hold encoded key
     //   schema: schema of the table
     //   pcolumn: output column
     //   key_idxes: indexes of columns for encoding
+    //   encoding_type: encoding type of the primary key
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
-                                bool large_column = false);
+                                PrimaryKeyEncodingType encoding_type, bool large_column = false);
 
-    static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
+    static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,
+                       PrimaryKeyEncodingType encoding_type);
 
     static Status encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
     static void encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
-                                 Column* dest);
+                                 Column* dest, PrimaryKeyEncodingType encoding_type);
 
     static bool encode_exceed_limit(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
-                                    size_t limit_size);
+                                    size_t limit_size, PrimaryKeyEncodingType encoding_type);
 
     static Status decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
-                         std::vector<uint8_t>* value_encode_flags = nullptr);
+                         PrimaryKeyEncodingType encoding_type, std::vector<uint8_t>* value_encode_flags = nullptr);
 };
 
 } // namespace starrocks

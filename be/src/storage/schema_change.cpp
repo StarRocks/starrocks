@@ -515,13 +515,18 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
+    PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (new_tschema->keys_type() == KeysType::PRIMARY_KEYS) {
+        ASSIGN_OR_RETURN(pk_encoding_type, new_tschema->primary_key_encoding_type_or_error());
+    }
+
     // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
     // set max memtable size to 4G since some column has limit size, it will make invalid data
     size_t max_buffer_size = std::min<size_t>(
             4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
     auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink, max_buffer_size,
                                                 CurrentThread::mem_tracker());
-    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type), alter_msg_header() + "failed to prepare mem table");
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -549,7 +554,8 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type),
+                                      alter_msg_header() + "failed to prepare mem table");
             VLOG(2) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
@@ -594,7 +600,8 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type),
+                                      alter_msg_header() + "failed to prepare mem table");
         }
 
         mem_pool->clear();

@@ -61,6 +61,10 @@ Schema LakePrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
     return ChunkHelper::convert_schema(tablet_schema, pk_columns);
 }
 
+StatusOr<PrimaryKeyEncodingType> LakePrimaryKeyCompactionConflictResolver::primary_key_encoding_type() const {
+    return _rowset->tablet_schema()->primary_key_encoding_type_or_error();
+}
+
 Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
         const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
                                    const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {

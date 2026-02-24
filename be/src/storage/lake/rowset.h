@@ -131,6 +131,8 @@ public:
 
     [[nodiscard]] int64_t version() const { return metadata().version(); }
 
+    TabletSchemaPtr tablet_schema() const { return _tablet_schema; }
+
     bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
 
     // no practical significance, just compatible interface

@@ -131,4 +131,9 @@ int64_t LakePrimaryKeyRecover::tablet_id() {
     return _tablet->id();
 }
 
+StatusOr<PrimaryKeyEncodingType> LakePrimaryKeyRecover::primary_key_encoding_type() const {
+    auto tablet_schema = std::make_unique<TabletSchema>(_metadata->schema());
+    return tablet_schema->primary_key_encoding_type_or_error();
+}
+
 } // namespace starrocks::lake
