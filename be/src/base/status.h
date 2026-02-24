@@ -7,20 +7,15 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
-#include <type_traits>
 
 #include "base/compiler_util.h"
 #include "base/logging.h"
 #include "gen_cpp/StatusCode_types.h" // for TStatus
 
-// Forward-declare fmt::basic_format_string inside the versioned inline namespace
-// (fmtlib 8.x uses inline namespace v8) so that Status can declare fmt overloads
-// without pulling in the full <fmt/format.h>.  The bodies live in status_fmt.hpp.
-
-namespace fmt::inline v8 {
-template <typename Char, typename... Args>
-class basic_format_string;
-} // namespace fmt::inline v8
+#define DEFINE_STATUS(name, code)                                                       \
+    static Status name(std::string_view msg) { return Status(TStatusCode::code, msg); } \
+    template <typename FMT, typename... Args>                                           \
+    static Status name(FMT&& fmt, Args&&... args);
 
 namespace starrocks {
 
@@ -103,194 +98,56 @@ public:
 
     static Status OK() { return Status(); }
 
-    static Status Unknown(std::string_view msg) { return Status(TStatusCode::UNKNOWN, msg); }
-    template <typename... Args>
-    static Status Unknown(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status PublishTimeout(std::string_view msg) { return Status(TStatusCode::PUBLISH_TIMEOUT, msg); }
-    template <typename... Args>
-    static Status PublishTimeout(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status MemoryAllocFailed(std::string_view msg) { return Status(TStatusCode::MEM_ALLOC_FAILED, msg); }
-    template <typename... Args>
-    static Status MemoryAllocFailed(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status BufferAllocFailed(std::string_view msg) { return Status(TStatusCode::BUFFER_ALLOCATION_FAILED, msg); }
-    template <typename... Args>
-    static Status BufferAllocFailed(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status InvalidArgument(std::string_view msg) { return Status(TStatusCode::INVALID_ARGUMENT, msg); }
-    template <typename... Args>
-    static Status InvalidArgument(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status MinimumReservationUnavailable(std::string_view msg) {
-        return Status(TStatusCode::MINIMUM_RESERVATION_UNAVAILABLE, msg);
-    }
-    template <typename... Args>
-    static Status MinimumReservationUnavailable(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status Corruption(std::string_view msg) { return Status(TStatusCode::CORRUPTION, msg); }
-    template <typename... Args>
-    static Status Corruption(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status IOError(std::string_view msg) { return Status(TStatusCode::IO_ERROR, msg); }
-    template <typename... Args>
-    static Status IOError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status NotFound(std::string_view msg) { return Status(TStatusCode::NOT_FOUND, msg); }
-    template <typename... Args>
-    static Status NotFound(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status AlreadyExist(std::string_view msg) { return Status(TStatusCode::ALREADY_EXIST, msg); }
-    template <typename... Args>
-    static Status AlreadyExist(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status NotSupported(std::string_view msg) { return Status(TStatusCode::NOT_IMPLEMENTED_ERROR, msg); }
-    template <typename... Args>
-    static Status NotSupported(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status EndOfFile(std::string_view msg) { return Status(TStatusCode::END_OF_FILE, msg); }
-    template <typename... Args>
-    static Status EndOfFile(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status InternalError(std::string_view msg) { return Status(TStatusCode::INTERNAL_ERROR, msg); }
-    template <typename... Args>
-    static Status InternalError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status RuntimeError(std::string_view msg) { return Status(TStatusCode::RUNTIME_ERROR, msg); }
-    template <typename... Args>
-    static Status RuntimeError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status Cancelled(std::string_view msg) { return Status(TStatusCode::CANCELLED, msg); }
-    template <typename... Args>
-    static Status Cancelled(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status MemoryLimitExceeded(std::string_view msg) { return Status(TStatusCode::MEM_LIMIT_EXCEEDED, msg); }
-    template <typename... Args>
-    static Status MemoryLimitExceeded(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status ThriftRpcError(std::string_view msg) { return Status(TStatusCode::THRIFT_RPC_ERROR, msg); }
-    template <typename... Args>
-    static Status ThriftRpcError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status TimedOut(std::string_view msg) { return Status(TStatusCode::TIMEOUT, msg); }
-    template <typename... Args>
-    static Status TimedOut(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status TooManyTasks(std::string_view msg) { return Status(TStatusCode::TOO_MANY_TASKS, msg); }
-    template <typename... Args>
-    static Status TooManyTasks(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status ServiceUnavailable(std::string_view msg) { return Status(TStatusCode::SERVICE_UNAVAILABLE, msg); }
-    template <typename... Args>
-    static Status ServiceUnavailable(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status Uninitialized(std::string_view msg) { return Status(TStatusCode::UNINITIALIZED, msg); }
-    template <typename... Args>
-    static Status Uninitialized(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status Aborted(std::string_view msg) { return Status(TStatusCode::ABORTED, msg); }
-    template <typename... Args>
-    static Status Aborted(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status DataQualityError(std::string_view msg) { return Status(TStatusCode::DATA_QUALITY_ERROR, msg); }
-    template <typename... Args>
-    static Status DataQualityError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status VersionAlreadyMerged(std::string_view msg) {
-        return Status(TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED, msg);
-    }
-    template <typename... Args>
-    static Status VersionAlreadyMerged(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status DuplicateRpcInvocation(std::string_view msg) {
-        return Status(TStatusCode::DUPLICATE_RPC_INVOCATION, msg);
-    }
-    template <typename... Args>
-    static Status DuplicateRpcInvocation(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status JsonFormatError(std::string_view msg) {
-        // TODO(mofei) define json format error.
-        return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
-    }
-    template <typename... Args>
-    static Status JsonFormatError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status VariantError(std::string_view msg) { return Status(TStatusCode::DATA_QUALITY_ERROR, msg); }
-    template <typename... Args>
-    static Status VariantError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
+    DEFINE_STATUS(Unknown, UNKNOWN);
+    DEFINE_STATUS(PublishTimeout, PUBLISH_TIMEOUT);
+    DEFINE_STATUS(MemoryAllocFailed, MEM_ALLOC_FAILED);
+    DEFINE_STATUS(BufferAllocFailed, BUFFER_ALLOCATION_FAILED);
+    DEFINE_STATUS(InvalidArgument, INVALID_ARGUMENT);
+    DEFINE_STATUS(MinimumReservationUnavailable, MINIMUM_RESERVATION_UNAVAILABLE);
+    DEFINE_STATUS(Corruption, CORRUPTION);
+    DEFINE_STATUS(IOError, IO_ERROR);
+    DEFINE_STATUS(NotFound, NOT_FOUND);
+    DEFINE_STATUS(AlreadyExist, ALREADY_EXIST);
+    DEFINE_STATUS(NotSupported, NOT_IMPLEMENTED_ERROR);
+    DEFINE_STATUS(EndOfFile, END_OF_FILE);
+    DEFINE_STATUS(InternalError, INTERNAL_ERROR);
+    DEFINE_STATUS(RuntimeError, RUNTIME_ERROR);
+    DEFINE_STATUS(Cancelled, CANCELLED);
+    DEFINE_STATUS(MemoryLimitExceeded, MEM_LIMIT_EXCEEDED);
+    DEFINE_STATUS(ThriftRpcError, THRIFT_RPC_ERROR);
+    DEFINE_STATUS(TimedOut, TIMEOUT);
+    DEFINE_STATUS(TooManyTasks, TOO_MANY_TASKS);
+    DEFINE_STATUS(ServiceUnavailable, SERVICE_UNAVAILABLE);
+    DEFINE_STATUS(Uninitialized, UNINITIALIZED);
+    DEFINE_STATUS(Aborted, ABORTED);
+    DEFINE_STATUS(DataQualityError, DATA_QUALITY_ERROR);
+    DEFINE_STATUS(VersionAlreadyMerged, OLAP_ERR_VERSION_ALREADY_MERGED);
+    DEFINE_STATUS(DuplicateRpcInvocation, DUPLICATE_RPC_INVOCATION);
+    // TODO(mofei) define json format error.
+    DEFINE_STATUS(JsonFormatError, DATA_QUALITY_ERROR);
+    DEFINE_STATUS(VariantError, DATA_QUALITY_ERROR);
     // used for global dict collection
-    static Status GlobalDictError(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
-    template <typename... Args>
-    static Status GlobalDictError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
+    DEFINE_STATUS(GlobalDictError, GLOBAL_DICT_ERROR);
     // used for global dict match
-    static Status GlobalDictNotMatch(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_NOT_MATCH, msg); }
-    template <typename... Args>
-    static Status GlobalDictNotMatch(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
+    DEFINE_STATUS(GlobalDictNotMatch, GLOBAL_DICT_NOT_MATCH);
 
-    static Status TransactionInProcessing(std::string_view msg) { return Status(TStatusCode::TXN_IN_PROCESSING, msg); }
-    template <typename... Args>
-    static Status TransactionInProcessing(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status TransactionNotExists(std::string_view msg) { return Status(TStatusCode::TXN_NOT_EXISTS, msg); }
-    template <typename... Args>
-    static Status TransactionNotExists(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status LabelAlreadyExists(std::string_view msg) { return Status(TStatusCode::LABEL_ALREADY_EXISTS, msg); }
-    template <typename... Args>
-    static Status LabelAlreadyExists(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status ResourceBusy(std::string_view msg) { return Status(TStatusCode::RESOURCE_BUSY, msg); }
-    template <typename... Args>
-    static Status ResourceBusy(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status EAgain(std::string_view msg) { return Status(TStatusCode::SR_EAGAIN, msg); }
-    template <typename... Args>
-    static Status EAgain(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status RemoteFileNotFound(std::string_view msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
-    template <typename... Args>
-    static Status RemoteFileNotFound(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
+    DEFINE_STATUS(TransactionInProcessing, TXN_IN_PROCESSING);
+    DEFINE_STATUS(TransactionNotExists, TXN_NOT_EXISTS);
+    DEFINE_STATUS(LabelAlreadyExists, LABEL_ALREADY_EXISTS);
+    DEFINE_STATUS(ResourceBusy, RESOURCE_BUSY);
+    DEFINE_STATUS(EAgain, SR_EAGAIN);
+    DEFINE_STATUS(RemoteFileNotFound, REMOTE_FILE_NOT_FOUND);
 
     static Status Yield() { return {TStatusCode::YIELD, ""}; }
 
-    static Status JitCompileError(std::string_view msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
-    template <typename... Args>
-    static Status JitCompileError(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status CapacityLimitExceed(std::string_view msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
-    template <typename... Args>
-    static Status CapacityLimitExceed(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status Shutdown(std::string_view msg) { return Status(TStatusCode::SHUTDOWN, msg); }
-    template <typename... Args>
-    static Status Shutdown(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status BigQueryCpuSecondLimitExceeded(std::string_view msg) {
-        return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
-    }
-    template <typename... Args>
-    static Status BigQueryCpuSecondLimitExceeded(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status BigQueryScanRowsLimitExceeded(std::string_view msg) {
-        return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
-    }
-    template <typename... Args>
-    static Status BigQueryScanRowsLimitExceeded(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status NotAuthorized(std::string_view msg) { return Status(TStatusCode::NOT_AUTHORIZED, msg); }
-    template <typename... Args>
-    static Status NotAuthorized(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status TableNotExist(std::string_view msg) { return Status(TStatusCode::TABLE_NOT_EXIST, msg); }
-    template <typename... Args>
-    static Status TableNotExist(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
-
-    static Status QueryNotExist(std::string_view msg) { return Status(TStatusCode::QUERY_NOT_EXIST, msg); }
-    template <typename... Args>
-    static Status QueryNotExist(fmt::basic_format_string<char, std::type_identity_t<Args>...> fmt_str, Args&&... args);
+    DEFINE_STATUS(JitCompileError, JIT_COMPILE_ERROR);
+    DEFINE_STATUS(CapacityLimitExceed, CAPACITY_LIMIT_EXCEED);
+    DEFINE_STATUS(Shutdown, SHUTDOWN);
+    DEFINE_STATUS(BigQueryCpuSecondLimitExceeded, BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED);
+    DEFINE_STATUS(BigQueryScanRowsLimitExceeded, BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED);
+    DEFINE_STATUS(NotAuthorized, NOT_AUTHORIZED);
+    DEFINE_STATUS(TableNotExist, TABLE_NOT_EXIST);
+    DEFINE_STATUS(QueryNotExist, QUERY_NOT_EXIST);
 
     bool ok() const { return _state == nullptr; }
 
