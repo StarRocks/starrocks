@@ -992,7 +992,15 @@ public class ExpressionAnalyzer {
                 castType = cast.getTargetTypeDef().getType();
             }
             Type fromType = cast.getChild(0).getType();
-            if (!TypeManager.canCastTo(fromType, castType)) {
+
+            // Allow explicit casting from Complex Types (Array/Map/Struct) to JSON.
+            // We do this here rather than in TypeManager.canCastTo to prevent unintended
+            // implicit casts (e.g., breaking array_concat strict type checks).
+            boolean isExplicitComplexToJson = !cast.isImplicit() &&
+                    castType.isJsonType() &&
+                    (fromType.isArrayType() || fromType.isMapType() || fromType.isStructType());
+
+            if (!isExplicitComplexToJson && !TypeManager.canCastTo(fromType, castType)) {
                 throw new SemanticException("Invalid type cast from " + fromType.toSql() + " to "
                         + castType.toSql() + " in sql `" +
                         AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`",

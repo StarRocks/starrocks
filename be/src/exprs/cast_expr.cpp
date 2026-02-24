@@ -35,11 +35,16 @@
 #include "base/types/int128.h"
 #include "base/types/numeric_types.h"
 #include "base/utility/mysql_global.h"
+#include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/json_converter.h"
+#include "column/column_visitor_adapter.h"
+#include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "column/variant_column.h"
 #include "column/variant_converter.h"
@@ -226,6 +231,8 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
                     }
                 }
             }
+        } else if constexpr (FromType == TYPE_ARRAY || FromType == TYPE_MAP || FromType == TYPE_STRUCT) {
+            overflow = true;
         } else {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
@@ -236,6 +243,8 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             if constexpr (AllowThrowException) {
                 if constexpr (FromType == TYPE_LARGEINT) {
                     THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, int128_to_string(viewer.value(row)));
+                } else if constexpr (FromType == TYPE_ARRAY || FromType == TYPE_MAP || FromType == TYPE_STRUCT) {
+                    THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
                 } else {
                     THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
                 }
@@ -1175,6 +1184,280 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 
+// =========================================================================
+// Helper functions for Complex Types to JSON Conversion (Column-wise approach)
+// =========================================================================
+
+static Status column_to_json_array(const Column* column, const TypeDescriptor& type, size_t row, vpack::Builder* builder);
+static Status column_to_json_value(const Column* column, const TypeDescriptor& type, size_t row, vpack::Builder* builder);
+
+static Status column_key_to_string(const Column* column, const TypeDescriptor& type, size_t row, std::string* out) {
+    if (column->is_null(row)) {
+        *out = "null";
+        return Status::OK();
+    }
+    switch (type.type) {
+    case TYPE_BOOLEAN: {
+        auto* col = down_cast<const BooleanColumn*>(ColumnHelper::get_data_column(column));
+        *out = col->get_data()[row] ? "true" : "false";
+        break;
+    }
+    case TYPE_TINYINT: {
+        auto* col = down_cast<const Int8Column*>(ColumnHelper::get_data_column(column));
+        *out = std::to_string(static_cast<int16_t>(col->get_data()[row]));
+        break;
+    }
+    case TYPE_SMALLINT: {
+        auto* col = down_cast<const Int16Column*>(ColumnHelper::get_data_column(column));
+        *out = std::to_string(col->get_data()[row]);
+        break;
+    }
+    case TYPE_INT: {
+        auto* col = down_cast<const Int32Column*>(ColumnHelper::get_data_column(column));
+        *out = std::to_string(col->get_data()[row]);
+        break;
+    }
+    case TYPE_BIGINT: {
+        auto* col = down_cast<const Int64Column*>(ColumnHelper::get_data_column(column));
+        *out = std::to_string(col->get_data()[row]);
+        break;
+    }
+    case TYPE_LARGEINT: {
+        auto* col = down_cast<const Int128Column*>(ColumnHelper::get_data_column(column));
+        *out = LargeIntValue::to_string(col->get_data()[row]);
+        break;
+    }
+    case TYPE_FLOAT: {
+        auto* col = down_cast<const FloatColumn*>(ColumnHelper::get_data_column(column));
+        *out = std::to_string(col->get_data()[row]);
+        break;
+    }
+    case TYPE_DOUBLE: {
+        auto* col = down_cast<const DoubleColumn*>(ColumnHelper::get_data_column(column));
+        *out = std::to_string(col->get_data()[row]);
+        break;
+    }
+    case TYPE_DECIMALV2: {
+        auto* col = down_cast<const DecimalColumn*>(ColumnHelper::get_data_column(column));
+        *out = col->get_data()[row].to_string();
+        break;
+    }
+    case TYPE_DECIMAL32: {
+        auto* col = down_cast<const Decimal32Column*>(ColumnHelper::get_data_column(column));
+        *out = DecimalV3Cast::to_string<int32_t>(col->get_data()[row], type.precision, type.scale);
+        break;
+    }
+    case TYPE_DECIMAL64: {
+        auto* col = down_cast<const Decimal64Column*>(ColumnHelper::get_data_column(column));
+        *out = DecimalV3Cast::to_string<int64_t>(col->get_data()[row], type.precision, type.scale);
+        break;
+    }
+    case TYPE_DECIMAL128: {
+        auto* col = down_cast<const Decimal128Column*>(ColumnHelper::get_data_column(column));
+        *out = DecimalV3Cast::to_string<int128_t>(col->get_data()[row], type.precision, type.scale);
+        break;
+    }
+    case TYPE_DATE: {
+        auto* col = down_cast<const DateColumn*>(ColumnHelper::get_data_column(column));
+        *out = col->get_data()[row].to_string();
+        break;
+    }
+    case TYPE_DATETIME: {
+        auto* col = down_cast<const TimestampColumn*>(ColumnHelper::get_data_column(column));
+        *out = col->get_data()[row].to_string();
+        break;
+    }
+    case TYPE_TIME: {
+        auto* col = down_cast<const DoubleColumn*>(ColumnHelper::get_data_column(column));
+        *out = starrocks::time_str_from_double(col->get_data()[row]);
+        break;
+    }
+    case TYPE_VARCHAR:
+    case TYPE_CHAR: {
+        auto* col = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+        auto slice = col->get_slice(row);
+        *out = std::string(slice.data, slice.size);
+        break;
+    }
+    default:
+        return Status::NotSupported(strings::Substitute("Unsupported Map Key Type: $0", type.debug_string()));
+    }
+    return Status::OK();
+}
+
+static Status column_to_json_value(const Column* column, const TypeDescriptor& type, size_t row, vpack::Builder* builder) {
+    if (column->is_null(row)) {
+        builder->add(vpack::Value(vpack::ValueType::Null));
+        return Status::OK();
+    }
+    switch (type.type) {
+    case TYPE_BOOLEAN: {
+        auto* col = down_cast<const BooleanColumn*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(col->get_data()[row] != 0));
+        break;
+    }
+    case TYPE_TINYINT: {
+        auto* col = down_cast<const Int8Column*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(static_cast<int64_t>(col->get_data()[row])));
+        break;
+    }
+    case TYPE_SMALLINT: {
+        auto* col = down_cast<const Int16Column*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(static_cast<int64_t>(col->get_data()[row])));
+        break;
+    }
+    case TYPE_INT: {
+        auto* col = down_cast<const Int32Column*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(static_cast<int64_t>(col->get_data()[row])));
+        break;
+    }
+    case TYPE_BIGINT: {
+        auto* col = down_cast<const Int64Column*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(col->get_data()[row]));
+        break;
+    }
+    case TYPE_LARGEINT: {
+        auto* col = down_cast<const Int128Column*>(ColumnHelper::get_data_column(column));
+        std::string s = LargeIntValue::to_string(col->get_data()[row]);
+        builder->add(vpack::Value(s));
+        break;
+    }
+    case TYPE_FLOAT: {
+        auto* col = down_cast<const FloatColumn*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(col->get_data()[row]));
+        break;
+    }
+    case TYPE_DOUBLE: {
+        auto* col = down_cast<const DoubleColumn*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(col->get_data()[row]));
+        break;
+    }
+    case TYPE_DECIMALV2: {
+        auto* col = down_cast<const DecimalColumn*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(col->get_data()[row].to_string()));
+        break;
+    }
+    case TYPE_DECIMAL32: {
+        auto* col = down_cast<const Decimal32Column*>(ColumnHelper::get_data_column(column));
+        std::string s = DecimalV3Cast::to_string<int32_t>(col->get_data()[row], type.precision, type.scale);
+        builder->add(vpack::Value(s));
+        break;
+    }
+    case TYPE_DECIMAL64: {
+        auto* col = down_cast<const Decimal64Column*>(ColumnHelper::get_data_column(column));
+        std::string s = DecimalV3Cast::to_string<int64_t>(col->get_data()[row], type.precision, type.scale);
+        builder->add(vpack::Value(s));
+        break;
+    }
+    case TYPE_DECIMAL128: {
+        auto* col = down_cast<const Decimal128Column*>(ColumnHelper::get_data_column(column));
+        std::string s = DecimalV3Cast::to_string<int128_t>(col->get_data()[row], type.precision, type.scale);
+        builder->add(vpack::Value(s));
+        break;
+    }
+    case TYPE_DATE: {
+        auto* col = down_cast<const DateColumn*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(col->get_data()[row].to_string()));
+        break;
+    }
+    case TYPE_DATETIME: {
+        auto* col = down_cast<const TimestampColumn*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(col->get_data()[row].to_string()));
+        break;
+    }
+    case TYPE_TIME: {
+        auto* col = down_cast<const DoubleColumn*>(ColumnHelper::get_data_column(column));
+        builder->add(vpack::Value(starrocks::time_str_from_double(col->get_data()[row])));
+        break;
+    }
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
+    case TYPE_HLL:
+    case TYPE_OBJECT: {
+        auto* col = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+        auto slice = col->get_slice(row);
+        builder->add(vpack::Value(std::string(slice.data, slice.size)));
+        break;
+    }
+    case TYPE_JSON: {
+        auto* col = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(column));
+        const JsonValue* json = col->get_object(row);
+        if (json) {
+            builder->add(json->to_vslice());
+        } else {
+            builder->add(vpack::Value(vpack::ValueType::Null));
+        }
+        break;
+    }
+    case TYPE_VARIANT: {
+        return Status::NotSupported("Casting nested VARIANT to JSON is not fully implemented yet");
+    }
+    case TYPE_ARRAY: {
+        return column_to_json_array(column, type, row, builder);
+    }
+    case TYPE_MAP: {
+        auto* map_col = down_cast<const MapColumn*>(ColumnHelper::get_data_column(column));
+        const auto& offsets = map_col->offsets().get_data();
+        const auto* keys = map_col->keys().get();
+        const auto* values = map_col->values().get();
+        const auto& key_type = type.children[0];
+        const auto& value_type = type.children[1];
+
+        builder->openObject();
+        size_t start = offsets[row];
+        size_t end = offsets[row + 1];
+
+        for (size_t i = start; i < end; ++i) {
+            std::string key_str;
+            RETURN_IF_ERROR(column_key_to_string(keys, key_type, i, &key_str));
+            builder->add(vpack::Value(key_str));
+            RETURN_IF_ERROR(column_to_json_value(values, value_type, i, builder));
+        }
+        builder->close();
+        break;
+    }
+    case TYPE_STRUCT: {
+        auto* struct_col = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column));
+        const auto& fields = struct_col->fields();
+
+        builder->openObject();
+        for (size_t i = 0; i < fields.size(); ++i) {
+            std::string field_name = (i < type.field_names.size())
+                ? type.field_names[i]
+                : "col" + std::to_string(i + 1);
+            builder->add(vpack::Value(field_name));
+
+            const auto& field_type = (i < type.children.size())
+                ? type.children[i]
+                : TypeDescriptor(TYPE_NULL);
+            RETURN_IF_ERROR(column_to_json_value(fields[i].get(), field_type, row, builder));
+        }
+        builder->close();
+        break;
+    }
+    default:
+        return Status::NotSupported(strings::Substitute("Type $0 not supported for JSON cast", type.debug_string()));
+    }
+    return Status::OK();
+}
+
+static Status column_to_json_array(const Column* column, const TypeDescriptor& type, size_t row, vpack::Builder* builder) {
+    auto* array_col = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(column));
+    const auto& offsets = array_col->offsets().get_data();
+    const auto* elements = array_col->elements().get();
+    const auto& child_type = type.children[0];
+
+    builder->openArray();
+    size_t start = offsets[row];
+    size_t end = offsets[row + 1];
+
+    for (size_t i = start; i < end; ++i) {
+        RETURN_IF_ERROR(column_to_json_value(elements, child_type, i, builder));
+    }
+    builder->close();
+    return Status::OK();
+}
+
 // clang-format off
 #define DEFINE_CAST_CONSTRUCT(CLASS)             \
     CLASS(const TExprNode& node) : Expr(node) {} \
@@ -1206,7 +1489,30 @@ public:
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
-            if constexpr (lt_is_decimal<FromType>) {
+            if constexpr (FromType == TYPE_ARRAY || FromType == TYPE_MAP || FromType == TYPE_STRUCT) {
+                if constexpr (ToType == TYPE_JSON) {
+                    ColumnBuilder<TYPE_JSON> json_builder(col_size);
+                    for (size_t i = 0; i < col_size; ++i) {
+                        if (column->is_null(i)) {
+                            json_builder.append_null();
+                        } else {
+                            vpack::Builder vb;
+                            Status st = column_to_json_value(column.get(), this->_children[0]->type(), i, &vb);
+                            if (!st.ok()) {
+                                if constexpr (AllowThrowException) {
+                                    throw RuntimeException(st.to_string());
+                                }
+                                json_builder.append_null();
+                            } else {
+                                json_builder.append(JsonValue(vb.slice()));
+                            }
+                        }
+                    }
+                    return json_builder.build(column->is_constant());
+                } else {
+                    result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
+                }
+            } else if constexpr (lt_is_decimal<FromType>) {
                 ColumnPtr double_column;
                 if (context != nullptr && context->error_if_overflow()) {
                     double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<
@@ -1470,6 +1776,9 @@ CUSTOMIZE_FN_CAST(TYPE_TIME, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_DATETIME, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_DATE, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_ARRAY, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_MAP, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_STRUCT, TYPE_JSON, cast_to_json_fn);
 
 // Cast SQL type to VARIANT
 SELF_CAST(TYPE_VARIANT);
@@ -2080,6 +2389,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_TO_JSON(TYPE_DATE, allow_throw_exception);
                 CASE_TO_JSON(TYPE_TIME, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DATETIME, allow_throw_exception);
+                CASE_TO_JSON(TYPE_ARRAY, allow_throw_exception);
+                CASE_TO_JSON(TYPE_MAP, allow_throw_exception);
+                CASE_TO_JSON(TYPE_STRUCT, allow_throw_exception);
             default:
                 LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
