@@ -79,6 +79,52 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactAzureBlobOAuth2ClientId() {
+        String sql = "select * from FILES(\n" +
+                "    \"path\" = \"abfs://container@blobaccount.dfs.core.windows.net/path\",\n" +
+                "    \"format\" = \"parquet\",\n" +
+                "    \"azure.blob.oauth2_client_id\" = \"11111111-2222-3333-4444-555555555555\",\n" +
+                "    \"azure.blob.oauth2_client_secret\" = \"BlobSecret123!\",\n" +
+                "    \"azure.blob.oauth2_client_endpoint\" = " +
+                "        \"https://login.microsoftonline.com/blob-tenant/oauth2/token\"\n" +
+                ")";
+
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("11111111-2222-3333-4444-555555555555"),
+                "Azure Blob OAuth2 client_id should be redacted");
+        Assertions.assertFalse(redacted.contains("BlobSecret123!"),
+                "Azure Blob OAuth2 client_secret should be redacted");
+        Assertions.assertTrue(redacted.contains("oauth2_client_endpoint"),
+                "Azure Blob oauth2_client_endpoint key should remain");
+        Assertions.assertTrue(redacted.contains("https://login.microsoftonline.com"),
+                "Azure Blob OAuth endpoint URL (non-credential) should remain");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
+    }
+
+    @Test
+    public void testRedactAzureAdls1OAuth2ClientId() {
+        String sql = "select * from FILES(\n" +
+                "    \"path\" = \"abfs://container@adls1account.dfs.core.windows.net/path\",\n" +
+                "    \"format\" = \"parquet\",\n" +
+                "    \"azure.adls1.oauth2_client_id\" = \"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\n" +
+                "    \"azure.adls1.oauth2_client_secret\" = \"Adls1Secret456!\",\n" +
+                "    \"azure.adls1.oauth2_client_endpoint\" = " +
+                "        \"https://login.microsoftonline.com/adls1-tenant/oauth2/token\"\n" +
+                ")";
+
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+                "Azure ADLS1 OAuth2 client_id should be redacted");
+        Assertions.assertFalse(redacted.contains("Adls1Secret456!"),
+                "Azure ADLS1 OAuth2 client_secret should be redacted");
+        Assertions.assertTrue(redacted.contains("oauth2_client_endpoint"),
+                "Azure ADLS1 oauth2_client_endpoint key should remain");
+        Assertions.assertTrue(redacted.contains("https://login.microsoftonline.com"),
+                "Azure ADLS1 OAuth endpoint URL (non-credential) should remain");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
+    }
+
+    @Test
     public void testRedactGcpCredentials() {
         String sql = "CREATE EXTERNAL CATALOG gcs_catalog\n" +
                 "PROPERTIES (\n" +
