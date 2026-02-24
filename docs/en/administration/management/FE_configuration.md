@@ -3793,6 +3793,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
+##### lake_compute_replica_warmup_timeout_secs
+
+- Default: 900
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The timeout duration (in seconds) for a tablet to complete warmup on a Compute Node in shared-data clusters. When a new tablet is assigned to a CN node, StarRocks fetches its latest metadata and data files from remote storage (warmup) before making the replica visible. If warmup does not finish within this timeout, the FE will consider the warmup successful and mark the replica as visible. Increase this value if warmup failures are observed due to large tablets or slow remote storage; decrease it to reduce the time a replica remains invisible after a scale-out event.
+- Introduced in: v3.5.0
+
 ##### enable_iceberg_commit_queue
 
 - Default: true

@@ -3054,6 +3054,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: In a shared-data cluster, whether to tag files written to object storage with object storage tags for convenient custom file management.
 - Introduced in: v3.5.3
 
+##### tablet_warmup_max_threads
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads for the background tablet warmup thread pool (`cloud_native_warmup`) on a CN node in shared-data clusters. When a new tablet is assigned to a CN node, the warmup manager fetches the tablet's latest metadata and data files from remote storage in the background using this thread pool. Increasing this value allows more tablets to be warmed up concurrently, reducing warmup queue depth and lowering the time new replicas spend in the invisible state. Decreasing it reduces the I/O pressure on remote storage during scale-out events. The value takes effect immediately when updated at runtime.
+- Introduced in: v3.5.0
+
 ##### table_schema_service_max_retries
 
 - Default: 3
