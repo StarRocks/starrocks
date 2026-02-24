@@ -1256,7 +1256,9 @@ public class IcebergScanNodeTest {
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
         new MockUp<IcebergRewriteDataJob>() {
             @Mock public void prepare() {}
-            @Mock public void execute() {}
+            @Mock public IcebergRewriteDataJob.RewriteMetrics execute() {
+                return IcebergRewriteDataJob.RewriteMetrics.EMPTY;
+            }
         };
 
 
@@ -1303,7 +1305,9 @@ public class IcebergScanNodeTest {
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
         new MockUp<IcebergRewriteDataJob>() {
             @Mock public void prepare() {}
-            @Mock public void execute() { throw new RuntimeException("boom"); }
+            @Mock public IcebergRewriteDataJob.RewriteMetrics execute() {
+                throw new RuntimeException("boom");
+            }
         };
 
 
