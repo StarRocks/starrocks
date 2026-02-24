@@ -13,7 +13,7 @@ case "$1" in
                     ;;
             esac
 
-            if [ -n "$COMP" ] && systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
+            if [ -n "$COMP" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
                 echo "Stopping StarRocks $COMP service..."
                 systemctl stop "starrocks-$COMP" || true
             fi
