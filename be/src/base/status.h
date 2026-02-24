@@ -15,7 +15,7 @@
 #define DEFINE_STATUS(name, code)                                                       \
     static Status name(std::string_view msg) { return Status(TStatusCode::code, msg); } \
     template <typename FMT, typename... Args>                                           \
-    static Status name(FMT&& fmt, Args&&... args);
+    requires(sizeof...(Args) > 0) static Status name(FMT&& fmt, Args&&... args);
 
 namespace starrocks {
 
