@@ -70,9 +70,12 @@ if command -v dpkg >/dev/null 2>&1; then
     fi
 fi
 
-SED_I=(-i)
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  SED_I=(-i '')
+    # macOS requires an explicit empty string for the backup extension
+    SED_INPLACE=(-i '')
+else
+    # Linux (GNU sed) does not
+    SED_INPLACE=(-i)
 fi
 
 # Cleanup previous builds
@@ -150,7 +153,7 @@ for COMP in "fe" "be" "cn"; do
     # Path Patching (LSB)
     echo "Patching $COMP.conf for standard paths..."
     CONF_FILE="$STAGING_DIR/etc/starrocks/$COMP/$COMP.conf"
-    sed "${SED_I[@]}" 's/\r$//' "$CONF_FILE"
+    sed "${SED_INPLACE[@]}" 's/\r$//' "$CONF_FILE"
 
     # Define the key and path based on component
     if [ "$COMP" == "fe" ]; then
@@ -166,7 +169,7 @@ for COMP in "fe" "be" "cn"; do
 
     # Robust Regex Patching
     if grep -Eq "^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=[[:space:]]*\$\{STARROCKS_HOME\}.*" "$CONF_FILE"; then
-        sed "${SED_I[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=[[:space:]]*\$\{STARROCKS_HOME\}.*|$KEY = $VAL|" "$CONF_FILE"
+        sed "${SED_INPLACE[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$KEY[[:space:]]*=[[:space:]]*\$\{STARROCKS_HOME\}.*|$KEY = $VAL|" "$CONF_FILE"
     else
         if ! grep -Eq "^[[:space:]]*$KEY[[:space:]]*=" "$CONF_FILE"; then
             echo "$KEY = $VAL" >> "$CONF_FILE"
@@ -187,7 +190,7 @@ for COMP in "fe" "be" "cn"; do
         # 3. Uses -E for Extended Regex to handle [[:space:]] properly
         if grep -Eq "^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=" "$CONF_FILE"; then
             echo "Updating $VAR in $CONF_FILE"
-            sed "${SED_I[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=.*|$VAR = $VALUE|" "$CONF_FILE"
+            sed "${SED_INPLACE[@]}" -E "s|^[[:space:]]*#?[[:space:]]*$VAR[[:space:]]*=.*|$VAR = $VALUE|" "$CONF_FILE"
         else
             echo "Appending $VAR to $CONF_FILE"
             echo "$VAR = $VALUE" >> "$CONF_FILE"
@@ -196,8 +199,8 @@ for COMP in "fe" "be" "cn"; do
 
     # Inject Metadata
     cp "control.$COMP" "$STAGING_DIR/DEBIAN/control"
-    sed "${SED_I[@]}" "s|^Version:.*|Version: $VERSION|" "$STAGING_DIR/DEBIAN/control"
-    sed "${SED_I[@]}" "s|^Architecture:.*|Architecture: $ARCH|" "$STAGING_DIR/DEBIAN/control"
+    sed "${SED_INPLACE[@]}" "s|^Version:.*|Version: $VERSION|" "$STAGING_DIR/DEBIAN/control"
+    sed "${SED_INPLACE[@]}" "s|^Architecture:.*|Architecture: $ARCH|" "$STAGING_DIR/DEBIAN/control"
     
     for script in postinst prerm postrm; do
         if [ -f "$script" ]; then
