@@ -39,7 +39,6 @@ public class CloneExpr extends Expr {
     }
 
     @Override
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/analysis/CloneExpr.java
     protected String toSqlImpl() {
         return "clone(" + getChild(0).toSqlImpl() + ")";
     }
@@ -52,10 +51,10 @@ public class CloneExpr extends Expr {
     @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.CLONE_EXPR);
-=======
+    }
+
     public boolean isNullable() {
         return getChild(0).isNullable();
->>>>>>> f07065e6a6 ([BugFix] Fix ClonExpr nullable bug (#68800)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/expression/CloneExpr.java
     }
 
     @Override
