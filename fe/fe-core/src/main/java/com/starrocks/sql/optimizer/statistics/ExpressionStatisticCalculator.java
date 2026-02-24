@@ -21,11 +21,13 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.spm.SPMFunctions;
@@ -39,12 +41,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.IsoFields;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
@@ -69,6 +73,9 @@ public class ExpressionStatisticCalculator {
         // Some functions estimate need plan node row count, such as COUNT
         private final double rowCount;
 
+        // Additional stats, e.g. ones that map stats to lambda variables.
+        private final Map<ColumnRefOperator, ColumnStatistic> additionalStats = new HashMap<>();
+
         public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
             this.inputStatistics = statistics;
             this.rowCount = Math.max(1.0, rowCount);
@@ -76,7 +83,7 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visit(ScalarOperator operator, Void context) {
-            if (operator.getChildren().size() > 1) {
+            if (!operator.getChildren().isEmpty()) {
                 return operator.getChild(0).accept(this, context);
             } else {
                 return ColumnStatistic.unknown();
@@ -85,6 +92,10 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitVariableReference(ColumnRefOperator operator, Void context) {
+            if (operator.getOpType() == OperatorType.LAMBDA_ARGUMENT) {
+                ColumnStatistic stat = additionalStats.get(operator);
+                return stat != null ? stat : ColumnStatistic.unknown();
+            }
             return inputStatistics.getColumnStatistic(operator);
         }
 
@@ -186,6 +197,8 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visitCall(CallOperator call, Void context) {
+            mapVariableStatistics(call);
+
             List<ColumnStatistic> childrenColumnStatistics =
                     call.getChildren().stream().map(child -> child.accept(this, context)).collect(Collectors.toList());
             Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size(),
@@ -532,6 +545,7 @@ public class ExpressionStatisticCalculator {
             double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
             double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
             double averageRowSize = callOperator.getType().getTypeSize();
+            double collectionSize = ColumnStatistic.DEFAULT_COLLECTION_SIZE;
             long interval;
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
@@ -640,6 +654,19 @@ public class ExpressionStatisticCalculator {
                     maxValue = 1;
                     distinctValues = 2;
                     break;
+                case FunctionSet.ARRAY_MAP:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    final var arrayStats = getArrayMapFirstArrayStats(callOperator, List.of(left, right));
+                    if (arrayStats.isUnknown()) {
+                        return ColumnStatistic.unknown();
+                    }
+                    // Since only the content of the arrays changes, most of the stats from the input remain except NDVs.
+                    nullsFraction = arrayStats.getNullsFraction();
+                    averageRowSize = arrayStats.getAverageRowSize();
+                    collectionSize = arrayStats.getCollectionSize();
+                    distinctValues = calculateArrayMapNdv(callOperator, List.of(left, right));
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -648,9 +675,11 @@ public class ExpressionStatisticCalculator {
                     .setMaxValue(maxValue)
                     .setNullsFraction(nullsFraction)
                     .setAverageRowSize(averageRowSize)
-                    .setDistinctValuesCount(distinctValues);
+                    .setDistinctValuesCount(distinctValues)
+                    .setCollectionSize(collectionSize);
             transformHistogramForBinary(callOperator, left, right).ifPresent(builder::setHistogram);
             return builder.build();
+
         }
 
         private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,
@@ -691,7 +720,7 @@ public class ExpressionStatisticCalculator {
 
         private ColumnStatistic deriveBasicColStats(CallOperator call) {
             List<ColumnRefOperator> usedCols = call.getColumnRefs();
-            if (usedCols.size() == 0) {
+            if (usedCols.isEmpty()) {
                 return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
                         0, call.getType().getTypeSize(), 1);
             } else if (usedCols.size() == 1 && !inputStatistics.getColumnStatistic(usedCols.get(0)).isUnknown()) {
@@ -1017,6 +1046,102 @@ public class ExpressionStatisticCalculator {
                 return Optional.empty();
             }
         }
+
+
+        private void mapVariableStatistics(CallOperator call) {
+            if (FunctionSet.ARRAY_MAP.equalsIgnoreCase(call.getFnName())) {
+                addLambdaArgStats(call);
+            }
+        }
+
+        /**
+         * Populates the lambda argument statistics overlay so that {@link #visitVariableReference} can resolve lambda parameters.
+         * E.g. for `array_map((x) -> ... x ..., ARRAY_TEST)`, maps lambda argument 'x' to the statistics of ARRAY_TEST.
+         */
+        private void addLambdaArgStats(CallOperator arrayMapCall) {
+            final var lambda = getLambdaFromArrayMap(arrayMapCall);
+            if (lambda == null) {
+                return;
+            }
+
+            // Collect non-lambda children (the array inputs) in order.
+            List<ScalarOperator> arrayInputs = new ArrayList<>();
+            for (ScalarOperator child : arrayMapCall.getChildren()) {
+                if (!(child instanceof LambdaFunctionOperator)) {
+                    arrayInputs.add(child);
+                }
+            }
+
+            final var refColumns = lambda.getRefColumns();
+            for (int i = 0; i < Math.min(refColumns.size(), arrayInputs.size()); i++) {
+                ColumnRefOperator lambdaArg = refColumns.get(i);
+                ScalarOperator arrayInput = arrayInputs.get(i);
+                ColumnStatistic stat = arrayInput.accept(this, null);
+                additionalStats.put(lambdaArg, stat);
+            }
+        }
+
+        @Nullable
+        private static LambdaFunctionOperator getLambdaFromArrayMap(CallOperator callOperator) {
+            final var firstChild = callOperator.getChild(0);
+            final var secondChild = callOperator.getChild(1);
+
+            if (firstChild instanceof LambdaFunctionOperator lambda) {
+                return lambda;
+            }
+
+            if (secondChild instanceof LambdaFunctionOperator lambda) {
+                return lambda;
+            }
+
+            return null;
+        }
+
+        private static ColumnStatistic getArrayMapFirstArrayStats(CallOperator callOperator, List<ColumnStatistic> stats) {
+            final var firstChild = callOperator.getChild(0);
+            final var lastChild = callOperator.getChild(callOperator.getChildren().size() - 1);
+
+            if (firstChild instanceof LambdaFunctionOperator) {
+                return stats.get(1);
+            }
+
+            if (lastChild instanceof LambdaFunctionOperator) {
+                return stats.get(stats.size() - 1);
+            }
+
+            return ColumnStatistic.unknown();
+        }
+
+
+        private static ColumnStatistic getArrayMapLambdaStats(CallOperator callOperator,
+                                                              LambdaFunctionOperator lambda,
+                                                              List<ColumnStatistic> stats) {
+            return stats.get(callOperator.getChildren().indexOf(lambda));
+        }
+
+        private static double calculateArrayMapNdv(CallOperator arrayMap, List<ColumnStatistic> stats) {
+            final var lambda = getLambdaFromArrayMap(arrayMap);
+            final var arrayStats = getArrayMapFirstArrayStats(arrayMap, stats);
+            if (lambda != null && lambda.getNumberOfDependentArguments() <= 1) {
+                final var lambdaStats = getArrayMapLambdaStats(arrayMap, lambda, stats);
+                if (!lambdaStats.isUnknown()) {
+                    if (lambda.isIndependentOfArguments()) {
+                        // If the lambda is independent of the array elements, we can use the NDV of the lambda to approximate.
+                        return lambdaStats.getDistinctValuesCount();
+                    }
+                    // TODO(o.layer): Could use NDV of unnest stats (https://github.com/StarRocks/starrocks/pull/69272) to
+                    // better estimate the NDV of array_map when lambda depends on the array elements.
+                }
+            }
+
+            // As a fallback, return the input NDVs as approximation.
+            if (arrayStats.isUnknown()) {
+                return ColumnStatistic.unknown().getDistinctValuesCount();
+            }
+            return arrayStats.getDistinctValuesCount();
+        }
+    }
+}
 
         private boolean isSupportedIntegerMcvType(Type t) {
             return t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint();
