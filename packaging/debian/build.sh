@@ -53,6 +53,13 @@ fi
 CN_SOURCE=${5:-"$BE_SOURCE"}
 echo "### StarRocks Debian Packaging Build ###"
 
+# Validate that the version is not the placeholder
+if [ "$VERSION" = "0.0.0" ]; then
+    echo "ERROR: Version is set to 0.0.0. Please provide a real version number." >&2
+    echo "Usage: $0 <version> [fe_src] [be_src] [arch] [cn_src]" >&2
+    exit 1
+fi
+
 # Detect OS for portable sed
 if [ -z "$BASH_VERSION" ]; then
     echo "ERROR: This script requires Bash." >&2
