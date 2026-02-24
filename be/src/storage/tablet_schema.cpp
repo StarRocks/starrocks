@@ -43,6 +43,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/metadata_util.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/type_utils.h"
 #include "tablet_meta.h"
@@ -375,9 +376,8 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
     if (src_tablet_schema->has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
-    if (src_tablet_schema->has_primary_key_encoding_type()) {
-        partial_tablet_schema_pb.set_primary_key_encoding_type(src_tablet_schema->primary_key_encoding_type());
-    }
+    partial_tablet_schema_pb.set_primary_key_encoding_type(
+            PrimaryKeyEncoder::pb_from_encoding_type(src_tablet_schema->primary_key_encoding_type()));
     std::vector<ColumnId> sort_key_idxes;
     // from referenced column name to index, used for build sort key idxes later.
     std::map<std::string, uint32_t> col_name_to_idx;
@@ -552,13 +552,13 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _schema_version = schema.schema_version();
 
     if (schema.has_primary_key_encoding_type()) {
-        _primary_key_encoding_type = schema.primary_key_encoding_type();
+        _primary_key_encoding_type = PrimaryKeyEncoder::encoding_type_from_pb(schema.primary_key_encoding_type());
     } else if (schema.keys_type() == KeysType::PRIMARY_KEYS) {
         // Compatibility fallback: schemas created before `primary_key_encoding_type` was introduced.
         // PRIMARY_KEYS tables used V1 encoding historically, so default to V1 when the field is absent.
-        _primary_key_encoding_type = PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1;
+        _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
     } else {
-        _primary_key_encoding_type = PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE;
+        _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     }
 }
 
@@ -655,7 +655,8 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
         index.to_schema_pb(tablet_index_pb);
     }
     // for simplicity, we always persist the primary key encoding type even for non-cloud-native tables
-    tablet_schema_pb->set_primary_key_encoding_type(_primary_key_encoding_type);
+    tablet_schema_pb->set_primary_key_encoding_type(
+            PrimaryKeyEncoder::pb_from_encoding_type(_primary_key_encoding_type));
 }
 
 Status TabletSchema::get_indexes_for_column(int32_t col_unique_id,

@@ -101,7 +101,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok()) {
         std::string err_msg = fmt::format("create column for primary key encoder failed, tablet_id: {}", _tablet_id);
         DCHECK(false) << err_msg;
         return Status::InternalError(err_msg);
@@ -134,8 +134,8 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    TRY_CATCH_BAD_ALLOC(
-                            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
+                    TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
                 }
             }
         }
@@ -561,8 +561,10 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
     for (const auto& each_chunk : segid_to_chunk) {
         new_deletes[rowset_id + each_chunk.first] = {};
         MutableColumnPtr pk_column;
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *each_chunk.second, 0, each_chunk.second->num_rows(), pk_column.get());
+        RETURN_IF_ERROR(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+        PrimaryKeyEncoder::encode(pkey_schema, *each_chunk.second, 0, each_chunk.second->num_rows(), pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
         RETURN_IF_ERROR(index.upsert(rowset_id + each_chunk.first, 0, *pk_column, &new_deletes));
     }
     RETURN_IF_ERROR(index.commit(&index_meta));
