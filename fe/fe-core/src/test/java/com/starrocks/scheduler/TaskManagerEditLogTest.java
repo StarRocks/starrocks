@@ -914,7 +914,7 @@ public class TaskManagerEditLogTest {
         Assertions.assertNotNull(masterTaskManager.getPeriodFutureMap().get(createdTask.getId()));
 
         // 2. Execute suspendTask operation (master side)
-        masterTaskManager.suspendTask(createdTask);
+        masterTaskManager.suspendTask(createdTask, false);
 
         // 3. Verify master state after suspension
         Task suspendedTask = masterTaskManager.getTask(taskName);
@@ -971,13 +971,13 @@ public class TaskManagerEditLogTest {
         Task createdTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         // Set state to PAUSE after creation
-        masterTaskManager.suspendTask(createdTask);
+        masterTaskManager.suspendTask(createdTask, false);
 
         Task suspendedTask = masterTaskManager.getTask(taskName);
         Assertions.assertEquals(Constants.TaskState.PAUSE, suspendedTask.getState());
 
         // 2. Execute resumeTask operation (master side)
-        masterTaskManager.resumeTask(suspendedTask);
+        masterTaskManager.resumeTask(suspendedTask, false);
 
         // 3. Verify master state after resumption
         Task resumedTask = masterTaskManager.getTask(taskName);
@@ -1115,7 +1115,7 @@ public class TaskManagerEditLogTest {
 
         // 3. Execute suspendTask operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            exceptionTaskManager.suspendTask(createdTask);
+            exceptionTaskManager.suspendTask(createdTask, false);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
