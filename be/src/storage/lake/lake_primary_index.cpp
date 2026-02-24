@@ -51,13 +51,15 @@ Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetada
     if (need_rebuild()) {
         unload_without_lock();
     }
+    // _do_lake_load may need tablet id to fetch tablet schema/encoding type.
+    // Set it before loading to avoid using the default value (0).
+    _tablet_id = metadata->id();
     _status = _do_lake_load(tablet_mgr, metadata, base_version, builder);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
     if (_status.ok()) {
         // update data version when memory index or persistent index load finish.
         _data_version = base_version;
     }
-    _tablet_id = metadata->id();
     _loaded = true;
     TRACE("end load pk index");
     if (!_status.ok()) {
@@ -128,9 +130,10 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
 
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        // more than one key column
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
+    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        // more than one key column or V2 encoding
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
     }
     vector<uint32_t> rowids;
     rowids.reserve(4096);
@@ -164,7 +167,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                     const Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                  pk_encoding_type);
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
