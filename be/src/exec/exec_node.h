@@ -56,7 +56,6 @@ class ExprContext;
 class ObjectPool;
 class RuntimeState;
 class SlotRef;
-class TPlan;
 class DataSink;
 
 namespace pipeline {
@@ -146,12 +145,6 @@ public:
     // close() on the children. To ensure that close() is called on the entire plan tree,
     // each implementation should start out by calling the default implementation.
     virtual void close(RuntimeState* state);
-
-    // Creates exec node tree from list of nodes contained in plan via depth-first
-    // traversal. All nodes are placed in pool.
-    // Returns error if 'plan' is corrupted, otherwise success.
-    static Status create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
-                              ExecNode** root);
 
     // Collect all nodes of given 'node_type' that are part of this subtree, and return in
     // 'nodes'.
@@ -284,9 +277,6 @@ protected:
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
 
-    static Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
-                                     const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root);
-
     virtual bool is_scan_node() const { return false; }
 
     void init_runtime_profile(const std::string& name);
@@ -299,8 +289,6 @@ protected:
     Status exec_debug_action(TExecNodePhase::type phase);
 
 private:
-    // TODO: delete this function if removed tupleId
-    Status static checkTupleIdsInDescs(const DescriptorTbl& descs, const TPlanNode& planNode);
     RuntimeState* _runtime_state;
     bool _is_closed;
 };

@@ -22,10 +22,14 @@ class DescriptorTbl;
 class ExecNode;
 class ObjectPool;
 class RuntimeState;
+class TPlan;
 class TPlanNode;
 
 class ExecFactory {
 public:
+    static Status create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
+                              ExecNode** root);
+
     static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
                                          const DescriptorTbl& descs, ExecNode** node);
 };

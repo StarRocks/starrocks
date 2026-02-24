@@ -26,6 +26,7 @@
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
+#include "exec/exec_factory.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
 #include "exec/olap_scan_node.h"
@@ -464,8 +465,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     // Set up plan
     _fragment_ctx->move_tplan(*const_cast<TPlan*>(&fragment.plan));
-    RETURN_IF_ERROR(
-            ExecNode::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl, &_fragment_ctx->plan()));
+    RETURN_IF_ERROR(ExecFactory::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl,
+                                             &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
     std::unordered_set<int32_t> filter_ids;
     collect_non_broadcast_rf_ids(plan, filter_ids);

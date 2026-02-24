@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <utility>
 
 #include "base/testutil/assert.h"
 #include "common/config.h"
@@ -58,11 +59,11 @@ protected:
         _tuple_id = tuple_descs[0]->id();
     }
 
-    TPlanNode make_base_plan_node(TPlanNodeType::type node_type) const {
+    TPlanNode make_base_plan_node(TPlanNodeType::type node_type, int node_id = 1, int num_children = 0) const {
         TPlanNode tnode;
-        tnode.__set_node_id(1);
+        tnode.__set_node_id(node_id);
         tnode.__set_node_type(node_type);
-        tnode.__set_num_children(0);
+        tnode.__set_num_children(num_children);
         tnode.__set_limit(-1);
         tnode.row_tuples.push_back(_tuple_id);
         return tnode;
@@ -137,6 +138,67 @@ TEST_F(ExecFactoryTest, test_stream_scan_invalid_source_type) {
     ASSERT_ERROR(st);
     ASSERT_TRUE(st.is_internal_error());
     ASSERT_NE(st.message().find("Stream scan node does not support source type"), std::string::npos);
+}
+
+TEST_F(ExecFactoryTest, test_create_tree_empty_plan) {
+    TPlan plan;
+    ExecNode* root = reinterpret_cast<ExecNode*>(0x1);
+    ASSERT_OK(ExecFactory::create_tree(&_runtime_state, &_object_pool, plan, *_desc_tbl, &root));
+    ASSERT_EQ(root, nullptr);
+}
+
+TEST_F(ExecFactoryTest, test_create_tree_valid_simple_tree) {
+    TPlan plan;
+    plan.nodes.emplace_back(make_base_plan_node(TPlanNodeType::SELECT_NODE, 10, 1));
+    plan.nodes.emplace_back(make_base_plan_node(TPlanNodeType::EMPTY_SET_NODE, 11, 0));
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(&_runtime_state, &_object_pool, plan, *_desc_tbl, &root));
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->type(), TPlanNodeType::SELECT_NODE);
+    ASSERT_EQ(root->children().size(), 1);
+    ASSERT_NE(root->children()[0], nullptr);
+    ASSERT_EQ(root->children()[0]->type(), TPlanNodeType::EMPTY_SET_NODE);
+}
+
+TEST_F(ExecFactoryTest, test_create_tree_invalid_tuple_id) {
+    TPlanNode tnode = make_base_plan_node(TPlanNodeType::SELECT_NODE);
+    tnode.row_tuples.clear();
+    tnode.row_tuples.push_back(_tuple_id + 1000);
+
+    TPlan plan;
+    plan.nodes.emplace_back(std::move(tnode));
+
+    ExecNode* root = nullptr;
+    Status st = ExecFactory::create_tree(&_runtime_state, &_object_pool, plan, *_desc_tbl, &root);
+    ASSERT_ERROR(st);
+    ASSERT_TRUE(st.is_internal_error());
+    ASSERT_NE(st.message().find("Tuple ids are not in descs"), std::string::npos);
+}
+
+TEST_F(ExecFactoryTest, test_create_tree_malformed_or_partial_tree) {
+    {
+        TPlan malformed_plan;
+        malformed_plan.nodes.emplace_back(make_base_plan_node(TPlanNodeType::SELECT_NODE, 20, 1));
+
+        ExecNode* root = nullptr;
+        Status st = ExecFactory::create_tree(&_runtime_state, &_object_pool, malformed_plan, *_desc_tbl, &root);
+        ASSERT_ERROR(st);
+        ASSERT_TRUE(st.is_internal_error());
+        ASSERT_NE(st.message().find("Failed to reconstruct plan tree from thrift."), std::string::npos);
+    }
+
+    {
+        TPlan partial_plan;
+        partial_plan.nodes.emplace_back(make_base_plan_node(TPlanNodeType::SELECT_NODE, 30, 0));
+        partial_plan.nodes.emplace_back(make_base_plan_node(TPlanNodeType::EMPTY_SET_NODE, 31, 0));
+
+        ExecNode* root = nullptr;
+        Status st = ExecFactory::create_tree(&_runtime_state, &_object_pool, partial_plan, *_desc_tbl, &root);
+        ASSERT_ERROR(st);
+        ASSERT_TRUE(st.is_internal_error());
+        ASSERT_NE(st.message().find("Plan tree only partially reconstructed"), std::string::npos);
+    }
 }
 
 } // namespace starrocks

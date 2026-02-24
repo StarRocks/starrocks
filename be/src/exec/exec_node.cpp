@@ -44,20 +44,19 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "common/util/debug_util.h"
-#include "exec/exec_factory.h"
-#include "exec/pipeline/chunk_accumulate_operator.h"
-#include "exec/pipeline/pipeline_builder.h"
 #include "exprs/chunk_predicate_evaluator.h"
-#include "exprs/dictionary_get_expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -164,13 +163,6 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
         _filter_null_value_columns = tnode.filter_null_value_columns;
     }
     return Status::OK();
-}
-
-void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
-                                                const RcRfProbeCollectorPtr& rc_rf_probe_collector) {
-    op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), this->get_tuple_ids(),
-                            this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector,
-                            _filter_null_value_columns, _tuple_slot_mappings);
 }
 
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
@@ -323,100 +315,10 @@ void ExecNode::close(RuntimeState* state) {
     _runtime_filter_collector.close(state);
 }
 
-Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
-                             ExecNode** root) {
-    if (plan.nodes.size() == 0) {
-        *root = nullptr;
-        return Status::OK();
-    }
-
-    int node_idx = 0;
-    RETURN_IF_ERROR(create_tree_helper(state, pool, plan.nodes, descs, nullptr, &node_idx, root));
-
-    if (node_idx + 1 != plan.nodes.size()) {
-        return Status::InternalError("Plan tree only partially reconstructed. Not all thrift nodes were used.");
-    }
-
-    return Status::OK();
-}
-
-Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
-                                    const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root) {
-    // propagate error case
-    if (*node_idx >= tnodes.size()) {
-        return Status::InternalError("Failed to reconstruct plan tree from thrift.");
-    }
-    const TPlanNode& tnode = tnodes[*node_idx];
-
-    int num_children = tnodes[*node_idx].num_children;
-    ExecNode* node = nullptr;
-    // check tuple ids is in descs before create node
-    RETURN_IF_ERROR(checkTupleIdsInDescs(descs, tnodes[*node_idx]));
-    RETURN_IF_ERROR(ExecFactory::create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
-
-    DCHECK((parent != nullptr) || (root != nullptr));
-    if (UNLIKELY(parent == nullptr && root == nullptr)) {
-        return Status::InternalError("parent and root shouldn't both be null");
-    }
-    if (parent != nullptr) {
-        parent->_children.push_back(node);
-    } else {
-        *root = node;
-    }
-
-    for (int i = 0; i < num_children; i++) {
-        ++*node_idx;
-        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node, node_idx, nullptr));
-
-        // we are expecting a child, but have used all nodes
-        // this means we have been given a bad tree and must fail
-        if (*node_idx >= tnodes.size()) {
-            // TODO: print thrift msg
-            return Status::InternalError("Failed to reconstruct plan tree from thrift.");
-        }
-    }
-
-    RETURN_IF_ERROR(node->init(tnode, state));
-
-    // build up tree of profiles; add children >0 first, so that when we print
-    // the profile, child 0 is printed last (makes the output more readable)
-    for (int i = 1; i < node->_children.size(); ++i) {
-        node->runtime_profile()->add_child(node->_children[i]->runtime_profile(), true, nullptr);
-    }
-
-    if (!node->_children.empty()) {
-        node->runtime_profile()->add_child(node->_children[0]->runtime_profile(), true, nullptr);
-    }
-
-    return Status::OK();
-}
-
 std::string ExecNode::debug_string() const {
     std::stringstream out;
     this->debug_string(0, &out);
     return out.str();
-}
-
-Status ExecNode::checkTupleIdsInDescs(const DescriptorTbl& descs, const TPlanNode& planNode) {
-    for (auto id : planNode.row_tuples) {
-        if (descs.get_tuple_descriptor(id) == nullptr) {
-            std::stringstream ss;
-            ss << "Plan node id: " << planNode.node_id << ", Tuple ids: ";
-            for (auto id : planNode.row_tuples) {
-                ss << id << ", ";
-            }
-            LOG(ERROR) << ss.str();
-            ss.str("");
-            ss << "DescriptorTbl: " << descs.debug_string();
-            LOG(ERROR) << ss.str();
-            ss.str("");
-            ss << "TPlanNode: " << apache::thrift::ThriftDebugString(planNode);
-            LOG(ERROR) << ss.str();
-            return Status::InternalError("Tuple ids are not in descs");
-        }
-    }
-
-    return Status::OK();
 }
 
 void ExecNode::debug_string(int indentation_level, std::stringstream* out) const {
@@ -500,15 +402,6 @@ Status ExecNode::exec_debug_action(TExecNodePhase::type phase) {
     }
 
     return Status::OK();
-}
-
-void ExecNode::may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id) {
-    // TODO(later): Need to rewrite ChunkAccumulateOperator to support StreamPipelines,
-    // for now just disable it in stream pipelines:
-    // - make sure UPDATE_BEFORE/UPDATE_AFTER are in the same chunk.
-    if (!context->is_stream_pipeline()) {
-        ops.emplace_back(std::make_shared<pipeline::ChunkAccumulateOperatorFactory>(context->next_operator_id(), id));
-    }
 }
 
 } // namespace starrocks
