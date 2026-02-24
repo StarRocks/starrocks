@@ -25,11 +25,8 @@
 #include "column/schema.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
-<<<<<<< HEAD
-=======
 #include "types/date_value.h"
 #include "types/datum.h"
->>>>>>> 4b816acefb ([Enhancement] Support Big-endian encoding for primary key in range-distribution table in share data mode. (#68191))
 
 using namespace std;
 
