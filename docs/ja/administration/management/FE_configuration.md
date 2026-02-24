@@ -3083,6 +3083,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: Long
 - 単位: ミリ秒
 - 変更可能: はい
+- エイリアス: lake_min_compaction_interval_ms_on_success
 - 説明: 共有データクラスタで、あるパーティションの Compaction が成功した後、そのパーティションで次の Compaction を開始するまでの間隔。
 - 導入バージョン: v3.2.0
 

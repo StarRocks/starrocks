@@ -3016,6 +3016,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
+- 别名: lake_min_compaction_interval_ms_on_success
 - 描述：如果该项设置为 `true`，存算分离集群中的 Compaction 操作即使只有其中一个子任务成功，系统也将认为操作成功。
 - 引入版本：v3.5.2
 
