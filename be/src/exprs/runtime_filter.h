@@ -17,6 +17,7 @@
 #include <numeric>
 #include <sstream>
 
+#include "base/hash/hash_std.hpp"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -32,7 +33,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 // 0x1. initial global runtime filter impl

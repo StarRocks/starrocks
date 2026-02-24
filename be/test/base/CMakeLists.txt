@@ -78,6 +78,7 @@ set(BASE_TEST_FILES
     string/string_util_test.cpp
     string/string_parser_test.cpp
     string/slice_test.cpp
+    string/url_parser_test.cpp
     string/utf8_check_test.cpp
     string/volnitsky_test.cpp
     testutil/sync_point_test.cpp

@@ -36,6 +36,7 @@
 #include "base/phmap/phmap.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
+#include "column/json_converter.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -53,7 +54,6 @@
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "util/bloom_filter.h"
-#include "util/json_converter.h"
 
 namespace starrocks {
 

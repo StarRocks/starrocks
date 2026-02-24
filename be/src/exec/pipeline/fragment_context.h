@@ -17,6 +17,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
@@ -41,7 +42,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "storage/predicate_tree_params.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 

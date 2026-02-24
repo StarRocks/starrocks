@@ -39,11 +39,11 @@
 #include <memory>
 #include <sstream>
 
+#include "base/hash/hash_std.hpp"
 #include "base/network/network_util.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/FrontendService.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 

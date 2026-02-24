@@ -19,12 +19,12 @@
 #include <rapidjson/writer.h>
 
 #include "column/column_viewer.h"
+#include "column/json_converter.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "http/http_client.h"
 #include "types/datum.h"
 #include "types/json_value.h"
-#include "util/json_converter.h"
 #include "util/json_flattener.h"
 #include "util/llm_cache.h"
 #include "util/llm_query_service.h"

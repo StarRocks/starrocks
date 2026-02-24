@@ -41,10 +41,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 

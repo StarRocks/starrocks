@@ -18,12 +18,12 @@
 
 #include <utility>
 
+#include "base/hash/hash_std.hpp"
 #include "common/config.h"
 #include "common/runtime_profile.h"
 #include "common/system/backend_options.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
-#include "util/hash_util.hpp"
 #include "util/stack_util.h"
 
 namespace starrocks::io {

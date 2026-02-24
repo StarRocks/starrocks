@@ -56,6 +56,7 @@ ADD_BE_LIB(Base
   string/faststring.cc
   string/string_util.cpp
   string/string_parser.cpp
+  string/url_parser.cpp
   string/slice.cpp
   string/utf8_check.cpp
   system/errno.cpp

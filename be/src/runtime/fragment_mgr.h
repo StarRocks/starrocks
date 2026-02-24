@@ -41,6 +41,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "gen_cpp/FrontendService.h"
@@ -49,7 +50,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "http/rest_monitor_iface.h"
 #include "runtime/mem_tracker.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 

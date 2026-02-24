@@ -49,6 +49,7 @@
 #include "base/brpc/brpc.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/failpoint/fail_point.h"
+#include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "brpc/errno.pb.h"
@@ -90,7 +91,6 @@
 #include "storage/txn_manager.h"
 #include "types/type_descriptor.h"
 #include "util/arrow/row_batch.h"
-#include "util/hash_util.hpp"
 #include "util/time_guard.h"
 
 namespace starrocks {
