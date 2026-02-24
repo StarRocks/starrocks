@@ -96,6 +96,12 @@ public:
     static Status Unknown(std::string_view msg) { return Status(TStatusCode::UNKNOWN, msg); }
 
     static Status PublishTimeout(std::string_view msg) { return Status(TStatusCode::PUBLISH_TIMEOUT, msg); }
+#ifdef FMT_FORMAT_H_
+    template <typename... Args>
+    static Status PublishTimeout(fmt::format_string<Args...> fmt_str, Args&&... args) {
+        return Status(TStatusCode::PUBLISH_TIMEOUT, fmt::format(fmt_str, std::forward<Args>(args)...));
+    }
+#endif
     static Status MemoryAllocFailed(std::string_view msg) { return Status(TStatusCode::MEM_ALLOC_FAILED, msg); }
     static Status BufferAllocFailed(std::string_view msg) { return Status(TStatusCode::BUFFER_ALLOCATION_FAILED, msg); }
     static Status InvalidArgument(std::string_view msg) { return Status(TStatusCode::INVALID_ARGUMENT, msg); }

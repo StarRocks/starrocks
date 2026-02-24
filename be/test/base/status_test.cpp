@@ -32,9 +32,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <fmt/format.h>
+
 #include "base/status.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 namespace starrocks {
@@ -179,6 +180,14 @@ TEST_F(StatusTest, test_to_string) {
     ASSERT_EQ("Table not exist: test table not exist", table_not_exist.to_string());
     Status query_not_exist = Status::QueryNotExist("test query not exist");
     ASSERT_EQ("Query not exist: test query not exist", query_not_exist.to_string());
+}
+
+TEST_F(StatusTest, PublishTimeoutFmtOverload) {
+    // Test the fmt-style overload of PublishTimeout
+    Status st = Status::PublishTimeout("txn {} timed out after {}ms", 42, 3000);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_publish_timeout());
+    ASSERT_EQ("txn 42 timed out after 3000ms", st.message());
 }
 
 TEST_F(StatusTest, HighStatusCodePreserved) {
