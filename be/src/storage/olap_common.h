@@ -49,13 +49,13 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "base/utility/guard.h"
 #include "common/column_id.h"
 #include "common/delete_condition.h"
 #include "gen_cpp/Types_types.h"
 #include "storage/olap_define.h"
-#include "util/hash_util.hpp"
 
 #define LOW_56_BITS 0x00ffffffffffffff
 

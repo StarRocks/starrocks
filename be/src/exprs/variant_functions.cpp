@@ -17,8 +17,8 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/variant_converter.h"
 #include "runtime/runtime_state.h"
-#include "util/variant_converter.h"
 #include "variant_path_parser.h"
 
 namespace starrocks {

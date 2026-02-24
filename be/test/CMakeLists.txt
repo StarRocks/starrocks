@@ -322,7 +322,6 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/download_util_test.cpp
         ./util/stack_util_test.cpp
-        ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp

@@ -28,7 +28,6 @@ set(UTIL_FILES
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
   download_util.cpp
-  hash_util.hpp
   json_util.cpp
   json_flattener.cpp
   global_metrics_registry.cpp
@@ -38,7 +37,6 @@ set(UTIL_FILES
   static_asserts.cpp
   stack_util.cpp
   system_metrics.cpp
-  url_parser.cpp
 # coding_util.cpp
   thrift_rpc_helper.cpp
   frame_of_reference_coding.cpp
@@ -47,7 +45,6 @@ set(UTIL_FILES
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
-  variant_converter.cpp
   variant_encoder.cpp
   hdfs_util.cpp
   jvm_metrics.cpp

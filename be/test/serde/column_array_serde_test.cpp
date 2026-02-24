@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/failpoint/fail_point.h"
+#include "base/hash/hash_std.hpp"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
@@ -32,7 +33,6 @@
 #include "types/hll.h"
 #include "types/json_value.h"
 #include "types/variant.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks::serde {
 
