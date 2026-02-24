@@ -159,8 +159,12 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
         }
         auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
         MutableColumnPtr pk_column;
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
+        RETURN_IF(pk_encoding_type != PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2,
+                  Status::InvalidArgument(
+                          "Big-endian encoding is required for range-distribution table in share data mode"));
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), pk_encoding_type);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {

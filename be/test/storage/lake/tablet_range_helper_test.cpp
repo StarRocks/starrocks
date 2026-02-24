@@ -136,6 +136,7 @@ TEST(TabletRangeHelperTest, test_tablet_range_intersect_branch_coverage) {
 TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 
     // c0, c1 are keys
     auto c0 = schema_pb.add_column();
@@ -192,6 +193,7 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
 TEST(TabletRangeHelperTest, test_non_nullable_key_rejects_null_range) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 
     auto c0 = schema_pb.add_column();
     c0->set_name("c0");
@@ -215,6 +217,36 @@ TEST(TabletRangeHelperTest, test_non_nullable_key_rejects_null_range) {
     ASSERT_FALSE(res.ok());
     ASSERT_TRUE(res.status().is_invalid_argument());
     ASSERT_EQ("Non-nullable primary key contains NULL in tablet range", res.status().message());
+}
+
+TEST(TabletRangeHelperTest, test_create_sst_seek_range_requires_v2_encoding) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1);
+
+    auto c0 = schema_pb.add_column();
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    schema_pb.clear_sort_key_idxes();
+    schema_pb.add_sort_key_idxes(0);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    TabletRangePB range_pb;
+    auto lower = range_pb.mutable_lower_bound();
+    auto v0 = lower->add_values();
+    TypeDescriptor type_int(TYPE_INT);
+    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->set_value("1");
+    range_pb.set_lower_bound_included(true);
+
+    auto res = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema);
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_invalid_argument());
+    ASSERT_THAT(res.status().to_string(),
+                testing::HasSubstr("Big-endian encoding is required for range-distribution table in share data mode"));
 }
 
 TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_full_range) {

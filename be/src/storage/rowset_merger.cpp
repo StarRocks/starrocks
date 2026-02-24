@@ -336,7 +336,9 @@ private:
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
         MutableColumnPtr sort_column;
         if (schema.sort_key_idxes().size() > 1) {
-            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes(),
+                                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                         .ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
@@ -638,7 +640,8 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
         }
     }();
     std::unique_ptr<RowsetMerger> merger;
-    auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes());
+    auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes(),
+                                                                PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     switch (key_type) {
     case TYPE_BOOLEAN:
         merger = std::make_unique<RowsetMergerImpl<uint8_t>>();

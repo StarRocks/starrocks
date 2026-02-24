@@ -42,6 +42,8 @@ public:
     // also consider sorting in data loading and compact concurrency scenarios
     static Status sort_rowsets(std::vector<RowsetSharedPtr>* rowsets);
 
+    StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type() const override;
+
 private:
     Tablet* _tablet;
     UpdateManager* _update_mgr;
