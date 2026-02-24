@@ -33,32 +33,49 @@ case "$1" in
             install -d -o starrocks -g starrocks -m 0750 "$dir"
         done
 
-        # Map package name to specific directories and derive component name  
-        COMPONENT_DIRS=""  
-        COMP=""  
-        case "$DPKG_MAINTSCRIPT_PACKAGE" in  
-            starrocks-fe)  
-                COMP="fe"  
-                COMPONENT_DIRS="/var/log/starrocks/fe /var/lib/starrocks/fe /var/lib/starrocks/fe/meta"  
-                ;;  
-            starrocks-be)  
-                COMP="be"  
-                COMPONENT_DIRS="/var/log/starrocks/be /var/lib/starrocks/be /var/lib/starrocks/be/storage"  
-                ;;  
-            starrocks-cn)  
-                COMP="cn"  
-                COMPONENT_DIRS="/var/log/starrocks/cn /var/lib/starrocks/cn /var/lib/starrocks/cn/cache"  
-                ;;  
-            *)  
-                # Unknown or unsupported package; do not touch component-specific paths  
-                COMP=""  
-                COMPONENT_DIRS=""  
-                ;;  
-        esac  
+        # Map package name to specific directories and derive component name
+        #
+        # IMPORTANT:
+        # - The component-specific data/cache/storage directories below (under /var/lib/starrocks)
+        #   MUST match the paths configured in the StarRocks configuration files that are
+        #   patched by the packaging/build logic (e.g. build.sh).
+        # - If either the configuration paths or these directories are changed, the other
+        #   must be updated accordingly, otherwise StarRocks services may fail to start
+        #   because they will look for metadata or storage in a different location than
+        #   the one created here.
+        # - When modifying FE/BE/CN data directories, keep this case statement and the
+        #   corresponding configuration patching in strict sync.
+        COMPONENT_DIRS=""
+        COMP=""
+        case "$DPKG_MAINTSCRIPT_PACKAGE" in
+            starrocks-fe)
+                COMP="fe"
+                # FE directories: log, runtime data root, and metadata directory.
+                # Keep /var/lib/starrocks/fe and /var/lib/starrocks/fe/meta in sync with FE configs.
+                COMPONENT_DIRS="/var/log/starrocks/fe /var/lib/starrocks/fe /var/lib/starrocks/fe/meta"
+                ;;
+            starrocks-be)
+                COMP="be"
+                # BE directories: log, runtime data root, and storage directory.
+                # Keep /var/lib/starrocks/be and /var/lib/starrocks/be/storage in sync with BE configs.
+                COMPONENT_DIRS="/var/log/starrocks/be /var/lib/starrocks/be /var/lib/starrocks/be/storage"
+                ;;
+            starrocks-cn)
+                COMP="cn"
+                # CN directories: log, runtime data root, and cache directory.
+                # Keep /var/lib/starrocks/cn and /var/lib/starrocks/cn/cache in sync with CN configs.
+                COMPONENT_DIRS="/var/log/starrocks/cn /var/lib/starrocks/cn /var/lib/starrocks/cn/cache"
+                ;;
+            *)
+                # Unknown or unsupported package; do not touch component-specific paths
+                COMP=""
+                COMPONENT_DIRS=""
+                ;;
+        esac
 
-        for dir in $COMPONENT_DIRS; do  
-            install -d -o starrocks -g starrocks -m 0750 "$dir"  
-        done  
+        for dir in $COMPONENT_DIRS; do
+            install -d -o starrocks -g starrocks -m 0750 "$dir"
+        done
 
         # Secure the configuration directory for the detected component  
         #  
