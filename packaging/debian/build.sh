@@ -211,7 +211,12 @@ for COMP in "fe" "be" "cn"; do
     
 
     echo "Generating conffiles for $COMP..."
-    find "$STAGING_DIR/etc/starrocks/$COMP" -type f 2>/dev/null | sed "s|^$STAGING_DIR||" | LC_ALL=C sort > "$STAGING_DIR/DEBIAN/conffiles" || true  
+    if [ -d "$STAGING_DIR/etc/starrocks/$COMP" ]; then
+        find "$STAGING_DIR/etc/starrocks/$COMP" -type f 2>/dev/null | sed "s|^$STAGING_DIR||" | LC_ALL=C sort > "$STAGING_DIR/DEBIAN/conffiles"
+    else
+        echo "No configuration directory found for $COMP at $STAGING_DIR/etc/starrocks/$COMP; generating empty conffiles."
+        : > "$STAGING_DIR/DEBIAN/conffiles"
+    fi
 
     # Inject Systemd
     if [ -f "systemd/starrocks-$COMP.service" ]; then
