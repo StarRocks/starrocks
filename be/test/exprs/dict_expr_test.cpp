@@ -216,7 +216,11 @@ TEST_F(DictMappingTest, test_function_return_exception) {
 TEST_F(DictMappingTest, test_expression_returns_null_for_some_values) {
     // Test case for expression that returns NULL for some dictionary values
     // and non-NULL strings for others. This simulates: if(v1 = '1', NULL, 'ok')
+<<<<<<< HEAD
     auto origin = pool.add(new ProvideExpr([](ColumnPtr column) {
+=======
+    auto origin = pool.add(new ProvideExpr([](const ColumnPtr& column) {
+>>>>>>> 404cee3d5b ([BugFix] Fixing derived dictionary translations for expressions with f(null) != null (#69376))
         ColumnViewer<TYPE_VARCHAR> viewer(column);
         ColumnBuilder<TYPE_VARCHAR> builder(column->size());
         size_t num_rows = column->size();
