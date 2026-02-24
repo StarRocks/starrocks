@@ -11,6 +11,8 @@ RuntimeDirectoryMode=0750
 ExecStart=/usr/lib/starrocks/fe/bin/start_fe.sh
 Restart=on-failure
 LimitNOFILE=65536
+# NOTE: FE is a Java process. Unlike BE/CN, it typically does not require 
+# LimitMEMLOCK=infinity as it doesn't use mlockall() for native storage.
 TimeoutStartSec=300
 TimeoutStopSec=300
 
