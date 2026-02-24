@@ -166,10 +166,12 @@ for COMP in "fe" "be" "cn"; do
     # Cleanup either BE or CN
     if [ "$COMP" == "be" ]; then
         rm -f "$STAGING_DIR/etc/starrocks/be/cn.conf"
-        echo "Note: BE and CN are mutually exclusive. Do not convert this BE directory to CN in-place." > "$STAGING_DIR/etc/starrocks/be/PACKAGE_NOTE"
-    elif [ "$COMP" == "cn" ]; then
-        rm -f "$STAGING_DIR/etc/starrocks/cn/be.conf"
-        echo "Note: CN and BE are mutually exclusive. Do not convert this CN directory to BE in-place." > "$STAGING_DIR/etc/starrocks/cn/PACKAGE_NOTE"
+        mkdir -p "$STAGING_DIR/usr/share/doc/starrocks-be"  
+        echo "Note: BE and CN are mutually exclusive. Do not convert this BE directory to CN in-place." > "$STAGING_DIR/usr/share/doc/starrocks-be/PACKAGE_NOTE"  
+    elif [ "$COMP" == "cn" ]; then  
+        rm -f "$STAGING_DIR/etc/starrocks/cn/be.conf"  
+        mkdir -p "$STAGING_DIR/usr/share/doc/starrocks-cn"  
+        echo "Note: CN and BE are mutually exclusive. Do not convert this CN directory to BE in-place." > "$STAGING_DIR/usr/share/doc/starrocks-cn/PACKAGE_NOTE"  
     fi
 
     # Path Patching (LSB)
