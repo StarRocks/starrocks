@@ -33,8 +33,16 @@ case "$1" in
         done
 
         # Remove the system user and group (shared across components)
-        # Only do this if no other starrocks packages are left.
-        if ! dpkg-query -W 'starrocks-*' >/dev/null 2>&1; then
+        # Only do this if no other starrocks server packages are left.
+        has_starrocks_pkg=false
+        for pkg in starrocks-fe starrocks-be starrocks-cn; do
+            if dpkg-query -W "$pkg" >/dev/null 2>&1; then
+                has_starrocks_pkg=true
+                break
+            fi
+        done
+        
+        if [ "$has_starrocks_pkg" = false ]; then
             if getent passwd starrocks >/dev/null; then
                 userdel starrocks || true
             fi
