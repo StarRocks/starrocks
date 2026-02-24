@@ -28,6 +28,7 @@
 #include "exec/spill/spiller.hpp"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state_helper.h"
 #include "storage/chunk_helper.h"
 
 DEFINE_FAIL_POINT(spill_always_streaming);
@@ -110,7 +111,7 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
 
     DCHECK(!_aggregator->is_none_group_by_exprs());
     _aggregator->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;

@@ -41,8 +41,11 @@
 #include <vector>
 
 #include "base/concurrency/concurrent_limiter.h"
+#include "base/string/string_util.h"
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -50,9 +53,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "service/backend_options.h"
-#include "util/string_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

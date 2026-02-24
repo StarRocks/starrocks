@@ -117,6 +117,71 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
     EXPECT_EQ(4u, meta->next_rowset_id()); // 批量合并仍消耗3个额外rowset id
 }
 
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10004);
+    auto meta = build_non_pk_metadata(10004);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(10004);
+    log->set_txn_id(13);
+    auto* rowset = log->mutable_op_write()->mutable_rowset();
+    rowset->set_num_rows(5);
+    rowset->set_data_size(100);
+    rowset->add_segments("seg_sparse_a");
+    rowset->add_segments("seg_sparse_b");
+    rowset->add_segment_size(50);
+    rowset->add_segment_size(50);
+    rowset->add_segment_metas()->set_segment_idx(0);
+    rowset->add_segment_metas()->set_segment_idx(4);
+
+    TxnLogVector logs{log};
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    EXPECT_EQ(0u, meta->rowsets(0).id());
+    EXPECT_EQ(5u, meta->next_rowset_id());
+}
+
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10005);
+    auto meta = build_non_pk_metadata(10005);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log1 = std::make_shared<TxnLogPB>();
+    log1->set_tablet_id(10005);
+    log1->set_txn_id(14);
+    auto* rowset1 = log1->mutable_op_write()->mutable_rowset();
+    rowset1->set_num_rows(3);
+    rowset1->set_data_size(30);
+    rowset1->add_segments("seg_a");
+    rowset1->add_segment_size(30);
+    rowset1->add_segment_metas()->set_segment_idx(0);
+
+    auto log2 = std::make_shared<TxnLogPB>();
+    log2->set_tablet_id(10005);
+    log2->set_txn_id(15);
+    auto* rowset2 = log2->mutable_op_write()->mutable_rowset();
+    rowset2->set_num_rows(4);
+    rowset2->set_data_size(40);
+    rowset2->add_segments("seg_b");
+    rowset2->add_segment_size(40);
+    rowset2->add_segment_metas()->set_segment_idx(0);
+
+    TxnLogVector logs{log1, log2};
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& merged = meta->rowsets(0);
+    ASSERT_EQ(2, merged.segments_size());
+    ASSERT_EQ(2, merged.segment_metas_size());
+    EXPECT_EQ(0, merged.segment_metas(0).segment_idx());
+    EXPECT_EQ(1, merged.segment_metas(1).segment_idx());
+    EXPECT_EQ(2u, meta->next_rowset_id());
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10002); // 修改参数顺序
     auto meta = build_non_pk_metadata(10002);
@@ -301,6 +366,42 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyLakeReplicationApply) {
     EXPECT_EQ(200, meta->rowsets(0).num_rows());
     EXPECT_EQ(4096, meta->rowsets(0).data_size());
     EXPECT_EQ(15u, meta->next_rowset_id());
+}
+
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegmentIdStep) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30003);
+    auto meta = build_non_pk_metadata(30003);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(30003);
+    log->set_txn_id(61);
+    auto* op_replication = log->mutable_op_replication();
+
+    auto* txn_meta = op_replication->mutable_txn_meta();
+    txn_meta->set_txn_id(61);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+
+    auto* op_write = op_replication->add_op_writes();
+    auto* rowset = op_write->mutable_rowset();
+    rowset->set_id(0);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(100);
+    rowset->add_segments("rep_seg1");
+    rowset->add_segments("rep_seg2");
+    rowset->add_segment_size(50);
+    rowset->add_segment_size(50);
+    rowset->add_segment_metas()->set_segment_idx(0);
+    rowset->add_segment_metas()->set_segment_idx(6);
+
+    Status st = applier->apply(*log);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    EXPECT_EQ(0u, meta->rowsets(0).id());
+    EXPECT_EQ(7u, meta->next_rowset_id());
 }
 
 } // namespace lake

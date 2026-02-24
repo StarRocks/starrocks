@@ -16,18 +16,19 @@
 
 #include <bvar/bvar.h>
 
+#include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/local_pk_index_manager.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -168,7 +169,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
-                    RETURN_IF_ERROR(insert(rowset->id() + i, rowids, *pkc));
+                    uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+                    RETURN_IF_ERROR(insert(rssid, rowids, *pkc));
                 }
             }
             itr->close();

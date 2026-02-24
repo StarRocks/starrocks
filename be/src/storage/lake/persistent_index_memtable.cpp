@@ -14,12 +14,12 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include "base/debug/trace.h"
+#include "base/string/string_util.h"
 #include "fs/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
-#include "util/string_util.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 

@@ -15,10 +15,10 @@
 #include "numeric_column.h"
 
 #include "base/string/string_parser.hpp"
+#include "base/types/numeric_types.h"
 #include "column/fixed_length_column.h"
 #include "common/simdjson_util.h"
 #include "gutil/strings/substitute.h"
-#include "util/numeric_types.h"
 
 namespace starrocks {
 

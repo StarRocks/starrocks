@@ -20,6 +20,8 @@ namespace starrocks {
 
 class MemTrackerTest : public testing::Test {
 protected:
+    static void SetUpTestSuite() { MemTracker::init_type_label_map(); }
+
     void SetUp() override {
         using MemTrackerType::PROCESS;
         using MemTrackerType::QUERY_POOL;
@@ -186,6 +188,11 @@ TEST_F(MemTrackerTest, has_enough_reserved_memory) {
 
     ASSERT_TRUE(_query_1->has_enough_reserved_memory(200));
     ASSERT_FALSE(_query_1->has_enough_reserved_memory(1000));
+}
+
+TEST_F(MemTrackerTest, err_msg_with_fragment_instance_id) {
+    std::string err_msg = _query_1->err_msg("mock msg", "abc-fragment-id");
+    ASSERT_NE(err_msg.find("fragment: abc-fragment-id"), std::string::npos);
 }
 
 } // namespace starrocks

@@ -46,13 +46,13 @@
 
 #include "common/status.h"
 #include "fs/fs_util.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/snapshot_meta.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

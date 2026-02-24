@@ -42,22 +42,32 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.types.Comparators;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.UUIDUtil;
 import org.apache.orc.ColumnStatistics;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
+import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.api.Binary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -352,6 +362,10 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                 Map<Integer, Long> nullValueCounts = new HashMap<>();
                 Map<Integer, ByteBuffer> lowerBounds = new HashMap<>();
                 Map<Integer, ByteBuffer> upperBounds = new HashMap<>();
+                Map<Integer, Object> lowerValues = new HashMap<>();
+                Map<Integer, Object> upperValues = new HashMap<>();
+                Map<Integer, Type> fieldTypes = new HashMap<>();
+                Map<Integer, Comparator<Object>> comparators = new HashMap<>();
                 Set<Integer> missingStats = new HashSet<>();
 
                 Schema schema = table.schema();
@@ -372,21 +386,39 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                             long valueCount = columnMeta.getValueCount();
                             valueCounts.merge(fieldId, valueCount, Long::sum);
                             // null counts
-                            if (columnMeta.getStatistics() != null && !columnMeta.getStatistics().isEmpty()) {
-                                if (columnMeta.getStatistics().getNumNulls() >= 0) {
-                                    nullValueCounts.merge(fieldId, columnMeta.getStatistics().getNumNulls(), Long::sum);
+                            Statistics<?> columnStats = columnMeta.getStatistics();
+                            if (columnStats != null && !columnStats.isEmpty()) {
+                                if (columnStats.getNumNulls() >= 0) {
+                                    nullValueCounts.merge(fieldId, columnStats.getNumNulls(), Long::sum);
                                 }
 
                                 // Min/Max values
-                                if (columnMeta.getStatistics().hasNonNullValue()) {
-                                    // Store min/max values as ByteBuffers
-                                    if (!lowerBounds.containsKey(fieldId) || ByteBuffer.wrap(columnMeta.getStatistics().
-                                            getMinBytes()).compareTo(lowerBounds.get(fieldId)) < 0) {
-                                        lowerBounds.put(fieldId, ByteBuffer.wrap(columnMeta.getStatistics().getMinBytes()));
+                                if (columnStats.hasNonNullValue()) {
+                                    Comparator<Object> comparator = comparators.get(fieldId);
+                                    if (comparator == null) {
+                                        comparator = tryGetComparator(field.type());
+                                        if (comparator == null) {
+                                            missingStats.add(fieldId);
+                                            continue;
+                                        }
+                                        comparators.put(fieldId, comparator);
                                     }
 
-                                    if (!upperBounds.containsKey(fieldId)) {
-                                        upperBounds.put(fieldId, ByteBuffer.wrap(columnMeta.getStatistics().getMaxBytes()));
+                                    Object minValue = tryConvertStatValue(field.type(), columnStats.genericGetMin());
+                                    Object maxValue = tryConvertStatValue(field.type(), columnStats.genericGetMax());
+                                    if (minValue == null || maxValue == null) {
+                                        missingStats.add(fieldId);
+                                        continue;
+                                    }
+
+                                    fieldTypes.put(fieldId, field.type());
+                                    Object existingMin = lowerValues.get(fieldId);
+                                    if (existingMin == null || comparator.compare(minValue, existingMin) < 0) {
+                                        lowerValues.put(fieldId, minValue);
+                                    }
+                                    Object existingMax = upperValues.get(fieldId);
+                                    if (existingMax == null || comparator.compare(maxValue, existingMax) > 0) {
+                                        upperValues.put(fieldId, maxValue);
                                     }
                                 }
                             } else {
@@ -400,6 +432,25 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                     nullValueCounts.remove(fieldId);
                     lowerBounds.remove(fieldId);
                     upperBounds.remove(fieldId);
+                    lowerValues.remove(fieldId);
+                    upperValues.remove(fieldId);
+                    fieldTypes.remove(fieldId);
+                    comparators.remove(fieldId);
+                }
+
+                for (Map.Entry<Integer, Object> entry : lowerValues.entrySet()) {
+                    int fieldId = entry.getKey();
+                    Type fieldType = fieldTypes.get(fieldId);
+                    if (fieldType != null) {
+                        lowerBounds.put(fieldId, Conversions.toByteBuffer(fieldType, entry.getValue()));
+                    }
+                }
+                for (Map.Entry<Integer, Object> entry : upperValues.entrySet()) {
+                    int fieldId = entry.getKey();
+                    Type fieldType = fieldTypes.get(fieldId);
+                    if (fieldType != null) {
+                        upperBounds.put(fieldId, Conversions.toByteBuffer(fieldType, entry.getValue()));
+                    }
                 }
 
                 return new Metrics(recordCount, columnSizes, valueCounts, nullValueCounts,
@@ -465,6 +516,143 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         } catch (Exception e) {
             LOGGER.warn("Failed to get column name for ORC column ID: {}", columnId);
         }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    static Comparator<Object> tryGetComparator(Type type) {
+        if (type == null || !type.isPrimitiveType()) {
+            return null;
+        }
+        try {
+            return (Comparator<Object>) Comparators.forType(type.asPrimitiveType());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static Object tryConvertStatValue(Type fieldType, Object statValue) {
+        if (fieldType == null || statValue == null) {
+            return null;
+        }
+
+        switch (fieldType.typeId()) {
+            case BOOLEAN:
+                return statValue instanceof Boolean ? statValue : null;
+            case INTEGER:
+            case DATE:
+                if (statValue instanceof Integer v) {
+                    return v;
+                }
+                if (statValue instanceof Long v) {
+                    if (v >= Integer.MIN_VALUE && v <= Integer.MAX_VALUE) {
+                        return v.intValue();
+                    }
+                }
+                return null;
+            case LONG:
+            case TIME:
+            case TIMESTAMP:
+            case TIMESTAMP_NANO:
+                if (statValue instanceof Long v) {
+                    return v;
+                }
+                if (statValue instanceof Integer v) {
+                    return v.longValue();
+                }
+                return null;
+            case FLOAT:
+                if (statValue instanceof Float v) {
+                    return v;
+                }
+                if (statValue instanceof Double v) {
+                    return v.floatValue();
+                }
+                return null;
+            case DOUBLE:
+                if (statValue instanceof Double v) {
+                    return v;
+                }
+                if (statValue instanceof Float v) {
+                    return v.doubleValue();
+                }
+                return null;
+            case STRING:
+                if (statValue instanceof CharSequence value) {
+                    return value.toString();
+                }
+                if (statValue instanceof Binary binary) {
+                    return binary.toStringUsingUTF8();
+                }
+                if (statValue instanceof byte[] bytes) {
+                    return new String(bytes, StandardCharsets.UTF_8);
+                }
+                return null;
+            case UUID:
+                if (statValue instanceof java.util.UUID uuid) {
+                    return uuid;
+                }
+                if (statValue instanceof Binary binary) {
+                    return UUIDUtil.convert(binary.getBytes());
+                }
+                if (statValue instanceof byte[] bytes) {
+                    return UUIDUtil.convert(bytes);
+                }
+                if (statValue instanceof ByteBuffer buffer) {
+                    return UUIDUtil.convert(buffer.duplicate());
+                }
+                return null;
+            case FIXED:
+            case BINARY:
+            case GEOMETRY:
+            case GEOGRAPHY:
+                if (statValue instanceof ByteBuffer buffer) {
+                    return buffer.duplicate();
+                }
+                if (statValue instanceof Binary binary) {
+                    return ByteBuffer.wrap(binary.getBytes());
+                }
+                if (statValue instanceof byte[] bytes) {
+                    return ByteBuffer.wrap(bytes);
+                }
+                return null;
+            case DECIMAL:
+                if (fieldType instanceof Types.DecimalType decimalType) {
+                    return tryConvertDecimalStatValue(decimalType, statValue);
+                }
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    static BigDecimal tryConvertDecimalStatValue(Types.DecimalType decimalType, Object statValue) {
+        if (statValue == null) {
+            return null;
+        }
+
+        int scale = decimalType.scale();
+        if (statValue instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (statValue instanceof Integer v) {
+            return BigDecimal.valueOf(v.longValue(), scale);
+        }
+        if (statValue instanceof Long v) {
+            return BigDecimal.valueOf(v, scale);
+        }
+        if (statValue instanceof Binary binary) {
+            return new BigDecimal(new BigInteger(binary.getBytes()), scale);
+        }
+        if (statValue instanceof byte[] bytes) {
+            return new BigDecimal(new BigInteger(bytes), scale);
+        }
+        if (statValue instanceof ByteBuffer buffer) {
+            byte[] bytes = new byte[buffer.remaining()];
+            buffer.duplicate().get(bytes);
+            return new BigDecimal(new BigInteger(bytes), scale);
+        }
+
         return null;
     }
 

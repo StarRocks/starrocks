@@ -34,6 +34,9 @@
 #include "common/status.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "format_utils.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "options.h"
@@ -299,12 +302,10 @@ private:
 
         // get conjuncts
         if (plan_node->__isset.conjuncts && plan_node->conjuncts.size() > 0) {
-            RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, plan_node->conjuncts, &_conjunct_ctxs, _state.get()));
-            RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, _state.get()));
-            for (auto ctx : _conjunct_ctxs) {
-                Status status = ctx->open(_state.get());
-            }
-            RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, _state.get()));
+            RETURN_IF_ERROR(
+                    ExprFactory::create_expr_trees(&_obj_pool, plan_node->conjuncts, &_conjunct_ctxs, _state.get()));
+            RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, _state.get()));
+            RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, _state.get()));
         }
 
         return Status::OK();
@@ -416,7 +417,7 @@ private:
 
             if (!_not_push_down_conjuncts.empty()) {
                 // SCOPED_TIMER(_expr_filter_timer);
-                auto status = ExecNode::eval_conjuncts(_not_push_down_conjuncts, _scan_chunk.get());
+                auto status = ChunkPredicateEvaluator::eval_conjuncts(_not_push_down_conjuncts, _scan_chunk.get());
                 DCHECK_CHUNK(_scan_chunk.get());
             }
 

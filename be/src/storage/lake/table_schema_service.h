@@ -19,11 +19,11 @@
 #include <functional>
 #include <memory>
 
+#include "base/bthreads/single_flight.h"
 #include "common/statusor.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
-#include "util/bthreads/single_flight.h"
 
 namespace starrocks::lake {
 

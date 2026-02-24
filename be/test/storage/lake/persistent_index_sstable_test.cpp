@@ -19,6 +19,7 @@
 #include <ctime>
 #include <set>
 
+#include "base/container/lru_cache.h"
 #include "base/phmap/btree.h"
 #include "base/testutil/assert.h"
 #include "common/config.h"
@@ -32,7 +33,6 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
-#include "util/lru_cache.h"
 
 namespace starrocks::lake {
 

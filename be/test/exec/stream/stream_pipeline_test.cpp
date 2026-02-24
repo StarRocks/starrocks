@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -67,6 +68,7 @@ Status StreamPipelineTest::prepare() {
     _runtime_state->set_be_number(_request.backend_num);
     _runtime_state->set_query_ctx(_query_ctx);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     _obj_pool = _runtime_state->obj_pool();
     auto sink_dop = _degree_of_parallelism;

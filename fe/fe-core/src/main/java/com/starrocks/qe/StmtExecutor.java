@@ -3193,7 +3193,7 @@ public class StmtExecutor {
                     // This is a DELETE operation, use IcebergDeleteSink
                     IcebergMetadata.IcebergSinkExtra extra = deleteSink.getSinkExtraInfo();
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                            catalogName, dbName, tableName, commitInfos, null, extra);
+                            catalogName, dbName, tableName, commitInfos, null, extra, context);
                 } else if (dataSink instanceof IcebergTableSink) {
                     // This is an INSERT/OVERWRITE operation, use IcebergTableSink
                     IcebergTableSink sink = (IcebergTableSink) dataSink;
@@ -3210,7 +3210,7 @@ public class StmtExecutor {
                                 .finish(catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
                     } else {
                         context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                                catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                                catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra, context);
                     }
                 } else {
                     throw new RuntimeException("Unsupported sink type for Iceberg table: " + dataSink.getClass().getName());

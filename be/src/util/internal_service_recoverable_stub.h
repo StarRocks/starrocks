@@ -14,8 +14,9 @@
 
 #pragma once
 
+#include "base/brpc/recoverable_closure.h"
+#include "base/status.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/recoverable_closure.h"
 
 namespace starrocks {
 

@@ -23,6 +23,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/config.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/rowset/column_iterator.h"
@@ -162,7 +163,7 @@ Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::v
             if (options.is_primary_keys) {
                 options.tablet_id = tablet.metadata()->id();
                 options.version = tablet.version();
-                options.segment_id = seg_id;
+                options.segment_id = lake::get_segment_idx(rowset->metadata(), seg_id);
                 options.pk_rowsetid = rowset->id();
                 options.dcg_loader = std::make_shared<lake::LakeDeltaColumnGroupLoader>(tablet.metadata());
             }

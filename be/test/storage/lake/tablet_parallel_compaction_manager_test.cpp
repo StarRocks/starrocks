@@ -21,10 +21,10 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "common/thread/threadpool.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
-#include "util/threadpool.h"
 
 namespace starrocks::lake {
 

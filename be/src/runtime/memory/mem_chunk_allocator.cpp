@@ -35,11 +35,11 @@
 #include "runtime/memory/mem_chunk_allocator.h"
 
 #include "base/failpoint/fail_point.h"
+#include "base/metrics.h"
 #include "common/mem_chunk.h"
 #include "common/runtime_profile.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/system_allocator.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -48,8 +48,12 @@ static IntCounter system_free_count(MetricUnit::NOUNIT);
 static IntCounter system_alloc_cost_ns(MetricUnit::NANOSECONDS);
 static IntCounter system_free_cost_ns(MetricUnit::NANOSECONDS);
 
-void MemChunkAllocator::init_metrics() {
-#define REGISTER_METIRC_WITH_NAME(name, metric) StarRocksMetrics::instance()->metrics()->register_metric(#name, &metric)
+void register_mem_chunk_allocator_metrics(MetricRegistry* registry) {
+    if (registry == nullptr) {
+        return;
+    }
+
+#define REGISTER_METIRC_WITH_NAME(name, metric) registry->register_metric(#name, &metric)
 
 #define REGISTER_METIRC_WITH_PREFIX(prefix, name) REGISTER_METIRC_WITH_NAME(prefix##name, name)
 

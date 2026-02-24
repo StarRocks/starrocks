@@ -18,7 +18,6 @@
 
 #include "common/config.h"
 #include "connector/hive_chunk_sink.h"
-#include "exec/exec_node.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
@@ -28,7 +27,12 @@
 #include "exec/hdfs_scanner/jni_scanner.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/descriptors_ext.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -255,13 +259,13 @@ void HiveDataSource::_update_has_any_predicate() {
 Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts,
+                                                       &_min_max_conjunct_ctxs, state));
     }
 
     if (hdfs_scan_node.__isset.partition_conjuncts) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts,
+                                                       &_partition_conjunct_ctxs, state));
         _has_partition_conjuncts = true;
     }
 
@@ -269,10 +273,10 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
         _case_sensitive = hdfs_scan_node.case_sensitive;
     }
 
-    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_min_max_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_min_max_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_conjunct_ctxs, state));
     _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
@@ -316,9 +320,9 @@ Status HiveDataSource::_init_partition_values() {
                             _conjunct_ctxs_by_slot.at(slotId).end());
             }
         }
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, partition_chunk.get()));
     } else if (_has_partition_conjuncts) {
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
     }
 
     if (!partition_chunk->has_rows()) {
@@ -350,9 +354,10 @@ Status HiveDataSource::_init_extended_values() {
         extended_column_values.emplace_back(id_to_column[id]);
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, extended_column_values, &_extended_column_values, _runtime_state));
-    RETURN_IF_ERROR(Expr::prepare(_extended_column_values, _runtime_state));
-    RETURN_IF_ERROR(Expr::open(_extended_column_values, _runtime_state));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(&_pool, extended_column_values, &_extended_column_values, _runtime_state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_extended_column_values, _runtime_state));
+    RETURN_IF_ERROR(ExprExecutor::open(_extended_column_values, _runtime_state));
 
     return Status::OK();
 }
@@ -473,7 +478,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
     }
 
     std::vector<ExprContext*> cloned_conjunct_ctxs;
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
 
     for (ExprContext* ctx : cloned_conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
@@ -522,7 +527,10 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         }
     }
     // rewrite dict
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_scanner_conjunct_ctxs));
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    RETURN_IF_ERROR(
+            fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_scanner_conjunct_ctxs));
     return Status::OK();
 }
 
@@ -530,13 +538,13 @@ Status HiveDataSource::_setup_all_conjunct_ctxs(RuntimeState* state) {
     // clone conjunct from _min_max_conjunct_ctxs & _conjunct_ctxs
     // then we will generate PredicateTree based on _all_conjunct_ctxs
     std::vector<ExprContext*> cloned_conjunct_ctxs;
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
     for (auto* ctx : cloned_conjunct_ctxs) {
         _all_conjunct_ctxs.emplace_back(ctx);
     }
 
     cloned_conjunct_ctxs.clear();
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
     for (auto* ctx : cloned_conjunct_ctxs) {
         _all_conjunct_ctxs.emplace_back(ctx);
     }
@@ -670,7 +678,9 @@ void HiveDataSource::_init_rf_counters() {
 
 Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
     const THdfsScanNode& hdfs_scan_node = _provider->_hdfs_scan_node;
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
     auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
@@ -907,11 +917,11 @@ void HiveDataSource::close(RuntimeState* state) {
         }
         _scanner->close();
     }
-    Expr::close(_min_max_conjunct_ctxs, state);
-    Expr::close(_partition_conjunct_ctxs, state);
-    Expr::close(_scanner_conjunct_ctxs, state);
+    ExprExecutor::close(_min_max_conjunct_ctxs, state);
+    ExprExecutor::close(_partition_conjunct_ctxs, state);
+    ExprExecutor::close(_scanner_conjunct_ctxs, state);
     for (auto& it : _conjunct_ctxs_by_slot) {
-        Expr::close(it.second, state);
+        ExprExecutor::close(it.second, state);
     }
 }
 

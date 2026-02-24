@@ -39,6 +39,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <string_view>
 #include <unordered_map>
 
 #include "base/concurrency/spinlock.h"
@@ -49,7 +50,6 @@
 namespace starrocks {
 
 class MemTracker;
-class RuntimeState;
 
 /// A MemTracker tracks memory consumption; it contains an optional limit
 /// and can be arranged into a tree structure such that the consumption tracked
@@ -420,7 +420,7 @@ public:
 
     Status check_mem_limit(const std::string& msg) const;
 
-    std::string err_msg(const std::string& msg, RuntimeState* state = nullptr) const;
+    std::string err_msg(const std::string& msg, std::string_view fragment_instance_id = "") const;
 
     static const std::string PEAK_MEMORY_USAGE;
     static const std::string ALLOCATED_MEMORY_USAGE;

@@ -14,6 +14,7 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
@@ -38,7 +39,6 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
 #include "util/stack_util.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -499,9 +499,9 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
     // 1. find all segments that have been compacted
     for (const auto& rowset : metadata.rowsets()) {
         if (input_rowsets.count(rowset.id()) > 0 && rowset.segments_size() > 0) {
-            std::vector<int> temp(rowset.segments_size());
-            std::iota(temp.begin(), temp.end(), rowset.id());
-            input_segments.insert(input_segments.end(), temp.begin(), temp.end());
+            for (int i = 0; i < rowset.segments_size(); ++i) {
+                input_segments.push_back(get_rssid(rowset, i));
+            }
         }
     }
     // 2. find out if these segments have been updated

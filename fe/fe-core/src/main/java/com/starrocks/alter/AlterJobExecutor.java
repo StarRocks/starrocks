@@ -49,6 +49,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
@@ -111,6 +112,7 @@ import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -581,6 +583,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
@@ -858,6 +862,10 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE) &&
+                !olapTable.isCloudNativeTableOrMaterializedView()) {
+            throw new DdlException("Property 'datacache.enable' is only supported in shared-data mode");
+        }
 
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
@@ -892,7 +900,14 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         TTabletType tTabletType =
                 PropertyAnalyzer.analyzeTabletType(properties);
 
+        // 5. enable data cache
+        Boolean newEnableDataCache = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            newEnableDataCache = PropertyAnalyzer.analyzeDataCacheEnable(properties);
+        }
+
         // modify meta here
+        List<Partition> partitionsToUpdateShardGroup = new ArrayList<>();
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
             // 1. date property
@@ -935,10 +950,37 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     olapTable.setReplicationNum(newReplicationNum);
                 }
             }
-            // 3. in memory
+            // 3. enable data cache
+            if (newEnableDataCache != null && olapTable.isCloudNativeTableOrMaterializedView()) {
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                if (dataCacheInfo == null || newEnableDataCache != dataCacheInfo.isEnabled()) {
+                    partitionsToUpdateShardGroup.add(olapTable.getPartition(partitionName));
+                    boolean asyncWriteBack = dataCacheInfo != null && dataCacheInfo.isAsyncWriteBack();
+                    partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(newEnableDataCache, asyncWriteBack));
+                }
+            }
             ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
-                    newDataProperty, newReplicationNum);
+                    newDataProperty, newReplicationNum, newEnableDataCache);
             modifyPartitionInfos.add(info);
+        }
+
+        if (newEnableDataCache != null && !partitionsToUpdateShardGroup.isEmpty()) {
+            // The updateShardGroup function is called centrally here, rather than iteratively within a for-loop, to
+            // ensure that updateShardGroup and the persistence of ModifyPartitionInfo are closely enough,
+            // thereby preventing metadata inconsistency.
+            try {
+                GlobalStateMgr.getCurrentState().getStarOSAgent().updateShardGroup(
+                        partitionsToUpdateShardGroup, newEnableDataCache);
+            } catch (DdlException e) {
+                // Revert in-memory datacache changes for partitions that were actually modified
+                for (Partition partition : partitionsToUpdateShardGroup) {
+                    DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                    partitionInfo.setDataCacheInfo(partition.getId(),
+                            new DataCacheInfo(!newEnableDataCache, dataCacheInfo.isAsyncWriteBack()));
+                }
+                throw new DdlException("Failed to update shard group for datacache.enable change: " + e.getMessage(),
+                        e);
+            }
         }
 
         // log here

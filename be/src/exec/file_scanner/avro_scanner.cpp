@@ -37,6 +37,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "types/type_descriptor.h"
 #ifdef __cplusplus
@@ -198,7 +199,7 @@ Status AvroScanner::_create_src_chunk(ChunkPtr* chunk) {
 }
 
 void AvroScanner::_report_error(const std::string& line, const std::string& err_msg) {
-    _state->append_error_msg_to_file(line, err_msg);
+    RuntimeStateHelper::append_error_msg_to_file(_state, line, err_msg);
 }
 
 Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk) {
@@ -282,7 +283,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
             auto err_msg = "serdes deserialize avro failed: " + std::string(_err_buf);
             LOG(ERROR) << err_msg;
             _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", err_msg);
+            RuntimeStateHelper::append_error_msg_to_file(_state, "", err_msg);
             return Status::InternalError("serdes deserialize avro failed");
         }
         DeferOp op([&] { avro_value_decref(&avro_value); });
@@ -317,7 +318,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
                 // hence the number of error appended to the file should be limited.
-                _state->append_error_msg_to_file("", st.to_string());
+                RuntimeStateHelper::append_error_msg_to_file(_state, "", st.to_string());
                 LOG(WARNING) << "failed to construct row: " << st;
             }
             // Before continuing to process other rows, we need to first clean the fail parsed row.

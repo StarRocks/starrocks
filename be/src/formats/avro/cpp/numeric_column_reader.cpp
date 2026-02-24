@@ -15,9 +15,9 @@
 #include "formats/avro/cpp/numeric_column_reader.h"
 
 #include "base/string/string_parser.hpp"
+#include "base/types/numeric_types.h"
 #include "formats/avro/cpp/utils.h"
 #include "types/decimalv3.h"
-#include "util/numeric_types.h"
 
 namespace starrocks::avrocpp {
 

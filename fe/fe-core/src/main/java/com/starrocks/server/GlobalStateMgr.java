@@ -659,6 +659,8 @@ public class GlobalStateMgr {
     private GlobalStateMgr(boolean isCkptGlobalState, NodeMgr nodeMgr) {
         if (!isCkptGlobalState) {
             RunMode.detectRunMode();
+            // set the global read-only variable again, avoid static variable initialization order chaos
+            GlobalVariable.runMode = Config.run_mode;
         }
 
         if (RunMode.isSharedDataMode()) {

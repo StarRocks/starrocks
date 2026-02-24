@@ -2334,6 +2334,15 @@ public class OlapTable extends Table {
         tableProperty.buildFileBundling();
     }
 
+    public void setDataCacheEnable(boolean isEnable) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                Boolean.valueOf(isEnable).toString());
+        tableProperty.buildDataCacheEnable();
+    }
+
     public void setStorageCoolDownTTL(PeriodDuration duration) {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL,
                 TimeUtils.toHumanReadableString(duration));

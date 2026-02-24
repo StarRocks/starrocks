@@ -42,9 +42,10 @@
 #include <vector>
 
 #include "base/metrics.h"
+#include "base/uid_util.h"
 #include "common/status.h"
+#include "common/util/thrift_client.h"
 #include "util/hash_util.hpp"
-#include "util/thrift_client.h"
 
 namespace starrocks {
 

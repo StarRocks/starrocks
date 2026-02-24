@@ -104,6 +104,7 @@ public:
         fe.port = 9020;
         _fragment_ctx->set_fe_addr(fe);
         _state->set_fragment_ctx(_fragment_ctx.get());
+        _state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};
         _tnode = std::make_unique<TPlanNode>();

@@ -1702,6 +1702,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void addSubPartitions(Database db, OlapTable table, Partition partition,
                                  int numSubPartition, ComputeResource computeResource) throws DdlException {
+        addSubPartitions(db, table, partition, numSubPartition, 0, computeResource);
+    }
+
+    public void addSubPartitions(Database db, OlapTable table, Partition partition,
+                                 int numSubPartition, int bucketNum,
+                                 ComputeResource computeResource) throws DdlException {
         try {
             table.setAutomaticBucketing(true);
 
@@ -1719,6 +1725,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
+            }
+
+            // Set user-specified bucket number on the copied table (thread-safe, no impact on the original table)
+            if (bucketNum > 0) {
+                copiedTable.setMutableBucketNum(bucketNum);
             }
 
             Preconditions.checkNotNull(olapTable);
@@ -1764,6 +1775,88 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } finally {
             table.setAutomaticBucketing(false);
         }
+    }
+
+    /**
+     * Add a new physical partition to an existing logical partition.
+     * This method is designed to be called via admin execute script for cross-cluster
+     * data replication scenarios.
+     *
+     *
+     * @param dbName        the database name
+     * @param tableName     the table name
+     * @param partitionName the partition name (null for non-partitioned table)
+     * @param bucketNum     the bucket number (0 to use system default)
+     */
+    public void addPhysicalPartition(String dbName, String tableName, String partitionName,
+                                     int bucketNum) throws DdlException {
+        Database db = getDb(dbName);
+        if (db == null) {
+            throw new DdlException("Database '" + dbName + "' does not exist");
+        }
+
+        Table table = getTable(dbName, tableName);
+        if (table == null) {
+            throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
+        }
+
+        if (!(table instanceof OlapTable)) {
+            throw new DdlException("Only OLAP table supports adding physical partition");
+        }
+
+        OlapTable olapTable = (OlapTable) table;
+
+        // Check if the table uses random distribution
+        if (olapTable.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new DdlException("Only random distribution table supports adding physical partition");
+        }
+
+        Partition partition;
+        if (partitionName == null) {
+            // For non-partitioned table, get the single partition
+            if (olapTable.getPartitionInfo().isPartitioned()) {
+                throw new DdlException("Partition name must be specified for partitioned table");
+            }
+            Collection<Partition> partitions = olapTable.getPartitions();
+            if (partitions.size() != 1) {
+                throw new DdlException("Non-partitioned table should have exactly one partition");
+            }
+            partition = partitions.iterator().next();
+        } else {
+            partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException("Partition '" + partitionName + "' does not exist");
+            }
+        }
+
+        // Validate distribution type at partition level
+        if (partition.getDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new DdlException("Only random distribution table supports adding physical partition");
+        }
+
+        if (bucketNum < 0) {
+            throw new DdlException("Bucket number must be non-negative");
+        }
+
+        if (bucketNum > Config.max_bucket_number_per_partition) {
+            throw new DdlException("Bucket number exceeds maximum allowed: " + Config.max_bucket_number_per_partition);
+        }
+
+        // Get compute resource
+        long warehouseId = ConnectContext.get() != null
+                ? ConnectContext.get().getCurrentWarehouseId()
+                : WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+
+        // Add one physical partition with the specified bucket number.
+        // The bucketNum is set on the shadow-copied table inside addSubPartitions,
+        // so there is no concurrent safety issue with the original table object.
+        addSubPartitions(db, olapTable, partition, 1, bucketNum, computeResource);
+
+        LOG.info("Successfully added physical partition to partition '{}' in table '{}'",
+                partition.getName(), olapTable.getName());
     }
 
     public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
@@ -3954,6 +4047,59 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterDataCacheEnable(Database db, OlapTable table,
+                                      Map<String, String> properties,
+                                      List<Runnable> appliers) throws DdlException {
+        // We need hold lock to prevent concurrent partition additions/drops while we iterate over the partition list
+        // and update DataCacheInfo.
+        // However since the caller in AlterJobExecutor have already locked the database, we don't need to lock again here.
+        boolean isEnable;
+        try {
+            isEnable = PropertyAnalyzer.analyzeDataCacheEnable(properties);
+        } catch (AnalysisException ex) {
+            throw new DdlException(ex.getMessage());
+        }
+
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new DdlException("Property 'datacache.enable' is only supported for cloud native tables");
+        }
+
+        // Collect partitions that need shard group update
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        Collection<Partition> partitions = table.getPartitions();
+        List<Partition> partitionsToUpdateShardGroup = new ArrayList<>();
+
+        for (Partition partition : partitions) {
+            DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+            if (dataCacheInfo == null || isEnable != dataCacheInfo.isEnabled()) {
+                partitionsToUpdateShardGroup.add(partition);
+            }
+        }
+
+        // Call StarOS to update shard groups BEFORE persisting
+        if (!partitionsToUpdateShardGroup.isEmpty()) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .updateShardGroup(partitionsToUpdateShardGroup, isEnable);
+        }
+
+        // Add applier for table property + partition DataCacheInfo updates.
+        // Note: We do NOT write a separate OP_BATCH_MODIFY_PARTITION log here.
+        // The partition-level DataCacheInfo is derived from the table property during
+        // replay of OP_ALTER_TABLE_PROPERTIES (see replayModifyTableProperty), ensuring
+        // atomicity — a single edit log entry covers both table and partition state.
+        appliers.add(() -> {
+            // Update table property
+            table.setDataCacheEnable(isEnable);
+
+            // Update partition DataCacheInfo in memory
+            for (Partition partition : partitions) {
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                boolean asyncWriteBack = dataCacheInfo != null && dataCacheInfo.isAsyncWriteBack();
+                partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(isEnable, asyncWriteBack));
+            }
+        });
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3993,6 +4139,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            alterDataCacheEnable(db, table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -4437,6 +4586,22 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 } else if (opCode == OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
                     GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
                             tableId, tableProperty.getBaseCompactionForbiddenTimeRanges());
+                } else if (opCode == OperationType.OP_ALTER_TABLE_PROPERTIES) {
+                    // When datacache.enable is changed at the table level, also update all
+                    // partition-level DataCacheInfo to match. This ensures atomicity: a single
+                    // OP_ALTER_TABLE_PROPERTIES log entry covers both table and partition state.
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)
+                            && olapTable.isCloudNativeTableOrMaterializedView()) {
+                        boolean dataCacheEnable = Boolean.parseBoolean(
+                                properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE));
+                        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                        for (Partition partition : olapTable.getPartitions()) {
+                            DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                            boolean asyncWriteBack = dataCacheInfo != null && dataCacheInfo.isAsyncWriteBack();
+                            partitionInfo.setDataCacheInfo(partition.getId(),
+                                    new DataCacheInfo(dataCacheEnable, asyncWriteBack));
+                        }
+                    }
                 }
             }
         } catch (Exception ex) {

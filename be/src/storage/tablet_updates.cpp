@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <memory>
 
+#include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
@@ -39,6 +40,7 @@
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
@@ -70,8 +72,6 @@
 #include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
-#include "util/starrocks_metrics.h"
-#include "util/trace.h"
 
 namespace starrocks {
 

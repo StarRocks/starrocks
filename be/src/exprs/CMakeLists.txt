@@ -17,6 +17,63 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
+set(EXPR_CORE_FILES
+  arithmetic_expr.cpp
+  function_context.cpp
+  expr_context.cpp
+  expr.cpp
+  array_element_expr.cpp
+  array_expr.cpp
+  base64.cpp
+  bit_functions.cpp
+  bitmap_functions.cpp
+  cast_nested.cpp
+  case_expr.cpp
+  cast_expr_json.cpp
+  cast_expr_map.cpp
+  chunk_predicate_evaluator.cpp
+  column_ref.cpp
+  compound_predicate.cpp
+  encryption_functions.cpp
+  es_functions.cpp
+  expr_executor.cpp
+  function_helper.cpp
+  gin_functions.cpp
+  grouping_sets_functions.cpp
+  hash_functions.cpp
+  hyperloglog_functions.cpp
+  info_func.cpp
+  in_const_predicate.cpp
+  in_predicate.cpp
+  is_null_predicate.cpp
+  jsonpath.cpp
+  lambda_function.cpp
+  like_predicate.cpp
+  literal.cpp
+  math_functions.cpp
+  map_expr.cpp
+  map_element_expr.cpp
+  map_functions.cpp
+  match_expr.cpp
+  placeholder_ref.cpp
+  regexp_split.cpp
+  runtime_filter_layout.cpp
+  struct_functions.cpp
+  subfield_expr.cpp
+  table_function/json_each.cpp
+  time_functions.cpp
+  variant_path_parser.cpp
+)
+
+if(STARROCKS_JIT_ENABLE)
+  set(EXPR_CORE_FILES ${EXPR_CORE_FILES}
+      jit/ir_helper.cpp
+      jit/expr_jit_codegen.cpp)
+endif()
+
+ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
+target_link_libraries(ExprCore PUBLIC RuntimeCore)
+
 set(EXPR_FILES
   agg/data_sketch/ds_theta.cpp
   agg/factory/aggregate_factory.cpp
@@ -33,95 +90,55 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
   agg/combinator/agg_state_utils.cpp
-  base64.cpp
   binary_functions.cpp
-  expr_context.cpp
-  expr.cpp
-  function_context.cpp
+  expr_factory.cpp
   table_function/table_function_factory.cpp
-  table_function/json_each.cpp
   table_function/list_rowsets.cpp
-  arithmetic_expr.cpp
-  array_element_expr.cpp
-  array_expr.cpp
   array_functions.cpp
   arrow_function_call.cpp
   binary_predicate.cpp
-  bitmap_functions.cpp
-  case_expr.cpp
   cast_expr.cpp
   cast_expr_array.cpp
-  cast_expr_json.cpp
   cast_expr_struct.cpp
-  cast_expr_map.cpp
-  cast_nested.cpp
-  column_ref.cpp
-  placeholder_ref.cpp
   dictmapping_expr.cpp
-  compound_predicate.cpp
   condition_expr.cpp
-  encryption_functions.cpp
-  es_functions.cpp
   find_in_set.cpp
   function_call_expr.cpp
-  function_helper.cpp
   geo_functions.cpp
-  grouping_sets_functions.cpp
-  hyperloglog_functions.cpp
-  in_const_predicate.cpp
-  info_func.cpp
   inet_aton.cpp
-  in_predicate.cpp
-  is_null_predicate.cpp
   json_functions.cpp
-  jsonpath.cpp
   variant_functions.cpp
-  variant_path_parser.cpp
-  like_predicate.cpp
-  literal.cpp
   locate.cpp
-  map_element_expr.cpp
-  map_functions.cpp
-  struct_functions.cpp
-  math_functions.cpp
   percentile_functions.cpp
   runtime_filter_bank.cpp
   runtime_filter.cpp
   split.cpp
-  regexp_split.cpp
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
-  time_functions.cpp
   utility_functions.cpp
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   java_function_call_expr.cpp
-  lambda_function.cpp
   array_map_expr.cpp
   array_sort_lambda_expr.cpp
-  subfield_expr.cpp
   map_apply_expr.cpp
-  map_expr.cpp
   substring_index.cpp
   dict_query_expr.cpp
-  runtime_filter_layout.cpp
   dictionary_get_expr.cpp
   ngram.cpp
-  match_expr.cpp
-  bit_functions.cpp
-  hash_functions.cpp
-  gin_functions.cpp
   ai_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
   set(EXPR_FILES ${EXPR_FILES}
-      jit/ir_helper.cpp
+      jit/expr_jit_rewriter.cpp
+      jit/expr_jit_pass.cpp
       jit/jit_engine.cpp
       jit/jit_expr.cpp)
 
 endif()
 
 ADD_BE_LIB(Exprs ${EXPR_FILES})
+target_link_libraries(Exprs PUBLIC ExprCore)

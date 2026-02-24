@@ -486,6 +486,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE +
+                                " must be bool type(false/true)");
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -1097,6 +1104,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     // 2. storage_medium && storage_cooldown_time
     // 3. in_memory
     // 4. tablet type
+    // 5. datacache.enable
     private void checkProperties(Map<String, String> properties) throws AnalysisException {
         // 1. data property
         DataProperty newDataProperty = null;
@@ -1114,6 +1122,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         // 4. tablet type
         PropertyAnalyzer.analyzeTabletType(properties);
+
+        // 5. datacache.enable (validate bool value if present)
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE);
+            if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE
+                        + " must be bool type(false/true)");
+            }
+        }
     }
 
     @Override

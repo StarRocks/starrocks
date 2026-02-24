@@ -19,6 +19,7 @@
 #include <shared_mutex>
 #include <variant>
 
+#include "base/bthreads/single_flight.h"
 #include "common/statusor.h"
 #include "compaction_task_context.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
@@ -29,7 +30,6 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
 #include "storage/rowset/base_rowset.h"
-#include "util/bthreads/single_flight.h"
 
 namespace starrocks {
 struct FileInfo;

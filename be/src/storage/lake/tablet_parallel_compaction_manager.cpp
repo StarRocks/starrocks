@@ -20,6 +20,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
@@ -32,7 +33,6 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/threadpool.h"
 
 namespace starrocks::lake {
 

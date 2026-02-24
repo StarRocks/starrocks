@@ -39,54 +39,26 @@
 
 #include <sstream>
 
-#include "base/simd/simd.h"
-#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/aggregate/aggregate_blocking_node.h"
-#include "exec/aggregate/aggregate_streaming_node.h"
-#include "exec/aggregate/distinct_blocking_node.h"
-#include "exec/aggregate/distinct_streaming_node.h"
-#include "exec/analytic_node.h"
-#include "exec/assert_num_rows_node.h"
-#include "exec/capture_version_node.h"
-#include "exec/connector_scan_node.h"
-#include "exec/cross_join_node.h"
-#include "exec/dict_decode_node.h"
-#include "exec/empty_set_node.h"
-#include "exec/except_node.h"
-#include "exec/exchange_node.h"
-#include "exec/fetch_node.h"
-#include "exec/file_scan_node.h"
-#include "exec/hash_join_node.h"
-#include "exec/intersect_node.h"
-#include "exec/lake_meta_scan_node.h"
-#include "exec/lookup_node.h"
-#include "exec/olap_meta_scan_node.h"
-#include "exec/olap_scan_node.h"
+#include "common/util/debug_util.h"
+#include "exec/exec_factory.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/project_node.h"
-#include "exec/raw_values_node.h"
-#include "exec/repeat_node.h"
-#include "exec/schema_scan_node.h"
-#include "exec/select_node.h"
-#include "exec/stream/stream_aggregate_node.h"
-#include "exec/table_function_node.h"
-#include "exec/topn_node.h"
-#include "exec/union_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "util/debug_util.h"
 
 namespace starrocks {
 
@@ -204,7 +176,7 @@ void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::P
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
     _runtime_state = state;
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs, state));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));
     if (tnode.__isset.local_rf_waiting_set) {
         _local_rf_waiting_set = tnode.local_rf_waiting_set;
@@ -224,7 +196,7 @@ Status ExecNode::prepare(RuntimeState* state) {
             "");
     _mem_tracker.reset(new MemTracker(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
                                       _runtime_profile->name(), nullptr));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, _runtime_profile.get()));
 
     // TODO(zc):
@@ -239,7 +211,7 @@ Status ExecNode::prepare(RuntimeState* state) {
 
 Status ExecNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.open(state));
     push_down_join_runtime_filter(state, &_runtime_filter_collector);
     _runtime_filter_collector.wait(is_scan_node());
@@ -347,7 +319,7 @@ void ExecNode::close(RuntimeState* state) {
         i->close(state);
     }
 
-    Expr::close(_conjunct_ctxs, state);
+    ExprExecutor::close(_conjunct_ctxs, state);
     _runtime_filter_collector.close(state);
 }
 
@@ -380,7 +352,7 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     ExecNode* node = nullptr;
     // check tuple ids is in descs before create node
     RETURN_IF_ERROR(checkTupleIdsInDescs(descs, tnodes[*node_idx]));
-    RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
+    RETURN_IF_ERROR(ExecFactory::create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
     DCHECK((parent != nullptr) || (root != nullptr));
     if (UNLIKELY(parent == nullptr && root == nullptr)) {
@@ -417,186 +389,6 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     }
 
     return Status::OK();
-}
-
-Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrocks::ObjectPool* pool,
-                                        const starrocks::TPlanNode& tnode, const starrocks::DescriptorTbl& descs,
-                                        starrocks::ExecNode** node) {
-    switch (tnode.node_type) {
-    case TPlanNodeType::OLAP_SCAN_NODE:
-        *node = pool->add(new OlapScanNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::META_SCAN_NODE:
-        *node = pool->add(new OlapMetaScanNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::LAKE_META_SCAN_NODE:
-        *node = pool->add(new LakeMetaScanNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::AGGREGATION_NODE:
-        if (tnode.agg_node.__isset.use_streaming_preaggregation && tnode.agg_node.use_streaming_preaggregation) {
-            if (tnode.agg_node.aggregate_functions.size() == 0) {
-                *node = pool->add(new DistinctStreamingNode(pool, tnode, descs));
-            } else {
-                *node = pool->add(new AggregateStreamingNode(pool, tnode, descs));
-            }
-        } else {
-            if (tnode.agg_node.aggregate_functions.size() == 0) {
-                *node = pool->add(new DistinctBlockingNode(pool, tnode, descs));
-            } else {
-                *node = pool->add(new AggregateBlockingNode(pool, tnode, descs));
-            }
-        }
-        return Status::OK();
-    case TPlanNodeType::EMPTY_SET_NODE:
-        *node = pool->add(new EmptySetNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::EXCHANGE_NODE:
-        *node = pool->add(new ExchangeNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::HASH_JOIN_NODE:
-        *node = pool->add(new HashJoinNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::ANALYTIC_EVAL_NODE:
-        *node = pool->add(new AnalyticNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::SORT_NODE:
-        *node = pool->add(new TopNNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::CROSS_JOIN_NODE:
-    case TPlanNodeType::NESTLOOP_JOIN_NODE:
-        *node = pool->add(new CrossJoinNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::UNION_NODE:
-        *node = pool->add(new UnionNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::RAW_VALUES_NODE:
-        *node = pool->add(new RawValuesNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::INTERSECT_NODE:
-        *node = pool->add(new IntersectNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::EXCEPT_NODE:
-        *node = pool->add(new ExceptNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::SELECT_NODE:
-        *node = pool->add(new SelectNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::FILE_SCAN_NODE: {
-        if (tnode.file_scan_node.__isset.enable_pipeline_load && tnode.file_scan_node.enable_pipeline_load) {
-            TPlanNode new_node = tnode;
-            TConnectorScanNode connector_scan_node;
-            connector_scan_node.connector_name = connector::Connector::FILE;
-            new_node.connector_scan_node = connector_scan_node;
-            *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
-        } else {
-            *node = pool->add(new FileScanNode(pool, tnode, descs));
-        }
-    }
-        return Status::OK();
-    case TPlanNodeType::REPEAT_NODE:
-        *node = pool->add(new RepeatNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::ASSERT_NUM_ROWS_NODE:
-        *node = pool->add(new AssertNumRowsNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::PROJECT_NODE:
-        *node = pool->add(new ProjectNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::TABLE_FUNCTION_NODE:
-        *node = pool->add(new TableFunctionNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::HDFS_SCAN_NODE:
-    case TPlanNodeType::KUDU_SCAN_NODE: {
-        TPlanNode new_node = tnode;
-        TConnectorScanNode connector_scan_node;
-        connector_scan_node.connector_name = connector::Connector::HIVE;
-        new_node.connector_scan_node = connector_scan_node;
-        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::MYSQL_SCAN_NODE: {
-        TPlanNode new_node = tnode;
-        TConnectorScanNode connector_scan_node;
-        connector_scan_node.connector_name = connector::Connector::MYSQL;
-        new_node.connector_scan_node = connector_scan_node;
-        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::BENCHMARK_SCAN_NODE: {
-        TPlanNode new_node = tnode;
-        TConnectorScanNode connector_scan_node;
-        connector_scan_node.connector_name = connector::Connector::BENCHMARK;
-        new_node.connector_scan_node = connector_scan_node;
-        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::ES_HTTP_SCAN_NODE: {
-        TPlanNode new_node = tnode;
-        TConnectorScanNode connector_scan_node;
-        connector_scan_node.connector_name = connector::Connector::ES;
-        new_node.connector_scan_node = connector_scan_node;
-        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::SCHEMA_SCAN_NODE:
-        *node = pool->add(new SchemaScanNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::DECODE_NODE:
-        *node = pool->add(new DictDecodeNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::JDBC_SCAN_NODE: {
-        TPlanNode new_node = tnode;
-        TConnectorScanNode connector_scan_node;
-        connector_scan_node.connector_name = connector::Connector::JDBC;
-        new_node.connector_scan_node = connector_scan_node;
-        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::LAKE_SCAN_NODE: {
-        TPlanNode new_node = tnode;
-        TConnectorScanNode connector_scan_node;
-        connector_scan_node.connector_name = connector::Connector::LAKE;
-        new_node.connector_scan_node = connector_scan_node;
-        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::STREAM_SCAN_NODE: {
-        TPlanNode new_node = tnode;
-        std::string connector_name;
-        StreamSourceType::type source_type = new_node.stream_scan_node.source_type;
-        switch (source_type) {
-        case StreamSourceType::BINLOG: {
-            connector_name = connector::Connector::BINLOG;
-            break;
-        }
-        default:
-            return Status::InternalError(fmt::format("Stream scan node does not support source type {}", source_type));
-        }
-        TConnectorScanNode connector_scan_node;
-        connector_scan_node.connector_name = connector_name;
-        new_node.connector_scan_node = connector_scan_node;
-        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::STREAM_AGG_NODE: {
-        *node = pool->add(new StreamAggregateNode(pool, tnode, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::CAPTURE_VERSION_NODE: {
-        *node = pool->add(new CaptureVersionNode(pool, tnode, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::FETCH_NODE: {
-        *node = pool->add(new FetchNode(pool, tnode, descs));
-        return Status::OK();
-    }
-    case TPlanNodeType::LOOKUP_NODE: {
-        *node = pool->add(new LookUpNode(pool, tnode, descs));
-        return Status::OK();
-    }
-    default:
-        return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
-    }
 }
 
 std::string ExecNode::debug_string() const {
@@ -643,153 +435,6 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
     }
 }
 
-Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk) {
-    Filter filter(chunk->num_rows(), 1);
-    Filter* raw_filter = &filter;
-
-    // prune chunk when pruned size is large enough
-    // these constants are just came up without any specific reason.
-    // and plus there is no strong evidence that this strategy has better performance.
-    // pruned chunk can be saved from following conjuncts evaluation, that's benefit.
-    // but calling `filter` there is memory copy, that's cost. So this is tradeoff.
-    // so we don't expect pruned chunk size is too small. and if prune_ratio > 0.5
-    // there is at most one prune process. according to my observation to running tpch 100g
-    // in many cases, chunk is sparse enough.
-    const float prune_ratio = 0.8;
-    const int prune_min_size = 1024;
-
-    int prune_threshold = std::max(int(chunk->num_rows() * prune_ratio), prune_min_size);
-    int zero_count = 0;
-
-    for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk))
-        size_t true_count = ColumnHelper::count_true_with_notnull(column);
-
-        if (true_count == column->size()) {
-            // all hit, skip
-            continue;
-        } else if (0 == true_count) {
-            // all not hit, return
-            chunk->set_num_rows(0);
-            return Status::OK();
-        } else {
-            ColumnHelper::merge_two_filters(column, raw_filter, nullptr);
-            zero_count = SIMD::count_zero(*raw_filter);
-            if (zero_count > prune_threshold) {
-                int rows = chunk->filter(*raw_filter, true);
-                if (rows == 0) {
-                    // When all rows in chunk is filtered, direct return
-                    // No need to execute the following predicate
-                    return Status::OK();
-                }
-                filter.assign(rows, 1);
-                zero_count = 0;
-            }
-        }
-    }
-    if (zero_count == 0) {
-        return Status::OK();
-    }
-    chunk->filter(*raw_filter, true);
-    return Status::OK();
-}
-
-Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk, FilterPtr* filter_ptr,
-                                bool apply_filter) {
-    // No need to do expression if none rows
-    DCHECK(chunk != nullptr);
-    if (chunk->num_rows() == 0) {
-        return Status::OK();
-    }
-
-    // if we don't need filter, then we can prune chunk during eval conjuncts.
-    // when doing prune, we expect all columns are in conjuncts, otherwise
-    // there will be extra memcpy of columns/slots which are not children of any conjunct.
-    // ideally, we can collects slots in conjuncts, and check the overlap with chunk->columns
-    // if overlap ratio is high enough, it's good to do prune.
-    // but here for simplicity, we just check columns numbers absolute value.
-    // TO BE NOTED, that there is no storng evidence that this has better performance.
-    // It's just by intuition.
-    TRY_CATCH_ALLOC_SCOPE_START()
-    const int eager_prune_max_column_number = 5;
-    if (filter_ptr == nullptr && chunk->num_columns() <= eager_prune_max_column_number) {
-        return eager_prune_eval_conjuncts(ctxs, chunk);
-    }
-
-    if (!apply_filter) {
-        DCHECK(filter_ptr) << "Must provide a filter if not apply it directly";
-    }
-    FilterPtr filter(new Filter(chunk->num_rows(), 1));
-    if (filter_ptr != nullptr) {
-        *filter_ptr = filter;
-    }
-    Filter* raw_filter = filter.get();
-
-    for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk))
-        size_t true_count = ColumnHelper::count_true_with_notnull(column);
-
-        if (true_count == column->size()) {
-            // all hit, skip
-            continue;
-        } else if (0 == true_count) {
-            // all not hit, return
-            if (apply_filter) {
-                chunk->set_num_rows(0);
-            } else {
-                filter->assign(filter->size(), 0);
-            }
-            return Status::OK();
-        } else {
-            bool all_zero = false;
-            ColumnHelper::merge_two_filters(column, raw_filter, &all_zero);
-            if (all_zero) {
-                if (apply_filter) {
-                    chunk->set_num_rows(0);
-                } else {
-                    filter->assign(filter->size(), 0);
-                }
-                return Status::OK();
-            }
-        }
-    }
-
-    if (apply_filter) {
-        chunk->filter(*raw_filter);
-    }
-    TRY_CATCH_ALLOC_SCOPE_END()
-    return Status::OK();
-}
-
-StatusOr<size_t> ExecNode::eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, Chunk* chunk,
-                                                      Filter* filter) {
-    // No need to do expression if none rows
-    DCHECK(chunk != nullptr);
-    if (chunk->num_rows() == 0) {
-        return 0;
-    }
-    for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk, filter->data()))
-        size_t true_count = ColumnHelper::count_true_with_notnull(column);
-
-        if (true_count == column->size()) {
-            // all hit, skip
-            continue;
-        } else if (0 == true_count) {
-            return 0;
-        } else {
-            bool all_zero = false;
-            ColumnHelper::merge_two_filters(column, filter, &all_zero);
-            if (all_zero) {
-                return 0;
-            }
-        }
-    }
-
-    size_t true_count = SIMD::count_nonzero(*filter);
-    return true_count;
-}
-
 void ExecNode::eval_join_runtime_filters(Chunk* chunk) {
     if (chunk == nullptr) return;
     _runtime_filter_collector.evaluate(chunk);
@@ -801,50 +446,8 @@ void ExecNode::eval_join_runtime_filters(ChunkPtr* chunk) {
     eval_join_runtime_filters(chunk->get());
 }
 
-void ExecNode::eval_filter_null_values(Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns) {
-    if (filter_null_value_columns.size() == 0) return;
-    size_t before_size = chunk->num_rows();
-    if (before_size == 0) return;
-
-    // lazy allocation.
-    Buffer<uint8_t> selection(0);
-
-    for (SlotId slot_id : filter_null_value_columns) {
-        const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);
-        if (!c->is_nullable()) continue;
-        if (c->only_null()) {
-            chunk->reset();
-            return;
-        }
-        const NullableColumn* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(c);
-        if (!nullable_column->has_null()) continue;
-        if (selection.size() == 0) {
-            selection.assign(before_size, 1);
-        }
-        // how many data() should we call? I really don't know.
-        // let compiler tells me.
-        // let compiler does vectorization.
-        // let compiler does everything.
-        // let's pray for compiler,
-        // till the end of the world.
-        const uint8_t* nulls = nullable_column->null_column()->raw_data();
-        uint8_t* sel = selection.data();
-        for (size_t i = 0; i < before_size; i++) {
-            sel[i] &= !nulls[i];
-        }
-    }
-    if (selection.size() == 0) return;
-
-    size_t after_size = SIMD::count_nonzero(selection);
-    // Those rows will be filtered out anyway, better to be filtered out here.
-    if (after_size != before_size) {
-        VLOG_FILE << "filter null values. before_size = " << before_size << ", after_size = " << after_size;
-        chunk->filter(selection, true);
-    }
-}
-
 void ExecNode::eval_filter_null_values(Chunk* chunk) {
-    eval_filter_null_values(chunk, _filter_null_value_columns);
+    ChunkPredicateEvaluator::eval_filter_null_values(chunk, _filter_null_value_columns);
 }
 
 void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode*>* nodes) {

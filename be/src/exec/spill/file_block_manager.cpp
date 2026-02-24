@@ -16,13 +16,13 @@
 
 #include <utility>
 
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
 #include "fmt/format.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
-#include "util/uid_util.h"
 
 namespace starrocks::spill {
 class FileBlockContainer {

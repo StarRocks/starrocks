@@ -19,7 +19,8 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -55,7 +56,7 @@ static void update_datacache_metrics(bool use_same_instance) {
 }
 
 void register_datacache_metrics(bool use_same_instance) {
-    StarRocksMetrics::instance()->metrics()->register_hook(
+    GlobalMetricsRegistry::instance()->metrics()->register_hook(
             "update_datacache_metrics", [use_same = use_same_instance] { update_datacache_metrics(use_same); });
 }
 #endif

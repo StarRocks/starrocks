@@ -38,29 +38,25 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-#include "base/phmap/phmap.h"
-#include "cache/datacache_utils.h"
-#include "cache/disk_cache/block_cache.h"
+#include "base/debug/debug_action.h"
+#include "base/uid_util.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
+#include "common/logging.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/global_dict/parser.h"
-#include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "util/debug_action.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -78,10 +74,13 @@ class RowDescriptor;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
+class FragmentDictState;
+class RuntimeStateHelper;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
-}
+class FragmentContext;
+} // namespace pipeline
 
 #define EXTRACE_SPILL_PARAM(query_option, spill_option, var) \
     spill_option.has_value() ? spill_option->var : query_option.var
@@ -123,11 +122,10 @@ public:
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
-    ObjectPool* global_obj_pool() const;
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
-    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) { _fragment_ctx = fragment_ctx; }
+    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx);
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
@@ -151,7 +149,10 @@ public:
     }
     const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
-    RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
+    RuntimeFilterPort* runtime_filter_port() {
+        DCHECK(_runtime_filter_port != nullptr);
+        return _runtime_filter_port;
+    }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
     void set_fragment_root_id(PlanNodeId id) {
@@ -238,20 +239,12 @@ public:
 
     const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
 
-    // is_summary is true, means we are going to write the summary line
-    void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
-
     bool has_reached_max_error_msg_num(bool is_summary = false);
-
-    Status create_rejected_record_file();
 
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
-
-    void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
-                                        const std::string& source);
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -281,18 +274,6 @@ public:
 
     void update_num_bytes_scan_from_source(int64_t scan_bytes) { _num_bytes_scan_from_source.fetch_add(scan_bytes); }
 
-    void update_report_load_status(TReportExecStatusParams* load_params) {
-        load_params->__set_loaded_rows(num_rows_load_sink());
-        load_params->__set_sink_load_bytes(num_bytes_load_sink());
-        load_params->__set_source_load_rows(num_rows_load_from_source());
-        load_params->__set_source_load_bytes(num_bytes_load_from_source());
-        load_params->__set_filtered_rows(num_rows_load_filtered());
-        load_params->__set_unselected_rows(num_rows_load_unselected());
-        load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
-        // Update datacache load metrics
-        update_load_datacache_metrics(load_params);
-    }
-
     void update_num_datacache_read_bytes(const int64_t read_bytes) {
         _num_datacache_read_bytes.fetch_add(read_bytes, std::memory_order_relaxed);
     }
@@ -312,10 +293,6 @@ public:
     void update_num_datacache_count(const int64_t count) {
         _num_datacache_count.fetch_add(count, std::memory_order_relaxed);
     }
-
-    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const;
-
-    std::atomic_int64_t* mutable_total_spill_bytes();
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
@@ -485,21 +462,9 @@ public:
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
-    const GlobalDictMaps& get_query_global_dict_map() const;
-    // for query global dict
-    GlobalDictMaps* mutable_query_global_dict_map();
-
-    const GlobalDictMaps& get_load_global_dict_map() const;
-
-    DictOptimizeParser* mutable_dict_optimize_parser();
-
-    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
-
-    using GlobalDictLists = std::vector<TGlobalDict>;
-    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
-    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
-
-    Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
+    void set_fragment_dict_state(FragmentDictState* ptr) { _fragment_dict_state = ptr; }
+    FragmentDictState* fragment_dict_state() { return _fragment_dict_state; }
+    const FragmentDictState* fragment_dict_state() const { return _fragment_dict_state; }
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -508,8 +473,6 @@ public:
 
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
-
-    std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     Status reset_epoch();
 
@@ -527,8 +490,6 @@ public:
     bool enable_wait_dependent_event() const {
         return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }
-
-    bool is_jit_enabled() const;
 
     bool is_adaptive_jit() const { return _query_options.__isset.jit_level && _query_options.jit_level == 1; }
 
@@ -589,14 +550,11 @@ public:
     void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
 
 private:
+    friend class RuntimeStateHelper;
+
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                const TQueryGlobals& query_globals, ExecEnv* exec_env);
-
-    Status create_error_log_file();
-
-    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                              phmap::flat_hash_map<uint32_t, int64_t>* version);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -712,10 +670,7 @@ private:
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
 
-    GlobalDictMaps _query_global_dicts;
-    GlobalDictMaps _load_global_dicts;
-    phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
-    DictOptimizeParser _dict_optimize_parser;
+    FragmentDictState* _fragment_dict_state = nullptr;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;
@@ -734,12 +689,12 @@ private:
     bool _fragment_prepared = false;
 };
 
-#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
-    do {                                                                                    \
-        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
-        if (tracker != nullptr) {                                                           \
-            return Status::MemoryLimitExceeded(tracker->err_msg(msg, state));               \
-        }                                                                                   \
+#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                                    \
+    do {                                                                                                        \
+        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker();                     \
+        if (tracker != nullptr) {                                                                               \
+            return Status::MemoryLimitExceeded(tracker->err_msg(msg, print_id(state->fragment_instance_id()))); \
+        }                                                                                                       \
     } while (false)
 
 #define RETURN_IF_CANCELLED(state)                                                       \

@@ -30,6 +30,7 @@
 
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
+#include "common/util/debug_util.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
 #include "formats/parquet/chunk_writer.h"
@@ -39,7 +40,6 @@
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/debug_util.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
