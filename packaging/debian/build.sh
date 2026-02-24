@@ -66,10 +66,25 @@ if [ -z "$BASH_VERSION" ]; then
     exit 1
 fi
 
+# Check for required Debian packaging tools
+for tool in dpkg-deb dpkg-query; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "ERROR: Required tool '$tool' not found." >&2
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "On macOS, you can install these via: brew install dpkg" >&2
+        else
+            echo "Please install the 'dpkg' or 'dpkg-dev' package for your distribution." >&2
+        fi
+        exit 1
+    fi
+done
+
 # Check for minimum dpkg version (1.19.0) for --root-owner-group support
 if command -v dpkg >/dev/null 2>&1; then
     DPKG_VERSION=$(dpkg-query -W -f='${Version}' dpkg | cut -d'~' -f1)
-    if [[ "$DPKG_VERSION" < "1.19.0" ]]; then
+    
+    # Use dpkg's built-in comparison tool: lt = "less than"
+    if dpkg --compare-versions "$DPKG_VERSION" lt "1.19.0"; then
         echo "ERROR: dpkg version $DPKG_VERSION is too old." >&2
         echo "This script requires dpkg >= 1.19.0 for --root-owner-group support." >&2
         echo "Please build on Debian 10+, Ubuntu 18.10+, or a modern equivalent." >&2
