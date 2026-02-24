@@ -133,6 +133,11 @@ for COMP in "fe" "be" "cn"; do
         "$SRC_DIR/conf/$COMP.conf"
         "$SRC_DIR/bin/start_${COMP}.sh"
     )
+    # Add config files to validation
+    if [ "$COMP" == "be" ] || [ "$COMP" == "cn" ]; then
+        REQUIRED_PATHS+=("$SRC_DIR/conf/be.conf" "$SRC_DIR/conf/cn.conf")
+    fi
+
     for REQ in "${REQUIRED_PATHS[@]}"; do
         if [ ! -e "$REQ" ]; then
             echo "ERROR: Required path for component '$COMP' is missing: $REQ" >&2
