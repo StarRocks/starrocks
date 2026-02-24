@@ -152,7 +152,7 @@ public class SimpleExecutor {
             return sqlResult.first;
         } catch (Exception e) {
             LOG.error(name + " execute SQL failed {}", SqlCredentialRedactor.redact(sql), e);
-            throw new SemanticException(name + "execute sql failed: " + sql, e);
+            throw new SemanticException(name + "execute sql failed: " + SqlCredentialRedactor.redact(sql), e);
         }
     }
 
