@@ -11,7 +11,7 @@ RuntimeDirectoryMode=0750
 PermissionsStartOnly=true
 ExecStartPre=/usr/bin/install -d -m 0750 -o starrocks -g starrocks /run/starrocks
 Environment="STARROCKS_HOME=/usr/lib/starrocks/be"
-ExecStart=/usr/lib/starrocks/be/bin/start_be.sh --daemonize 0
+ExecStart=/usr/lib/starrocks/be/bin/start_be.sh
 Restart=on-failure
 LimitNOFILE=262144
 LimitMEMLOCK=infinity

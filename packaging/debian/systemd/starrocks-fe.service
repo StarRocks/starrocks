@@ -22,8 +22,9 @@ TimeoutStopSec=300
 #   (RUN_DAEMON=0) unless the --daemon flag is explicitly provided.  
 # - For systemd Type=simple, the main process must stay in the foreground.  
 # - Therefore we intentionally do NOT pass --daemon or a separate  
-#   "foreground" flag here. In contrast, BE/CN services use --daemonize 0  
-#   on their binaries to enforce the same foreground behavior. 
+#   "foreground" flag here. BE/CN services are configured in their own  
+#   systemd units and startup scripts to keep the main process in the  
+#   foreground as well.  
 
 [Install]
 WantedBy=multi-user.target
