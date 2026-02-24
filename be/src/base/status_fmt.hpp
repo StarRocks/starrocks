@@ -50,8 +50,7 @@ inline Status Status::InvalidArgument(fmt::basic_format_string<char, Args...> fm
 }
 
 template <typename... Args>
-inline Status Status::MinimumReservationUnavailable(fmt::basic_format_string<char, Args...> fmt_str,
-                                                    Args&&... args) {
+inline Status Status::MinimumReservationUnavailable(fmt::basic_format_string<char, Args...> fmt_str, Args&&... args) {
     return MinimumReservationUnavailable(fmt::format(fmt_str, std::forward<Args>(args)...));
 }
 
@@ -216,14 +215,12 @@ inline Status Status::Shutdown(fmt::basic_format_string<char, Args...> fmt_str, 
 }
 
 template <typename... Args>
-inline Status Status::BigQueryCpuSecondLimitExceeded(fmt::basic_format_string<char, Args...> fmt_str,
-                                                     Args&&... args) {
+inline Status Status::BigQueryCpuSecondLimitExceeded(fmt::basic_format_string<char, Args...> fmt_str, Args&&... args) {
     return BigQueryCpuSecondLimitExceeded(fmt::format(fmt_str, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
-inline Status Status::BigQueryScanRowsLimitExceeded(fmt::basic_format_string<char, Args...> fmt_str,
-                                                    Args&&... args) {
+inline Status Status::BigQueryScanRowsLimitExceeded(fmt::basic_format_string<char, Args...> fmt_str, Args&&... args) {
     return BigQueryScanRowsLimitExceeded(fmt::format(fmt_str, std::forward<Args>(args)...));
 }
 

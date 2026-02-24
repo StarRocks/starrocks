@@ -32,11 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <fmt/format.h>
-
 #include "base/status.h"
 
 #include <gtest/gtest.h>
+
+#include "base/status_fmt.hpp"
 
 namespace starrocks {
 

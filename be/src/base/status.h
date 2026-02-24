@@ -15,12 +15,11 @@
 // Forward-declare fmt::basic_format_string inside the versioned inline namespace
 // (fmtlib 8.x uses inline namespace v8) so that Status can declare fmt overloads
 // without pulling in the full <fmt/format.h>.  The bodies live in status_fmt.hpp.
-namespace fmt {
-inline namespace v8 {
+
+namespace fmt::inline v8 {
 template <typename Char, typename... Args>
 class basic_format_string;
-} // namespace v8
-} // namespace fmt
+} // namespace fmt::inline v8
 
 namespace starrocks {
 
