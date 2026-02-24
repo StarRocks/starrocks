@@ -2,13 +2,30 @@
 set -e
 
 case "$1" in
-    remove|deconfigure)
-        COMP=$(echo "$DPKG_MAINTSCRIPT_PACKAGE" | sed 's/starrocks-//')
-        
-        if systemctl is-active --quiet "starrocks-$COMP"; then
-            echo "Stopping starrocks-$COMP service..."
-            systemctl stop "starrocks-$COMP" || true
+    remove|upgrade|deconfigure)
+        if [ -n "$DPKG_MAINTSCRIPT_PACKAGE" ]; then
+            case "$DPKG_MAINTSCRIPT_PACKAGE" in
+                starrocks-*)
+                    COMP=${DPKG_MAINTSCRIPT_PACKAGE#starrocks-}
+                    ;;
+                *)
+                    COMP=""
+                    ;;
+            esac
+
+            if [ -n "$COMP" ] && systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
+                echo "Stopping StarRocks $COMP service..."
+                systemctl stop "starrocks-$COMP" || true
+            fi
         fi
+    ;;
+
+    failed-upgrade)
+    ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
     ;;
 esac
 
