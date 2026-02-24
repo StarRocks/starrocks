@@ -17,11 +17,14 @@ package com.starrocks.planner;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.THdfsScanNode;
@@ -86,6 +89,12 @@ public class IcebergMetadataScanNode extends ScanNode {
         String catalogName = table.getCatalogName();
         String originDbName = table.getOriginDb();
         String originTableName = table.getOriginTable();
+        ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+        Table originTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, catalogName, originDbName, originTableName);
+        if (originTable instanceof IcebergTable) {
+            ((IcebergTable) originTable).checkSupportedFormat();
+        }
 
         long snapshotId = version.end().isPresent() ? version.end().get() : -1;
         IcebergMetaSpec serializedMetaSpec = GlobalStateMgr.getCurrentState().getMetadataMgr().getSerializedMetaSpec(

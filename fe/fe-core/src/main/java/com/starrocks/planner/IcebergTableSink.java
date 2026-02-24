@@ -53,6 +53,7 @@ public class IcebergTableSink extends DataSink {
 
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink,
                             SessionVariable sessionVariable, String targetBranch) {
+        icebergTable.checkSupportedFormat();
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
         this.tableLocation = nativeTable.location();

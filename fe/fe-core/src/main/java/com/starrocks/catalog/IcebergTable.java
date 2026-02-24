@@ -254,6 +254,35 @@ public class IcebergTable extends Table {
     }
 
     /**
+     * Check if the Iceberg table format version is supported.
+     * Currently, only Iceberg V1 and V2 are supported. V3 and higher versions are not supported.
+     *
+     * @throws StarRocksConnectorException if the table format version is V3 or higher
+     */
+    public void checkSupportedFormat() {
+        org.apache.iceberg.Table nativeTable = getNativeTable();
+        if (!(nativeTable instanceof BaseTable)) {
+            return;
+        }
+        BaseTable baseTable = (BaseTable) nativeTable;
+        org.apache.iceberg.TableOperations operations = baseTable.operations();
+        if (operations == null) {
+            return;
+        }
+        org.apache.iceberg.TableMetadata metadata = operations.current();
+        if (metadata == null) {
+            return;
+        }
+        int formatVersion = metadata.formatVersion();
+        if (formatVersion >= 3) {
+            throw new StarRocksConnectorException(String.format(
+                    "Iceberg table %s uses format version %d which is not supported. " +
+                    "Currently only Iceberg V1 and V2 are supported.",
+                    getTableIdentifier(), formatVersion));
+        }
+    }
+
+    /**
      * <p>
      *     In the Iceberg Partition Evolution scenario, 'org.apache.iceberg.PartitionField#name' only represents the
      *     name of a partition in the Iceberg table's Partition Spec. This name is used when trying to obtain the

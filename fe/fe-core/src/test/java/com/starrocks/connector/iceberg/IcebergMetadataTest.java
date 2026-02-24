@@ -2185,4 +2185,45 @@ public class IcebergMetadataTest extends TableTestBase {
                 HDFS_ENVIRONMENT);
         executor.execute();
     }
+
+    @Test
+    public void testIcebergV1FormatVersionSupported() {
+        // mockedNativeTableB is created with formatVersion=1
+        IcebergTable icebergTable = new IcebergTable(1, "test_table_v1", CATALOG_NAME, "resource_name",
+                "test_db", "test_table_v1", "s3://bucket/tbl_v1", Lists.newArrayList(),
+                mockedNativeTableB, Maps.newHashMap());
+
+        // V1 format should not throw exception
+        Assertions.assertDoesNotThrow(icebergTable::checkSupportedFormat);
+    }
+
+    @Test
+    public void testIcebergV2FormatVersionSupported() {
+        // mockedNativeTableA is created with formatVersion=2
+        IcebergTable icebergTable = new IcebergTable(1, "test_table_v2", CATALOG_NAME, "resource_name",
+                "test_db", "test_table_v2", "s3://bucket/tbl_v2", Lists.newArrayList(),
+                mockedNativeTableA, Maps.newHashMap());
+
+        // V2 format should not throw exception
+        Assertions.assertDoesNotThrow(icebergTable::checkSupportedFormat);
+    }
+
+    @Test
+    public void testIcebergV3FormatVersionThrowsException() {
+        // Use MockUp to change mockedNativeTableA to return V3 format version
+        new MockUp<TableMetadata>() {
+            @Mock
+            public int formatVersion() {
+                return 3;  // V3 format version
+            }
+        };
+
+        // Use existing mockedNativeTableA which has V2 format by default
+        IcebergTable icebergTable = new IcebergTable(1, "test_table", CATALOG_NAME, "resource_name",
+                "test_db", "test_table", "s3://bucket/tbl", Lists.newArrayList(),
+                mockedNativeTableA, Maps.newHashMap());
+
+        // Verify V3 table throws exception when checking format
+        Assertions.assertThrows(StarRocksConnectorException.class, icebergTable::checkSupportedFormat);
+    }
 }
