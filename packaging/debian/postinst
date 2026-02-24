@@ -5,30 +5,31 @@ case "$1" in
     configure)
         # 1. Create starrocks group
         if ! getent group starrocks >/dev/null; then
-            if ! groupadd --system starrocks; then
-                echo "Error: Failed to create system group 'starrocks'." >&2
-                exit 1
-            fi
+            groupadd --system starrocks
         fi
 
-        # 2. Create starrocks user
+        # 2. Create base directories BEFORE user creation
+        # This ensures the home-dir exists when the user is created.
+        for dir in /var/log/starrocks /var/lib/starrocks; do
+            if [ ! -d "$dir" ]; then
+                mkdir -p "$dir"
+                # We will fix ownership in the next step once the user exists
+            fi
+        done
+
+        # 3. Create starrocks user
         if ! getent passwd starrocks >/dev/null; then
-            if ! useradd --system \
+            useradd --system \
                 --gid starrocks \
                 --home-dir /var/lib/starrocks \
                 --no-create-home \
                 --shell /usr/sbin/nologin \
                 --comment "StarRocks system user" \
-                starrocks; then
-                echo "Error: Failed to create system user 'starrocks'." >&2
-                exit 1
-            fi
+                starrocks
         fi
-
-        # 3. Create specific subdirectories for FE,BE,CN with correct ownership and permissions
-        echo "Creating StarRocks runtime directories..."
-
-        # Always ensure shared base directories exist
+        
+        # 4. Enforce ownership and permissions on base and specific directories
+        echo "Ensuring StarRocks runtime directories exist..."
         for dir in /var/log/starrocks /var/lib/starrocks; do
             install -d -o starrocks -g starrocks -m 0750 "$dir"
         done
