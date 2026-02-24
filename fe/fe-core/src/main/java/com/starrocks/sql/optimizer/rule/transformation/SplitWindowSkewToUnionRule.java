@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -333,7 +333,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         // Verify that the skewed column is part of the partition expressions
         if (!window.getPartitionExpressions().contains(col)) {
-            throw new StarRocksConnectorException("Can't find skew column");
+            throw new SemanticException("Can't find skew column");
         }
 
         return skewValues.stream()
