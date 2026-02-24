@@ -123,11 +123,19 @@ case "$1" in
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload >/dev/null 2>&1 || true
 
-            # If this is an upgrade, try to restart the service to apply changes
+            # NOTE:
+            # For database services like StarRocks, automatic restarts during upgrades
+            # can be risky and may cause data corruption if the cluster is not
+            # cleanly quiesced beforehand. Therefore, this postinst script does not
+            # automatically restart running StarRocks services.
+            #
+            # If a StarRocks component is currently active, inform the administrator
+            # so they can perform a coordinated restart (or stop/start) following
+            # their operational procedures.
             if [ -n "$COMP" ] && systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
-                echo "Restarting StarRocks $COMP to apply upgrade..."
-                systemctl try-restart "starrocks-$COMP" || true
-            fi
+                echo "StarRocks $COMP is currently running."
+                echo "Systemd units have been reloaded, but the service was not restarted automatically."
+                echo "Please coordinate a manual restart (or stop/start) of StarRocks $COMP at a safe time to apply configuration or binary changes."
         fi
     ;;
 
