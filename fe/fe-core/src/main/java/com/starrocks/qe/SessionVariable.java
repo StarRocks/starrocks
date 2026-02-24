@@ -2584,6 +2584,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return connectorSinkCompressionCodec;
     }
 
+    public void setConnectorSinkCompressionCodec(String connectorSinkCompressionCodec) {
+        this.connectorSinkCompressionCodec = connectorSinkCompressionCodec;
+    }
+
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_TARGET_MAX_FILE_SIZE)
     private long connectorSinkTargetMaxFileSize = 1024L * 1024 * 1024;
 
