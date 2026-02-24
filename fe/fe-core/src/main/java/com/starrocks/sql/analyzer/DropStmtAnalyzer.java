@@ -217,14 +217,7 @@ public class DropStmtAnalyzer {
             } else {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
                 if (db != null) {
-<<<<<<< HEAD
                     func = db.getFunction(statement.getFunctionSearchDesc());
-                    if (func == null) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
-                    }
-=======
-                    func = db.getFunction(funcDesc);
->>>>>>> 7bbd1272ba ([BugFix] Fix DROP FUNCTION IF EXISTS ignoring ifExists flag (#69216))
                 }
             }
 
