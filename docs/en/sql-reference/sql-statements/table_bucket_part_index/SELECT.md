@@ -47,8 +47,7 @@ It is easier to read and understand SQL code by abstracting the most complex par
 Examples:
 
 ```sql
--- Define one subquery at the outer level, and another at the inner level as part of the
--- initial stage of the UNION ALL query.
+-- Define one subquery at the outer level, and another at the inner level as part of the initial stage of the UNION ALL query.
 
 with t1 as (select 1),t2 as (select 2)
 select * from t1 union all select * from t2;
@@ -194,9 +193,10 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 
 The various joins supported by StarRocks can be classified as equi-joins and non-equi-joins depending on the join conditions specified in the joins.
 
-| **Equi-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
-| -------------------------- | ------------------------------------------------------------ |
-| **Non-equi-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
+| **Join Type**  | **Description**                                                               |
+| -------------- | ----------------------------------------------------------------------------- |
+| Equi-joins     | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
+| Non-equi-joins | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
 
 - Equi-joins
   
@@ -342,9 +342,6 @@ ORDER BY <column_name>
 
 ```sql
 select * from big_table order by tiny_column, short_column desc;
-```
-
-```sql
 select  *  from  sales_record  order by  employee_id  nulls first;
 ```
 
@@ -965,7 +962,7 @@ Because--is interpreted as a comment in the following statement (when a user can
 
 When + or - is a binary operator, such as 2+2, 3+1.5, or col1+col2, it means that the left value is added or subtracted from the right value. Both left and right values must be numeric types.
 
-**and/**: represent multiplication and division, respectively. The operands on both sides must be data types. When two numbers are multiplied.
+**\*and/**: represent multiplication and division, respectively. The operands on both sides must be data types. When two numbers are multiplied.
 
 Smaller operands may be promoted if needed (e.g., SMALLINT to INT or BIGINT), and the result of the expression will be promoted to the next larger type.
 
@@ -1430,7 +1427,7 @@ Querying organizational hierarchy is one of the most common use cases for Recurs
 
 Result:
 
-```
+```Plain
 +-------------+---------+----------------------+-------+-----------------------------------------+
 | employee_id | name    | title                | level | path                                    |
 +-------------+---------+----------------------+-------+-----------------------------------------+
