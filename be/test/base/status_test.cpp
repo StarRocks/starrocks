@@ -32,6 +32,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <fmt/format.h>
+
 #include "base/status_fmt.h"
 
 #include <gtest/gtest.h>
