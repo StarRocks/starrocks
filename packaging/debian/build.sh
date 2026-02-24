@@ -59,6 +59,17 @@ if [ -z "$BASH_VERSION" ]; then
     exit 1
 fi
 
+# Check for minimum dpkg version (1.19.0) for --root-owner-group support
+if command -v dpkg >/dev/null 2>&1; then
+    DPKG_VERSION=$(dpkg-query -W -f='${Version}' dpkg | cut -d'~' -f1)
+    if [[ "$DPKG_VERSION" < "1.19.0" ]]; then
+        echo "ERROR: dpkg version $DPKG_VERSION is too old." >&2
+        echo "This script requires dpkg >= 1.19.0 for --root-owner-group support." >&2
+        echo "Please build on Debian 10+, Ubuntu 18.10+, or a modern equivalent." >&2
+        exit 1
+    fi
+fi
+
 SED_I=(-i)
 if [[ "$OSTYPE" == "darwin"* ]]; then
   SED_I=(-i '')
