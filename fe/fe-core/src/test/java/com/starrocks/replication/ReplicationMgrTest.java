@@ -72,10 +72,17 @@ public class ReplicationMgrTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+<<<<<<< HEAD
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
+=======
+        FeConstants.runningUnitTest = true;
+        AnalyzeTestUtil.initWithoutTableAndDb(RunMode.SHARED_DATA);
+        GlobalStateMgr.getCurrentState().getPublishVersionDaemon().setStop();
+        starRocksAssert = AnalyzeTestUtil.starRocksAssert;
+>>>>>>> 4606df71c6 ([UT] Fix fe ut ReplicationMgrTest (#69324))
 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
