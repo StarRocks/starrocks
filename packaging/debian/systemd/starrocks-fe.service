@@ -10,7 +10,6 @@ RuntimeDirectory=starrocks
 RuntimeDirectoryMode=0750
 PermissionsStartOnly=true
 ExecStartPre=/usr/bin/install -d -m 0750 -o starrocks -g starrocks /run/starrocks
-Environment="STARROCKS_HOME=/usr/lib/starrocks/fe"
 ExecStart=/usr/lib/starrocks/fe/bin/start_fe.sh
 Restart=on-failure
 LimitNOFILE=65536
