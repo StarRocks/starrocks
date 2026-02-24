@@ -3627,6 +3627,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
+- Alias: lake_min_compaction_interval_ms_on_success
 - Description: The interval before triggering the next Compaction for a partition in a shared-data cluster after a successful Compaction on that partition.
 - Introduced in: v3.2.0
 
