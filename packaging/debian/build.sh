@@ -96,9 +96,24 @@ for COMP in "fe" "be" "cn"; do
     echo "--- Processing $PACKAGE_NAME ---"
 
     if [ ! -d "$SRC_DIR" ]; then
-        echo "ERROR: Source directory $SRC_DIR not found!"
+        echo "ERROR: Source directory $SRC_DIR not found!" >&2
         exit 1
     fi
+
+    # Validate required subdirectories and files before copying
+    REQUIRED_PATHS=(
+        "$SRC_DIR/bin"
+        "$SRC_DIR/lib"
+        "$SRC_DIR/conf"
+        "$SRC_DIR/conf/$COMP.conf"
+        "$SRC_DIR/bin/start_${COMP}.sh"
+    )
+    for REQ in "${REQUIRED_PATHS[@]}"; do
+        if [ ! -e "$REQ" ]; then
+            echo "ERROR: Required path for component '$COMP' is missing: $REQ" >&2
+            exit 1
+        fi
+    done
 
     # Create Structure
     mkdir -p "$STAGING_DIR/DEBIAN"
