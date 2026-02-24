@@ -190,6 +190,20 @@ TEST_F(StatusTest, PublishTimeoutFmtOverload) {
     ASSERT_EQ("txn 42 timed out after 3000ms", st.message());
 }
 
+TEST_F(StatusTest, InternalErrorFmtOverload) {
+    Status st = Status::InternalError("unexpected value {}", 99);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+    ASSERT_EQ("unexpected value 99", st.message());
+}
+
+TEST_F(StatusTest, NotFoundFmtOverload) {
+    Status st = Status::NotFound("tablet {} not found on disk {}", 123, "ssd0");
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_not_found());
+    ASSERT_EQ("tablet 123 not found on disk ssd0", st.message());
+}
+
 TEST_F(StatusTest, HighStatusCodePreserved) {
     const auto code = static_cast<TStatusCode::type>(200);
     Status st(code, "overflow");
