@@ -29,11 +29,8 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
-<<<<<<< HEAD
 #include "testutil/assert.h"
-=======
 #include "testutil/column_test_helper.h"
->>>>>>> e7b438814a ([UT] Refactor test case: ParquetFileWriterTest (#69405))
 
 namespace starrocks::formats {
 
