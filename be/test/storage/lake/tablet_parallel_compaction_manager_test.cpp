@@ -19,14 +19,6 @@
 #include <filesystem>
 #include <future>
 
-<<<<<<< HEAD
-#include "storage/lake/compaction_scheduler.h"
-#include "storage/lake/compaction_task_context.h"
-#include "storage/lake/test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/threadpool.h"
-=======
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "common/config.h"
@@ -35,7 +27,9 @@
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
->>>>>>> ed8297ab85 ([Enhancement] Support segment-level splitting for parallel compaction (#68123))
+#include "testutil/assert.h"
+#include "testutil/id_generator.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
