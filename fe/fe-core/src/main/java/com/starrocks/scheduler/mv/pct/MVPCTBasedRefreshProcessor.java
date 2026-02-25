@@ -43,8 +43,12 @@ import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
+import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -53,6 +57,7 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.ExecPlan;
+import org.apache.parquet.Strings;
 
 import java.util.Map;
 import java.util.Set;
@@ -185,14 +190,29 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
             locker.unlock();
         }
 
+        final InsertStmt finalInsertStmt = insertStmt;
         updateTaskRunStatus(status -> {
             MVTaskRunExtraMessage message = status.getMvTaskRunExtraMessage();
             if (message == null) {
                 return;
             }
+
+            // update plan builder message
             Map<String, String> planBuildMessage = planBuilder.getPlanBuilderMessage();
-            logger.info("MV Refresh PlanBuilderMessage: {}", planBuildMessage);
-            message.setPlanBuilderMessage(planBuildMessage);
+            if (planBuildMessage != null) {
+                logger.info("MV Refresh PlanBuilderMessage: {}", planBuildMessage);
+                message.setPlanBuilderMessage(planBuildMessage);
+                // record the plan builder message
+                Tracers.record("MVRefreshPlanBuilderInfo", planBuildMessage.toString());
+            }
+
+            final String refreshedSql = finalInsertStmt != null ? AstToSQLBuilder.buildSimple(finalInsertStmt) : "";
+            // update mv refresh definition
+            if (!Strings.isNullOrEmpty(refreshedSql)) {
+                // Remove line separator and shrink to MAX_FIELD_VARCHAR_LENGTH-1 which is defined in the TaskRunsSystemTable.java
+                String query = LogUtil.removeLineSeparator(refreshedSql);
+                status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH - 1));
+            }
         });
 
         QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();

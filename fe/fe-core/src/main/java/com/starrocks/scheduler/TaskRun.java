@@ -558,7 +558,7 @@ public class TaskRun implements Comparable<TaskRun> {
         if (!Strings.isNullOrEmpty(task.getDefinition())) {
             // Remove line separator and shrink to MAX_FIELD_VARCHAR_LENGTH/4 which is defined in the TaskRunsSystemTable.java
             String query = LogUtil.removeLineSeparator(task.getDefinition());
-            status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4));
+            status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH - 1));
         }
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
