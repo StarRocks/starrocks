@@ -159,6 +159,7 @@ TEST_F(ExecFactoryTest, test_create_tree_valid_simple_tree) {
     ASSERT_EQ(root->children().size(), 1);
     ASSERT_NE(root->children()[0], nullptr);
     ASSERT_EQ(root->children()[0]->type(), TPlanNodeType::EMPTY_SET_NODE);
+    root->close(&_runtime_state);
 }
 
 TEST_F(ExecFactoryTest, test_create_tree_invalid_tuple_id) {
