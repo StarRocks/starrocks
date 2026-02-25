@@ -954,10 +954,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
 
-    public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
-    public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
-
-
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
     public static final String ENABLE_DEFER_PROJECT_AFTER_TOPN = "enable_defer_project_after_topn";
 
@@ -1966,16 +1962,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
 
-    @VarAttr(name = ARROW_FLIGHT_PROXY)
-    private String arrowFlightProxy = "";
-    @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
-    private boolean arrowFlightProxyEnabled = true;
-
     @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
     private int topNPushDownAggMode = 1;
 
     @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
     private boolean enableDeferProjectAfterTopN = true;
+
+    @VarAttr(name = ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT)
+    private boolean enableLabeledColumnStatisticOutput = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5335,28 +5329,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableDeferProjectAfterTopN;
     }
 
-    public void setArrowFlightProxy(String proxy) {
-        this.arrowFlightProxy = proxy;
-    }
-
-    public String getArrowFlightProxy() {
-        return this.arrowFlightProxy;
-    }
-
-    public void setArrowFlightProxyEnabled(boolean flag) {
-        this.arrowFlightProxyEnabled = flag;
-    }
-
-    public boolean isArrowFlightProxyEnabled() {
-        return this.arrowFlightProxyEnabled;
-    }
-
     public void setTopNPushDownAggMode(int mode) {
         this.topNPushDownAggMode = mode;
     }
 
     public int getTopNPushDownAggMode() {
         return topNPushDownAggMode;
+    }
+
+    public void setEnableLabeledColumnStatisticOutput(boolean flag) {
+        this.enableLabeledColumnStatisticOutput = flag;
+    }
+
+    public boolean isEnableLabeledColumnStatisticOutput() {
+        return this.enableLabeledColumnStatisticOutput;
     }
 
     public void setMcvRowPercentagePropagationThreshold(double mcvRowPercentagePropagationThreshold) {
