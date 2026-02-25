@@ -9,6 +9,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 配置项
 
 <BEConfigMethod />
@@ -5332,6 +5334,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_resolve_hostname_to_ip_in_load_error_url
 
+<<<<<<< HEAD
 - 默认值: false
 - 类型: Boolean
 - 单位: -
@@ -5340,3 +5343,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `true`：将主机名解析为 IP 地址。
   - `false`（默认）：在错误 URL 中保留原始主机名。
 - 引入版本：v4.0.1
+=======
+##### user_function_dir
+
+- 默认值：`${STARROCKS_HOME}/lib/udf`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：UDF 存放的路径。
+- 引入版本：-
+
+##### web_log_bytes
+
+- 默认值: 1048576 (1 MB)
+- 类型: long
+- 单位：Bytes
+- 是否动态：否
+- 描述: 从 INFO 日志文件读取并在 BE 调试 Web Server 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
+- 引入版本: v3.2.0
+
+### 已移除的参数
+
+##### enable_bit_unpack_simd
+
+- 状态：已移除
+- 描述：该参数已移除。Bit-unpack 的 SIMD 路径现在在编译期根据 AVX2/BMI2 自动选择，并在不支持时回退到默认实现。
+- 移除版本：-
+
+<EditionSpecificBEItem />
+>>>>>>> 9b5229bd39 ([Doc] Add Edition-specific BE Config Items (#69435))

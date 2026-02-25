@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 設定
 
 <BEConfigMethod />
@@ -2193,8 +2195,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
+<<<<<<< HEAD
 - 可変: はい
 - 説明: `error_urls` デバッグのために、オペレーターがFEハートビートからの元のホスト名を使用するか、環境要件に基づいてIPアドレスへの解決を強制するかを選択できるようにするかどうか。
   - `true`: ホスト名をIPアドレスに変換します。
   - `false` (デフォルト): エラーURLに元のホスト名を保持します。
 - 導入バージョン: v4.0.1
+=======
+- 可変: いいえ
+- 説明: ユーザー定義関数 (UDF) を保存するために使用されるディレクトリ。
+- 導入バージョン: -
+
+<EditionSpecificBEItem />
+>>>>>>> 9b5229bd39 ([Doc] Add Edition-specific BE Config Items (#69435))

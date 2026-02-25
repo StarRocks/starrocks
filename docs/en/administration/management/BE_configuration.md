@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE Configuration
 
 <BEConfigMethod />
@@ -5195,6 +5197,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<<<<<<< HEAD
 <!--
 ##### bitmap_max_filter_ratio
 
@@ -5371,3 +5374,10 @@ When this value is set to less than `0`, the system uses the product of its abso
   - `true`: Resolve hostnames to IPs.
   - `false` (Default): Keeps the original hostname in the error URL.
 - Introduced in: v4.0.1
+=======
+- Status: Removed
+- Description: This parameter has been removed. Bit-unpack SIMD selection is now handled at compile time (AVX2/BMI2) with automatic fallback to the default implementation.
+- Removed in: -
+
+<EditionSpecificBEItem />
+>>>>>>> 9b5229bd39 ([Doc] Add Edition-specific BE Config Items (#69435))
