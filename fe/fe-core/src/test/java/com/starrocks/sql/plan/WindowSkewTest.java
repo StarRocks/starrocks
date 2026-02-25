@@ -23,7 +23,6 @@ import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -298,7 +297,6 @@ class WindowSkewTest extends PlanTestBase {
     }
 
     @Test
-    @Disabled // todo(martinr0x) enable once is merged https://github.com/StarRocks/starrocks/pull/68964
     void testWindowSkewHintWithJoinBeforeWindow() throws Exception {
         // Test that the skew hint works correctly when there is a join before the window function
         final var table = getOlapTable("window_skew_table");
