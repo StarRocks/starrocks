@@ -35,9 +35,13 @@
 #include "exec/exec_factory.h"
 
 #include <fmt/format.h>
+#include <thrift/protocol/TDebugProtocol.h>
 
+#include <sstream>
 #include <string>
+#include <vector>
 
+#include "common/logging.h"
 #include "connector/connector.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/aggregate_streaming_node.h"
@@ -73,6 +77,95 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+
+namespace {
+
+Status check_tuple_ids_in_descs(const DescriptorTbl& descs, const TPlanNode& plan_node) {
+    for (auto id : plan_node.row_tuples) {
+        if (descs.get_tuple_descriptor(id) == nullptr) {
+            std::stringstream ss;
+            ss << "Plan node id: " << plan_node.node_id << ", Tuple ids: ";
+            for (auto tuple_id : plan_node.row_tuples) {
+                ss << tuple_id << ", ";
+            }
+            LOG(ERROR) << ss.str();
+            ss.str("");
+            ss << "DescriptorTbl: " << descs.debug_string();
+            LOG(ERROR) << ss.str();
+            ss.str("");
+            ss << "TPlanNode: " << apache::thrift::ThriftDebugString(plan_node);
+            LOG(ERROR) << ss.str();
+            return Status::InternalError("Tuple ids are not in descs");
+        }
+    }
+
+    return Status::OK();
+}
+
+Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
+                          const DescriptorTbl& descs, int* node_idx, ExecNode** root) {
+    // propagate error case
+    if (*node_idx >= tnodes.size()) {
+        return Status::InternalError("Failed to reconstruct plan tree from thrift.");
+    }
+    const TPlanNode& tnode = tnodes[*node_idx];
+
+    ExecNode* node = nullptr;
+    RETURN_IF_ERROR(check_tuple_ids_in_descs(descs, tnode));
+    RETURN_IF_ERROR(ExecFactory::create_vectorized_node(state, pool, tnode, descs, &node));
+
+    std::vector<ExecNode*> children;
+    children.reserve(tnode.num_children);
+    for (int i = 0; i < tnode.num_children; i++) {
+        ++*node_idx;
+        ExecNode* child = nullptr;
+        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node_idx, &child));
+        children.emplace_back(child);
+
+        // we are expecting a child, but have used all nodes
+        // this means we have been given a bad tree and must fail
+        if (*node_idx >= tnodes.size()) {
+            // TODO: print thrift msg
+            return Status::InternalError("Failed to reconstruct plan tree from thrift.");
+        }
+    }
+    node->set_children(std::move(children));
+
+    RETURN_IF_ERROR(node->init(tnode, state));
+
+    // build up tree of profiles; add children >0 first, so that when we print
+    // the profile, child 0 is printed last (makes the output more readable)
+    const auto& node_children = node->children();
+    for (size_t i = 1; i < node_children.size(); ++i) {
+        node->runtime_profile()->add_child(node_children[i]->runtime_profile(), true, nullptr);
+    }
+
+    if (!node_children.empty()) {
+        node->runtime_profile()->add_child(node_children[0]->runtime_profile(), true, nullptr);
+    }
+
+    *root = node;
+    return Status::OK();
+}
+
+} // namespace
+
+Status ExecFactory::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
+                                ExecNode** root) {
+    if (plan.nodes.empty()) {
+        *root = nullptr;
+        return Status::OK();
+    }
+
+    int node_idx = 0;
+    RETURN_IF_ERROR(create_tree_helper(state, pool, plan.nodes, descs, &node_idx, root));
+
+    if (node_idx + 1 != plan.nodes.size()) {
+        return Status::InternalError("Plan tree only partially reconstructed. Not all thrift nodes were used.");
+    }
+
+    return Status::OK();
+}
 
 Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
                                            const DescriptorTbl& descs, ExecNode** node) {

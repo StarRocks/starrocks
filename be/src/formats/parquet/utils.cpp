@@ -19,8 +19,8 @@
 
 #include <cstring>
 
+#include "base/hash/hash_std.hpp"
 #include "formats/parquet/schema.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks::parquet {
 

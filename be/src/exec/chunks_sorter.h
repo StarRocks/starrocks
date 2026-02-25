@@ -27,8 +27,8 @@
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
-#include "exprs/runtime_filter.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

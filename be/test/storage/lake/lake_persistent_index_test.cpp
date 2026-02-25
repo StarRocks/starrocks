@@ -82,6 +82,7 @@ protected:
         TabletSchemaPB schema_pb;
         schema_pb.set_keys_type(PRIMARY_KEYS);
         schema_pb.set_num_short_key_columns(num_key_columns);
+        schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
         for (int i = 0; i < (int)columns.size(); ++i) {
             auto* c = schema_pb.add_column();
             c->set_name(columns[i].first);
@@ -307,8 +308,10 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
         chunk->append_column(std::move(col), (SlotId)0);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -357,6 +360,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
     auto* schema_pb = tablet_metadata_ptr->mutable_schema();
     schema_pb->clear_sort_key_idxes();
     schema_pb->add_sort_key_idxes(0);
+    schema_pb->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 
     // Configure a tablet range ["key_10", "key_30").
     TabletRangePB* range_pb = tablet_metadata_ptr->mutable_range();
@@ -392,6 +396,106 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
     ASSERT_EQ(encode_key("key_10"), out_sst.range().start_key());
     // end_key is inclusive, so for ["key_10", "key_30") we expect the last key to be "key_29".
     ASSERT_EQ(encode_key("key_29"), out_sst.range().end_key());
+
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    constexpr int N = 30;
+
+    auto* schema_pb = _tablet_metadata->mutable_schema();
+    schema_pb->clear_sort_key_idxes();
+    schema_pb->add_sort_key_idxes(0);
+    schema_pb->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+
+    auto tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    std::vector<ColumnId> pk_columns = {0};
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    auto encode_key = [&](int32_t v) {
+        auto chunk = std::make_unique<Chunk>();
+        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col->append_datum(Datum(v));
+        chunk->append_column(std::move(col), (SlotId)0);
+
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
+    };
+
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    for (int batch = 0; batch < 3; ++batch) {
+        std::vector<std::string> keys;
+        std::vector<Slice> key_slices;
+        std::vector<IndexValue> values;
+        std::vector<IndexValue> upsert_old_values(N);
+        keys.reserve(N);
+        key_slices.reserve(N);
+        values.reserve(N);
+        for (int j = 0; j < N; ++j) {
+            const int key = 100 + batch * N + j;
+            keys.emplace_back(encode_key(key));
+            key_slices.emplace_back(keys.back());
+            values.emplace_back(key * 10);
+        }
+        index->prepare(EditVersion(batch, 0), 0);
+        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
+    }
+
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+
+    TabletRangePB* range_pb = tablet_metadata_ptr->mutable_range();
+    range_pb->Clear();
+    range_pb->mutable_lower_bound()->add_values()->CopyFrom(make_int_variant_pb(100));
+    range_pb->set_lower_bound_included(true);
+    range_pb->mutable_upper_bound()->add_values()->CopyFrom(make_int_variant_pb(200));
+    range_pb->set_upper_bound_included(false);
+
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    ASSERT_OK(index->commit(&builder));
+
+    auto* sstable_meta = tablet_metadata_ptr->mutable_sstable_meta();
+    for (auto& sst_pb : *sstable_meta->mutable_sstables()) {
+        sst_pb.set_shared(true);
+    }
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
+    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
+
+    const auto& out_sst = txn_log->op_compaction().output_sstable();
+    ASSERT_EQ(encode_key(100), out_sst.range().start_key());
+    ASSERT_EQ(encode_key(100 + 3 * N - 1), out_sst.range().end_key());
+
+    ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
+
+    std::vector<std::string> probe_keys = {encode_key(99), encode_key(100), encode_key(150), encode_key(189),
+                                           encode_key(199)};
+    std::vector<Slice> probe_key_slices;
+    probe_key_slices.reserve(probe_keys.size());
+    for (const auto& k : probe_keys) {
+        probe_key_slices.emplace_back(k);
+    }
+
+    std::vector<IndexValue> get_values(probe_keys.size());
+    ASSERT_OK(index->get(probe_key_slices.size(), probe_key_slices.data(), get_values.data()));
+    ASSERT_EQ(NullIndexValue, get_values[0].get_value());
+    ASSERT_EQ(IndexValue(1000), get_values[1]);
+    ASSERT_EQ(IndexValue(1500), get_values[2]);
+    ASSERT_EQ(IndexValue(1890), get_values[3]);
+    ASSERT_EQ(NullIndexValue, get_values[4].get_value());
 
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
@@ -624,8 +728,10 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
         chunk->append_column(std::move(col), (SlotId)0);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -669,8 +775,10 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {

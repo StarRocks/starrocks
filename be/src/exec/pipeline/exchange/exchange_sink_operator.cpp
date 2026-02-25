@@ -22,11 +22,11 @@
 #include <utility>
 
 #include "common/config.h"
-#include "exec/partition/bucket_aware_partition.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
+#include "runtime/bucket_aware_partition.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"

@@ -16,12 +16,12 @@
 #include <map>
 
 #include "base/hash/hash.h"
+#include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "column/column_hash.h"
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h" // for PlanNodeId
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 

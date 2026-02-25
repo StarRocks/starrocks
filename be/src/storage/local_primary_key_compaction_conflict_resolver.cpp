@@ -44,6 +44,10 @@ Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
     return ChunkHelper::convert_schema(schema, pk_columns);
 }
 
+StatusOr<PrimaryKeyEncodingType> LocalPrimaryKeyCompactionConflictResolver::primary_key_encoding_type() const {
+    return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+}
+
 Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
         const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
                                    const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {

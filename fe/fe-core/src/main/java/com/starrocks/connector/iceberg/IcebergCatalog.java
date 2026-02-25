@@ -247,6 +247,17 @@ public interface IcebergCatalog extends MemoryTrackable {
         return new HashMap<>();
     }
 
+    /**
+     * Check if this catalog uses vended credentials for table access.
+     * When vended credentials are used, caching tables may cause issues
+     * because credentials expire before the cache TTL.
+     *
+     * @return true if vended credentials are enabled
+     */
+    default boolean isVendedCredentialsEnabled() {
+        return false;
+    }
+
     default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
         Map<String, String> properties = loadNamespaceMetadata(context, ns);
         String databaseLocation = properties.get(LOCATION_PROPERTY);
@@ -342,6 +353,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                             StructProjection partitionData = row.get(0, StructProjection.class);
                             int specId = row.get(1, Integer.class);
                             PartitionSpec spec = nativeTable.specs().get(specId);
+
+                            // Old partition specs may be referenced in metadata even if they have been deleted. Skip them.
+                            if (spec == null) {
+                                continue;
+                            }
 
                             String partitionName =
                                     PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);

@@ -2914,7 +2914,6 @@ public class StmtExecutor {
         }
 
         // Handle metadata-level delete for Iceberg
-        // execute the delete operation here
         if (stmt instanceof DeleteStmt && execPlan != null && execPlan.isIcebergMetadataDelete()) {
             // Execute metadata-level delete
             IcebergMetadataDeleteNode node = (IcebergMetadataDeleteNode) execPlan.getTopFragment().getPlanRoot();

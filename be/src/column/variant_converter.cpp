@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/variant_converter.h"
+#include "column/variant_converter.h"
 
 #include "types/variant.h"
 

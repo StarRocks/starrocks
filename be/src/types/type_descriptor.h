@@ -371,6 +371,7 @@ static const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(Ty
 static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
 static const TypeDescriptor TYPE_VARBINARY_DESC =
         TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+static const TypeDescriptor TYPE_JSON_DESC = TypeDescriptor::create_json_type();
 
 static const TypeDescriptor TYPE_INT_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_DESC);
 
