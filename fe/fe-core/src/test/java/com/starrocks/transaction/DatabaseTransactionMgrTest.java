@@ -54,6 +54,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -950,5 +951,112 @@ public class DatabaseTransactionMgrTest {
                 () -> masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, null, 1000L));
         assertEquals(TransactionStatus.VISIBLE, txnState.getTransactionStatus());
         lockThread.join();
+    }
+
+    @Test
+    public void testCanTxnFinishedWithLockTimeoutNoContention() throws Exception {
+        String testTxnLabel = StringUtils.generateRandomString(10);
+
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        while (true) { // clean up previous committed transactions
+            List<TransactionState> txnList = masterDbTransMgr.getCommittedTxnList();
+            if (txnList.isEmpty()) {
+                break;
+            }
+            for (TransactionState state : txnList) {
+                if (masterTransMgr.canTxnFinished(state, Sets.newHashSet(), null)) {
+                    masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, state.getTransactionId(), null);
+                }
+            }
+        }
+
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                testTxnLabel,
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
+
+        TransactionState txnState = masterDbTransMgr.getTransactionState(transactionId);
+        assertEquals(TransactionStatus.COMMITTED, txnState.getTransactionStatus());
+
+        // Should succeed with a generous timeout when there is no lock contention
+        Assertions.assertDoesNotThrow(() -> {
+            boolean result = masterTransMgr.canTxnFinished(txnState, Sets.newHashSet(), null,
+                    Config.finish_transaction_default_lock_timeout_ms);
+            Assertions.assertTrue(result);
+        });
+    }
+
+    @Test
+    public void testCanTxnFinishedWithLockTimeout() throws Exception {
+        String testTxnLabel = StringUtils.generateRandomString(10);
+
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        while (true) { // clean up previous committed transactions
+            List<TransactionState> txnList = masterDbTransMgr.getCommittedTxnList();
+            if (txnList.isEmpty()) {
+                break;
+            }
+            for (TransactionState state : txnList) {
+                if (masterTransMgr.canTxnFinished(state, Sets.newHashSet(), null)) {
+                    masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, state.getTransactionId(), null);
+                }
+            }
+        }
+
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                testTxnLabel,
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
+
+        TransactionState txnState = masterDbTransMgr.getTransactionState(transactionId);
+        assertEquals(TransactionStatus.COMMITTED, txnState.getTransactionStatus());
+
+        // Hold a conflicting WRITE lock in a background thread to trigger the read-lock timeout
+        CountDownLatch latchLock = new CountDownLatch(1);
+        CountDownLatch latchUnlock = new CountDownLatch(1);
+        Thread lockThread = new Thread(() -> {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(GlobalStateMgrTestUtil.testDbId1,
+                    GlobalStateMgrTestUtil.testTableId1, LockType.WRITE);
+            latchLock.countDown();
+            try {
+                latchUnlock.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                // ignore
+            }
+            locker.unLockTableWithIntensiveDbLock(GlobalStateMgrTestUtil.testDbId1,
+                    GlobalStateMgrTestUtil.testTableId1, LockType.WRITE);
+        });
+        lockThread.start();
+
+        latchLock.await();
+        // WRITE lock is held — canTxnFinished should time out and throw ERR_LOCK_ERROR
+        LockTimeoutException exception = Assertions.assertThrows(LockTimeoutException.class,
+                () -> masterTransMgr.canTxnFinished(txnState, Sets.newHashSet(), null,
+                        Config.finish_transaction_default_lock_timeout_ms));
+
+        latchUnlock.countDown();
+        lockThread.join();
+
+        // After the WRITE lock is released, canTxnFinished should succeed
+        Assertions.assertDoesNotThrow(() -> {
+            boolean result = masterTransMgr.canTxnFinished(txnState, Sets.newHashSet(), null,
+                    Config.finish_transaction_default_lock_timeout_ms);
+            Assertions.assertTrue(result);
+        });
     }
 }

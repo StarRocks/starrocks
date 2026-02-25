@@ -59,6 +59,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
@@ -986,7 +987,8 @@ public class DatabaseTransactionMgr {
     // check whether transaction can be finished or not
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
-    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends) {
+    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends,
+                                  long lockTimeoutMs) throws LockTimeoutException {
         Database db = globalStateMgr.getLocalMetastore().getDb(txn.getDbId());
         if (db == null) {
             return true;
@@ -994,7 +996,16 @@ public class DatabaseTransactionMgr {
 
         List<Long> tableIdList = txn.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
+        if (lockTimeoutMs > 0) {
+            if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ, lockTimeoutMs,
+                    TimeUnit.MILLISECONDS)) {
+                throw new LockTimeoutException(
+                        "Failed to acquire read lock on database " + db.getId() + ", tables: " + tableIdList
+                                + " within " + lockTimeoutMs + " ms");
+            }
+        } else {
+            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
+        }
         long currentTs = System.currentTimeMillis();
         try {
             // check each table involved in transaction
