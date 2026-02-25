@@ -119,7 +119,7 @@ protected:
     std::unique_ptr<parquet::ParquetOutputStream> _output_stream;
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
-    std::atomic<int> _lazy_column_coalesce_counter;
+    std::atomic<int> _lazy_column_coalesce_counter = 0;
     std::shared_ptr<ParquetWriterOptions> _writer_options;
     TCompressionType::type _compression_type = TCompressionType::NO_COMPRESSION;
 };
