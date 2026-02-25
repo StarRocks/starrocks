@@ -301,4 +301,29 @@ public class LakeTableHelper {
             return Optional.empty();
         }
     }
+
+    /**
+     * Computes the minimum active transaction ID that must be preserved for vacuum operations.
+     * This considers:
+     * 1. Database-level minimum active transaction ID from the global transaction manager
+     * 2. Active schema change jobs' transaction IDs
+     * 3. Active rollup (materialized view) jobs' transaction IDs
+     *
+     * The minimum across all these sources is returned to ensure vacuum does not delete
+     * data still needed by any active operation.
+     *
+     * @param dbId the database ID
+     * @param tableId the table ID
+     * @return the minimum active transaction ID that must be preserved
+     */
+    public static long computeMinActiveTxnId(long dbId, long tableId) {
+        long dbMinTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getMinActiveTxnIdOfDatabase(dbId);
+        Optional<Long> schemaChangeMinTxnId = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .getActiveTxnIdOfTable(tableId);
+        Optional<Long> rollupMinTxnId = GlobalStateMgr.getCurrentState().getRollupHandler()
+                .getActiveTxnIdOfTable(tableId);
+        return Math.min(Math.min(dbMinTxnId, schemaChangeMinTxnId.orElse(Long.MAX_VALUE)),
+                rollupMinTxnId.orElse(Long.MAX_VALUE));
+    }
 }
