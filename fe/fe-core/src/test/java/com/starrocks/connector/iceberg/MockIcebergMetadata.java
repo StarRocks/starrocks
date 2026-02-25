@@ -502,7 +502,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
         readLock();
         try {
-            MockIcebergTable t = MOCK_TABLE_MAP.get(dbName).get(tblName).icebergTable;
+            Map<String, IcebergTableInfo> dbTables = MOCK_TABLE_MAP.get(dbName);
+            if (dbTables == null) {
+                return null;
+            }
+            IcebergTableInfo tableInfo = dbTables.get(tblName);
+            if (tableInfo == null) {
+                return null;
+            }
+            MockIcebergTable t = tableInfo.icebergTable;
             MockIcebergTable t1 = new MockIcebergTable(t.getId(), t.getName(), t.getCatalogName(), t.getResourceName(),
                         t.getCatalogDBName(), t.getCatalogTableName(),
                         t.getBaseSchema(), t.getNativeTable(), t.getIcebergProperties(),
