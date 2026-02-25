@@ -141,7 +141,7 @@ subprojects {
             implementation("commons-validator:commons-validator:1.7")
             implementation("de.jflex:jflex:1.4.3")
             implementation("dnsjava:dnsjava:${project.ext["dnsjava.version"]}")
-            implementation("io.airlift:aircompressor:0.27")
+            implementation("io.airlift:aircompressor:2.0.3")
             implementation("io.airlift:concurrent:202")
             implementation("io.airlift:security:202")
             implementation("io.delta:delta-kernel-api:${project.ext["delta-kernel.version"]}")
