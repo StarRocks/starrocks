@@ -5256,7 +5256,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<<<<<<< HEAD
 <!--
 ##### bitmap_max_filter_ratio
 
@@ -5422,10 +5421,5 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
 - Introduced in: 3.5.1
-=======
-- Status: Removed
-- Description: This parameter has been removed. Bit-unpack SIMD selection is now handled at compile time (AVX2/BMI2) with automatic fallback to the default implementation.
-- Removed in: -
 
 <EditionSpecificBEItem />
->>>>>>> 9b5229bd39 ([Doc] Add Edition-specific BE Config Items (#69435))
