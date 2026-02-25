@@ -45,6 +45,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /*
  * Rule Objective:
@@ -336,9 +337,22 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             throw new SemanticException("Can't find skew column");
         }
 
+        // Validate that each skew value is type-compatible with the column and cast to the column's type
         return skewValues.stream()
-                .filter(v -> v instanceof ConstantOperator)
-                .map(v -> new SkewedInfo(col, (ConstantOperator) v))
+                .map(v -> {
+                    if (!(v instanceof ConstantOperator c)) {
+                        throw new SemanticException("Window skew hint values must be constant");
+                    }
+                    if (c.isNull()) {
+                        return new SkewedInfo(col, ConstantOperator.createNull(col.getType()));
+                    }
+                    Optional<ConstantOperator> cast = c.castTo(col.getType());
+                    if (cast.isEmpty()) {
+                        throw new SemanticException("Window skew hint value type mismatch: " +
+                                c.getType() + " vs " + col.getType());
+                    }
+                    return new SkewedInfo(col, cast.get());
+                })
                 .toList();
     }
 

@@ -468,4 +468,42 @@ class WindowSkewTest extends PlanTestBase {
         Exception e2 = assertThrows(Exception.class, () -> getFragmentPlan(sql2));
         assertContains(e2.getMessage(), "Window skew hint currently supports only a single value, but got 2 values");
     }
+
+    @Test
+    void testWindowSkewHintWithWrongValueType() {
+        // Column 'p' is INT, but the skew hint provides a string value that cannot be cast to INT
+        String sql = "select p, s, sum(x) over ([skew|p('abc')] partition by p order by s) from window_skew_table";
+
+        Exception e = assertThrows(Exception.class, () -> getFragmentPlan(sql));
+        assertContains(e.getMessage(), "Window skew hint value type mismatch");
+    }
+
+    @Test
+    void testWindowSkewHintWithWrongValueTypeDate() throws Exception {
+        // Create a table with a DATE partition column
+        starRocksAssert.withTable(
+                """
+                        CREATE TABLE IF NOT EXISTS `window_skew_table_date` (
+                          `p` date NULL,
+                          `s` int NULL,
+                          `x` int NULL
+                        ) ENGINE=OLAP
+                        DUPLICATE KEY(`p`, `s`, `x`)
+                        DISTRIBUTED BY HASH(`p`) BUCKETS 3
+                        PROPERTIES (
+                          "replication_num" = "1",
+                          "in_memory" = "false"
+                        );
+                        """
+        );
+        final var table = getOlapTable("window_skew_table_date");
+        setTableStatistics(table, 1000);
+
+        // Column 'p' is DATE, but the skew hint provides a non-date string value
+        String sql = "select p, s, sum(x) over ([skew|p('not_a_date')] partition by p order by s) " +
+                "from window_skew_table_date";
+
+        Exception e = assertThrows(Exception.class, () -> getFragmentPlan(sql));
+        assertContains(e.getMessage(), "Window skew hint value type mismatch");
+    }
 }
