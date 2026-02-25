@@ -28,7 +28,6 @@
 #include <ostream>
 #include <utility>
 
-#include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
 #include "formats/file_writer.h"
@@ -39,8 +38,8 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "types/logical_type.h"
 #include "util/debug_util.h"
+#include "util/failpoint/fail_point.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
