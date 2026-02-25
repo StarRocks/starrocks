@@ -9,6 +9,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 配置项
 
 <BEConfigMethod />
@@ -5391,8 +5393,47 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态: 是
 - 描述: 用来控制metrics/接口是否返回表级别的metrics，默认值为true。只有当enable_table_metrics同时为true时才生效。
 
+<<<<<<< HEAD
 ##### max_table_metrics_num
 - 默认值: 100
 - 类型: -
 - 是否动态: 否
 - 描述: table metrics中表的最大数量, metrics/接口最多返回max_table_metrics_num个表的metrics。
+=======
+##### upload_buffer_size
+
+- 默认值：4194304
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：上传快照文件到远端存储时的缓冲区大小（fs::copy 读写块大小）。值越大传输吞吐越高但每个并发上传占用更多内存；可与 upload_worker_count 一起调优。
+- 引入版本：v3.2.13
+
+##### user_function_dir
+
+- 默认值：`${STARROCKS_HOME}/lib/udf`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：UDF 存放的路径。
+- 引入版本：-
+
+##### web_log_bytes
+
+- 默认值: 1048576 (1 MB)
+- 类型: long
+- 单位：Bytes
+- 是否动态：否
+- 描述: 从 INFO 日志文件读取并在 BE 调试 Web Server 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
+- 引入版本: v3.2.0
+
+### 已移除的参数
+
+##### enable_bit_unpack_simd
+
+- 状态：已移除
+- 描述：该参数已移除。Bit-unpack 的 SIMD 路径现在在编译期根据 AVX2/BMI2 自动选择，并在不支持时回退到默认实现。
+- 移除版本：-
+
+<EditionSpecificBEItem />
+>>>>>>> 9b5229bd39 ([Doc] Add Edition-specific BE Config Items (#69435))
