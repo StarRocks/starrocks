@@ -47,6 +47,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.PartitionPublishVersionData;
@@ -364,8 +365,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
         boolean shouldFinishTxn = true;
         if (!allTaskFinished) {
-            shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
-                    publishErrorReplicaIds, unfinishedBackends);
+            try {
+                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
+                        publishErrorReplicaIds, unfinishedBackends,
+                        Config.finish_transaction_default_lock_timeout_ms);
+            } catch (LockTimeoutException exception) {
+                LOG.info("Fail to get lock to check canTxnFinished for transaction {}, error: {}. Will retry later",
+                        transactionState.getTransactionId(), exception.getMessage());
+                return;
+            }
         }
 
         if (shouldFinishTxn) {
