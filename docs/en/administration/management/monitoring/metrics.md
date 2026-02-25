@@ -2039,3 +2039,43 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Cumulative
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total number of delete files removed by Iceberg manual compaction tasks.
+
+### Iceberg write FE metrics
+
+#### iceberg_write_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total number of `INSERT`, `INSERT OVERWRITE`, or `CTAS` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total execution time of Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`) in milliseconds. The duration of each task is added after it ends. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total written bytes from Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the total size of data files written to the Iceberg table. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total written rows from Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the number of rows written to the Iceberg table. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_files
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total number of data files written to Iceberg from write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the count of data files written to the Iceberg table. `write_type` distinguishes between the operation types.
