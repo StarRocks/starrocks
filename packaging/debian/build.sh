@@ -189,7 +189,7 @@ for COMP in "fe" "be" "cn"; do
     CONF_FILE="$STAGING_DIR/etc/starrocks/$COMP/$COMP.conf"
     
     # Portable CR removal and patching
-    sed 's/\r$//' "$CONF_FILE" > "${CONF_FILE}.tmp" && mv "${CONF_FILE}.tmp" "$CONF_FILE"
+    sed -E 's/\r$//' "$CONF_FILE" > "${CONF_FILE}.tmp" && mv "${CONF_FILE}.tmp" "$CONF_FILE"
 
     # Define the key and path based on component
     if [ "$COMP" == "fe" ]; then
