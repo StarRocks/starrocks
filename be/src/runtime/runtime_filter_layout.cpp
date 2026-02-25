@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/runtime_filter_layout.h"
+#include "runtime/runtime_filter_layout.h"
 
 #include <glog/logging.h>
 

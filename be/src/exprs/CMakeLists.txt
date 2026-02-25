@@ -57,7 +57,6 @@ set(EXPR_CORE_FILES
   match_expr.cpp
   placeholder_ref.cpp
   regexp_split.cpp
-  runtime_filter_layout.cpp
   struct_functions.cpp
   subfield_expr.cpp
   table_function/json_each.cpp
@@ -111,7 +110,6 @@ set(EXPR_FILES
   locate.cpp
   percentile_functions.cpp
   runtime_filter_bank.cpp
-  runtime_filter.cpp
   split.cpp
   split_part.cpp
   str_to_map.cpp
