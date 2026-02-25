@@ -137,7 +137,6 @@ case "$1" in
                 echo "Systemd units have been reloaded, but the service was not restarted automatically."
                 echo "Please coordinate a manual restart (or stop/start) of StarRocks $COMP at a safe time to apply configuration or binary changes."
             fi
-            fi
         fi
     ;;
 
