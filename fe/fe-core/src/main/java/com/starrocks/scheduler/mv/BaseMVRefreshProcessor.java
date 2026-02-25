@@ -23,11 +23,9 @@ import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.Table;
@@ -62,7 +60,6 @@ import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
@@ -413,28 +410,17 @@ public abstract class BaseMVRefreshProcessor {
                     throw new DmlException("Force refresh failed, database:" + db.getFullName() + " not exist");
                 }
                 try {
-                    PartitionInfo partitionInfo = mv.getPartitionInfo();
-                    DataProperty dataProperty = null;
-                    if (!mv.isPartitionedTable()) {
-                        String partitionName = toRefreshPartitions.getPartitions().iterator().next().name();
-                        Partition partition = mv.getPartition(partitionName);
-                        dataProperty = partitionInfo.getDataProperty(partition.getId());
-                        mv.dropPartition(db.getId(), partitionName, true /* forceDrop */);
+                    // for non-partitioned MVs, or for complete refresh of partitioned MVs, just clear the visible
+                    // version map directly since all partitions will be refreshed.
+                    if (!mv.isPartitionedTable() || mvRefreshParams.isCompleteRefresh()) {
+                        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                     } else {
                         for (PCellWithName partName : toRefreshPartitions.getPartitions()) {
                             mvRefreshPartitioner.dropPartition(db, mv, partName.name());
                         }
                     }
-
-                    // for non-partitioned table, we need to build the partition here
-                    if (!mv.isPartitionedTable()) {
-                        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-                        ConnectContext connectContext = mvContext.getCtx();
-                        localMetastore.buildNonPartitionOlapTable(db, mv, partitionInfo, dataProperty,
-                                connectContext.getCurrentComputeResource());
-                    }
                 } catch (Exception e) {
-                    logger.warn("failed to drop partitions {} for force refresh",
+                    logger.warn("failed to drop partitions or clear version map {} for force refresh",
                             Joiner.on(",").join(toRefreshPartitions.getPartitionNames()),
                             DebugUtil.getRootStackTrace(e));
                     throw new AnalysisException("failed to drop partitions for force refresh: " + e.getMessage());

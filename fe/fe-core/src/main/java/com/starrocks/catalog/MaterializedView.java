@@ -1219,6 +1219,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // if mv's partition is dropped, we need to update mv's timeliness.
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
                 .triggerTimelessInfoEvent(this, MVTimelinessMgr.MVChangeEvent.MV_PARTITION_DROPPED);
+
+        // Update schema update time to invalidate cached plans
+        lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     @Override
