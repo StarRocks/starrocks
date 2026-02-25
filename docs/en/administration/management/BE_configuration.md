@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE Configuration
 
 <BEConfigMethod />
@@ -5371,3 +5373,5 @@ When this value is set to less than `0`, the system uses the product of its abso
   - `true`: Resolve hostnames to IPs.
   - `false` (Default): Keeps the original hostname in the error URL.
 - Introduced in: v4.0.1
+
+<EditionSpecificBEItem />

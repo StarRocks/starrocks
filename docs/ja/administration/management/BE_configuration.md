@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 設定
 
 <BEConfigMethod />
@@ -2198,3 +2200,5 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `true`: ホスト名をIPアドレスに変換します。
   - `false` (デフォルト): エラーURLに元のホスト名を保持します。
 - 導入バージョン: v4.0.1
+
+<EditionSpecificBEItem />
