@@ -120,7 +120,7 @@ case "$1" in
         fi
 
         # Reload systemd units to pick up changes immediately
-        if [ -d /run/systemd/system ]; then
+        if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
             systemctl daemon-reload >/dev/null 2>&1 || true
 
             # NOTE:
@@ -132,10 +132,12 @@ case "$1" in
             # If a StarRocks component is currently active, inform the administrator
             # so they can perform a coordinated restart (or stop/start) following
             # their operational procedures.
-            if [ -n "$COMP" ] && systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
-                echo "StarRocks $COMP is currently running."
-                echo "Systemd units have been reloaded, but the service was not restarted automatically."
-                echo "Please coordinate a manual restart (or stop/start) of StarRocks $COMP at a safe time to apply configuration or binary changes."
+            if [ -f "/lib/systemd/system/starrocks-$COMP.service" ]; then
+                if systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
+                    echo "StarRocks $COMP is currently running."
+                    echo "Systemd units have been reloaded, but the service was not restarted automatically."
+                    echo "Please coordinate a manual restart (or stop/start) of StarRocks $COMP at a safe time to apply configuration or binary changes."
+                fi
             fi
         fi
     ;;
