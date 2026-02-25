@@ -78,9 +78,8 @@ FileWriter::CommitResult ParquetFileWriter::commit() {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }
 
-    FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_close_failed, {
-        result.io_status.update(Status::IOError("writer close failed by fail point"));
-    });
+    FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_close_failed,
+                               { result.io_status.update(Status::IOError("writer close failed by fail point")); });
 
     if (auto status = _output_stream->Close(); !status.ok()) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close output stream error", status.message())));
