@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.SystemInfoService;
@@ -261,7 +263,8 @@ public class PublishVersionDaemonTest {
                 globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
                 result = Lists.newArrayList(txnState1, txnState2);
 
-                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any);
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
                 result = true;
                 minTimes = 0;
 
@@ -307,7 +310,8 @@ public class PublishVersionDaemonTest {
                 globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
                 result = Lists.newArrayList(txnState1);
 
-                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any);
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
                 result = true;
                 minTimes = 0;
 
@@ -350,9 +354,10 @@ public class PublishVersionDaemonTest {
                 globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
                 result = Lists.newArrayList(txnState3);
 
-                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any);
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
                 result = new mockit.Delegate<Boolean>() {
-                    boolean canTxnFinished(TransactionState state, Set<Long> err, Set<Long> unfinished) {
+                    boolean canTxnFinished(TransactionState state, Set<Long> err, Set<Long> unfinished, long timeout) {
                         canTxnFinishedCallCount.incrementAndGet();
                         return false;
                     }
@@ -417,5 +422,90 @@ public class PublishVersionDaemonTest {
 
         // Even if submission fails, publishingTransactionIds should be cleaned up
         Assertions.assertFalse(daemon3.publishingTransactionIds.contains(txnId1));
+
+        // Test 5: canTxnFinished throws LockTimeoutException - should return early, finishTransaction never called
+        finishedTxnIds.clear();
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public ThreadPoolExecutor getTaskExecutor() {
+                return new SynchronousExecutor();
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+                nodeMgr.getClusterInfo();
+                result = systemInfoService;
+                minTimes = 0;
+                systemInfoService.getBackendIds(false);
+                result = Lists.newArrayList(1L, 2L, 3L);
+                minTimes = 0;
+
+                globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
+                result = Lists.newArrayList(txnState3);
+
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
+                result = new LockTimeoutException("lock timeout");
+
+                globalTransactionMgr.finishTransaction(anyLong, anyLong, (Set<Long>) any, anyLong);
+                result = new mockit.Delegate<Void>() {
+                    void finishTransaction(long db, long txn, Set<Long> err, long timeout) {
+                        finishedTxnIds.add(txn);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        PublishVersionDaemon daemon4 = new PublishVersionDaemon();
+        // ERR_LOCK_ERROR is swallowed with an info log and retried next cycle — must not throw
+        Assertions.assertDoesNotThrow(daemon4::runAfterCatalogReady);
+        // finishTransaction must NOT have been invoked because tryFinishTransaction returned early
+        Assertions.assertEquals(0, finishedTxnIds.size());
+
+        // Test 6: canTxnFinished throws a non-lock StarRocksException - should propagate out of tryFinishTransaction
+        finishedTxnIds.clear();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+                nodeMgr.getClusterInfo();
+                result = systemInfoService;
+                minTimes = 0;
+                systemInfoService.getBackendIds(false);
+                result = Lists.newArrayList(1L, 2L, 3L);
+                minTimes = 0;
+
+                globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
+                result = Lists.newArrayList(txnState3);
+
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
+                result = new StarRocksException("internal non-lock error");
+            }
+        };
+
+        // The non-lock exception propagates from tryFinishTransaction, is caught as Throwable
+        // by the executor's catch block (LOG.error), so runAfterCatalogReady itself does not throw
+        PublishVersionDaemon daemon5 = new PublishVersionDaemon();
+        Assertions.assertDoesNotThrow(daemon5::runAfterCatalogReady);
+        // finishTransaction was never reached because exception was thrown before it
+        Assertions.assertEquals(0, finishedTxnIds.size());
     }
 }
