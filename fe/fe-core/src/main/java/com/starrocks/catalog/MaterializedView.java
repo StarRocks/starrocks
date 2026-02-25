@@ -406,6 +406,38 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.mvPartitionNameRefBaseTablePartitionMap.clear();
         }
 
+        public void clearVisibleVersionMapByMVPartitions(Set<String> mvPartitionNames) {
+            if (CollectionUtils.isEmpty(mvPartitionNames)) {
+                return;
+            }
+            LOG.info("Clear materialized view's version map by mv partitions: {}", mvPartitionNames);
+
+            Set<String> associatedBasePartitionNames = Sets.newHashSet();
+            for (String mvPartitionName : mvPartitionNames) {
+                Set<String> associatedPartitions = this.mvPartitionNameRefBaseTablePartitionMap.remove(mvPartitionName);
+                if (CollectionUtils.isNotEmpty(associatedPartitions)) {
+                    associatedBasePartitionNames.addAll(associatedPartitions);
+                }
+            }
+
+            for (Map<String, BasePartitionInfo> partitionInfos : this.baseTableVisibleVersionMap.values()) {
+                clearPartitionInfosByMVPartitions(partitionInfos, mvPartitionNames, associatedBasePartitionNames);
+            }
+            for (Map<String, BasePartitionInfo> partitionInfos : this.baseTableInfoVisibleVersionMap.values()) {
+                clearPartitionInfosByMVPartitions(partitionInfos, mvPartitionNames, associatedBasePartitionNames);
+            }
+        }
+
+        private static void clearPartitionInfosByMVPartitions(Map<String, BasePartitionInfo> partitionInfos,
+                                                              Set<String> mvPartitionNames,
+                                                              Set<String> associatedBasePartitionNames) {
+            if (MapUtils.isEmpty(partitionInfos)) {
+                return;
+            }
+            partitionInfos.entrySet().removeIf(entry ->
+                    mvPartitionNames.contains(entry.getKey()) || associatedBasePartitionNames.contains(entry.getKey()));
+        }
+
         public boolean isDefineStartTime() {
             return defineStartTime;
         }

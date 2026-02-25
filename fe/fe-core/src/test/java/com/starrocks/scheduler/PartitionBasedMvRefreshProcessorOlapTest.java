@@ -2985,6 +2985,79 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 });
     }
 
+    @Test
+    public void testForceRefreshSpecificPartitionDoesNotRecreatePartition() throws Exception {
+        starRocksAssert.withTable(new MTable("tt_partial_force_refresh", "k2",
+                        List.of(
+                                "k1 date",
+                                "k2 int",
+                                "v1 int"
+                        ),
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))"
+                        )
+                ).withValues(List.of(
+                        "('2021-12-02',2,10)",
+                        "('2022-01-02',2,10)",
+                        "('2022-02-02',2,10)"
+                )),
+                () -> {
+                    starRocksAssert.withRefreshedMaterializedView("create materialized view test_mv_partial_force_refresh \n" +
+                            "partition by k1 \n" +
+                            "distributed by random \n" +
+                            "refresh deferred manual\n" +
+                            "properties('partition_refresh_strategy' = 'force')\n" +
+                            "as select * from tt_partial_force_refresh;");
+                    MaterializedView mv = getMv("test_mv_partial_force_refresh");
+
+                    long p0IdBefore = mv.getPartition("p0").getId();
+                    long p1IdBefore = mv.getPartition("p1").getId();
+                    long p2IdBefore = mv.getPartition("p2").getId();
+                    long p0VersionBefore = mv.getPartition("p0").getDefaultPhysicalPartition().getVisibleVersion();
+                    long p1VersionBefore = mv.getPartition("p1").getDefaultPhysicalPartition().getVisibleVersion();
+                    long p2VersionBefore = mv.getPartition("p2").getDefaultPhysicalPartition().getVisibleVersion();
+
+                    executeInsertSql(connectContext, "insert into tt_partial_force_refresh partition(p1) " +
+                            "values('2022-01-15',3,20);");
+
+                    starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW test_mv_partial_force_refresh " +
+                            "PARTITION START ('2022-01-01') END ('2022-02-01') FORCE");
+
+                    String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                    long taskId = tm.getTask(mvTaskName).getId();
+                    int waitCount = 0;
+                    while (waitCount++ < 120 && (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null
+                            || tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName)).isEmpty())) {
+                        Thread.sleep(1000);
+                    }
+
+                    Map<String, List<TaskRunStatus>> statusMap =
+                            tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
+                    Assertions.assertNotNull(statusMap, "Status map should not be null");
+                    Assertions.assertFalse(statusMap.isEmpty() || statusMap.get(mvTaskName) == null
+                                    || statusMap.get(mvTaskName).isEmpty(),
+                            "Timed out waiting for MV refresh to produce a TaskRunStatus entry");
+                    TaskRunStatus status = statusMap.get(mvTaskName).get(0);
+                    Assertions.assertEquals(Constants.TaskRunState.SUCCESS, status.getState(),
+                            "Force refresh for a specific partition should succeed");
+
+                    Assertions.assertEquals(p0IdBefore, mv.getPartition("p0").getId());
+                    Assertions.assertEquals(p1IdBefore, mv.getPartition("p1").getId());
+                    Assertions.assertEquals(p2IdBefore, mv.getPartition("p2").getId());
+
+                    Assertions.assertEquals(p0VersionBefore,
+                            mv.getPartition("p0").getDefaultPhysicalPartition().getVisibleVersion());
+                    Assertions.assertTrue(
+                            mv.getPartition("p1").getDefaultPhysicalPartition().getVisibleVersion() > p1VersionBefore);
+                    Assertions.assertEquals(p2VersionBefore,
+                            mv.getPartition("p2").getDefaultPhysicalPartition().getVisibleVersion());
+                });
+    }
+
     /**
      * Test that force refresh for non-partitioned MV clears the visible version map directly.
      * Verifies the refresh succeeds without dropping partitions.
