@@ -4,7 +4,7 @@ This directory contains the scripts and metadata required to build standard `.de
 
 ## Prerequisites
 - **Bash 4.0+**
-- **dpkg-dev** (specifically `dpkg-deb` version >= 1.19.0 for `--root-owner-group` support)
+- **dpkg** (providing `dpkg-deb` version >= 1.19.0 for `--root-owner-group` support)
 - **StarRocks build artifacts**: You must build StarRocks from source first to generate the `out/` directories.
 
 ## Building Packages
