@@ -27,6 +27,8 @@ import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
 
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
+import static org.apache.iceberg.TableProperties.DELETE_PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 
 /**
  * IcebergDeleteSink is used to support delete operations to Iceberg tables.
@@ -64,7 +66,10 @@ public class IcebergDeleteSink extends DataSink {
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
         this.targetTableId = icebergTable.getId();
         this.tableIdentifier = icebergTable.getUUID();
-        this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
+        // Priority: write.delete.parquet.compression-codec > write.parquet.compression-codec > session variable
+        this.compressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION,
+                nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
+                        sessionVariable.getConnectorSinkCompressionCodec()));
         this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
                 sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
     }
