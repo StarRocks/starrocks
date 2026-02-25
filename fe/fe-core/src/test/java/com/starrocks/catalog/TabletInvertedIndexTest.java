@@ -23,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -41,17 +42,17 @@ public class TabletInvertedIndexTest {
     @BeforeEach
     public void setUp() {
         tabletInvertedIndex = new TabletInvertedIndex();
-        
+
         // Create test tablet meta
         tabletMeta = new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD);
-        
+
         // Create test replicas
-        replica1 = new Replica(100L, 1000L, 1L, 123, 0L, 0L, 
-                              Replica.ReplicaState.NORMAL, -1L, 1L);
-        replica2 = new Replica(101L, 1001L, 1L, 123, 0L, 0L, 
-                              Replica.ReplicaState.NORMAL, -1L, 1L);
-        replica3 = new Replica(102L, 1002L, 1L, 123, 0L, 0L, 
-                              Replica.ReplicaState.NORMAL, -1L, 1L);
+        replica1 = new Replica(100L, 1000L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        replica2 = new Replica(101L, 1001L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        replica3 = new Replica(102L, 1002L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
     }
 
     @Test
@@ -64,21 +65,27 @@ public class TabletInvertedIndexTest {
         tabletInvertedIndex.addReplica(tabletId, replica3);
 
         // When: Get replicas for the tablet
-        Map<Long, Replica> replicas = tabletInvertedIndex.getReplicas(tabletId);
+        //Map<Long, Replica> replicas = tabletInvertedIndex.getReplicas(tabletId);
+        List<Replica> replicas = tabletInvertedIndex.getReplicasByTabletId(tabletId);
 
         // Then: Verify the result
         Assertions.assertNotNull(replicas, "Replicas map should not be null");
         Assertions.assertEquals(3, replicas.size(), "Should have 3 replicas");
-        
-        // Verify each replica is present
-        Assertions.assertTrue(replicas.containsKey(1000L), "Should contain replica on backend 1000");
-        Assertions.assertTrue(replicas.containsKey(1001L), "Should contain replica on backend 1001");
-        Assertions.assertTrue(replicas.containsKey(1002L), "Should contain replica on backend 1002");
-        
+
+        Assertions.assertTrue(replicas.stream().anyMatch(replica -> replica.getBackendId() == 1000L),
+                "Should contain replica on backend 1000");
+        Assertions.assertTrue(replicas.stream().anyMatch(replica -> replica.getBackendId() == 1001L),
+                "Should contain replica on backend 1001");
+        Assertions.assertTrue(replicas.stream().anyMatch(replica -> replica.getBackendId() == 1002L),
+                "Should contain replica on backend 1002");
+
         // Verify replica details
-        Assertions.assertEquals(replica1, replicas.get(1000L), "Replica on backend 1000 should match");
-        Assertions.assertEquals(replica2, replicas.get(1001L), "Replica on backend 1001 should match");
-        Assertions.assertEquals(replica3, replicas.get(1002L), "Replica on backend 1002 should match");
+        Assertions.assertTrue(replicas.stream().anyMatch(replica -> replica.equals(replica1)),
+                "Replica on backend 1000 should match");
+        Assertions.assertTrue(replicas.stream().anyMatch(replica -> replica.equals(replica2)),
+                "Replica on backend 1001 should match");
+        Assertions.assertTrue(replicas.stream().anyMatch(replica -> replica.equals(replica3)),
+                "Replica on backend 1002 should match");
     }
 
     @Test
@@ -120,8 +127,8 @@ public class TabletInvertedIndexTest {
             long start = System.currentTimeMillis();
             for (int i = 0; i < repeats; ++i) {
                 for (int j = 0; j < diskNum; ++j) {
-                    result1.put(diskHashes[j],
-                            tabletInvertedIndex.getTabletNumByBackendIdAndPathHash(backendId, diskHashes[j]));
+                    Map<Long, Long> pathHashToTabletNum = tabletInvertedIndex.getTabletNumByBackendIdGroupByPathHash(backendId);
+                    result1.put(diskHashes[j], pathHashToTabletNum.get(diskHashes[j]));
                 }
             }
             long end = System.currentTimeMillis();
