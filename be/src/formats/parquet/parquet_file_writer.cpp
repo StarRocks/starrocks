@@ -39,11 +39,8 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD
 #include "types/logical_type.h"
 #include "util/debug_util.h"
-=======
->>>>>>> 02bb88cf02 ([BugFix] Make the PartitionChunkWriter::commit_file function return a status value. (#69473))
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {

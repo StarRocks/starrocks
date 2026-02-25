@@ -15,11 +15,8 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
 #include "common/status.h"
-=======
 #include "common/thread/threadpool.h"
->>>>>>> 02bb88cf02 ([BugFix] Make the PartitionChunkWriter::commit_file function return a status value. (#69473))
 #include "connector/connector_sink_profile.h"
 #include "connector/utils.h"
 #include "exec/sorting/sorting.h"
