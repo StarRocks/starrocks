@@ -684,7 +684,7 @@ public class MaterializedViewAnalyzer {
                         }
                     }
                     indexes.add(new Index(indexDef.getIndexName(), columnIds, indexDef.getIndexType(),
-                            indexDef.getComment()));
+                            indexDef.getComment(), indexDef.getProperties()));
                     indexMultiMap.put(indexDef.getIndexName().toLowerCase(), 1);
                     colMultiMap.put(String.join(",", indexDef.getColumns()), 1);
                 }
