@@ -31,10 +31,10 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "exprs/runtime_filter.h"
 #include "gen_cpp/Metrics_types.h"
 #include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_filter.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

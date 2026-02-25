@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/runtime_filter.h"
+#include "runtime/runtime_filter.h"
 
 #include "base/simd/simd.h"
 #include "types/logical_type_infra.h"

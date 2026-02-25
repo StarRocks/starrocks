@@ -25,9 +25,9 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
-#include "exprs/runtime_filter.h"
 #include "gutil/port.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_filter.h"
 
 namespace starrocks {
 

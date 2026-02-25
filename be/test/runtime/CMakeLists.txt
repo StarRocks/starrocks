@@ -18,6 +18,7 @@ set(RUNTIME_CORE_TEST_FILES
     mem_tracker_test.cpp
     mem_pool_test.cpp
     runtime_state_core_test.cpp
+    runtime_filter_core_test.cpp
     memory/mem_chunk_allocator_test.cpp
     memory/system_allocator_test.cpp
     memory/memory_resource_test.cpp

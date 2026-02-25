@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/partition/bucket_aware_partition.h"
+#include "runtime/bucket_aware_partition.h"
 
 #include "column/nullable_column.h"
 #include "gutil/casts.h"

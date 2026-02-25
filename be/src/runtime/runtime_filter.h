@@ -27,11 +27,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
-#include "exec/partition/bucket_aware_partition.h"
-#include "exec/pipeline/exchange/shuffler.h"
-#include "exprs/runtime_filter_layout.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/bucket_aware_partition.h"
+#include "runtime/runtime_filter_layout.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

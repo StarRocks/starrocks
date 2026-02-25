@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/expr.h"
-#include "exprs/runtime_filter.h"
+#include "runtime/runtime_filter.h"
 
 namespace starrocks {
 template <LogicalType Type>

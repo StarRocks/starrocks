@@ -17,8 +17,8 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
-#include "exprs/runtime_filter.h"
 #include "gtest/gtest.h"
+#include "runtime/runtime_filter.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

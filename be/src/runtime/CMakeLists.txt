@@ -23,6 +23,9 @@ set(RUNTIME_CORE_FILES
     runtime_state.cpp
     mem_tracker.cpp
     mem_pool.cpp
+    runtime_filter.cpp
+    runtime_filter_layout.cpp
+    bucket_aware_partition.cpp
     starrocks_metrics.cpp
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
