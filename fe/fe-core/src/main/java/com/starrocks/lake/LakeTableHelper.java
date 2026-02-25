@@ -257,4 +257,75 @@ public class LakeTableHelper {
                 sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
                 sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
+<<<<<<< HEAD
+=======
+
+    // for now, only loading txn and compaction txn support combined txn log
+    public static boolean isTransactionSupportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
+        return isLoadingTransaction(sourceType) || sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION;
+    }
+
+    // if one of the tables in tableIdList is LakeTable with file bundling, return true
+    // else return false
+    public static boolean fileBundling(long dbId, List<Long> tableIdList) {
+        if (!RunMode.isSharedDataMode()) {
+            return false;
+        }
+        // for each tableIdList
+        for (Long tableId : tableIdList) {
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+            if (table == null) {
+                continue;
+            }
+            // check if table is LakeTable with file bundling
+            if (table.isFileBundling()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static Optional<Long> extractIdFromPath(String path) {
+        if (path == null) {
+            return Optional.empty();
+        }
+    
+        int lastSlashIndex = path.lastIndexOf('/');
+        if (lastSlashIndex == -1 || lastSlashIndex == path.length() - 1) {
+            return Optional.empty();
+        }
+    
+        String idPart = path.substring(lastSlashIndex + 1);
+        try {
+            return Optional.of(Long.parseLong(idPart));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Computes the minimum active transaction ID that must be preserved for vacuum operations.
+     * This considers:
+     * 1. Database-level minimum active transaction ID from the global transaction manager
+     * 2. Active schema change jobs' transaction IDs
+     * 3. Active rollup (materialized view) jobs' transaction IDs
+     *
+     * The minimum across all these sources is returned to ensure vacuum does not delete
+     * data still needed by any active operation.
+     *
+     * @param dbId the database ID
+     * @param tableId the table ID
+     * @return the minimum active transaction ID that must be preserved
+     */
+    public static long computeMinActiveTxnId(long dbId, long tableId) {
+        long dbMinTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getMinActiveTxnIdOfDatabase(dbId);
+        Optional<Long> schemaChangeMinTxnId = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .getActiveTxnIdOfTable(tableId);
+        Optional<Long> rollupMinTxnId = GlobalStateMgr.getCurrentState().getRollupHandler()
+                .getActiveTxnIdOfTable(tableId);
+        return Math.min(Math.min(dbMinTxnId, schemaChangeMinTxnId.orElse(Long.MAX_VALUE)),
+                rollupMinTxnId.orElse(Long.MAX_VALUE));
+    }
+>>>>>>> e43208390b ([BugFix] Consider rollup handler's active transaction ID in computeMinActiveTxnId (#69285))
 }
