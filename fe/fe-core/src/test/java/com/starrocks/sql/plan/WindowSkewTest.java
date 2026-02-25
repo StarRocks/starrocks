@@ -296,6 +296,7 @@ class WindowSkewTest extends PlanTestBase {
         assertNotContains(plan, "UNION");
         assertContains(plan, "ANALYTIC");
     }
+
     @Test
     void testWindowSkewHintWithJoinBeforeWindow() throws Exception {
         // Test that the skew hint works correctly when there is a join before the window function
@@ -308,7 +309,6 @@ class WindowSkewTest extends PlanTestBase {
         setTableStatistics(joinTable, 500);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
-
 
         String sql = "select a.p, a.s, b.val, sum(a.x) over (partition by a.p order by a.s) " +
                 "from window_skew_table a " +
