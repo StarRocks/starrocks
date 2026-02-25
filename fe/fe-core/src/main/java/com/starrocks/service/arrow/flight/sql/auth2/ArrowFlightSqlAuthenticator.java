@@ -14,6 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql.auth2;
 
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallStatus;
@@ -62,10 +63,21 @@ public class ArrowFlightSqlAuthenticator implements CallHeaderAuthenticator {
         try {
             sessionManager.validateToken(token);
         } catch (IllegalArgumentException e) {
+            // Token not found locally - if proxy is enabled and token is from a valid FE, allow through.
+            if (isProxyEnabled()) {
+                String feHost = ArrowFlightSqlSessionManager.extractFeHost(token);
+                if (feHost != null && ArrowFlightSqlSessionManager.isValidFeHost(feHost)) {
+                    return createAuthResult(token);
+                }
+            }
             throw CallStatus.UNAUTHENTICATED.withCause(e).withDescription(e.getMessage()).toRuntimeException();
         }
 
         return createAuthResult(token);
+    }
+
+    private boolean isProxyEnabled() {
+        return GlobalVariable.isArrowFlightProxyEnabled();
     }
 
     private AuthResult createAuthResult(String token) {
