@@ -9,6 +9,7 @@ Group=starrocks
 RuntimeDirectory=starrocks
 RuntimeDirectoryMode=0750
 ExecStart=/usr/lib/starrocks/cn/bin/start_cn.sh
+ExecStop=/usr/lib/starrocks/cn/bin/stop_cn.sh
 Restart=always
 RestartSec=5
 LimitNOFILE=262144

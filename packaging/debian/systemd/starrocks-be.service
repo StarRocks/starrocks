@@ -9,6 +9,7 @@ Group=starrocks
 RuntimeDirectory=starrocks
 RuntimeDirectoryMode=0750
 ExecStart=/usr/lib/starrocks/be/bin/start_be.sh
+ExecStop=/usr/lib/starrocks/be/bin/stop_be.sh
 Restart=on-failure
 LimitNOFILE=262144
 LimitMEMLOCK=infinity
