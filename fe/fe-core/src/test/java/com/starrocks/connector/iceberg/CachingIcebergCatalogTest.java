@@ -416,6 +416,91 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testGetTableBypassCacheWhenVendedCredentialsEnabled(@Mocked IcebergRESTCatalog restCatalog) {
+        // When vended credentials is enabled, caching should be bypassed to avoid
+        // using expired credentials.
+        ConnectContext ctx = new ConnectContext();
+        Table nativeTable1 = createBaseTableWithManifests(1, 1);
+        Table nativeTable2 = createBaseTableWithManifests(1, 1);
+
+        new Expectations() {
+            {
+                restCatalog.isVendedCredentialsEnabled();
+                result = true;
+                minTimes = 0;
+
+                restCatalog.getTable(ctx, "db4", "tbl4");
+                result = nativeTable1;
+                result = nativeTable2;
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        Table result1 = cachingIcebergCatalog.getTable(ctx, "db4", "tbl4");
+        Table result2 = cachingIcebergCatalog.getTable(ctx, "db4", "tbl4");
+
+        // Should return different instances (no caching)
+        Assertions.assertSame(nativeTable1, result1);
+        Assertions.assertSame(nativeTable2, result2);
+    }
+
+    @Test
+    public void testGetTableWithCacheWhenVendedCredentialsDisabled(@Mocked IcebergRESTCatalog restCatalog) {
+        // When vended credentials is disabled, normal caching should work.
+        ConnectContext ctx = new ConnectContext();
+        Table nativeTable = createBaseTableWithManifests(1, 1);
+
+        new Expectations() {
+            {
+                restCatalog.isVendedCredentialsEnabled();
+                result = false;
+                minTimes = 0;
+
+                restCatalog.getTable(ctx, "db5", "tbl5");
+                result = nativeTable;
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        Table result1 = cachingIcebergCatalog.getTable(ctx, "db5", "tbl5");
+        Table result2 = cachingIcebergCatalog.getTable(ctx, "db5", "tbl5");
+
+        // Should return the same instance (cached)
+        Assertions.assertSame(nativeTable, result1);
+        Assertions.assertSame(nativeTable, result2);
+        Assertions.assertSame(result1, result2);
+    }
+
+    @Test
+    public void testGetCatalogPropertiesDelegatesToWrappedCatalog() {
+        Map<String, String> expectedProperties = new HashMap<>();
+        expectedProperties.put("s3.access-key-id", "test-key");
+        expectedProperties.put("s3.secret-access-key", "test-secret");
+
+        // Use Mockito for this test since JMockit doesn't properly handle default interface methods
+        IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(delegate.getCatalogProperties()).thenReturn(expectedProperties);
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        Map<String, String> actualProperties = cachingIcebergCatalog.getCatalogProperties();
+        Assertions.assertEquals(expectedProperties, actualProperties);
+        Assertions.assertEquals("test-key", actualProperties.get("s3.access-key-id"));
+        Assertions.assertEquals("test-secret", actualProperties.get("s3.secret-access-key"));
+
+        // Verify that getCatalogProperties was called on the delegate
+        Mockito.verify(delegate).getCatalogProperties();
+    }
+
+    @Test
+>>>>>>> be5b3de4d8 ([Enhancement] Bypass caching in CachingIcebergCatalog when vended credentials are enabled (#69434))
     public void testCacheFreshnessBug(@Mocked IcebergCatalog delegate, @Mocked PartitionSpec spec) {
         //this test will fail on 3.5.9
         System.out.println("===========Starting testCacheFreshnessBug==========");
