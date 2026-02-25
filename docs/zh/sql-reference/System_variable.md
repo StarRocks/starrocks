@@ -713,6 +713,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会显示最近 100 条开启了 `enable_profile` 的查询的 profile。
 
+### profile_log_latency_threshold_ms
+
+* **范围**: Session
+* **描述**: 写入 `fe.profile.log` 的查询最小延迟（毫秒）。仅当查询执行时间大于或等于该值时才记录 profile。设为 `-1`（默认）时使用 FE 配置项 `profile_log_latency_threshold_ms`。设为 `0` 时记录所有 profile。设为正数（如 `1000`）时仅记录延迟 ≥ 该值（毫秒）的查询。可通过该会话变量按连接覆盖集群级配置。
+* **默认值**: -1
+* **类型**: long
+* **单位**: 毫秒
+
 ### enable_query_cache
 
 * 描述：是否开启 Query Cache。取值范围：true 和 false。true 表示开启，false 表示关闭（默认值）。开启该功能后，只有当查询满足[Query Cache](../using_starrocks/caching/query_cache.md#应用场景) 所述条件时，才会启用 Query Cache。

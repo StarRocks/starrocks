@@ -238,7 +238,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled; when `enable_profile_log_compress` is enabled, the JSON may be gzipped before logging. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage).
+- Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled; when `enable_profile_log_compress` is enabled, the JSON may be gzipped before logging. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage). Which queries are logged can be further filtered by `profile_log_latency_threshold_ms`.
 - Introduced in: v3.2.5
 
 ##### `enable_qe_slow_log`
@@ -420,6 +420,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: Directory where FE profile logs are written. Log4jConfig uses this value to place profile-related appenders (creates files like `fe.profile.log` and `fe.features.log` under this directory). Rotation and retention for these files are governed by `profile_log_roll_size_mb`, `profile_log_roll_num` and `profile_log_delete_age`; the timestamp suffix format is controlled by `profile_log_roll_interval` (supports DAY or HOUR). Because the default directory is under `STARROCKS_HOME_DIR`, ensure the FE process has write and rotation/delete permissions on this directory.
 - Introduced in: v3.2.5
+
+##### `profile_log_latency_threshold_ms`
+
+- Default: 0
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum query latency (in milliseconds) for a profile to be written to `fe.profile.log`. Only queries whose execution time is greater than or equal to this value are logged. Set to 0 to log all profiles (no threshold). Use a positive value to reduce log volume by logging only slower queries.
+- Introduced in: -
+
 
 ##### `profile_log_roll_interval`
 

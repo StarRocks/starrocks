@@ -309,6 +309,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean enable_profile_log = true;
+    @ConfField(mutable = true, comment = "Minimum query latency (ms) to log a profile to fe.profile.log. " +
+            "Only queries with latency >= this value are logged. 0 means log all profiles (no threshold).")
+    public static long profile_log_latency_threshold_ms = 0;
     @ConfField
     public static String profile_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
