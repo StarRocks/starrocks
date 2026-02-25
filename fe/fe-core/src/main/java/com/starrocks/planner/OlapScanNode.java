@@ -1526,7 +1526,7 @@ public class OlapScanNode extends ScanNode {
                 if (materializedIndex == null) {
                     throw new RuntimeException(String.format("Materialized index with meta id %d " +
                                     "not found in partition %s (physical partition id: %d) of table %s. ",
-                            index.indexMetaId, partition.getName(), physicalPartition.getId(), olapTable.getName()));
+                            materializedIndex.indexMetaId, partition.getName(), physicalPartition.getId(), olapTable.getName()));
                 }
                 for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
                     tabletToPartitionMap.put(tabletId, physicalPartition.getId());
@@ -1540,7 +1540,7 @@ public class OlapScanNode extends ScanNode {
             if (!tabletToPartitionMap.containsKey(tabletId)) {
                 throw new RuntimeException(String.format("Invalid tablet id: '%d'. The tablet may have been dropped. " +
                                 "Selected partitions: %s, Table: %s, IndexMetaId: %d. ",
-                        tabletId, selectedPartitionIds, olapTable.getName(), index.indexMetaId));
+                        tabletId, selectedPartitionIds, olapTable.getName(), materializedIndex.indexMetaId));
             }
             long partitionId = tabletToPartitionMap.get(tabletId);
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
