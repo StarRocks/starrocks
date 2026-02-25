@@ -50,6 +50,20 @@ class WindowSkewTest extends PlanTestBase {
                         );
                         """
         );
+        starRocksAssert.withTable(
+                """
+                        CREATE TABLE `window_skew_table_join` (
+                          `id` int NULL,
+                          `val` int NULL
+                        ) ENGINE=OLAP
+                        DUPLICATE KEY(`id`, `val`)
+                        DISTRIBUTED BY HASH(`id`) BUCKETS 3
+                        PROPERTIES (
+                          "replication_num" = "1",
+                          "in_memory" = "false"
+                        );
+                        """
+        );
 
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
@@ -283,6 +297,35 @@ class WindowSkewTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
 
         assertNotContains(plan, "UNION");
+        assertContains(plan, "ANALYTIC");
+    }
+    @Test
+    void testWindowSkewHintWithJoinBeforeWindow() throws Exception {
+        // Test that the skew hint works correctly when there is a join before the window function
+        final var table = getOlapTable("window_skew_table");
+        final var joinTable = getOlapTable("window_skew_table_join");
+
+        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
+        setTableStatistics(table, 1000);
+        setTableStatistics(joinTable, 500);
+        statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
+        statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
+
+
+        String sql = "select a.p, a.s, b.val, sum(a.x) over (partition by a.p order by a.s) " +
+                "from window_skew_table a " +
+                "join [skew|b.id(NULL)] window_skew_table_join b on a.p = b.id";
+        String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
+
+        // Verify UNION rewrite is triggered
+        assertContains(plan, "UNION");
+        // Verify JOIN is present in the plan
+        assertContains(plan, "JOIN");
+        // Verify the NULL/NOT NULL predicates for skew handling
+        assertContains(plan, "IS NULL");
+        assertContains(plan, "IS NOT NULL");
+        // Verify ANALYTIC window function is present
         assertContains(plan, "ANALYTIC");
     }
 }
