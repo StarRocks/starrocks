@@ -204,8 +204,8 @@ void ConnectorScanOperatorFactory::detach_shared_input(int32_t operator_seq, int
     }
 }
 
-void ConnectorScanOperatorFactory::mark_split_source_morsel_finished() {
-    morsel_queue_factory()->mark_split_source_morsel_finished();
+Status ConnectorScanOperatorFactory::mark_split_source_morsel_finished() {
+    return morsel_queue_factory()->mark_split_source_morsel_finished();
 }
 
 // ===============================================================
@@ -602,9 +602,9 @@ Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     return Status::OK();
 }
 
-void ConnectorScanOperator::mark_split_source_morsel_finished() {
+Status ConnectorScanOperator::mark_split_source_morsel_finished() {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    factory->mark_split_source_morsel_finished();
+    return factory->mark_split_source_morsel_finished();
 }
 
 int64_t ConnectorScanOperator::get_scan_table_id() const {
@@ -683,18 +683,26 @@ ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_
     return f->_io_tasks_mem_limiter;
 }
 
-void ConnectorChunkSource::_report_split_source_morsel_finished_once() {
+Status ConnectorChunkSource::_report_split_source_morsel_finished_once() {
     if (!_is_split_source_morsel || _split_source_morsel_reported) {
-        return;
+        return Status::OK();
     }
 
     auto* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
-    scan_op->mark_split_source_morsel_finished();
+    RETURN_IF_ERROR(scan_op->mark_split_source_morsel_finished());
     _split_source_morsel_reported = true;
+    return Status::OK();
 }
 
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
+
+    // Ensure split-source completion is reported even when this chunk source
+    // exits through non-EOF paths (cancel/close/error/limit reach).
+    Status report_status = _report_split_source_morsel_finished_once();
+    LOG_IF(WARNING, !report_status.ok()) << "mark split source morsel finished failed, fragment_instance_id="
+                                         << print_id(state->fragment_instance_id())
+                                         << ", error=" << report_status.to_string();
 
     if (_enable_adaptive_io_tasks) {
         MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
@@ -812,75 +820,78 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     ConnectorScanOperatorAdaptiveProcessor& P = *(scan_op->adaptive_processor());
 
     DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
+    auto is_terminal_status = [](const Status& st) {
+        return st.is_end_of_file() || st.is_cancelled() || (!st.ok() && !st.is_time_out() && !st.is_eagain());
+    };
 
-    int64_t total_time_ns = 0;
-    int64_t delta_io_time_ns = 0;
-    int64_t delta_scan_bytes = 0;
-    {
-        SCOPED_RAW_TIMER(&total_time_ns);
-        int64_t prev_io_time_ns = get_io_time_spent();
-        int64_t prev_scan_bytes = get_scan_bytes();
+    Status ret = [&]() -> Status {
+        int64_t total_time_ns = 0;
+        int64_t delta_io_time_ns = 0;
+        int64_t delta_scan_bytes = 0;
+        {
+            SCOPED_RAW_TIMER(&total_time_ns);
+            int64_t prev_io_time_ns = get_io_time_spent();
+            int64_t prev_scan_bytes = get_scan_bytes();
 
-        bool mem_alloc_failed = false;
-        RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
-        if (mem_alloc_failed) {
-            _mem_alloc_failed_count += 1;
-            return Status::EAgain("");
-        }
-        if (state->is_cancelled()) {
-            return Status::Cancelled("canceled state");
-        }
-
-        // Improve for select * from table limit x, x is small
-        if (_reach_eof()) {
-            _reach_limit.store(true);
-            return Status::EndOfFile("limit reach");
-        }
-
-        while (_status.ok()) {
-            ChunkPtr tmp;
-            _status = _data_source->get_next(state, &tmp);
-            if (_status.ok()) {
-                if (tmp->num_rows() == 0) continue;
-                _ck_acc.push(tmp);
-                if (_ck_acc.has_output()) break;
-            } else if (!_status.is_end_of_file()) {
-                if (_status.is_time_out()) {
-                    Status t = _status;
-                    _status = Status::OK();
-                    return t;
-                } else {
-                    return _status;
-                }
-            } else {
-                _ck_acc.finalize();
-                DCHECK(_status.is_end_of_file());
+            bool mem_alloc_failed = false;
+            RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
+            if (mem_alloc_failed) {
+                _mem_alloc_failed_count += 1;
+                return Status::EAgain("");
             }
+            if (state->is_cancelled()) {
+                return Status::Cancelled("canceled state");
+            }
+
+            // Improve for select * from table limit x, x is small
+            if (_reach_eof()) {
+                _reach_limit.store(true);
+                return Status::EndOfFile("limit reach");
+            }
+
+            while (_status.ok()) {
+                ChunkPtr tmp;
+                _status = _data_source->get_next(state, &tmp);
+                if (_status.ok()) {
+                    if (tmp->num_rows() == 0) continue;
+                    _ck_acc.push(tmp);
+                    if (_ck_acc.has_output()) break;
+                } else if (!_status.is_end_of_file()) {
+                    if (_status.is_time_out()) {
+                        Status t = _status;
+                        _status = Status::OK();
+                        return t;
+                    } else {
+                        return _status;
+                    }
+                } else {
+                    _ck_acc.finalize();
+                    DCHECK(_status.is_end_of_file());
+                }
+            }
+
+            DCHECK(_status.ok() || _status.is_end_of_file());
+            _scan_rows_num = _data_source->raw_rows_read();
+            _scan_bytes = _data_source->num_bytes_read();
+            _cpu_time_spent_ns = _data_source->cpu_time_spent();
+            _io_time_spent_ns = _data_source->io_time_spent();
+            delta_io_time_ns = _io_time_spent_ns - prev_io_time_ns;
+            delta_scan_bytes = _scan_bytes - prev_scan_bytes;
         }
 
-        DCHECK(_status.ok() || _status.is_end_of_file());
-        _scan_rows_num = _data_source->raw_rows_read();
-        _scan_bytes = _data_source->num_bytes_read();
-        _cpu_time_spent_ns = _data_source->cpu_time_spent();
-        _io_time_spent_ns = _data_source->io_time_spent();
-        delta_io_time_ns = _io_time_spent_ns - prev_io_time_ns;
-        delta_scan_bytes = _scan_bytes - prev_scan_bytes;
-    }
+        if (_ck_acc.has_output()) {
+            *chunk = std::move(_ck_acc.pull());
+            P.cs_total_running_time += total_time_ns;
+            P.cs_total_io_time += delta_io_time_ns;
+            P.cs_total_scan_bytes += delta_scan_bytes;
+            _chunk_rows_read += (*chunk)->num_rows();
+            _chunk_mem_bytes += (*chunk)->memory_usage();
+            _chunk_buffer.update_limiter(chunk->get());
+            return Status::OK();
+        }
+        _ck_acc.reset();
 
-    if (_ck_acc.has_output()) {
-        *chunk = std::move(_ck_acc.pull());
-        P.cs_total_running_time += total_time_ns;
-        P.cs_total_io_time += delta_io_time_ns;
-        P.cs_total_scan_bytes += delta_scan_bytes;
-        _chunk_rows_read += (*chunk)->num_rows();
-        _chunk_mem_bytes += (*chunk)->memory_usage();
-        _chunk_buffer.update_limiter(chunk->get());
-        return Status::OK();
-    }
-    _ck_acc.reset();
-
-    // before returning eof, we can check if this chunk source generates splits.
-    {
+        // before returning eof, we can check if this chunk source generates splits.
         std::vector<ScanSplitContextPtr> split_tasks;
         _data_source->get_split_tasks(&split_tasks);
         auto* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
@@ -904,10 +915,13 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
             RETURN_IF_ERROR(scan_op->append_morsels(std::move(split_morsels)));
         }
+        return Status::EndOfFile("");
+    }();
 
-        _report_split_source_morsel_finished_once();
+    if (is_terminal_status(ret)) {
+        RETURN_IF_ERROR(_report_split_source_morsel_finished_once());
     }
-    return Status::EndOfFile("");
+    return ret;
 }
 
 uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {

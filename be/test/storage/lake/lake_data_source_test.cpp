@@ -223,7 +223,7 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     ASSERT_TRUE(data_source_provider->could_split());
     ASSERT_TRUE(data_source_provider->could_split_physically());
 
-    ASSERT_TRUE(morsel_queue_factory->is_shared());
+    ASSERT_FALSE(morsel_queue_factory->is_shared());
     auto morsel_queue = morsel_queue_factory->create(1);
     ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() > 1);
 }

@@ -255,7 +255,7 @@ public:
     virtual StatusOr<int> next_driver_seq();
     virtual bool enable_random_append_split_morsel() const { return false; }
     virtual void set_has_more_scan_ranges(bool v) {}
-    virtual void mark_split_source_morsel_finished() {}
+    virtual Status mark_split_source_morsel_finished();
     virtual bool reach_limit() const { return false; }
 };
 
@@ -273,13 +273,11 @@ public:
 
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     void set_has_more_scan_ranges(bool v) override;
-    void mark_split_source_morsel_finished() override;
     bool reach_limit() const override;
 
 private:
     MorselQueuePtr _queue;
     const int _size;
-    std::atomic<int64_t> _num_original_morsels{0};
 };
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
@@ -307,7 +305,7 @@ public:
         return _enable_random_append_split_morsel;
     }
     void set_has_more_scan_ranges(bool v) override;
-    void mark_split_source_morsel_finished() override;
+    Status mark_split_source_morsel_finished() override;
     bool reach_limit() const override;
 
 private:

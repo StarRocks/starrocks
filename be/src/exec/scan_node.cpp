@@ -170,7 +170,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                  morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
 
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
-        // for Lake, always use SharedMorselQueueFactory
+        // for DLA, always use SharedMorselQueueFactory
         // for cloud, if enable_shared_scan, then always use SharedMorselQueueFactory
         // else it will consider the morsel numbers and io_parallelism to choose individual or shared morsel queue factory
         if (!always_shared_scan() && !enable_shared_scan && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&

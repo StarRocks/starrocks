@@ -72,7 +72,7 @@ public:
     void set_scan_mem_limit(int64_t scan_mem_limit);
     void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
     void set_data_source_mem_bytes(int64_t value);
-    void mark_split_source_morsel_finished();
+    Status mark_split_source_morsel_finished();
 
     void attach_shared_input(int32_t operator_seq, int32_t source_index);
     void detach_shared_input(int32_t operator_seq, int32_t source_index);
@@ -121,7 +121,7 @@ public:
     bool is_running_all_io_tasks() const override;
 
     Status append_morsels(std::vector<MorselPtr>&& morsels);
-    void mark_split_source_morsel_finished();
+    Status mark_split_source_morsel_finished();
     ConnectorScanOperatorAdaptiveProcessor* adaptive_processor() const { return _adaptive_processor; }
     bool enable_adaptive_io_tasks() const { return _enable_adaptive_io_tasks; }
 
@@ -164,7 +164,7 @@ protected:
 
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
-    void _report_split_source_morsel_finished_once();
+    Status _report_split_source_morsel_finished_once();
 
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 
